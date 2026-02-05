@@ -1,0 +1,23 @@
+name: SentinAI Auto-Scaler Cron
+
+on:
+  schedule:
+    - cron: '*/5 * * * *' # Every 5 minutes
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+jobs:
+  trigger-scaler:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call Scaler API
+        run: |
+          # Replace with your actual deployment URL in GitHub Secrets or directly here
+          # Example: https://sentinai.vercel.app/api/scaler
+          
+          echo "Triggering Auto-Scaling..."
+          
+          curl -X POST "${{ secrets.DEPLOY_URL }}/api/scaler" \
+          -H "Content-Type: application/json" \
+          --max-time 10 \
+          --fail \
+          || echo "Warning: Scaler trigger failed (Check URL or Server Status)"
