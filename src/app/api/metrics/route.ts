@@ -295,29 +295,26 @@ export async function GET(request: Request) {
     }
     // Debug: Log incoming request URL
     console.log('[API] Request URL:', request.url);
-    console.time('Total GET');
-    // Debug: Log incoming request URL
-    console.log('[API] Request URL:', request.url);
-    console.time('Total GET');
+    const startTotal = performance.now();
 
     try {
         // 1. Parallel Data Fetch for All Components
         // Label prefix can be configured via K8S_APP_PREFIX env var
         const appPrefix = process.env.K8S_APP_PREFIX || 'op';
 
-        console.time('K8s Fetch');
+        const startK8s = performance.now();
         const [l2Client, consensus, batcher, proposer] = await Promise.all([
             getComponentDetails(`app=${appPrefix}-geth`, "L2 Client", "cpu", ""),
             getComponentDetails(`app=${appPrefix}-node`, "Consensus Node", "globe", ""),
             getComponentDetails(`app=${appPrefix}-batcher`, "Batcher", "shuffle", ""),
             getComponentDetails(`app=${appPrefix}-proposer`, "Proposer", "shield", "")
         ]);
-        console.timeEnd('K8s Fetch');
+        console.log(`[Timer] K8s Fetch: ${(performance.now() - startK8s).toFixed(2)}ms`);
 
         const components = [l2Client, consensus, batcher, proposer];
 
         // 2. Metrics (Chain Data)
-        console.time('RPC Fetch');
+        const startRpc = performance.now();
         const rpcUrl = process.env.L2_RPC_URL;
         if (!rpcUrl) {
             return NextResponse.json(
@@ -358,7 +355,7 @@ export async function GET(request: Request) {
             // Fallback: use current block tx count if txpool_status not supported
             txPoolPending = block.transactions.length;
         }
-        console.timeEnd('RPC Fetch');
+        console.log(`[Timer] RPC Fetch: ${(performance.now() - startRpc).toFixed(2)}ms`);
 
         // 3. Metrics (Host Resource - Best Effort)
         const gasUsed = Number(block.gasUsed);
@@ -457,7 +454,7 @@ export async function GET(request: Request) {
 
         // Disable caching
         response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-        console.timeEnd('Total GET');
+        console.log(`[Timer] Total GET: ${(performance.now() - startTotal).toFixed(2)}ms`);
         return response;
 
     } catch (error) {
