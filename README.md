@@ -12,10 +12,45 @@ npm run dev
 
 ## Features
 - **L1/L2 Block Monitoring**: Real-time block height display for both L1 and L2
-- **Dynamic Scaling Visualization**: 1-8 vCPU range with cost optimization metrics
+- **Dynamic Resource Scaling**: Hybrid auto-scaling engine using CPU, TxPool, and AI insights.
 - **AI-Powered Log Analysis**: Gemini-based anomaly detection for Optimism Rollup components
 - **Stress Test Simulation**: Simulate peak load scenarios (8 vCPU / 16 GiB)
-- **K8s Integration**: AWS EKS connection with dynamic token generation
+- **K8s Integration**: AWS EKS connection with **cached dynamic token generation** (10-minute expiry) for low-latency polling.
+
+## Dynamic Resource Scaling
+Combines **Rule-based Metrics** and **AI-driven Insights** to optimize `op-geth` resources automatically.
+
+1.  **Hybrid Scoring Logic (0-100)**:
+    *   **CPU & Gas (60%)**: Real-time load indicators.
+    *   **TxPool (20%)**: Pending transaction bottleneck detection.
+    *   **AI Severity (20%)**: Proactive scaling based on log anomaly risks.
+
+2.  **Adaptive Tiers**:
+    *   **Idle (<30)**: 1 vCPU (Cost Saving)
+    *   **Normal (30-70)**: 2 vCPU (Standard Operation)
+    *   **High (>70)**: 4 vCPU (Peak Performance)
+
+3.  **Safety Mechanisms**:
+    *   **Cooldown**: 5-minute freeze after scaling to prevent flapping.
+    *   **Simulation Mode**: Dry-run execution by default for safety.
+
+## AI Log Analysis Engine
+SentinAI uses **Gemini 3 Pro** via a custom AI Gateway to audit network health in real-time.
+
+1.  **Holistic Context Window**: Instead of analyzing logs in isolation, it aggregates logs from 4 core components to detect complex cross-component issues:
+    *   `op-geth` (Execution Engine)
+    *   `op-node` (Consensus Driver)
+    *   `op-batcher` (L1 Transaction Submitter)
+    *   `op-proposer` (State Root Proposer)
+
+2.  **Senior Engineer Persona**: The AI is prompted with a "Senior Protocol Engineer" system instruction to check for:
+    *   **Security**: P2P GossipSub attacks, unauthorized peering.
+    *   **Consensus**: Unsafe head divergence, derivation stalls.
+    *   **Liveness**: Batch submission failures, sequencer drifts.
+
+3.  **Actionable Intelligence**:
+    *   Outputs results in structured JSON: `{ "severity": "critical", "summary": "...", "action_item": "..." }`.
+    *   **Suggestions** are grounded in official Optimism documentation (e.g., suggesting `--syncmode snap` or checking specific P2P flags).
 
 ## Environment Variables
 Copy the sample and configure:

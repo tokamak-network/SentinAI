@@ -27,10 +27,15 @@ vercel --prod  # Production Deployment
 ## Architecture
 
 ### Next.js Dashboard
-- **`src/app/page.tsx`**: Main dashboard component with real-time charts (Recharts), L1/L2 block display, stress test simulation, and AI anomaly detection UI
-- **`src/app/api/metrics/route.ts`**: Core metrics API - fetches L1 and L2 block heights via viem, K8s pod resources via kubectl, calculates Fargate costs
+- **`src/app/page.tsx`**: Main dashboard component with real-time charts (Recharts), L1/L2 block display, stress test simulation, and AI anomaly detection UI. Uses `AbortController` for optimizing high-frequency polling.
+- **`src/app/api/metrics/route.ts`**: Core metrics API - fetches L1 and L2 block heights via viem, K8s pod resources via kubectl.
+  - **Optimization**: Implements in-memory caching (10 min) for AWS EKS tokens to reduce latency (0.6s vs 3s).
+  - **Fast Path**: Bypasses K8s calls immediately when `stress=true` is enabling, providing instant UI feedback.
 - **`src/app/api/k8s/resources/route.ts`**: K8s resource discovery - lists Deployments/StatefulSets, falls back to mock data if cluster unavailable
 - **`src/app/api/analyze-logs/route.ts`**: AI log analysis endpoint
+- **`src/lib/k8s-scaler.ts`**: Handles StatefulSet patching and simulation logic.
+  - Maintains in-memory state for safe simulation (non-destructive).
+  - Supports dry-run and cooldown mechanisms.
 - **`src/lib/ai-analyzer.ts`**: Gemini-based log analysis for Optimism Rollup components (op-geth, op-node, op-batcher, op-proposer)
 
 ### Python Scripts (`src/`)
@@ -43,6 +48,7 @@ vercel --prod  # Production Deployment
 - Vercel Deployment: Next.js API Routes run as serverless functions
 - L1/L2 block height fetched in parallel via viem
 - K8s commands executed via `kubectl` with optional AWS EKS token (`aws eks get-token`)
+- **Performance**: AWS tokens cached globally (10m) to minimize CLI overhead during polling.
 - Dual-mode operation: Real cluster data or mock fallback for development
 - Cost calculation based on AWS Fargate Seoul pricing ($0.04656/vCPU-hour, $0.00511/GB-hour)
 - Dynamic scaling range: 1-8 vCPU (memory = vCPU × 2 GiB)
