@@ -5,8 +5,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 **SentinAI (Autonomous Node Guardian)** - A monitoring and auto-scaling dashboard for Optimism-based L2 networks.
-- **Next.js Dashboard**: Real-time web UI with L1/L2 block monitoring, K8s integration, and AI-powered log analysis (Vercel Deployment)
-- **Python Scripts**: Prometheus metrics collector and rule engine for auto-scaling decisions (Local/Server Execution)
+- **Next.js Dashboard**: Real-time web UI with L1/L2 block monitoring, K8s integration, and AI-powered log analysis
+- **Python Scripts**: Prometheus metrics collector and rule engine for auto-scaling decisions
+
+## Deployment
+
+> **Note**: This application requires `kubectl` and `aws` CLI for K8s monitoring features.
+> **Vercel/serverless deployment is NOT supported.** Deploy on K8s cluster or EC2 instead.
+
+### Recommended Deployment Options
+1. **K8s Cluster (Recommended)**: Deploy as a Pod with ServiceAccount for native kubectl access
+2. **EC2/VM**: Install kubectl and aws CLI, run with PM2 or systemd
 
 ## Commands
 
@@ -15,13 +24,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 npm install
 npm run dev      # Starts on port 3001
 npm run build    # Production build
+npm run start    # Production server
 npm run lint     # ESLint check
-```
-
-### Vercel Deployment
-```bash
-vercel         # Preview Deployment
-vercel --prod  # Production Deployment
 ```
 
 ## Architecture
@@ -45,7 +49,6 @@ vercel --prod  # Production Deployment
 - **`engine/rule_engine.py`**: Auto-scaling decision engine with CPU/TxPool thresholds and cooldown logic
 
 ### Key Patterns
-- Vercel Deployment: Next.js API Routes run as serverless functions
 - L1/L2 block height fetched in parallel via viem
 - K8s commands executed via `kubectl` with optional AWS EKS token (`aws eks get-token`)
 - **Performance**: AWS tokens cached globally (10m) to minimize CLI overhead during polling.
@@ -82,7 +85,7 @@ AWS_SECRET_ACCESS_KEY=your-secret-key
 ```
 
 ## Tech Stack
-- Next.js 16, React 19, TypeScript, Vercel
+- Next.js 16, React 19, TypeScript
 - viem (Ethereum client), @kubernetes/client-node
 - Recharts, Tailwind CSS 4, Lucide icons
 - Python: prometheus_client, web3.py
