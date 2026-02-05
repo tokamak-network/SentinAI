@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/scaler",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}
