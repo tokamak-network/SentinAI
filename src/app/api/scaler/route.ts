@@ -156,7 +156,7 @@ export async function POST(request: NextRequest) {
     // Extract base URL (In Vercel environment)
     const baseUrl = process.env.VERCEL_URL
       ? `https://${process.env.VERCEL_URL}`
-      : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001';
+      : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002';
 
     let decision;
     let triggeredBy: 'auto' | 'manual' = 'auto';

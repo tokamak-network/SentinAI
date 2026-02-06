@@ -56,7 +56,7 @@ Install kubectl and aws CLI manually, run with PM2 or systemd.
 
 ```bash
 npm install
-npm run dev      # Starts on port 3001
+npm run dev      # Starts on port 3002
 npm run build    # Production build
 npm run start    # Production server
 npm run lint     # ESLint check

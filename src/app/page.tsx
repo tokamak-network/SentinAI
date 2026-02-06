@@ -2,12 +2,11 @@
 
 import { useEffect, useState, useRef } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  AreaChart, Area, ComposedChart, Bar
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import {
   Activity, Server, Zap, ShieldAlert, Cpu, ArrowUpRight,
-  TrendingDown, FileText, CheckCircle2, XCircle, Shield
+  TrendingDown, FileText, CheckCircle2, XCircle, Shield, Database
 } from 'lucide-react';
 
 // --- Interfaces ---
@@ -97,6 +96,61 @@ export default function Dashboard() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [prediction, setPrediction] = useState<PredictionInfo | null>(null);
   const [predictionMeta, setPredictionMeta] = useState<PredictionMeta | null>(null);
+  const [seedScenario, setSeedScenario] = useState<'stable' | 'rising' | 'spike' | 'falling'>('rising');
+  const [isSeeding, setIsSeeding] = useState(false);
+  const [isApplyingScale, setIsApplyingScale] = useState(false);
+  const [scaleResult, setScaleResult] = useState<{ success: boolean; from: number; to: number; reason: string; dryRun?: boolean } | null>(null);
+
+  // Seed prediction data for testing
+  const seedPredictionData = async () => {
+    setIsSeeding(true);
+    try {
+      const res = await fetch(`/api/metrics/seed?scenario=${seedScenario}`, { method: 'POST' });
+      if (res.ok) {
+        // Re-fetch scaler to get updated prediction
+        const scalerRes = await fetch('/api/scaler', { cache: 'no-store' });
+        if (scalerRes.ok) {
+          const scalerData: ScalerState = await scalerRes.json();
+          setPrediction(scalerData.prediction);
+          setPredictionMeta(scalerData.predictionMeta);
+        }
+      }
+    } catch (e) {
+      console.error('Seed failed:', e);
+    } finally {
+      setIsSeeding(false);
+    }
+  };
+
+  // Apply predicted scaling
+  const applyPredictedScale = async () => {
+    if (!prediction) return;
+    setIsApplyingScale(true);
+    setScaleResult(null);
+    try {
+      const res = await fetch('/api/scaler', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          targetVcpu: prediction.predictedVcpu,
+          reason: `[UI] Apply predicted ${prediction.predictedVcpu} vCPU (${prediction.recommendedAction}, confidence: ${(prediction.confidence * 100).toFixed(0)}%)`,
+        }),
+      });
+      const data = await res.json();
+      setScaleResult({
+        success: data.success,
+        from: data.previousVcpu,
+        to: data.currentVcpu,
+        reason: data.error || data.decision?.reason || '',
+        dryRun: data.dryRun,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Unknown error';
+      setScaleResult({ success: false, from: 0, to: 0, reason: msg });
+    } finally {
+      setIsApplyingScale(false);
+    }
+  };
 
   // Logic
   const checkLogs = async (mode: string) => {
@@ -347,6 +401,35 @@ export default function Dashboard() {
                     }`}>{prediction.predictedVcpu} vCPU</span>
                   </div>
                 </div>
+                {/* Apply Scaling Button */}
+                {prediction.predictedVcpu !== (current?.metrics.gethVcpu || 1) && (
+                  <button
+                    onClick={applyPredictedScale}
+                    disabled={isApplyingScale}
+                    className={`mt-3 w-full py-2 rounded-lg text-xs font-bold transition-all ${
+                      isApplyingScale
+                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        : prediction.recommendedAction === 'scale_up'
+                        ? 'bg-orange-500 text-white hover:bg-orange-600'
+                        : 'bg-green-500 text-white hover:bg-green-600'
+                    }`}
+                  >
+                    {isApplyingScale ? '적용 중...' : `${prediction.predictedVcpu} vCPU 적용`}
+                  </button>
+                )}
+                {/* Scale Result */}
+                {scaleResult && (
+                  <div className={`mt-2 p-2 rounded-lg text-xs ${
+                    scaleResult.success
+                      ? 'bg-green-50 border border-green-200 text-green-700'
+                      : 'bg-red-50 border border-red-200 text-red-700'
+                  }`}>
+                    {scaleResult.success
+                      ? `${scaleResult.from} → ${scaleResult.to} vCPU 변경 완료${scaleResult.dryRun ? ' (Simulation)' : ''}`
+                      : `실패: ${scaleResult.reason}`
+                    }
+                  </div>
+                )}
               </div>
             )}
 
@@ -369,6 +452,37 @@ export default function Dashboard() {
               </div>
             )}
 
+            {/* Seed Prediction Data (Debug - Development Only) */}
+            {process.env.NODE_ENV !== 'production' && <div className="mb-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+              <div className="flex items-center gap-2 mb-2">
+                <Database size={14} className="text-indigo-600" />
+                <span className="text-xs font-medium text-indigo-800">Seed Test Data</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={seedScenario}
+                  onChange={(e) => setSeedScenario(e.target.value as typeof seedScenario)}
+                  className="flex-1 text-xs bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                >
+                  <option value="stable">Stable (15~25% CPU)</option>
+                  <option value="rising">Rising (20% → 70%)</option>
+                  <option value="spike">Spike (30% → 95%)</option>
+                  <option value="falling">Falling (80% → 20%)</option>
+                </select>
+                <button
+                  onClick={seedPredictionData}
+                  disabled={isSeeding}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    isSeeding
+                      ? 'bg-indigo-300 text-white cursor-not-allowed'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-500'
+                  }`}
+                >
+                  {isSeeding ? 'Seeding...' : 'Seed'}
+                </button>
+              </div>
+            </div>}
+
             {/* AI Insight Box */}
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
               <div className="flex items-start gap-2">
@@ -389,15 +503,17 @@ export default function Dashboard() {
             {prediction && prediction.factors.length > 0 && (
               <div className="mt-3 pt-3 border-t border-gray-100">
                 <p className="text-[10px] text-gray-400 font-semibold uppercase mb-2">Key Factors</p>
-                <div className="space-y-1">
+                <div className="flex flex-wrap gap-1.5">
                   {prediction.factors.slice(0, 3).map((factor, i) => (
-                    <div key={i} className="flex items-center gap-2 text-xs">
-                      <div className={`w-1.5 h-1.5 rounded-full ${
-                        factor.impact > 0.3 ? 'bg-orange-500' :
-                        factor.impact < -0.3 ? 'bg-green-500' :
-                        'bg-gray-400'
-                      }`} />
-                      <span className="text-gray-600">{factor.description}</span>
+                    <div key={i} className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full border ${
+                      factor.impact > 0.3
+                        ? 'bg-orange-50 border-orange-200 text-orange-700'
+                        : factor.impact < -0.3
+                        ? 'bg-green-50 border-green-200 text-green-700'
+                        : 'bg-gray-50 border-gray-200 text-gray-600'
+                    }`}>
+                      <span className="font-medium">{factor.name}</span>
+                      <span className="opacity-60">{factor.impact > 0 ? '+' : ''}{factor.impact.toFixed(1)}</span>
                     </div>
                   ))}
                 </div>
@@ -444,74 +560,6 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
-
-          {/* Prediction Trend Chart */}
-          {dataHistory.length > 5 && (
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="font-semibold text-gray-900 text-sm">Resource Trend</h4>
-                {prediction && (
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                    prediction.trend === 'rising' ? 'bg-orange-100 text-orange-600' :
-                    prediction.trend === 'falling' ? 'bg-green-100 text-green-600' :
-                    'bg-gray-100 text-gray-600'
-                  }`}>
-                    {prediction.trend.toUpperCase()}
-                  </span>
-                )}
-              </div>
-              <div className="h-32">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={dataHistory}>
-                    <defs>
-                      <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
-                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
-                    <XAxis
-                      dataKey="name"
-                      tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 10, fill: '#9CA3AF' }}
-                      axisLine={false}
-                      tickLine={false}
-                      domain={[0, 100]}
-                    />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1F2937',
-                        border: 'none',
-                        borderRadius: '8px',
-                        fontSize: '12px',
-                        color: '#F3F4F6'
-                      }}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="cpu"
-                      stroke="#3B82F6"
-                      fill="url(#cpuGradient)"
-                      strokeWidth={2}
-                      name="CPU %"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-              {prediction && (
-                <div className="flex items-center justify-center gap-2 mt-2 text-[10px] text-gray-400">
-                  <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                  <span>Current Load</span>
-                  <div className="w-2 h-2 bg-orange-500 rounded-full ml-3" />
-                  <span>Predicted: {prediction.predictedVcpu} vCPU</span>
-                </div>
-              )}
-            </div>
-          )}
 
           {/* Total Saved Card (Dark) */}
           <div className="mt-auto bg-[#1A1D21] rounded-2xl p-5 text-white">
