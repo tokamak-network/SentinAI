@@ -55,7 +55,7 @@ Prefix for resource identification.
 
 ## 4. AWS EKS Connection (Required if using AWS)
 
-This configuration is required when querying pod information from *outside* the K8s cluster (e.g., local development environment or Vercel). (This may not be necessary in In-Cluster environments using ServiceAccount).
+This configuration is required when querying pod information from *outside* the K8s cluster (e.g., local development or Docker container). Not needed for In-Cluster deployments with ServiceAccount.
 
 ### `AWS_CLUSTER_NAME`
 *   **Description**: Name of the EKS Cluster.

@@ -11,11 +11,46 @@ Real-time web UI with L1/L2 block monitoring, K8s integration, AI-powered log an
 ## Deployment
 
 > **Note**: This application requires `kubectl` and `aws` CLI for K8s monitoring features.
-> **Vercel/serverless deployment is NOT supported.** Deploy on K8s cluster or EC2 instead.
+> **Vercel/serverless deployment is NOT supported.** Use Docker container deployment.
 
-### Recommended Deployment Options
-1. **K8s Cluster (Recommended)**: Deploy as a Pod with ServiceAccount for native kubectl access
-2. **EC2/VM**: Install kubectl and aws CLI, run with PM2 or systemd
+### Docker Deployment (Recommended)
+
+3-stage multi-stage build: deps → builder → runner (node:20-alpine). kubectl and aws-cli pre-installed.
+Healthcheck: `GET /api/health` (30s interval). Output: `standalone` mode.
+
+```bash
+# Build image
+docker build -t sentinai:latest .
+
+# Run container (minimum - L2 RPC only, K8s features disabled)
+docker run -d \
+  --name sentinai \
+  -p 3000:3000 \
+  -e L2_RPC_URL=https://your-l2-rpc-endpoint.com \
+  sentinai:latest
+
+# Run container (full - with K8s and AI features)
+docker run -d \
+  --name sentinai \
+  -p 3000:3000 \
+  -e L2_RPC_URL=https://your-l2-rpc-endpoint.com \
+  -e AI_GATEWAY_URL=https://api.ai.tokamak.network \
+  -e GEMINI_API_KEY=your-api-key \
+  -e K8S_NAMESPACE=default \
+  -e K8S_APP_PREFIX=op \
+  -e K8S_API_URL=https://your-eks-cluster.amazonaws.com \
+  -e AWS_CLUSTER_NAME=my-cluster-name \
+  -e AWS_REGION=ap-northeast-2 \
+  -e AWS_ACCESS_KEY_ID=your-access-key \
+  -e AWS_SECRET_ACCESS_KEY=your-secret-key \
+  sentinai:latest
+```
+
+### Alternative: K8s Pod
+Deploy as a Pod with ServiceAccount for native kubectl access. Use K8s CronJob for periodic scaling triggers.
+
+### Alternative: EC2/VM
+Install kubectl and aws CLI manually, run with PM2 or systemd.
 
 ## Commands
 
@@ -41,6 +76,8 @@ npm run lint     # ESLint check
   - `PATCH`: Updates auto-scaling settings (enable/disable, simulation mode).
 
 - **`analyze-logs/route.ts`**: AI log analysis endpoint using Gemini via custom AI Gateway.
+
+- **`health/route.ts`**: Lightweight health check endpoint for Docker HEALTHCHECK and load balancer probes.
 
 ### Libraries (`src/lib/`)
 
@@ -71,24 +108,26 @@ Core type definitions: `ScalingMetrics`, `ScalingDecision`, `ScalingConfig`, `Ta
 
 ## Environment Variables
 
-Copy the sample and configure:
+Copy the sample and configure (see `ENV_GUIDE.md` for detailed setup instructions):
 ```bash
 cp .env.local.sample .env.local
 ```
 
+**Required:**
 ```bash
-# L2 Chain RPC (Required)
-L2_RPC_URL=https://your-l2-rpc-endpoint.com
+L2_RPC_URL=https://your-l2-rpc-endpoint.com    # L2 Chain RPC
+```
 
-# AI Configuration (Required for Log Analysis)
+**Optional (AI Log Analysis):**
+```bash
 AI_GATEWAY_URL=https://api.ai.tokamak.network
 GEMINI_API_KEY=your-api-key-here
+```
 
-# Kubernetes Configuration
+**Optional (K8s Monitoring & Auto-scaling):**
+```bash
 K8S_NAMESPACE=default
 K8S_APP_PREFIX=op
-
-# AWS EKS Connection
 K8S_API_URL=https://<CLUSTER_ID>.eks.amazonaws.com
 AWS_CLUSTER_NAME=my-cluster-name
 AWS_REGION=ap-northeast-2

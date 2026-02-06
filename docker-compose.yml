@@ -1,0 +1,15 @@
+services:
+  sentinai:
+    build: .
+    container_name: sentinai
+    ports:
+      - "3002:3000"
+    env_file:
+      - .env.local
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 5s
+      retries: 3
