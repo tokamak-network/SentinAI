@@ -44,8 +44,9 @@ async function getK8sToken(): Promise<string | undefined> {
                 expiresAt: now + 10 * 60 * 1000
             };
             return token;
-        } catch (e: any) {
-            console.warn("AWS Token Gen Failed:", e.message);
+        } catch (e) {
+            const message = e instanceof Error ? e.message : 'Unknown error';
+            console.warn("AWS Token Gen Failed:", message);
             return undefined;
         }
     }
@@ -76,20 +77,23 @@ async function runK8sCommand(command: string) {
     }
 }
 
-interface RealComponentState {
+interface ComponentDetail {
     name: string;
-    podName: string;
-    cpuReq: string;
-    memReq: string;
-    nodeName: string;
+    type: string;
+    strategy: string;
+    current: string;
     status: string;
-    restarts: number;
-    instanceType: string;
-    isFargate: boolean;
+    icon: string;
+    rawCpu: number;
+    metrics?: {
+        cpuReq: string;
+        memReq: string;
+        node: string;
+    };
 }
 
 // Fetch deep details for a specific component
-async function getComponentDetails(labelSelector: string, displayName: string, icon: string, strategy: string = "Static"): Promise<any> {
+async function getComponentDetails(labelSelector: string, displayName: string, icon: string, strategy: string = "Static"): Promise<ComponentDetail | null> {
     const namespace = process.env.K8S_NAMESPACE || 'default';
     try {
         // 1. Get Pod Info (JSON)
@@ -170,7 +174,7 @@ async function getComponentDetails(labelSelector: string, displayName: string, i
         }
 
         const phase = pod.status.phase;
-        const isReady = pod.status.conditions?.find((c: any) => c.type === 'Ready')?.status === 'True';
+        const isReady = pod.status.conditions?.find((c: { type: string; status: string }) => c.type === 'Ready')?.status === 'True';
         const statusDisp = isReady ? "Running" : phase;
 
         const currentDesc = isFargate
@@ -367,8 +371,8 @@ export async function GET(request: Request) {
         const isStressTest = url.searchParams.get('stress') === 'true';
 
         let effectiveCpu = evmLoad;
-        let effectiveTx = txPoolPending;
-        let currentVcpu = l2Client ? (l2Client.rawCpu || 1) : 1;
+        const effectiveTx = txPoolPending;
+        let currentVcpu: number = l2Client ? (l2Client.rawCpu || 1) : 1;
 
         if (isStressTest) {
             effectiveCpu = 96.5; // Simulate overload

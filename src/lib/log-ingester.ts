@@ -69,8 +69,9 @@ export async function getLiveLogs(namespace?: string, labelSelector?: string): P
                 const { stdout } = await execAsync(`aws eks get-token --cluster-name ${clusterName}`);
                 const tokenData = JSON.parse(stdout);
                 token = tokenData.status.token;
-            } catch (e: any) {
-                console.warn(`[LogIngester] AWS Token Generation Warning: ${e.message}`);
+            } catch (e) {
+                const message = e instanceof Error ? e.message : 'Unknown error';
+                console.warn(`[LogIngester] AWS Token Generation Warning: ${message}`);
                 // Fallback to static token if generation fails
             }
         }
@@ -114,16 +115,17 @@ export async function getLiveLogs(namespace?: string, labelSelector?: string): P
 
         return logs || "INFO [System] Log stream is empty.";
 
-    } catch (error: any) {
-        console.error("[LogIngester] kubectl Error:", error.message);
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error("[LogIngester] kubectl Error:", errorMessage);
         // Fallback or Error Message
         // If it's a "command not found" mock it for the user if they don't have kubectl
-        if (error.message.includes('command not found')) {
+        if (errorMessage.includes('command not found')) {
             return `ERROR [System] 'kubectl' command not found on server.
             Please ensure kubectl is installed and in the PATH.`;
         }
 
         return `ERROR [System] Failed to fetch K8s logs:
-        ${error.message}`;
+        ${errorMessage}`;
     }
 }

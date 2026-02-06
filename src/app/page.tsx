@@ -55,11 +55,11 @@ interface ComponentData {
 // --- Main Dashboard Component ---
 export default function Dashboard() {
   // State
-  const [dataHistory, setDataHistory] = useState<any[]>([]);
+  const [dataHistory, setDataHistory] = useState<{ name: string; cpu: number; gethVcpu: number; gethMemGiB: number; saving: number; cost: number }[]>([]);
   const [current, setCurrent] = useState<MetricData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [stressMode, setStressMode] = useState(false);
-  const [logInsight, setLogInsight] = useState<any>(null);
+  const [logInsight, setLogInsight] = useState<{ summary: string; severity: string; timestamp: string; action_item?: string } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Logic
@@ -72,7 +72,7 @@ export default function Dashboard() {
       setLogInsight(data.analysis);
     } catch (e) {
       console.error(e);
-      setLogInsight({ summary: "Failed to connect to AI Gateway.", severity: "critical" })
+      setLogInsight({ summary: "Failed to connect to AI Gateway.", severity: "critical", timestamp: new Date().toISOString() })
     } finally {
       setIsAnalyzing(false);
     }
@@ -126,8 +126,8 @@ export default function Dashboard() {
         };
         setDataHistory(prev => [...prev.slice(-20), point]);
         setIsLoading(false);
-      } catch (err: any) {
-        if (err.name === 'AbortError') {
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
           console.log('Fetch aborted');
         } else {
           console.error(err);
@@ -531,7 +531,7 @@ export default function Dashboard() {
 
 // --- Sub Components ---
 
-function LogBlock({ time, source, level, msg, highlight, color }: any) {
+function LogBlock({ time, source, level, msg, highlight, color }: { time: string; source: string; level: string; msg: string; highlight?: boolean; color?: string }) {
   return (
     <div className={`flex items-start gap-3 font-mono text-xs ${highlight ? 'bg-white/5 -mx-2 px-2 py-1 rounded' : ''}`}>
       <span className="text-gray-600 shrink-0" suppressHydrationWarning>[{time}]</span>

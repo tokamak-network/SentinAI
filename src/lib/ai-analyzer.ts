@@ -98,12 +98,13 @@ export async function analyzeLogChunk(logs: Record<string, string> | string): Pr
             };
         }
 
-    } catch (error: any) {
-        console.error("AI Gateway Error:", error.message);
+    } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+        console.error("AI Gateway Error:", errorMessage);
         // Fallback or "Simulation" output if Gateway is unreachable
         return {
             severity: "critical",
-            summary: `Analysis Failed: Could not reach AI Gateway at ${AI_GATEWAY_URL}. (${error.message})`,
+            summary: `Analysis Failed: Could not reach AI Gateway at ${AI_GATEWAY_URL}. (${errorMessage})`,
             action_item: "Check API Gateway connectivity and API Key.",
             timestamp: new Date().toISOString()
         };

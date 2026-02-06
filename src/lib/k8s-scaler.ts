@@ -18,7 +18,7 @@ import {
 const execAsync = promisify(exec);
 
 // Simulation mode (Controlled by env var, default: true = safe mode)
-let simulationConfig: SimulationConfig = {
+const simulationConfig: SimulationConfig = {
   ...DEFAULT_SIMULATION_CONFIG,
   enabled: process.env.SCALING_SIMULATION_MODE !== 'false',
 };
