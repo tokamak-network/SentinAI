@@ -7,12 +7,14 @@ A Next.js dashboard for monitoring and auto-scaling Optimism-based L2 networks.
 
 ```bash
 npm install
+npm run setup    # Interactive setup wizard for .env.local
 npm run dev
 ```
 
 ## Features
 - **L1/L2 Block Monitoring**: Real-time block height display for both L1 and L2
 - **Dynamic Resource Scaling**: Hybrid auto-scaling engine using CPU, TxPool, and AI insights.
+- **Predictive Scaling**: AI-powered time-series analysis (Claude Haiku 4.5) predicts optimal vCPU/MEM allocation 5 minutes ahead.
 - **AI-Powered Log Analysis**: Claude-based anomaly detection for Optimism Rollup components
 - **Stress Test Simulation**: Simulate peak load scenarios (8 vCPU / 16 GiB)
 - **K8s Integration**: AWS EKS connection with **cached dynamic token generation** (10-minute expiry) for low-latency polling.
@@ -33,6 +35,14 @@ Combines **Rule-based Metrics** and **AI-driven Insights** to optimize `op-geth`
 3.  **Safety Mechanisms**:
     *   **Cooldown**: 5-minute freeze after scaling to prevent flapping.
     *   **Simulation Mode**: Dry-run execution by default for safety.
+
+## Predictive Scaling
+Uses **Claude Haiku 4.5** via LiteLLM AI Gateway to analyze time-series metrics and predict optimal resource allocation.
+
+1.  **Data Collection**: In-memory ring buffer (60 data points) stores CPU, TxPool, Gas ratio, and block interval metrics.
+2.  **AI Analysis**: Sends statistical summary + recent 15 data points to Claude for prediction.
+3.  **Output**: Predicted vCPU (1/2/4), confidence score, trend direction, key factors, and reasoning.
+4.  **Seed Testing**: Dev-only UI for injecting mock scenarios (`stable`, `rising`, `spike`, `falling`) or using live accumulated data (`live`).
 
 ## AI Log Analysis Engine
 SentinAI uses **Claude Haiku 4.5** via a custom AI Gateway to audit network health in real-time.

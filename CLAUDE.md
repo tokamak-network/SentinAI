@@ -60,6 +60,7 @@ npm run dev      # Starts on port 3002
 npm run build    # Production build
 npm run start    # Production server
 npm run lint     # ESLint check
+npm run setup    # Interactive setup wizard for .env.local
 ```
 
 ## Architecture
@@ -70,8 +71,12 @@ npm run lint     # ESLint check
   - **Token Caching**: AWS EKS tokens cached globally (10 min) to reduce latency (0.6s vs 3s).
   - **Fast Path**: When `stress=true`, returns simulated 8 vCPU peak data immediately (no K8s/RPC calls).
 
+- **`metrics/seed/route.ts`**: Dev-only endpoint for injecting mock time-series data into MetricsStore.
+  - Scenarios: `stable`, `rising`, `spike`, `falling` (mock data), `live` (real accumulated data).
+  - `live` scenario requires ≥20 data points and preserves existing MetricsStore data.
+
 - **`scaler/route.ts`**: Auto-scaling control endpoint.
-  - `GET`: Returns current scaling state (vCPU, cooldown, simulation mode).
+  - `GET`: Returns current scaling state, AI prediction, and prediction metadata.
   - `POST`: Executes manual or auto scaling with metrics collection.
   - `PATCH`: Updates auto-scaling settings (enable/disable, simulation mode).
 
@@ -87,15 +92,20 @@ npm run lint     # ESLint check
 
 - **`ai-analyzer.ts`**: Claude-based log analysis for Optimism Rollup components (op-geth, op-node, op-batcher, op-proposer).
 
+- **`predictive-scaler.ts`**: AI-powered time-series prediction using Claude Haiku 4.5 via LiteLLM gateway. Analyzes MetricsStore data to predict optimal vCPU for the next 5 minutes. Includes rate limiting (5-min cooldown) and rule-based fallback.
+
+- **`metrics-store.ts`**: In-memory ring buffer (capacity: 60) for time-series metric data points. Provides statistical analysis (mean, stdDev, trend, slope) for prediction input.
+
 - **`log-ingester.ts`**: Log collection utilities for K8s pods.
 
-### Types (`src/types/scaling.ts`)
+### Types (`src/types/`)
 
-Core type definitions: `ScalingMetrics`, `ScalingDecision`, `ScalingConfig`, `TargetVcpu` (1|2|4), `AISeverity`.
+- **`scaling.ts`**: Core type definitions: `ScalingMetrics`, `ScalingDecision`, `ScalingConfig`, `TargetVcpu` (1|2|4), `AISeverity`.
+- **`prediction.ts`**: Prediction types: `PredictionResult`, `PredictionConfig`, `PredictionFactor`, `MetricDataPoint`.
 
 ### UI (`src/app/`)
 
-- **`page.tsx`**: Main dashboard with real-time charts (Recharts), L1/L2 block display, stress test simulation, and AI anomaly detection UI. Uses `AbortController` for optimizing high-frequency polling.
+- **`page.tsx`**: Main dashboard with L1/L2 block display, stress test simulation, AI anomaly detection, and Scaling Forecast card with AI prediction visualization. Includes dev-only Seed Test Data panel for mock/live scenario testing. Uses `AbortController` for optimizing high-frequency polling.
 
 ### Key Patterns
 
