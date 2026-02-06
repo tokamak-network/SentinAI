@@ -96,7 +96,7 @@ export default function Dashboard() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [prediction, setPrediction] = useState<PredictionInfo | null>(null);
   const [predictionMeta, setPredictionMeta] = useState<PredictionMeta | null>(null);
-  const [seedScenario, setSeedScenario] = useState<'stable' | 'rising' | 'spike' | 'falling'>('rising');
+  const [seedScenario, setSeedScenario] = useState<'stable' | 'rising' | 'spike' | 'falling' | 'live'>('rising');
   const [isSeeding, setIsSeeding] = useState(false);
 
   // Seed prediction data for testing
@@ -432,6 +432,7 @@ export default function Dashboard() {
                   <option value="rising">Rising (20% → 70%)</option>
                   <option value="spike">Spike (30% → 95%)</option>
                   <option value="falling">Falling (80% → 20%)</option>
+                  <option value="live">Live (Current Data)</option>
                 </select>
                 <button
                   onClick={seedPredictionData}

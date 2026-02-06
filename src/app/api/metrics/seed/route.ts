@@ -5,15 +5,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { pushMetric, clearMetrics } from '@/lib/metrics-store';
+import { pushMetric, clearMetrics, getRecentMetrics, getMetricsCount } from '@/lib/metrics-store';
 import { resetPredictionState } from '@/lib/predictive-scaler';
 import { MetricDataPoint } from '@/types/prediction';
 
 export const dynamic = 'force-dynamic';
 
-type Scenario = 'stable' | 'rising' | 'spike' | 'falling';
+type Scenario = 'stable' | 'rising' | 'spike' | 'falling' | 'live';
 
-const VALID_SCENARIOS: Scenario[] = ['stable', 'rising', 'spike', 'falling'];
+const VALID_SCENARIOS: Scenario[] = ['stable', 'rising', 'spike', 'falling', 'live'];
+const LIVE_MIN_DATA_POINTS = 20;
 
 /**
  * Linear interpolation between two values
@@ -129,7 +130,40 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Clear existing data and reset prediction cache
+  // Live scenario: use existing real data in MetricsStore
+  if (scenario === 'live') {
+    const count = getMetricsCount();
+    if (count < LIVE_MIN_DATA_POINTS) {
+      return NextResponse.json(
+        {
+          error: `Insufficient data for live prediction: ${count}/${LIVE_MIN_DATA_POINTS} points. Wait for more metrics to accumulate.`,
+          currentCount: count,
+          requiredCount: LIVE_MIN_DATA_POINTS,
+        },
+        { status: 400 }
+      );
+    }
+
+    // Only reset prediction cache, keep real data intact
+    resetPredictionState();
+
+    const liveData = getRecentMetrics();
+    return NextResponse.json({
+      success: true,
+      scenario: 'live',
+      dataPointCount: count,
+      timeRange: {
+        from: liveData[0]?.timestamp || null,
+        to: liveData[liveData.length - 1]?.timestamp || null,
+      },
+      summary: {
+        cpuRange: `${Math.min(...liveData.map(d => d.cpuUsage)).toFixed(1)}% - ${Math.max(...liveData.map(d => d.cpuUsage)).toFixed(1)}%`,
+        txPoolRange: `${Math.min(...liveData.map(d => d.txPoolPending))} - ${Math.max(...liveData.map(d => d.txPoolPending))}`,
+      },
+    });
+  }
+
+  // Mock scenarios: clear existing data and inject generated data
   clearMetrics();
   resetPredictionState();
 
