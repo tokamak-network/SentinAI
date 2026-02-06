@@ -27,6 +27,9 @@ import {
   TargetVcpu,
   DEFAULT_SCALING_CONFIG,
 } from '@/types/scaling';
+import { predictScaling, getLastPrediction, getNextPredictionIn } from '@/lib/predictive-scaler';
+import { getMetricsCount } from '@/lib/metrics-store';
+import { PredictionResult, DEFAULT_PREDICTION_CONFIG } from '@/types/prediction';
 
 /**
  * Get current metrics from /api/metrics
@@ -78,7 +81,7 @@ async function fetchAIAnalysis(baseUrl: string): Promise<{
 }
 
 /**
- * GET: Get current scaling state
+ * GET: Get current scaling state with prediction
  */
 export async function GET(_request: NextRequest) {
   try {
@@ -93,10 +96,44 @@ export async function GET(_request: NextRequest) {
       });
     }
 
+    // Get or generate prediction
+    let prediction: PredictionResult | null = getLastPrediction();
+    const metricsCount = getMetricsCount();
+
+    // Try to generate new prediction if we have enough data
+    if (metricsCount >= DEFAULT_PREDICTION_CONFIG.minDataPoints) {
+      const newPrediction = await predictScaling(currentVcpu);
+      if (newPrediction) {
+        prediction = newPrediction;
+      }
+    }
+
+    // Build prediction info for response
+    const predictionInfo = prediction
+      ? {
+          predictedVcpu: prediction.predictedVcpu,
+          confidence: prediction.confidence,
+          trend: prediction.trend,
+          reasoning: prediction.reasoning,
+          recommendedAction: prediction.recommendedAction,
+          generatedAt: prediction.generatedAt,
+          predictionWindow: prediction.predictionWindow,
+          factors: prediction.factors,
+        }
+      : null;
+
     return NextResponse.json({
       ...getScalingState(),
       simulationMode: isSimulationMode(),
       timestamp: new Date().toISOString(),
+      // New prediction fields
+      prediction: predictionInfo,
+      predictionMeta: {
+        metricsCount,
+        minRequired: DEFAULT_PREDICTION_CONFIG.minDataPoints,
+        nextPredictionIn: getNextPredictionIn(),
+        isReady: metricsCount >= DEFAULT_PREDICTION_CONFIG.minDataPoints,
+      },
     });
   } catch (error) {
     console.error('GET /api/scaler error:', error);
@@ -144,7 +181,7 @@ export async function POST(request: NextRequest) {
         breakdown: { cpuScore: 0, gasScore: 0, txPoolScore: 0, aiScore: 0 },
       };
     } else {
-      // Auto-scaling
+      // Auto-scaling (with optional predictive mode)
       if (!isAutoScalingEnabled()) {
         return NextResponse.json(
           { error: 'Auto-scaling is disabled', autoScalingEnabled: false },
@@ -171,7 +208,35 @@ export async function POST(request: NextRequest) {
         aiSeverity,
       };
 
-      decision = makeScalingDecision(scalingMetrics);
+      // Get reactive decision
+      const reactiveDecision = makeScalingDecision(scalingMetrics);
+
+      // Try predictive scaling for preemptive action
+      const currentVcpu = await getCurrentVcpu();
+      const prediction = await predictScaling(currentVcpu);
+
+      // Use predictive decision if confidence is high enough and it suggests scaling up
+      if (
+        prediction &&
+        prediction.confidence >= DEFAULT_PREDICTION_CONFIG.confidenceThreshold &&
+        prediction.recommendedAction === 'scale_up' &&
+        prediction.predictedVcpu > reactiveDecision.targetVcpu
+      ) {
+        // Preemptive scaling based on prediction
+        decision = {
+          targetVcpu: prediction.predictedVcpu,
+          targetMemoryGiB: (prediction.predictedVcpu * 2) as 2 | 4 | 8,
+          reason: `[Predictive] ${prediction.reasoning} (Confidence: ${(prediction.confidence * 100).toFixed(0)}%)`,
+          confidence: prediction.confidence,
+          score: reactiveDecision.score,
+          breakdown: reactiveDecision.breakdown,
+        };
+        triggeredBy = 'auto';
+        console.log(`[Predictive Scaler] Preemptive scale-up: ${currentVcpu} -> ${prediction.predictedVcpu} vCPU`);
+      } else {
+        // Use reactive decision
+        decision = reactiveDecision;
+      }
     }
 
     // Execute Scaling

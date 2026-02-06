@@ -52,6 +52,40 @@ interface ComponentData {
   };
 }
 
+interface PredictionFactor {
+  name: string;
+  impact: number;
+  description: string;
+}
+
+interface PredictionInfo {
+  predictedVcpu: 1 | 2 | 4;
+  confidence: number;
+  trend: 'rising' | 'falling' | 'stable';
+  reasoning: string;
+  recommendedAction: 'scale_up' | 'scale_down' | 'maintain';
+  generatedAt: string;
+  predictionWindow: string;
+  factors: PredictionFactor[];
+}
+
+interface PredictionMeta {
+  metricsCount: number;
+  minRequired: number;
+  nextPredictionIn: number;
+  isReady: boolean;
+}
+
+interface ScalerState {
+  currentVcpu: number;
+  currentMemoryGiB: number;
+  cooldownRemaining: number;
+  autoScalingEnabled: boolean;
+  simulationMode: boolean;
+  prediction: PredictionInfo | null;
+  predictionMeta: PredictionMeta;
+}
+
 // --- Main Dashboard Component ---
 export default function Dashboard() {
   // State
@@ -61,6 +95,8 @@ export default function Dashboard() {
   const [stressMode, setStressMode] = useState(false);
   const [logInsight, setLogInsight] = useState<{ summary: string; severity: string; timestamp: string; action_item?: string } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [prediction, setPrediction] = useState<PredictionInfo | null>(null);
+  const [predictionMeta, setPredictionMeta] = useState<PredictionMeta | null>(null);
 
   // Logic
   const checkLogs = async (mode: string) => {
@@ -125,6 +161,24 @@ export default function Dashboard() {
           cost: data.cost.monthlyEstimated,
         };
         setDataHistory(prev => [...prev.slice(-20), point]);
+
+        // Fetch scaler state with prediction (every 10 seconds to avoid overload)
+        if (timestamp % 10000 < 1000) {
+          try {
+            const scalerRes = await fetch('/api/scaler', {
+              cache: 'no-store',
+              signal: controller.signal,
+            });
+            if (scalerRes.ok) {
+              const scalerData: ScalerState = await scalerRes.json();
+              setPrediction(scalerData.prediction);
+              setPredictionMeta(scalerData.predictionMeta);
+            }
+          } catch {
+            // Ignore scaler fetch errors
+          }
+        }
+
         setIsLoading(false);
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
@@ -243,22 +297,112 @@ export default function Dashboard() {
             <div className="flex justify-between items-center mb-4">
               <div>
                 <h3 className="font-bold text-gray-900">Scaling Forecast</h3>
+                {prediction && (
+                  <p className="text-[10px] text-gray-400 mt-0.5">
+                    AI Confidence: {(prediction.confidence * 100).toFixed(0)}%
+                  </p>
+                )}
               </div>
-              <span className="bg-blue-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase">Live</span>
+              <span className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
+                prediction?.recommendedAction === 'scale_up'
+                  ? 'bg-orange-500'
+                  : prediction?.recommendedAction === 'scale_down'
+                  ? 'bg-green-500'
+                  : 'bg-blue-500'
+              }`}>
+                {prediction?.recommendedAction === 'scale_up' ? 'Scale Up' :
+                 prediction?.recommendedAction === 'scale_down' ? 'Scale Down' : 'Stable'}
+              </span>
             </div>
 
+            {/* Prediction Visualization */}
+            {prediction && (
+              <div className="mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-500">Current</span>
+                  <span className="text-xs text-gray-500">Predicted ({prediction.predictionWindow})</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
+                  </div>
+                  <ArrowUpRight size={20} className={`shrink-0 ${
+                    prediction.trend === 'rising' ? 'text-orange-500' :
+                    prediction.trend === 'falling' ? 'text-green-500 rotate-180' :
+                    'text-gray-400 rotate-45'
+                  }`} />
+                  <div className={`flex-1 h-8 rounded-lg flex items-center justify-center ${
+                    prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
+                      ? 'bg-orange-100 border border-orange-200'
+                      : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
+                      ? 'bg-green-100 border border-green-200'
+                      : 'bg-blue-100 border border-blue-200'
+                  }`}>
+                    <span className={`text-lg font-bold ${
+                      prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
+                        ? 'text-orange-600'
+                        : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
+                        ? 'text-green-600'
+                        : 'text-blue-600'
+                    }`}>{prediction.predictedVcpu} vCPU</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Data Collection Progress (when not enough data) */}
+            {predictionMeta && !predictionMeta.isReady && (
+              <div className="mb-4 p-3 bg-yellow-50 rounded-xl border border-yellow-100">
+                <div className="flex items-center gap-2 mb-2">
+                  <Activity size={14} className="text-yellow-600" />
+                  <span className="text-xs font-medium text-yellow-800">Collecting Data...</span>
+                </div>
+                <div className="w-full h-2 bg-yellow-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-yellow-500 rounded-full transition-all duration-500"
+                    style={{ width: `${(predictionMeta.metricsCount / predictionMeta.minRequired) * 100}%` }}
+                  />
+                </div>
+                <p className="text-[10px] text-yellow-600 mt-1">
+                  {predictionMeta.metricsCount}/{predictionMeta.minRequired} data points
+                </p>
+              </div>
+            )}
+
             {/* AI Insight Box */}
-            <div className="mt-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
               <div className="flex items-start gap-2">
                 <Zap size={14} className="text-blue-500 mt-0.5 shrink-0" />
                 <p className="text-xs text-gray-600 leading-relaxed">
-                  {current?.cost.isPeakMode
-                    ? `Scaling up to handle traffic spike, current cost: $${current?.cost.opGethMonthlyCost?.toFixed(0) || '166'}/mo.`
-                    : `Running at ${current?.metrics.gethVcpu || 1} vCPU, estimated savings: `}
-                  {!current?.cost.isPeakMode && <span className="text-green-600 font-bold">${current?.cost.monthlySaving?.toFixed(0) || '124'}/mo</span>}
+                  {prediction ? (
+                    prediction.reasoning
+                  ) : current?.cost.isPeakMode ? (
+                    `Scaling up to handle traffic spike, current cost: $${current?.cost.opGethMonthlyCost?.toFixed(0) || '166'}/mo.`
+                  ) : (
+                    <>Running at {current?.metrics.gethVcpu || 1} vCPU, estimated savings: <span className="text-green-600 font-bold">${current?.cost.monthlySaving?.toFixed(0) || '124'}/mo</span></>
+                  )}
                 </p>
               </div>
             </div>
+
+            {/* Prediction Factors */}
+            {prediction && prediction.factors.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                <p className="text-[10px] text-gray-400 font-semibold uppercase mb-2">Key Factors</p>
+                <div className="space-y-1">
+                  {prediction.factors.slice(0, 3).map((factor, i) => (
+                    <div key={i} className="flex items-center gap-2 text-xs">
+                      <div className={`w-1.5 h-1.5 rounded-full ${
+                        factor.impact > 0.3 ? 'bg-orange-500' :
+                        factor.impact < -0.3 ? 'bg-green-500' :
+                        'bg-gray-400'
+                      }`} />
+                      <span className="text-gray-600">{factor.description}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* System Health */}
@@ -300,6 +444,74 @@ export default function Dashboard() {
               </div>
             </div>
           </div>
+
+          {/* Prediction Trend Chart */}
+          {dataHistory.length > 5 && (
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-semibold text-gray-900 text-sm">Resource Trend</h4>
+                {prediction && (
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                    prediction.trend === 'rising' ? 'bg-orange-100 text-orange-600' :
+                    prediction.trend === 'falling' ? 'bg-green-100 text-green-600' :
+                    'bg-gray-100 text-gray-600'
+                  }`}>
+                    {prediction.trend.toUpperCase()}
+                  </span>
+                )}
+              </div>
+              <div className="h-32">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={dataHistory}>
+                    <defs>
+                      <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#3B82F6" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="#3B82F6" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+                    <XAxis
+                      dataKey="name"
+                      tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                      axisLine={false}
+                      tickLine={false}
+                    />
+                    <YAxis
+                      tick={{ fontSize: 10, fill: '#9CA3AF' }}
+                      axisLine={false}
+                      tickLine={false}
+                      domain={[0, 100]}
+                    />
+                    <Tooltip
+                      contentStyle={{
+                        backgroundColor: '#1F2937',
+                        border: 'none',
+                        borderRadius: '8px',
+                        fontSize: '12px',
+                        color: '#F3F4F6'
+                      }}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="cpu"
+                      stroke="#3B82F6"
+                      fill="url(#cpuGradient)"
+                      strokeWidth={2}
+                      name="CPU %"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+              {prediction && (
+                <div className="flex items-center justify-center gap-2 mt-2 text-[10px] text-gray-400">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                  <span>Current Load</span>
+                  <div className="w-2 h-2 bg-orange-500 rounded-full ml-3" />
+                  <span>Predicted: {prediction.predictedVcpu} vCPU</span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Total Saved Card (Dark) */}
           <div className="mt-auto bg-[#1A1D21] rounded-2xl p-5 text-white">

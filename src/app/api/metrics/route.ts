@@ -10,12 +10,19 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
+import { pushMetric } from '@/lib/metrics-store';
+import { MetricDataPoint } from '@/types/prediction';
+
 // --- Helper Functions ---
 
 // --- Helper Functions ---
 
 // Global Cache for K8s Token to avoid expensive executables per request
 let k8sTokenCache: { token: string; expiresAt: number } | null = null;
+
+// Block interval tracking for metrics store
+let lastL2BlockHeight: bigint | null = null;
+let lastL2BlockTime: number | null = null;
 
 async function getK8sToken(): Promise<string | undefined> {
     // 1. Static Token from Env
@@ -418,6 +425,37 @@ export async function GET(request: Request) {
         const maxMonthlySaving = fixedCost - dynamicMonthlyCost; // ~$114
 
         const currentHourlyCost = opGethMonthlyCost / HOURS_PER_MONTH;
+
+        // Calculate block interval and push to metrics store
+        const now = Date.now();
+        let blockInterval = 2.0; // Default block interval (L2 typical)
+
+        if (lastL2BlockHeight !== null && lastL2BlockTime !== null) {
+          if (blockNumber > lastL2BlockHeight) {
+            // New block detected, calculate interval
+            const timeDiff = (now - lastL2BlockTime) / 1000; // Convert to seconds
+            const blockDiff = Number(blockNumber - lastL2BlockHeight);
+            blockInterval = timeDiff / blockDiff;
+          }
+        }
+
+        // Update tracking variables
+        lastL2BlockHeight = blockNumber;
+        lastL2BlockTime = now;
+
+        // Push data point to metrics store (only for real data, not stress test)
+        if (!isStressTest) {
+          const dataPoint: MetricDataPoint = {
+            timestamp: new Date().toISOString(),
+            cpuUsage: effectiveCpu,
+            txPoolPending: effectiveTx,
+            gasUsedRatio: gasUsed / gasLimit,
+            blockHeight: Number(blockNumber),
+            blockInterval,
+            currentVcpu,
+          };
+          pushMetric(dataPoint);
+        }
 
         const response = NextResponse.json({
             timestamp: new Date().toISOString(),
