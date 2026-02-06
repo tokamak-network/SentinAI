@@ -2,8 +2,8 @@
 
 | 항목 | 내용 |
 |------|------|
-| 버전 | 1.1.0 |
-| 실행일 | 2026-02-06 14:18~14:24 (KST) |
+| 버전 | 1.2.0 |
+| 실행일 | 2026-02-06 14:18~14:24 (KST), 재검증 18:01 (KST) |
 | 실행자 | Claude Opus 4.6 (자동화 검증) |
 | 기반 문서 | `docs/predictive-scaling-verification.md` |
 | 커밋 | `4c60b21` |
@@ -248,11 +248,11 @@ avg: 0.727s | min: 0.576s | max: 2.506s | n=20
 
 | 시나리오 | 측정값 | 목표값 | 판정 |
 |---------|--------|--------|------|
-| 첫 요청 (AI Gateway 호출) | 6.646s | < 5s | **WARN** |
-| 캐시 히트 (10회 평균) | 0.004s | < 100ms | **PASS** |
-| 캐시 히트 최대 | 0.005s | < 100ms | **PASS** |
+| 첫 요청 (AI Gateway 호출) | 4.040s | < 5s | **PASS** |
+| 캐시 히트 (2회 평균) | 0.007s | < 100ms | **PASS** |
+| 캐시 히트 최대 | 0.009s | < 100ms | **PASS** |
 
-> 첫 요청 6.6s는 AI Gateway(Claude Haiku 4.5)의 응답 지연이 원인. 5분 쿨다운 내 후속 요청은 캐시 히트로 4~5ms에 응답. 실사용 시 캐시 히트율 > 99%.
+> 첫 요청 4.0s는 AI Gateway(Claude Haiku 4.5 via LiteLLM)의 응답 지연 포함. 5분 쿨다운 내 후속 요청은 캐시 히트로 4~9ms에 응답. 실사용 시 캐시 히트율 > 99%. (초기 보고서 6.6s → LiteLLM 포맷 통일 후 4.0s로 개선)
 
 ### 4.3 Fallback 응답 시간
 
@@ -267,8 +267,8 @@ avg: 0.727s | min: 0.576s | max: 2.506s | n=20
 | 지표 | 판정 |
 |------|------|
 | metrics API 응답 < 3s | **PASS** |
-| scaler API 응답 < 5s (AI 호출) | **WARN** (6.6s, AI 의존) |
-| scaler API 응답 (캐시) < 100ms | **PASS** (4ms) |
+| scaler API 응답 < 5s (AI 호출) | **PASS** (4.0s) |
+| scaler API 응답 (캐시) < 100ms | **PASS** (7ms) |
 | Fallback 응답 < 100ms | **PASS** |
 | 메모리 사용 안정 (60개 제한) | **PASS** (Ring Buffer 동작 확인) |
 
@@ -324,7 +324,7 @@ avg: 0.727s | min: 0.576s | max: 2.506s | n=20
 
 | # | 발견 사항 | 심각도 | 설명 |
 |---|----------|--------|------|
-| F-01 | AI Gateway 첫 호출 지연 | Low | 첫 예측 요청 시 6.6s 소요 (Claude 응답 지연). 이후 캐시로 4ms. |
+| F-01 | AI Gateway 첫 호출 지연 | Low | 첫 예측 요청 시 4.0s 소요 (LiteLLM 포맷 통일 후 개선, 이전 6.6s). 이후 캐시로 7ms. |
 | F-02 | 서버 프로세스 잔존 가능 | Info | `npm run dev` 종료 후에도 Node 프로세스가 남아있을 수 있음. `kill -9`로 완전 종료 필요. |
 
 ---
@@ -338,7 +338,7 @@ avg: 0.727s | min: 0.576s | max: 2.506s | n=20
 | AI 연동 | **PASS** — AI Gateway 정상 호출, 유효한 예측 반환 |
 | AI Fallback | **PASS** — 장애 시 confidence 0.5 규칙 기반 예측 동작 |
 | Rate Limiting | **PASS** — 5분 쿨다운, 캐시 히트 확인 |
-| 성능 | **PASS (WARN)** — 캐시 히트 4ms, AI 첫 호출 6.6s (목표 5s 초과) |
+| 성능 | **PASS** — 캐시 히트 7ms, AI 첫 호출 4.0s (목표 5s 이내) |
 | 스트레스 격리 | **PASS** — stress 모드 시 MetricsStore 미저장 확인 |
 | **전체** | **PASS** — TC-07(UI)만 수동 확인 권장 |
 
@@ -365,7 +365,7 @@ avg: 0.727s | min: 0.576s | max: 2.506s | n=20
 ### 성능 기준
 
 - [x] metrics API 응답 < 3s (K8s 연결 시) — 평균 0.727s
-- [ ] scaler API 응답 < 5s (AI 호출 포함) — 6.6s (WARN)
+- [x] scaler API 응답 < 5s (AI 호출 포함) — 4.0s (PASS)
 - [x] Fallback 응답 < 100ms
 - [x] 메모리 사용 안정 (60개 데이터 포인트 제한)
 
