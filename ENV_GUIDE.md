@@ -1,11 +1,30 @@
 # SentinAI Environment Configuration Guide (`.env.local`)
 
-This document explains how to obtain the necessary environment variables to run the `SentinAI` project.
-Copy the `.env.local.sample` file to `.env.local` and fill in the values.
+Recommended: use the interactive setup wizard.
+
+```bash
+npm run setup
+```
+
+Or copy the sample and configure manually:
 
 ```bash
 cp .env.local.sample .env.local
 ```
+
+---
+
+## Quick Start (3 variables)
+
+For full functionality, you only need these 3 variables:
+
+```bash
+L2_RPC_URL=https://your-l2-rpc-endpoint.com
+ANTHROPIC_API_KEY=your-api-key-here
+AWS_CLUSTER_NAME=my-cluster-name
+```
+
+`K8S_API_URL` and `AWS_REGION` are **auto-detected** at runtime from `AWS_CLUSTER_NAME`.
 
 ---
 
@@ -39,43 +58,47 @@ API Key for using the Anthropic Claude model (via LiteLLM).
 
 ---
 
-## 3. Kubernetes Configuration (Required for Infrastructure Monitoring)
-
-### `K8S_NAMESPACE`
-The Kubernetes namespace where the target pods are deployed.
-*   **Default**: `default`
-*   **How to Check**: Run `kubectl get namespaces` or ask your DevOps engineer.
-
-### `K8S_APP_PREFIX`
-Prefix for resource identification.
-*   **Default**: `op`
-*   **Description**: The code monitors resources by looking for labels like `app=${PREFIX}-geth` and `app=${PREFIX}-node`. Follow the labeling convention of your deployed Helm Chart or Manifest.
-
----
-
-## 4. AWS EKS Connection (Required if using AWS)
-
-This configuration is required when querying pod information from *outside* the K8s cluster (e.g., local development or Docker container). Not needed for In-Cluster deployments with ServiceAccount.
+## 3. AWS EKS / Kubernetes (Required for Infrastructure Monitoring)
 
 ### `AWS_CLUSTER_NAME`
-*   **Description**: Name of the EKS Cluster.
-*   **How to Obtain**: Check in AWS Console > EKS > Clusters list.
-
-### `K8S_API_URL`
-*   **Description**: Endpoint URL of the Kubernetes API server.
+Name of the EKS Cluster. This is the **only required variable** for K8s monitoring — the rest is auto-detected.
 *   **How to Obtain**:
-    *   **AWS Console**: Select EKS > Cluster > Check "API server endpoint".
-    *   **CLI**: `aws eks describe-cluster --name <CLUSTER_NAME> --query "cluster.endpoint"`
+    *   **AWS Console**: Go to EKS > Clusters list.
+    *   **CLI**: `aws eks list-clusters`
+    *   **`npm run setup`**: Automatically lists clusters for selection.
 
-### `AWS_REGION`
-*   **Description**: AWS Region code where the cluster is located.
-*   **Example**: `ap-northeast-2` (Seoul), `us-east-1` (Virginia)
+### Auto-Detected Variables
 
-### `AWS_ACCESS_KEY_ID` & `AWS_SECRET_ACCESS_KEY`
-*   **Description**: Access keys for an IAM user with permission to access the EKS cluster.
-*   **How to Obtain**:
-    1. Go to AWS Console > IAM > Users.
-    2. Click "Add users" > Create user (permissions setup required).
-    3. Go to the "Security credentials" tab of the created user.
-    4. Click "Create access key" > Select "Local code" and generate the key.
-*   **Required Permissions**: Must include at least `eks:DescribeCluster` and be mapped to the cluster's RBAC (e.g., `system:masters` or `view` role).
+The following are resolved automatically at runtime:
+
+| Variable | Auto-Detection Method | Manual Override |
+|----------|----------------------|-----------------|
+| `K8S_API_URL` | `aws eks describe-cluster --name <cluster>` | Set `K8S_API_URL` env var |
+| `AWS_REGION` | `AWS_REGION` env > `aws configure get region` | Set `AWS_REGION` env var |
+| Auth Token | `aws eks get-token --cluster-name <cluster>` | Set `K8S_TOKEN` env var |
+
+### AWS Authentication
+
+No need to put AWS credentials in `.env.local`. SentinAI uses the standard AWS credential chain:
+
+1. **`aws configure`** (recommended for local development)
+   ```bash
+   aws configure
+   # Enter: Access Key ID, Secret Access Key, Region, Output format
+   ```
+2. **Environment Variables** (for Docker/CI)
+   ```bash
+   AWS_ACCESS_KEY_ID=...
+   AWS_SECRET_ACCESS_KEY=...
+   ```
+3. **IAM Role** (for EKS/EC2/Fargate deployments — no config needed)
+
+**Required Permissions**: `eks:DescribeCluster`, `eks:ListClusters`, and cluster RBAC mapping (e.g., `system:masters` or `view` role).
+
+### Optional K8s Settings
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `K8S_NAMESPACE` | `default` | Namespace where L2 pods are deployed |
+| `K8S_APP_PREFIX` | `op` | Pod label prefix (e.g., `app=op-geth`) |
+| `KUBECONFIG` | — | Path to kubeconfig file (alternative to EKS auto-detection) |

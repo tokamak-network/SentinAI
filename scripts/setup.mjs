@@ -4,6 +4,7 @@ import { createInterface } from "node:readline";
 import { existsSync, writeFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { exec } from "node:child_process";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(__dirname, "..");
@@ -19,6 +20,14 @@ function ask(prompt) {
 
 function isValidUrl(value) {
   return /^https?:\/\/.+/.test(value);
+}
+
+function execCmd(cmd, timeoutMs = 10000) {
+  return new Promise((resolve) => {
+    exec(cmd, { timeout: timeoutMs }, (error, stdout, stderr) => {
+      resolve({ error, stdout: stdout?.trim() || "", stderr: stderr?.trim() || "" });
+    });
+  });
 }
 
 async function askRequired(prompt, validate) {
@@ -60,6 +69,36 @@ async function askYesNo(prompt, defaultNo = true) {
   if (!answer) return !defaultNo;
   return answer === "y" || answer === "yes";
 }
+
+// ============================================================
+// AWS Auto-Detection Helpers
+// ============================================================
+
+async function checkAwsCli() {
+  const { error } = await execCmd("aws --version");
+  return !error;
+}
+
+async function getAwsRegion() {
+  // Try: aws configure get region
+  const { stdout } = await execCmd("aws configure get region");
+  return stdout || null;
+}
+
+async function listEksClusters(region) {
+  const regionFlag = region ? ` --region ${region}` : "";
+  const { error, stdout } = await execCmd(`aws eks list-clusters${regionFlag} --output json`);
+  if (error || !stdout) return [];
+  try {
+    return JSON.parse(stdout).clusters || [];
+  } catch {
+    return [];
+  }
+}
+
+// ============================================================
+// Main
+// ============================================================
 
 async function main() {
   console.log("");
@@ -104,18 +143,61 @@ async function main() {
 
   if (setupK8s) {
     console.log("");
-    console.log("  --- 3. Kubernetes Configuration ---");
+    console.log("  --- 3. Kubernetes (EKS) ---");
+
+    // Auto-detect AWS CLI
+    const hasAwsCli = await checkAwsCli();
+    let detectedRegion = null;
+
+    if (hasAwsCli) {
+      detectedRegion = await getAwsRegion();
+      if (detectedRegion) {
+        console.log(`  \u2713 AWS CLI configured (region: ${detectedRegion})`);
+      } else {
+        console.log("  \u2713 AWS CLI found (no default region configured)");
+      }
+    } else {
+      console.log("  ! AWS CLI not found. Enter cluster name manually.");
+    }
+
+    // Auto-detect EKS clusters
+    let selectedCluster = null;
+
+    if (hasAwsCli) {
+      console.log("");
+      console.log("  Searching for EKS clusters...");
+      const clusters = await listEksClusters(detectedRegion);
+
+      if (clusters.length > 0) {
+        console.log(`  Found ${clusters.length} cluster(s):`);
+        clusters.forEach((c, i) => console.log(`    ${i + 1}. ${c}`));
+        console.log("");
+
+        const choice = (await ask(`? Select cluster (1-${clusters.length}), or enter name manually: `)).trim();
+        const idx = parseInt(choice, 10);
+        if (idx >= 1 && idx <= clusters.length) {
+          selectedCluster = clusters[idx - 1];
+        } else if (choice) {
+          selectedCluster = choice;
+        }
+      } else {
+        console.log("  No EKS clusters found in this account/region.");
+      }
+    }
+
+    if (!selectedCluster) {
+      selectedCluster = await askOptional("? AWS Cluster Name");
+    }
+
+    if (selectedCluster) {
+      env.AWS_CLUSTER_NAME = selectedCluster;
+      console.log(`  \u2713 Cluster: ${selectedCluster}`);
+      console.log("  (K8S_API_URL will be auto-detected at runtime)");
+    }
+
+    console.log("");
     env.K8S_NAMESPACE = await askOptional("? K8s Namespace", "default");
     env.K8S_APP_PREFIX = await askOptional("? K8s App Prefix", "op");
-    console.log("");
-
-    // --- 4. AWS EKS ---
-    console.log("  --- 4. AWS EKS Connection ---");
-    env.K8S_API_URL = await askOptionalUrl("? K8s API URL (EKS endpoint)");
-    env.AWS_CLUSTER_NAME = await askOptional("? AWS Cluster Name");
-    env.AWS_REGION = await askOptional("? AWS Region", "ap-northeast-2");
-    env.AWS_ACCESS_KEY_ID = await askOptional("? AWS Access Key ID");
-    env.AWS_SECRET_ACCESS_KEY = await askOptional("? AWS Secret Access Key");
   }
 
   console.log("");
@@ -130,7 +212,7 @@ async function main() {
     "# --- 1. L2 Chain RPC (Required) ---",
     `L2_RPC_URL=${env.L2_RPC_URL}`,
     "",
-    "# --- 2. AI Configuration (Required for Log Analysis) ---",
+    "# --- 2. AI Configuration ---",
   ];
 
   if (env.AI_GATEWAY_URL) {
@@ -142,16 +224,13 @@ async function main() {
 
   if (setupK8s) {
     lines.push("");
-    lines.push("# --- 3. Kubernetes Configuration ---");
+    lines.push("# --- 3. K8s Monitoring ---");
+    if (env.AWS_CLUSTER_NAME) {
+      lines.push(`AWS_CLUSTER_NAME=${env.AWS_CLUSTER_NAME}`);
+      lines.push("# K8S_API_URL is auto-detected from AWS_CLUSTER_NAME");
+    }
     lines.push(`K8S_NAMESPACE=${env.K8S_NAMESPACE || "default"}`);
     lines.push(`K8S_APP_PREFIX=${env.K8S_APP_PREFIX || "op"}`);
-    lines.push("");
-    lines.push("# --- 4. AWS EKS Connection ---");
-    if (env.K8S_API_URL) lines.push(`K8S_API_URL=${env.K8S_API_URL}`);
-    if (env.AWS_CLUSTER_NAME) lines.push(`AWS_CLUSTER_NAME=${env.AWS_CLUSTER_NAME}`);
-    lines.push(`AWS_REGION=${env.AWS_REGION || "ap-northeast-2"}`);
-    if (env.AWS_ACCESS_KEY_ID) lines.push(`AWS_ACCESS_KEY_ID=${env.AWS_ACCESS_KEY_ID}`);
-    if (env.AWS_SECRET_ACCESS_KEY) lines.push(`AWS_SECRET_ACCESS_KEY=${env.AWS_SECRET_ACCESS_KEY}`);
   }
 
   lines.push("");

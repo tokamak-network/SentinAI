@@ -3,8 +3,6 @@
  * Patch StatefulSet resources via kubectl
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import {
   ScaleResult,
   ScalingState,
@@ -14,8 +12,7 @@ import {
   SimulationConfig,
   DEFAULT_SIMULATION_CONFIG,
 } from '@/types/scaling';
-
-const execAsync = promisify(exec);
+import { runK8sCommand } from '@/lib/k8s-config';
 
 // Simulation mode (Controlled by env var, default: true = safe mode)
 const simulationConfig: SimulationConfig = {
@@ -57,36 +54,6 @@ export function getSimulationConfig(): SimulationConfig {
   return { ...simulationConfig };
 }
 
-/**
- * kubectl command execution helper
- */
-async function runK8sCommand(command: string): Promise<{ stdout: string; stderr: string }> {
-  let token = process.env.K8S_TOKEN;
-
-  // Generate AWS EKS dynamic token
-  if (process.env.AWS_CLUSTER_NAME) {
-    try {
-      const { stdout } = await execAsync(
-        `aws eks get-token --cluster-name ${process.env.AWS_CLUSTER_NAME}`
-      );
-      const tokenData = JSON.parse(stdout);
-      token = tokenData.status.token;
-    } catch (e) {
-      const message = e instanceof Error ? e.message : 'Unknown error';
-      console.warn('AWS Token Gen Failed:', message);
-    }
-  }
-
-  let baseCmd = 'kubectl';
-  if (process.env.K8S_API_URL) {
-    baseCmd += ` --server="${process.env.K8S_API_URL}"`;
-  }
-  if (token) {
-    baseCmd += ` --token="${token}" --insecure-skip-tls-verify`;
-  }
-
-  return await execAsync(`${baseCmd} ${command}`, { timeout: 10000 });
-}
 
 /**
  * Get current op-geth vCPU

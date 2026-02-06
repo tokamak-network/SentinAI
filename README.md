@@ -63,27 +63,23 @@ SentinAI uses **Claude Haiku 4.5** via a custom AI Gateway to audit network heal
     *   **Suggestions** are grounded in official Optimism documentation (e.g., suggesting `--syncmode snap` or checking specific P2P flags).
 
 ## Environment Variables
-Copy the sample and configure:
+
+Interactive setup (recommended):
+```bash
+npm run setup
+```
+
+Or copy the sample and configure manually:
 ```bash
 cp .env.local.sample .env.local
 ```
 
+**Minimum required (3 variables for full functionality):**
 ```bash
-# L2 Chain RPC (Required)
-L2_RPC_URL=https://your-l2-rpc-endpoint.com
-
-# AI Configuration (Required for Log Analysis)
-AI_GATEWAY_URL=https://api.ai.tokamak.network
-ANTHROPIC_API_KEY=your-api-key-here
-
-# Kubernetes Configuration
-K8S_NAMESPACE=default
-K8S_APP_PREFIX=op
-
-# AWS EKS Connection
-K8S_API_URL=https://<CLUSTER_ID>.eks.amazonaws.com
-AWS_CLUSTER_NAME=my-cluster-name
-AWS_REGION=ap-northeast-2
-AWS_ACCESS_KEY_ID=your-access-key
-AWS_SECRET_ACCESS_KEY=your-secret-key
+L2_RPC_URL=https://your-l2-rpc-endpoint.com    # L2 Chain RPC
+ANTHROPIC_API_KEY=your-api-key-here             # AI features
+AWS_CLUSTER_NAME=my-cluster-name                # K8s (auto-detects K8S_API_URL & region)
 ```
+
+> `K8S_API_URL` and `AWS_REGION` are auto-detected at runtime from `AWS_CLUSTER_NAME`.
+> AWS credentials use the standard chain: env vars, `~/.aws/credentials`, or IAM Role.

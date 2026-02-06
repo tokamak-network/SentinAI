@@ -5,84 +5,13 @@ import { NextResponse } from 'next/server';
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
-
 import { pushMetric } from '@/lib/metrics-store';
 import { MetricDataPoint } from '@/types/prediction';
-
-// --- Helper Functions ---
-
-// --- Helper Functions ---
-
-// Global Cache for K8s Token to avoid expensive executables per request
-let k8sTokenCache: { token: string; expiresAt: number } | null = null;
+import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 
 // Block interval tracking for metrics store
 let lastL2BlockHeight: bigint | null = null;
 let lastL2BlockTime: number | null = null;
-
-async function getK8sToken(): Promise<string | undefined> {
-    // 1. Static Token from Env
-    if (process.env.K8S_TOKEN) return process.env.K8S_TOKEN;
-
-    // 2. Dynamic AWS EKS Token
-    if (process.env.AWS_CLUSTER_NAME) {
-        const now = Date.now();
-        // Reuse cached token if valid (buffer 1 minute)
-        if (k8sTokenCache && k8sTokenCache.expiresAt > now + 60000) {
-            return k8sTokenCache.token;
-        }
-
-        try {
-            const startToken = Date.now();
-            // This command typically takes 2-3 seconds, so caching is critical
-            const { stdout } = await execAsync(`aws eks get-token --cluster-name ${process.env.AWS_CLUSTER_NAME}`);
-            console.log(`[Timer] AWS Token Gen takes ${Date.now() - startToken}ms (Cache Miss)`);
-
-            const tokenData = JSON.parse(stdout);
-            const token = tokenData.status.token;
-
-            // Cache for 10 minutes (AWS tokens usually last 15 min)
-            k8sTokenCache = {
-                token,
-                expiresAt: now + 10 * 60 * 1000
-            };
-            return token;
-        } catch (e) {
-            const message = e instanceof Error ? e.message : 'Unknown error';
-            console.warn("AWS Token Gen Failed:", message);
-            return undefined;
-        }
-    }
-    return undefined;
-}
-
-async function runK8sCommand(command: string) {
-    const startCmd = Date.now();
-
-    // Get token (cached or fresh)
-    const token = await getK8sToken();
-
-    let baseCmd = 'kubectl';
-    if (process.env.K8S_API_URL) {
-        baseCmd += ` --server="${process.env.K8S_API_URL}"`;
-    }
-    if (token) {
-        baseCmd += ` --token="${token}" --insecure-skip-tls-verify`;
-    }
-
-    try {
-        const result = await execAsync(`${baseCmd} ${command}`);
-        console.log(`[Timer] Kubectl Data Fetch takes ${Date.now() - startCmd}ms : ${command.substring(0, 30)}...`);
-        return result;
-    } catch (e) {
-        console.log(`[Timer] Kubectl Failed takes ${Date.now() - startCmd}ms : ${command}`);
-        throw e;
-    }
-}
 
 interface ComponentDetail {
     name: string;
@@ -101,7 +30,7 @@ interface ComponentDetail {
 
 // Fetch deep details for a specific component
 async function getComponentDetails(labelSelector: string, displayName: string, icon: string, strategy: string = "Static"): Promise<ComponentDetail | null> {
-    const namespace = process.env.K8S_NAMESPACE || 'default';
+    const namespace = getNamespace();
     try {
         // 1. Get Pod Info (JSON)
         const podCmd = `get pods -n ${namespace} -l ${labelSelector} -o json`;
@@ -147,7 +76,7 @@ async function getComponentDetails(labelSelector: string, displayName: string, i
         let instanceInfo = "Unknown Node";
         let isFargate = false;
 
-        if (nodeName) {
+        if (nodeName && /^[a-zA-Z0-9._-]+$/.test(nodeName)) {
             try {
                 // Check Node for Fargate or Instance Type
                 const nodeCmd = `get node ${nodeName} -o json`;
@@ -310,8 +239,7 @@ export async function GET(request: Request) {
 
     try {
         // 1. Parallel Data Fetch for All Components
-        // Label prefix can be configured via K8S_APP_PREFIX env var
-        const appPrefix = process.env.K8S_APP_PREFIX || 'op';
+        const appPrefix = getAppPrefix();
 
         const startK8s = performance.now();
         const [l2Client, consensus, batcher, proposer] = await Promise.all([

@@ -82,6 +82,13 @@ function generateScenarioData(scenario: Scenario): MetricDataPoint[] {
         gasUsedRatio = jitter(lerp(0.75, 0.15, t), 0.03);
         blockInterval = jitter(lerp(4.0, 2.0, t), 0.2);
         break;
+
+      default:
+        cpuUsage = jitter(20, 5);
+        txPoolPending = Math.round(jitter(20, 10));
+        gasUsedRatio = jitter(0.15, 0.05);
+        blockInterval = jitter(2.0, 0.3);
+        break;
     }
 
     // Clamp values to valid ranges

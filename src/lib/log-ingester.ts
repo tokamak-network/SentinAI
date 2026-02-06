@@ -34,9 +34,11 @@ export function generateMockLogs(mode: 'normal' | 'attack' = 'normal'): Record<s
     return logs;
 }
 
+import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
+
 // Fetch logs from ALL components
 export async function getAllLiveLogs(namespace?: string): Promise<Record<string, string>> {
-    const ns = namespace || process.env.K8S_NAMESPACE || 'default';
+    const ns = namespace || getNamespace();
     const results: Record<string, string> = {};
     const components = getL2Components();
     // Run in parallel
@@ -46,54 +48,15 @@ export async function getAllLiveLogs(namespace?: string): Promise<Record<string,
     return results;
 }
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
-
-// Real K8s Logic using kubectl (Phase 3)
+// Real K8s Logic using kubectl
 export async function getLiveLogs(namespace?: string, labelSelector?: string): Promise<string> {
-    const ns = namespace || process.env.K8S_NAMESPACE || 'default';
-    const appPrefix = process.env.K8S_APP_PREFIX || 'op';
-    const label = labelSelector || `app=${appPrefix}-geth`;
+    const ns = namespace || getNamespace();
+    const label = labelSelector || `app=${getAppPrefix()}-geth`;
     try {
-        let token = process.env.K8S_TOKEN;
-
-        // AWS EKS Dynamic Token Generation (Option 3 - Priority)
-        // Always attempt to generate a fresh token if Cluster Name is provided, 
-        // to avoid using stale tokens from env.
-        if (process.env.AWS_CLUSTER_NAME) {
-            try {
-                const clusterName = process.env.AWS_CLUSTER_NAME;
-                // console.log(`[LogIngester] Generating EKS token for cluster: ${clusterName}`);
-                const { stdout } = await execAsync(`aws eks get-token --cluster-name ${clusterName}`);
-                const tokenData = JSON.parse(stdout);
-                token = tokenData.status.token;
-            } catch (e) {
-                const message = e instanceof Error ? e.message : 'Unknown error';
-                console.warn(`[LogIngester] AWS Token Generation Warning: ${message}`);
-                // Fallback to static token if generation fails
-            }
-        }
-
-        // Construct base kubectl command with env overrides
-        let baseCmd = 'kubectl';
-
-        if (process.env.KUBECONFIG) {
-            baseCmd += ` --kubeconfig="${process.env.KUBECONFIG}"`;
-        }
-        if (process.env.K8S_API_URL) {
-            baseCmd += ` --server="${process.env.K8S_API_URL}"`;
-        }
-        if (token) {
-            baseCmd += ` --token="${token}" --insecure-skip-tls-verify`;
-        }
-
         // 1. Find Pod Name
-        const findPodCmd = `${baseCmd} get pods -n ${ns} -l ${label} -o jsonpath="{.items[0].metadata.name}"`;
-        console.log(`[LogIngester] Finding pod: ${findPodCmd.replace(/--token="[^"]+"/, '--token="***"')}`);
-
-        const { stdout: podName, stderr: findErr } = await execAsync(findPodCmd);
+        const { stdout: podName } = await runK8sCommand(
+            `get pods -n ${ns} -l ${label} -o jsonpath="{.items[0].metadata.name}"`
+        );
 
         if (!podName || podName.trim() === '') {
             console.warn(`[LogIngester] No pods found for ${label}`);
@@ -105,11 +68,11 @@ export async function getLiveLogs(namespace?: string, labelSelector?: string): P
         console.log(`[LogIngester] Tailing logs from: ${cleanPodName}`);
 
         // 2. Fetch Logs (Tail)
-        const logsCmd = `${baseCmd} logs ${cleanPodName} -n ${ns} --tail=50`;
-        const { stdout: logs, stderr: logsErr } = await execAsync(logsCmd);
+        const { stdout: logs, stderr: logsErr } = await runK8sCommand(
+            `logs ${cleanPodName} -n ${ns} --tail=50`
+        );
 
         if (logsErr && !logs) {
-            // kubectl logs might imply stderr info, but usually checking logs is enough
             throw new Error(logsErr);
         }
 
@@ -118,8 +81,7 @@ export async function getLiveLogs(namespace?: string, labelSelector?: string): P
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
         console.error("[LogIngester] kubectl Error:", errorMessage);
-        // Fallback or Error Message
-        // If it's a "command not found" mock it for the user if they don't have kubectl
+
         if (errorMessage.includes('command not found')) {
             return `ERROR [System] 'kubectl' command not found on server.
             Please ensure kubectl is installed and in the PATH.`;

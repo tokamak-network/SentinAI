@@ -30,19 +30,17 @@ docker run -d \
   sentinai:latest
 
 # Run container (full - with K8s and AI features)
+# K8S_API_URL and AWS_REGION are auto-detected from AWS_CLUSTER_NAME.
+# AWS credentials: mount ~/.aws or pass AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.
 docker run -d \
   --name sentinai \
   -p 3000:3000 \
   -e L2_RPC_URL=https://your-l2-rpc-endpoint.com \
-  -e AI_GATEWAY_URL=https://api.ai.tokamak.network \
   -e ANTHROPIC_API_KEY=your-api-key \
-  -e K8S_NAMESPACE=default \
-  -e K8S_APP_PREFIX=op \
-  -e K8S_API_URL=https://your-eks-cluster.amazonaws.com \
   -e AWS_CLUSTER_NAME=my-cluster-name \
-  -e AWS_REGION=ap-northeast-2 \
   -e AWS_ACCESS_KEY_ID=your-access-key \
   -e AWS_SECRET_ACCESS_KEY=your-secret-key \
+  -e AWS_REGION=ap-northeast-2 \
   sentinai:latest
 ```
 
@@ -68,7 +66,6 @@ npm run setup    # Interactive setup wizard for .env.local
 ### API Routes (`src/app/api/`)
 
 - **`metrics/route.ts`**: Core metrics API - fetches L1/L2 block heights via viem, K8s pod resources via kubectl.
-  - **Token Caching**: AWS EKS tokens cached globally (10 min) to reduce latency (0.6s vs 3s).
   - **Fast Path**: When `stress=true`, returns simulated 8 vCPU peak data immediately (no K8s/RPC calls).
 
 - **`metrics/seed/route.ts`**: Dev-only endpoint for injecting mock time-series data into MetricsStore.
@@ -110,7 +107,7 @@ npm run setup    # Interactive setup wizard for .env.local
 ### Key Patterns
 
 - L1/L2 block heights fetched in parallel via viem
-- K8s commands executed via `kubectl` with optional AWS EKS token (`aws eks get-token`)
+- K8s commands via centralized `k8s-config.ts` module (auto-detects K8S_API_URL, token, region)
 - Dual-mode operation: Real cluster data or mock fallback for development
 - Cost calculation based on AWS Fargate Seoul pricing ($0.04656/vCPU-hour, $0.00511/GB-hour)
 - Dynamic scaling range: 1-4 vCPU (memory = vCPU × 2 GiB), stress mode simulates 8 vCPU
@@ -123,26 +120,19 @@ Copy the sample and configure (see `ENV_GUIDE.md` for detailed setup instruction
 cp .env.local.sample .env.local
 ```
 
-**Required:**
+**Minimum required (3 variables for full functionality):**
 ```bash
 L2_RPC_URL=https://your-l2-rpc-endpoint.com    # L2 Chain RPC
+ANTHROPIC_API_KEY=your-api-key-here             # AI features
+AWS_CLUSTER_NAME=my-cluster-name                # K8s (auto-detects K8S_API_URL & region)
 ```
 
-**Optional (AI Log Analysis):**
+**Optional (sensible defaults):**
 ```bash
-AI_GATEWAY_URL=https://api.ai.tokamak.network
-ANTHROPIC_API_KEY=your-api-key-here
-```
-
-**Optional (K8s Monitoring & Auto-scaling):**
-```bash
-K8S_NAMESPACE=default
-K8S_APP_PREFIX=op
-K8S_API_URL=https://<CLUSTER_ID>.eks.amazonaws.com
-AWS_CLUSTER_NAME=my-cluster-name
-AWS_REGION=ap-northeast-2
-AWS_ACCESS_KEY_ID=your-access-key
-AWS_SECRET_ACCESS_KEY=your-secret-key
+# AI_GATEWAY_URL=https://api.ai.tokamak.network  # Default
+# K8S_NAMESPACE=default
+# K8S_APP_PREFIX=op
+# K8S_API_URL=https://...  # Override auto-detection
 ```
 
 ## Tech Stack
