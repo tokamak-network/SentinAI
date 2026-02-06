@@ -12,9 +12,9 @@ import {
 import { TargetVcpu } from '@/types/scaling';
 import { getRecentMetrics, getMetricsStats, getMetricsCount } from './metrics-store';
 
-// AI Gateway Configuration (Same as ai-analyzer.ts)
-const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://api.ai.tokamak.network';
-const API_KEY = process.env.GEMINI_API_KEY || '';
+// Anthropic API Configuration
+const ANTHROPIC_API_URL = process.env.ANTHROPIC_API_URL || 'https://api.anthropic.com';
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
 // Rate limiting state
 let lastPredictionTime: number = 0;
@@ -53,12 +53,16 @@ Return ONLY a valid JSON object (no markdown, no explanation outside JSON):
   "predictedVcpu": 1 | 2 | 4,
   "confidence": 0.0 to 1.0,
   "trend": "rising" | "falling" | "stable",
-  "reasoning": "Brief explanation of prediction logic",
+  "reasoning": "Concise summary under 200 characters. State the key metric trend and recommended action in one sentence.",
   "recommendedAction": "scale_up" | "scale_down" | "maintain",
   "factors": [
-    { "name": "factorName", "impact": -1.0 to 1.0, "description": "explanation" }
+    { "name": "factorName", "impact": -1.0 to 1.0, "description": "short phrase" }
   ]
-}`;
+}
+
+IMPORTANT CONSTRAINTS:
+- "reasoning" MUST be under 200 characters. Be concise: summarize the core insight, not every detail.
+- "description" in factors MUST be under 60 characters each.`;
 }
 
 /**
@@ -224,18 +228,20 @@ export async function predictScaling(
   const userPrompt = buildUserPrompt(currentVcpu);
 
   try {
-    console.log(`[Predictive Scaler] Requesting prediction from AI Gateway...`);
+    console.log(`[Predictive Scaler] Requesting prediction from Anthropic API...`);
 
-    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
+    const response = await fetch(`${ANTHROPIC_API_URL}/v1/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
+        'x-api-key': ANTHROPIC_API_KEY,
+        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'gemini-3-pro',
+        model: 'claude-haiku-4-5-20241022',
+        max_tokens: 1024,
+        system: systemPrompt,
         messages: [
-          { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.2,
@@ -243,11 +249,11 @@ export async function predictScaling(
     });
 
     if (!response.ok) {
-      throw new Error(`AI Gateway responded with ${response.status}: ${response.statusText}`);
+      throw new Error(`Anthropic API responded with ${response.status}: ${response.statusText}`);
     }
 
     const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    const content = data.content?.[0]?.text || '';
 
     const prediction = parseAIResponse(content);
 

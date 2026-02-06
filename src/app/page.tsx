@@ -98,8 +98,6 @@ export default function Dashboard() {
   const [predictionMeta, setPredictionMeta] = useState<PredictionMeta | null>(null);
   const [seedScenario, setSeedScenario] = useState<'stable' | 'rising' | 'spike' | 'falling'>('rising');
   const [isSeeding, setIsSeeding] = useState(false);
-  const [isApplyingScale, setIsApplyingScale] = useState(false);
-  const [scaleResult, setScaleResult] = useState<{ success: boolean; from: number; to: number; reason: string; dryRun?: boolean } | null>(null);
 
   // Seed prediction data for testing
   const seedPredictionData = async () => {
@@ -119,36 +117,6 @@ export default function Dashboard() {
       console.error('Seed failed:', e);
     } finally {
       setIsSeeding(false);
-    }
-  };
-
-  // Apply predicted scaling
-  const applyPredictedScale = async () => {
-    if (!prediction) return;
-    setIsApplyingScale(true);
-    setScaleResult(null);
-    try {
-      const res = await fetch('/api/scaler', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          targetVcpu: prediction.predictedVcpu,
-          reason: `[UI] Apply predicted ${prediction.predictedVcpu} vCPU (${prediction.recommendedAction}, confidence: ${(prediction.confidence * 100).toFixed(0)}%)`,
-        }),
-      });
-      const data = await res.json();
-      setScaleResult({
-        success: data.success,
-        from: data.previousVcpu,
-        to: data.currentVcpu,
-        reason: data.error || data.decision?.reason || '',
-        dryRun: data.dryRun,
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : 'Unknown error';
-      setScaleResult({ success: false, from: 0, to: 0, reason: msg });
-    } finally {
-      setIsApplyingScale(false);
     }
   };
 
@@ -359,7 +327,7 @@ export default function Dashboard() {
               </div>
               <span className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
                 prediction?.recommendedAction === 'scale_up'
-                  ? 'bg-orange-500'
+                  ? 'bg-indigo-500'
                   : prediction?.recommendedAction === 'scale_down'
                   ? 'bg-green-500'
                   : 'bg-blue-500'
@@ -376,60 +344,56 @@ export default function Dashboard() {
                   <span className="text-xs text-gray-500">Current</span>
                   <span className="text-xs text-gray-500">Predicted ({prediction.predictionWindow})</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                    <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
-                  </div>
-                  <ArrowUpRight size={20} className={`shrink-0 ${
-                    prediction.trend === 'rising' ? 'text-orange-500' :
-                    prediction.trend === 'falling' ? 'text-green-500 rotate-180' :
-                    'text-gray-400 rotate-45'
-                  }`} />
-                  <div className={`flex-1 h-8 rounded-lg flex items-center justify-center ${
-                    prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
-                      ? 'bg-orange-100 border border-orange-200'
-                      : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
-                      ? 'bg-green-100 border border-green-200'
-                      : 'bg-blue-100 border border-blue-200'
-                  }`}>
-                    <span className={`text-lg font-bold ${
+                <div className="space-y-2">
+                  {/* vCPU Row */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
+                    </div>
+                    <ArrowUpRight size={20} className={`shrink-0 ${
+                      prediction.trend === 'rising' ? 'text-indigo-500' :
+                      prediction.trend === 'falling' ? 'text-green-500 rotate-180' :
+                      'text-gray-400 rotate-45'
+                    }`} />
+                    <div className={`flex-1 h-8 rounded-lg flex items-center justify-center ${
                       prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
-                        ? 'text-orange-600'
+                        ? 'bg-indigo-100 border border-indigo-200'
                         : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
-                        ? 'text-green-600'
-                        : 'text-blue-600'
-                    }`}>{prediction.predictedVcpu} vCPU</span>
+                        ? 'bg-green-100 border border-green-200'
+                        : 'bg-blue-100 border border-blue-200'
+                    }`}>
+                      <span className={`text-lg font-bold ${
+                        prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
+                          ? 'text-indigo-600'
+                          : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
+                          ? 'text-green-600'
+                          : 'text-blue-600'
+                      }`}>{prediction.predictedVcpu} vCPU</span>
+                    </div>
+                  </div>
+                  {/* MEM Row */}
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 h-7 bg-gray-100 rounded-lg flex items-center justify-center">
+                      <span className="text-sm font-bold text-gray-500">{(current?.metrics.gethVcpu || 1) * 2} GiB</span>
+                    </div>
+                    <div className="w-5 shrink-0" />
+                    <div className={`flex-1 h-7 rounded-lg flex items-center justify-center ${
+                      prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
+                        ? 'bg-indigo-50 border border-indigo-100'
+                        : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
+                        ? 'bg-green-50 border border-green-100'
+                        : 'bg-blue-50 border border-blue-100'
+                    }`}>
+                      <span className={`text-sm font-bold ${
+                        prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
+                          ? 'text-indigo-500'
+                          : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
+                          ? 'text-green-500'
+                          : 'text-blue-500'
+                      }`}>{prediction.predictedVcpu * 2} GiB</span>
+                    </div>
                   </div>
                 </div>
-                {/* Apply Scaling Button */}
-                {prediction.predictedVcpu !== (current?.metrics.gethVcpu || 1) && (
-                  <button
-                    onClick={applyPredictedScale}
-                    disabled={isApplyingScale}
-                    className={`mt-3 w-full py-2 rounded-lg text-xs font-bold transition-all ${
-                      isApplyingScale
-                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                        : prediction.recommendedAction === 'scale_up'
-                        ? 'bg-orange-500 text-white hover:bg-orange-600'
-                        : 'bg-green-500 text-white hover:bg-green-600'
-                    }`}
-                  >
-                    {isApplyingScale ? '적용 중...' : `${prediction.predictedVcpu} vCPU 적용`}
-                  </button>
-                )}
-                {/* Scale Result */}
-                {scaleResult && (
-                  <div className={`mt-2 p-2 rounded-lg text-xs ${
-                    scaleResult.success
-                      ? 'bg-green-50 border border-green-200 text-green-700'
-                      : 'bg-red-50 border border-red-200 text-red-700'
-                  }`}>
-                    {scaleResult.success
-                      ? `${scaleResult.from} → ${scaleResult.to} vCPU 변경 완료${scaleResult.dryRun ? ' (Simulation)' : ''}`
-                      : `실패: ${scaleResult.reason}`
-                    }
-                  </div>
-                )}
               </div>
             )}
 
@@ -507,7 +471,7 @@ export default function Dashboard() {
                   {prediction.factors.slice(0, 3).map((factor, i) => (
                     <div key={i} className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full border ${
                       factor.impact > 0.3
-                        ? 'bg-orange-50 border-orange-200 text-orange-700'
+                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
                         : factor.impact < -0.3
                         ? 'bg-green-50 border-green-200 text-green-700'
                         : 'bg-gray-50 border-gray-200 text-gray-600'
