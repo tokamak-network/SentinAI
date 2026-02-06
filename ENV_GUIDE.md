@@ -29,8 +29,8 @@ The address of the internal AI Gateway or external LLM API.
 *   **Default**: `https://api.ai.tokamak.network` (When using Tokamak Network API Server)
 *   **Self-hosted**: Enter your custom AI Gateway address.
 
-### `GEMINI_API_KEY`
-API Key for using the Google Gemini model (via LiteLLM).
+### `ANTHROPIC_API_KEY`
+API Key for using the Anthropic Claude model (via LiteLLM).
 *   **How to Obtain**:
     1. Go to [LiteLLM dashboard](https://api.ai.tokamak.network/ui/) and log in (ask administrator for account).
     2. Click on "Create New Key".

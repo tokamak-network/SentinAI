@@ -35,7 +35,7 @@ docker run -d \
   -p 3000:3000 \
   -e L2_RPC_URL=https://your-l2-rpc-endpoint.com \
   -e AI_GATEWAY_URL=https://api.ai.tokamak.network \
-  -e GEMINI_API_KEY=your-api-key \
+  -e ANTHROPIC_API_KEY=your-api-key \
   -e K8S_NAMESPACE=default \
   -e K8S_APP_PREFIX=op \
   -e K8S_API_URL=https://your-eks-cluster.amazonaws.com \
@@ -75,7 +75,7 @@ npm run lint     # ESLint check
   - `POST`: Executes manual or auto scaling with metrics collection.
   - `PATCH`: Updates auto-scaling settings (enable/disable, simulation mode).
 
-- **`analyze-logs/route.ts`**: AI log analysis endpoint using Gemini via custom AI Gateway.
+- **`analyze-logs/route.ts`**: AI log analysis endpoint using Claude via custom AI Gateway.
 
 - **`health/route.ts`**: Lightweight health check endpoint for Docker HEALTHCHECK and load balancer probes.
 
@@ -85,7 +85,7 @@ npm run lint     # ESLint check
 
 - **`k8s-scaler.ts`**: StatefulSet patching and simulation logic. Maintains in-memory state for safe dry-run testing with 5-minute cooldown between scaling operations.
 
-- **`ai-analyzer.ts`**: Gemini-based log analysis for Optimism Rollup components (op-geth, op-node, op-batcher, op-proposer).
+- **`ai-analyzer.ts`**: Claude-based log analysis for Optimism Rollup components (op-geth, op-node, op-batcher, op-proposer).
 
 - **`log-ingester.ts`**: Log collection utilities for K8s pods.
 
@@ -121,7 +121,7 @@ L2_RPC_URL=https://your-l2-rpc-endpoint.com    # L2 Chain RPC
 **Optional (AI Log Analysis):**
 ```bash
 AI_GATEWAY_URL=https://api.ai.tokamak.network
-GEMINI_API_KEY=your-api-key-here
+ANTHROPIC_API_KEY=your-api-key-here
 ```
 
 **Optional (K8s Monitoring & Auto-scaling):**

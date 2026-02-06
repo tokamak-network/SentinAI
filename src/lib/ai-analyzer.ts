@@ -1,7 +1,7 @@
 
 // Custom AI Gateway Logic
 const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || "https://api.ai.tokamak.network";
-const API_KEY = process.env.GEMINI_API_KEY || "";
+const API_KEY = process.env.ANTHROPIC_API_KEY || "";
 
 export interface LogAnalysisResult {
     severity: 'normal' | 'warning' | 'critical';
@@ -62,7 +62,7 @@ export async function analyzeLogChunk(logs: Record<string, string> | string): Pr
                 'Authorization': `Bearer ${API_KEY}`
             },
             body: JSON.stringify({
-                model: "gemini-3-pro", // User specified model
+                model: "claude-haiku-4.5",
                 messages: [
                     { role: "system", content: systemPrompt },
                     { role: "user", content: userContent }

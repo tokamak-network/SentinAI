@@ -13,7 +13,7 @@ npm run dev
 ## Features
 - **L1/L2 Block Monitoring**: Real-time block height display for both L1 and L2
 - **Dynamic Resource Scaling**: Hybrid auto-scaling engine using CPU, TxPool, and AI insights.
-- **AI-Powered Log Analysis**: Gemini-based anomaly detection for Optimism Rollup components
+- **AI-Powered Log Analysis**: Claude-based anomaly detection for Optimism Rollup components
 - **Stress Test Simulation**: Simulate peak load scenarios (8 vCPU / 16 GiB)
 - **K8s Integration**: AWS EKS connection with **cached dynamic token generation** (10-minute expiry) for low-latency polling.
 
@@ -35,7 +35,7 @@ Combines **Rule-based Metrics** and **AI-driven Insights** to optimize `op-geth`
     *   **Simulation Mode**: Dry-run execution by default for safety.
 
 ## AI Log Analysis Engine
-SentinAI uses **Gemini 3 Pro** via a custom AI Gateway to audit network health in real-time.
+SentinAI uses **Claude Haiku 4.5** via a custom AI Gateway to audit network health in real-time.
 
 1.  **Holistic Context Window**: Instead of analyzing logs in isolation, it aggregates logs from 4 core components to detect complex cross-component issues:
     *   `op-geth` (Execution Engine)
@@ -64,7 +64,7 @@ L2_RPC_URL=https://your-l2-rpc-endpoint.com
 
 # AI Configuration (Required for Log Analysis)
 AI_GATEWAY_URL=https://api.ai.tokamak.network
-GEMINI_API_KEY=your-api-key-here
+ANTHROPIC_API_KEY=your-api-key-here
 
 # Kubernetes Configuration
 K8S_NAMESPACE=default

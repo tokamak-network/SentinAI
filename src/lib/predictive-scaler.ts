@@ -13,7 +13,7 @@ import { TargetVcpu } from '@/types/scaling';
 import { getRecentMetrics, getMetricsStats, getMetricsCount } from './metrics-store';
 
 // Anthropic API Configuration
-const ANTHROPIC_API_URL = process.env.ANTHROPIC_API_URL || 'https://api.anthropic.com';
+const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://api.ai.tokamak.network';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
 // Rate limiting state
@@ -127,10 +127,10 @@ function parseAIResponse(content: string): PredictionResult | null {
     // Ensure factors array is valid
     const factors: PredictionFactor[] = Array.isArray(parsed.factors)
       ? parsed.factors.map((f: { name?: string; impact?: number; description?: string }) => ({
-          name: String(f.name || 'unknown'),
-          impact: Number(f.impact) || 0,
-          description: String(f.description || ''),
-        }))
+        name: String(f.name || 'unknown'),
+        impact: Number(f.impact) || 0,
+        description: String(f.description || ''),
+      }))
       : [];
 
     return {
@@ -228,20 +228,18 @@ export async function predictScaling(
   const userPrompt = buildUserPrompt(currentVcpu);
 
   try {
-    console.log(`[Predictive Scaler] Requesting prediction from Anthropic API...`);
+    console.log(`[Predictive Scaler] Requesting prediction from AI Gateway...`);
 
-    const response = await fetch(`${ANTHROPIC_API_URL}/v1/messages`, {
+    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
+        'Authorization': `Bearer ${ANTHROPIC_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20241022',
-        max_tokens: 1024,
-        system: systemPrompt,
+        model: 'claude-haiku-4.5',
         messages: [
+          { role: 'system', content: systemPrompt },
           { role: 'user', content: userPrompt },
         ],
         temperature: 0.2,
@@ -249,11 +247,11 @@ export async function predictScaling(
     });
 
     if (!response.ok) {
-      throw new Error(`Anthropic API responded with ${response.status}: ${response.statusText}`);
+      throw new Error(`AI Gateway responded with ${response.status}: ${response.statusText}`);
     }
 
     const data = await response.json();
-    const content = data.content?.[0]?.text || '';
+    const content = data.choices?.[0]?.message?.content || '';
 
     const prediction = parseAIResponse(content);
 

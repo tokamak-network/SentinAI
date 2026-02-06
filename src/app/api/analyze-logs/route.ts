@@ -20,7 +20,7 @@ export async function GET(request: Request) {
         logData = generateMockLogs('normal');
     }
 
-    // Call AI (Gemini)
+    // Call AI (Claude)
     const analysis = await analyzeLogChunk(logData);
 
     return NextResponse.json({
