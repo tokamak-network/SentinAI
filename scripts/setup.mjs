@@ -25,7 +25,7 @@ async function askRequired(prompt, validate) {
   while (true) {
     const answer = (await ask(prompt)).trim();
     if (!answer) {
-      console.log("  이 항목은 필수입니다. 다시 입력해주세요.");
+      console.log("  This field is required. Please try again.");
       continue;
     }
     if (validate && !validate(answer)) {
@@ -47,7 +47,7 @@ async function askOptionalUrl(prompt, defaultValue) {
     const answer = (await ask(`${prompt}${suffix}: `)).trim();
     if (!answer) return defaultValue || "";
     if (!isValidUrl(answer)) {
-      console.log("  URL은 http:// 또는 https://로 시작해야 합니다.");
+      console.log("  URL must start with http:// or https://.");
       continue;
     }
     return answer;
@@ -68,9 +68,9 @@ async function main() {
 
   // Check existing .env.local
   if (existsSync(ENV_PATH)) {
-    const overwrite = await askYesNo("? 이미 .env.local이 존재합니다. 덮어쓰시겠습니까?");
+    const overwrite = await askYesNo("? .env.local already exists. Overwrite?");
     if (!overwrite) {
-      console.log("  취소되었습니다.");
+      console.log("  Cancelled.");
       rl.close();
       return;
     }
@@ -81,9 +81,9 @@ async function main() {
 
   // --- 1. L2 RPC (Required) ---
   console.log("  --- 1. L2 Chain RPC ---");
-  env.L2_RPC_URL = await askRequired("? L2 RPC URL (필수): ", (v) => {
+  env.L2_RPC_URL = await askRequired("? L2 RPC URL (required): ", (v) => {
     if (!isValidUrl(v)) {
-      console.log("  URL은 http:// 또는 https://로 시작해야 합니다.");
+      console.log("  URL must start with http:// or https://.");
       return false;
     }
     return true;
@@ -96,11 +96,11 @@ async function main() {
     "? AI Gateway URL",
     "https://api.ai.tokamak.network"
   );
-  env.ANTHROPIC_API_KEY = await askRequired("? Anthropic API Key (필수): ");
+  env.ANTHROPIC_API_KEY = await askRequired("? Anthropic API Key (required): ");
   console.log("");
 
   // --- 3. K8s Configuration ---
-  const setupK8s = await askYesNo("? K8s 모니터링 설정하시겠습니까?");
+  const setupK8s = await askYesNo("? Configure K8s monitoring?");
 
   if (setupK8s) {
     console.log("");
@@ -158,15 +158,15 @@ async function main() {
 
   writeFileSync(ENV_PATH, lines.join("\n"), "utf-8");
 
-  console.log("  \u2713 .env.local 생성 완료");
-  console.log("  npm run dev 로 서버를 시작하세요.");
+  console.log("  \u2713 .env.local created successfully");
+  console.log("  Run `npm run dev` to start the server.");
   console.log("");
 
   rl.close();
 }
 
 main().catch((err) => {
-  console.error("Setup 오류:", err.message);
+  console.error("Setup error:", err.message);
   rl.close();
   process.exit(1);
 });
