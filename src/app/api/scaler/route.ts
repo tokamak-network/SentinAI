@@ -30,6 +30,8 @@ import {
 import { predictScaling, getLastPrediction, getNextPredictionIn } from '@/lib/predictive-scaler';
 import { getMetricsCount } from '@/lib/metrics-store';
 import { PredictionResult, DEFAULT_PREDICTION_CONFIG } from '@/types/prediction';
+import { analyzeLogChunk } from '@/lib/ai-analyzer';
+import { getAllLiveLogs } from '@/lib/log-ingester';
 
 /**
  * Get current metrics from /api/metrics
@@ -60,20 +62,15 @@ async function fetchCurrentMetrics(baseUrl: string): Promise<{
 }
 
 /**
- * Get AI analysis results from /api/analyze-logs
+ * Get AI analysis results by calling ai-analyzer directly
  */
-async function fetchAIAnalysis(baseUrl: string): Promise<{
+async function fetchAIAnalysis(): Promise<{
   severity: string;
 } | null> {
   try {
-    const res = await fetch(`${baseUrl}/api/analyze-logs?mode=live`, {
-      cache: 'no-store',
-    });
-
-    if (!res.ok) return null;
-
-    const data = await res.json();
-    return data.analysis || null;
+    const logs = await getAllLiveLogs();
+    const result = await analyzeLogChunk(logs);
+    return { severity: result.severity };
   } catch (error) {
     console.error('Failed to fetch AI analysis:', error);
     return null;
@@ -199,7 +196,7 @@ export async function POST(request: NextRequest) {
       }
 
       // AI Analysis (Optional - Continue even if failed)
-      const aiAnalysis = await fetchAIAnalysis(baseUrl);
+      const aiAnalysis = await fetchAIAnalysis();
       const aiSeverity = mapAIResultToSeverity(aiAnalysis);
 
       // Scaling Decision

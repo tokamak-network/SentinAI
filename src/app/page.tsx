@@ -106,8 +106,6 @@ export default function Dashboard() {
   const [current, setCurrent] = useState<MetricData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [stressMode, setStressMode] = useState(false);
-  const [logInsight, setLogInsight] = useState<{ summary: string; severity: string; timestamp: string; action_item?: string } | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [activeAnomalies, setActiveAnomalies] = useState<AnomalyResultData[]>([]);
 
   // RCA State
@@ -138,22 +136,6 @@ export default function Dashboard() {
       console.error('Seed failed:', e);
     } finally {
       setIsSeeding(false);
-    }
-  };
-
-  // Logic
-  const checkLogs = async (mode: string) => {
-    setLogInsight(null);
-    setIsAnalyzing(true);
-    try {
-      const res = await fetch(`/api/analyze-logs?mode=${mode}`);
-      const data = await res.json();
-      setLogInsight(data.analysis);
-    } catch (e) {
-      console.error(e);
-      setLogInsight({ summary: "Failed to connect to AI Gateway.", severity: "critical", timestamp: new Date().toISOString() })
-    } finally {
-      setIsAnalyzing(false);
     }
   };
 
@@ -367,7 +349,7 @@ export default function Dashboard() {
               </p>
             </div>
             <button
-              onClick={() => checkLogs('live')}
+              onClick={runRCA}
               className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-600 transition"
             >
               Analyze Now
@@ -633,7 +615,7 @@ export default function Dashboard() {
           {/* Terminal Header */}
           <div className="bg-[#25282D] px-6 py-4 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
-              <ShieldAlert className={`${logInsight?.severity === 'critical' ? 'text-red-500 animate-pulse' : 'text-blue-400'}`} size={20} />
+              <ShieldAlert className={`${rcaResult?.rootCause?.confidence !== undefined && rcaResult.rootCause.confidence >= 0.7 ? 'text-red-500 animate-pulse' : 'text-blue-400'}`} size={20} />
               <span className="text-gray-200 font-bold text-sm tracking-wide">ONE-CLICK CHECKUP MONITOR</span>
             </div>
             <span className="text-xs text-gray-500 font-mono">Real-time Analysis</span>
@@ -664,7 +646,7 @@ export default function Dashboard() {
                           {anomaly.direction.toUpperCase()}
                         </span>
                         <span className="text-gray-400">[{anomaly.metric}]</span>
-                        <span className="text-gray-300 break-all">{anomaly.description}</span>
+                        <span className="text-gray-300 break-words">{anomaly.description}</span>
                       </div>
                     ))}
                   </div>
@@ -675,43 +657,10 @@ export default function Dashboard() {
                   <LogBlock time={new Date().toLocaleTimeString()} source="op-geth" level="WARN" msg="TxPool overflow: 5021 pending txs. Re-prioritizing gas..." highlight={true} color="text-yellow-400" />
                 )}
 
-                {/* Analyzing State */}
-                {isAnalyzing && (
-                  <div className="flex flex-col items-center justify-center py-10 animate-pulse">
-                    <div className="w-full max-w-xs bg-gray-800 rounded-full h-1.5 mb-4 overflow-hidden">
-                      <div className="bg-blue-500 h-1.5 rounded-full animate-loading-bar"></div>
-                    </div>
-                    <p className="text-blue-400 font-mono text-xs animate-pulse">Running Diagnostics & Log Analysis...</p>
-                  </div>
-                )}
-
-                {!logInsight && !isAnalyzing && (
+                {!rcaResult && !isRunningRCA && !rcaError && (
                   <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 mt-10">
                     <Activity size={32} className="mb-2" />
                     <p>System Ready... Waiting for checkup.</p>
-                  </div>
-                )}
-
-                {/* AI Result Injection */}
-                {logInsight && !isAnalyzing && (
-                  <div className="my-6 p-4 rounded-lg bg-gray-800/50 border-l-4 border-blue-500 animate-slideIn">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-blue-400 font-bold text-xs uppercase">AI Analysis Report</span>
-                      <span className="text-gray-500 text-[10px]">{new Date(logInsight.timestamp).toLocaleTimeString()}</span>
-                    </div>
-                    <p className="text-gray-300 leading-relaxed whitespace-pre-wrap font-sans text-sm">
-                      {logInsight.summary}
-                    </p>
-                    {logInsight.action_item && (
-                      <div className="mt-3 pt-3 border-t border-gray-700/50">
-                        <p className="text-green-400 font-bold text-xs flex items-center gap-2">
-                          <CheckCircle2 size={12} /> SUGGESTED ACTION:
-                        </p>
-                        <p className="text-gray-400 text-xs mt-1 pl-5">
-                          {logInsight.action_item}
-                        </p>
-                      </div>
-                    )}
                   </div>
                 )}
 
@@ -749,46 +698,29 @@ export default function Dashboard() {
                 <h4 className="text-gray-400 text-xs font-bold uppercase mb-4">Diagnostics Controls</h4>
 
                 <button
-                  onClick={() => checkLogs('live')}
-                  disabled={isAnalyzing || isRunningRCA}
-                  className={`w-full font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-3 mb-4 group ${isAnalyzing
+                  onClick={runRCA}
+                  disabled={isRunningRCA}
+                  className={`w-full font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-3 mb-4 group ${isRunningRCA
                     ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
                     : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/40'
                     }`}
                 >
-                  {isAnalyzing ? (
+                  {isRunningRCA ? (
                     <Activity className="animate-spin" size={18} />
                   ) : (
                     <Activity className="group-hover:animate-spin" size={18} />
                   )}
-                  {isAnalyzing ? 'ANALYZING...' : 'CHECK HEALTH'}
-                </button>
-
-                {/* RCA Button */}
-                <button
-                  onClick={runRCA}
-                  disabled={isRunningRCA || isAnalyzing}
-                  className={`w-full font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-3 group ${isRunningRCA
-                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                    : 'bg-orange-600 hover:bg-orange-500 text-white shadow-orange-900/40'
-                    }`}
-                >
-                  {isRunningRCA ? (
-                    <GitBranch className="animate-spin" size={18} />
-                  ) : (
-                    <GitBranch className="group-hover:rotate-12 transition-transform" size={18} />
-                  )}
-                  {isRunningRCA ? 'ANALYZING...' : 'ROOT CAUSE ANALYSIS'}
+                  {isRunningRCA ? 'ANALYZING...' : 'CHECK HEALTH'}
                 </button>
               </div>
 
               <div className="mt-8">
                 <p className="text-gray-500 text-xs text-center mb-2">System Status</p>
-                <div className={`text-center py-2 rounded-lg font-bold text-sm border ${logInsight?.severity === 'critical'
+                <div className={`text-center py-2 rounded-lg font-bold text-sm border ${rcaResult?.rootCause?.confidence !== undefined && rcaResult.rootCause.confidence >= 0.7
                   ? 'bg-red-500/10 text-red-500 border-red-500/30'
                   : 'bg-green-500/10 text-green-500 border-green-500/30'
                   }`}>
-                  {isAnalyzing ? 'RUNNING CHECKS...' : (logInsight?.severity?.toUpperCase() || 'MONITORING ACTIVE')}
+                  {isRunningRCA ? 'RUNNING CHECKS...' : (rcaResult ? rcaResult.rootCause.component.toUpperCase() + ' ISSUE DETECTED' : 'MONITORING ACTIVE')}
                 </div>
               </div>
             </div>

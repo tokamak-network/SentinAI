@@ -196,6 +196,7 @@ function detectTxPoolMonotonicIncrease(
   if (isMonotonic) {
     const startValue = recentHistory[0].txPoolPending;
     const increase = currentTxPool - startValue;
+    if (increase <= 0) return null;
     const durationSec = (now - parseTimestamp(recentHistory[0].timestamp)) / 1000;
 
     return {
