@@ -432,6 +432,36 @@ Analyze the above data and identify the root cause of the incident.`;
 }
 
 /**
+ * Extract the first complete JSON object from AI response text.
+ * Handles markdown code blocks, trailing text after JSON, etc.
+ */
+function extractJSON(text: string): string {
+  // Strip markdown code fences
+  let cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+
+  // Find the first '{' and match its closing '}'
+  const start = cleaned.indexOf('{');
+  if (start === -1) return '{}';
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = start; i < cleaned.length; i++) {
+    const ch = cleaned[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') depth++;
+    if (ch === '}') { depth--; if (depth === 0) return cleaned.slice(start, i + 1); }
+  }
+
+  // Fallback: return from first '{' to end
+  return cleaned.slice(start);
+}
+
+/**
  * Perform RCA analysis via AI Gateway
  */
 async function callAIForRCA(
@@ -483,7 +513,8 @@ async function callAIForRCA(
       const data = await response.json();
       const content = data.choices?.[0]?.message?.content || data.output || '{}';
 
-      const jsonStr = content.replace(/```json/g, '').replace(/```/g, '').trim();
+      // Extract the first complete JSON object from the response
+      const jsonStr = extractJSON(content);
       const parsed = JSON.parse(jsonStr);
 
       return {
@@ -515,7 +546,8 @@ async function callAIForRCA(
         continue;
       }
 
-      return generateFallbackAnalysis(timeline, anomalies);
+      console.error(`[RCA Engine] All ${maxRetries + 1} attempts failed. Last error: ${errorMessage}`);
+      return generateFallbackAnalysis(timeline, anomalies, errorMessage);
     }
   }
 
@@ -527,7 +559,8 @@ async function callAIForRCA(
  */
 function generateFallbackAnalysis(
   timeline: RCAEvent[],
-  _anomalies: AnomalyResult[]
+  _anomalies: AnomalyResult[],
+  lastError?: string
 ): {
   rootCause: RootCauseInfo;
   causalChain: RCAEvent[];
@@ -540,10 +573,13 @@ function generateFallbackAnalysis(
   const rootCauseComponent = firstError?.component || 'system';
   const affectedComponents = findAffectedComponents(rootCauseComponent);
 
+  const fallbackDesc = firstError?.description
+    || `Unable to determine root cause (AI unavailable: ${lastError || 'unknown'})`;
+
   return {
     rootCause: {
       component: rootCauseComponent,
-      description: firstError?.description || 'Unable to determine root cause (AI unavailable)',
+      description: fallbackDesc,
       confidence: 0.3,
     },
     causalChain: errorEvents.slice(0, 5),

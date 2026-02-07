@@ -847,9 +847,11 @@ function LogBlock({ time, source, level, msg, highlight, color }: { time: string
 
 // RCA Result Display Component
 function RCAResultDisplay({ result }: { result: RCAResult }) {
-  const [expandedChain, setExpandedChain] = useState(true);
+  const [showDetails, setShowDetails] = useState(false);
 
-  // Component color mapping
+  const isHealthy = result.rootCause.confidence >= 0.9
+    && result.rootCause.description.toLowerCase().includes('no incident');
+
   const componentColors: Record<RCAComponent, string> = {
     'op-geth': 'bg-blue-500',
     'op-node': 'bg-green-500',
@@ -859,164 +861,127 @@ function RCAResultDisplay({ result }: { result: RCAResult }) {
     'system': 'bg-gray-500',
   };
 
-  // Event type icons
-  const getEventIcon = (type: RCAEvent['type']) => {
-    switch (type) {
-      case 'error':
-        return <XCircle size={12} className="text-red-400" />;
-      case 'warning':
-        return <AlertTriangle size={12} className="text-yellow-400" />;
-      case 'metric_anomaly':
-        return <Activity size={12} className="text-orange-400" />;
-      case 'state_change':
-        return <GitBranch size={12} className="text-blue-400" />;
-      default:
-        return <Activity size={12} className="text-gray-400" />;
-    }
-  };
+  // Healthy state — compact green card
+  if (isHealthy) {
+    return (
+      <div className="my-6 animate-slideIn">
+        <div className="p-4 rounded-lg bg-green-900/20 border-l-4 border-green-500">
+          <div className="flex items-center justify-between">
+            <span className="text-green-400 font-bold text-xs uppercase flex items-center gap-2">
+              <CheckCircle2 size={14} />
+              System Healthy
+            </span>
+            <span className="text-gray-500 text-[10px]">
+              {new Date(result.generatedAt).toLocaleTimeString()}
+            </span>
+          </div>
+          <p className="text-gray-300 text-sm mt-2">All components operating normally.</p>
+          {result.remediation.preventive.length > 0 && (
+            <p className="text-gray-500 text-xs mt-2">
+              Tip: {result.remediation.preventive[0]}
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
 
+  // Issue detected — summary + action-first layout
   return (
-    <div className="my-6 space-y-4 animate-slideIn">
-      {/* Header */}
-      <div className="p-4 rounded-lg bg-orange-900/30 border-l-4 border-orange-500">
+    <div className="my-6 space-y-3 animate-slideIn">
+      {/* Summary: What + Where + Confidence */}
+      <div className="p-4 rounded-lg bg-red-900/20 border-l-4 border-red-500">
         <div className="flex items-center justify-between mb-2">
-          <span className="text-orange-400 font-bold text-xs uppercase flex items-center gap-2">
-            <GitBranch size={14} />
-            Root Cause Analysis Report
+          <span className="text-red-400 font-bold text-xs uppercase flex items-center gap-2">
+            <AlertTriangle size={14} />
+            Issue Detected
           </span>
           <span className="text-gray-500 text-[10px]">
             {new Date(result.generatedAt).toLocaleTimeString()}
           </span>
         </div>
-
-        {/* Root Cause */}
-        <div className="mt-3 p-3 bg-red-900/40 rounded-lg border border-red-500/50">
-          <div className="flex items-center gap-2 mb-2">
-            <div className={`w-2 h-2 rounded-full ${componentColors[result.rootCause.component]} animate-pulse`}></div>
-            <span className="text-red-400 font-bold text-sm uppercase">{result.rootCause.component}</span>
-            <span className="text-gray-500 text-[10px] ml-auto">
-              Confidence: {(result.rootCause.confidence * 100).toFixed(0)}%
+        <div className="flex items-center gap-2 mb-2">
+          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${componentColors[result.rootCause.component]}`}>
+            {result.rootCause.component}
+          </span>
+          {result.affectedComponents.length > 0 && (
+            <span className="text-gray-500 text-[10px]">
+              +{result.affectedComponents.length} affected
             </span>
-          </div>
-          <p className="text-gray-200 text-sm leading-relaxed">
-            {result.rootCause.description}
-          </p>
+          )}
+          <span className="text-gray-600 text-[10px] ml-auto">
+            {(result.rootCause.confidence * 100).toFixed(0)}% confidence
+          </span>
         </div>
+        <p className="text-gray-200 text-sm leading-relaxed">
+          {result.rootCause.description}
+        </p>
       </div>
 
-      {/* Causal Chain */}
-      <div className="p-4 rounded-lg bg-gray-800/50 border border-gray-700/50">
-        <button
-          onClick={() => setExpandedChain(!expandedChain)}
-          className="w-full flex items-center justify-between text-gray-400 font-bold text-xs uppercase mb-3 hover:text-gray-200 transition-colors"
-        >
-          <span className="flex items-center gap-2">
-            <GitBranch size={14} />
-            Causal Chain ({result.causalChain.length} events)
+      {/* Action Required — highlighted */}
+      {result.remediation.immediate.length > 0 && (
+        <div className="p-4 rounded-lg bg-blue-900/20 border-l-4 border-blue-500">
+          <span className="text-blue-400 font-bold text-xs uppercase flex items-center gap-2 mb-2">
+            <Shield size={14} />
+            Action Required
           </span>
-          {expandedChain ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </button>
-
-        {expandedChain && (
-          <div className="relative pl-4 border-l-2 border-gray-600 space-y-3">
-            {result.causalChain.map((event, index) => (
-              <div
-                key={index}
-                className={`relative pl-4 ${index === 0 ? 'opacity-100' : 'opacity-80'}`}
-              >
-                {/* Timeline dot */}
-                <div
-                  className={`absolute -left-[calc(0.5rem+1px)] top-1 w-3 h-3 rounded-full border-2 border-gray-800 ${
-                    index === 0 ? 'bg-red-500 ring-2 ring-red-500/30' : componentColors[event.component]
-                  }`}
-                ></div>
-
-                <div className="flex items-start gap-2">
-                  {/* Component Badge */}
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${componentColors[event.component]}`}
-                  >
-                    {event.component}
-                  </span>
-
-                  {/* Event Icon */}
-                  {getEventIcon(event.type)}
-
-                  {/* Timestamp */}
-                  <span className="text-gray-500 text-[10px] shrink-0">
-                    {new Date(event.timestamp).toLocaleTimeString()}
-                  </span>
-                </div>
-
-                <p className="text-gray-300 text-xs mt-1 leading-relaxed">
-                  {event.description}
-                </p>
-              </div>
+          <ul className="space-y-1.5">
+            {result.remediation.immediate.map((step, i) => (
+              <li key={i} className="text-gray-200 text-sm flex items-start gap-2">
+                <span className="text-blue-400 font-bold shrink-0">{i + 1}.</span>
+                {step}
+              </li>
             ))}
-          </div>
-        )}
-      </div>
-
-      {/* Affected Components */}
-      {result.affectedComponents.length > 0 && (
-        <div className="p-4 rounded-lg bg-gray-800/50 border border-gray-700/50">
-          <span className="text-gray-400 font-bold text-xs uppercase mb-3 block">
-            Affected Components
-          </span>
-          <div className="flex flex-wrap gap-2">
-            {result.affectedComponents.map((comp) => (
-              <span
-                key={comp}
-                className={`px-3 py-1 rounded-full text-xs font-bold text-white ${componentColors[comp]}`}
-              >
-                {comp}
-              </span>
-            ))}
-          </div>
+          </ul>
         </div>
       )}
 
-      {/* Remediation */}
-      <div className="p-4 rounded-lg bg-gray-800/50 border border-gray-700/50">
-        <span className="text-gray-400 font-bold text-xs uppercase mb-3 block flex items-center gap-2">
-          <CheckCircle2 size={14} className="text-green-400" />
-          Remediation Steps
-        </span>
+      {/* Expandable Details */}
+      {(result.causalChain.length > 0 || result.remediation.preventive.length > 0) && (
+        <button
+          onClick={() => setShowDetails(!showDetails)}
+          className="w-full flex items-center justify-center gap-1 text-gray-500 text-[10px] uppercase hover:text-gray-300 transition-colors py-1"
+        >
+          {showDetails ? 'Hide' : 'Show'} Details
+          {showDetails ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </button>
+      )}
 
-        {/* Immediate Actions */}
-        {result.remediation.immediate.length > 0 && (
-          <div className="mb-4">
-            <span className="text-red-400 font-bold text-[10px] uppercase block mb-2">
-              Immediate Actions
-            </span>
-            <ul className="space-y-1">
-              {result.remediation.immediate.map((step, i) => (
-                <li key={i} className="text-gray-300 text-xs flex items-start gap-2">
-                  <span className="text-red-400 shrink-0">{i + 1}.</span>
-                  {step}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+      {showDetails && (
+        <div className="space-y-3">
+          {/* Causal Chain */}
+          {result.causalChain.length > 0 && (
+            <div className="p-3 rounded-lg bg-gray-800/40 border border-gray-700/30">
+              <span className="text-gray-500 font-bold text-[10px] uppercase block mb-2">Causal Chain</span>
+              <div className="space-y-1.5">
+                {result.causalChain.map((event, i) => (
+                  <div key={i} className="flex items-start gap-2 text-xs">
+                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase text-white shrink-0 ${componentColors[event.component]}`}>
+                      {event.component}
+                    </span>
+                    <span className="text-gray-400">{event.description}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
-        {/* Preventive Measures */}
-        {result.remediation.preventive.length > 0 && (
-          <div>
-            <span className="text-blue-400 font-bold text-[10px] uppercase block mb-2">
-              Preventive Measures
-            </span>
-            <ul className="space-y-1">
-              {result.remediation.preventive.map((step, i) => (
-                <li key={i} className="text-gray-300 text-xs flex items-start gap-2">
-                  <span className="text-blue-400 shrink-0">{i + 1}.</span>
-                  {step}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+          {/* Preventive Measures */}
+          {result.remediation.preventive.length > 0 && (
+            <div className="p-3 rounded-lg bg-gray-800/40 border border-gray-700/30">
+              <span className="text-gray-500 font-bold text-[10px] uppercase block mb-2">Preventive Measures</span>
+              <ul className="space-y-1">
+                {result.remediation.preventive.map((step, i) => (
+                  <li key={i} className="text-gray-400 text-xs flex items-start gap-2">
+                    <span className="text-gray-500 shrink-0">{i + 1}.</span>
+                    {step}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
