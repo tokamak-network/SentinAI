@@ -1,6 +1,6 @@
 /**
  * Anomaly Detection Pipeline Types
- * 다층 이상 탐지 시스템을 위한 타입 정의
+ * Type definitions for multi-layer anomaly detection system
  */
 
 import { AISeverity } from './scaling';
@@ -10,15 +10,15 @@ import { AISeverity } from './scaling';
 // ============================================================================
 
 /**
- * 이상 방향
- * - spike: 급격한 상승
- * - drop: 급격한 하락
- * - plateau: 장시간 변화 없음 (정체)
+ * Anomaly direction
+ * - spike: sudden increase
+ * - drop: sudden decrease
+ * - plateau: no change for extended period (stagnation)
  */
 export type AnomalyDirection = 'spike' | 'drop' | 'plateau';
 
 /**
- * 탐지 대상 메트릭
+ * Detection target metrics
  */
 export type AnomalyMetric =
   | 'cpuUsage'
@@ -28,22 +28,22 @@ export type AnomalyMetric =
   | 'l2BlockInterval';
 
 /**
- * Layer 1 통계 기반 이상 탐지 결과
+ * Layer 1 statistical anomaly detection result
  */
 export interface AnomalyResult {
-  /** 이상 여부 */
+  /** Whether anomaly is detected */
   isAnomaly: boolean;
-  /** 이상이 감지된 메트릭 */
+  /** Metric where anomaly was detected */
   metric: AnomalyMetric;
-  /** 현재 값 */
+  /** Current value */
   value: number;
-  /** Z-Score (평균으로부터 표준편차 단위 거리) */
+  /** Z-Score (distance from mean in standard deviation units) */
   zScore: number;
-  /** 이상 방향 */
+  /** Anomaly direction */
   direction: AnomalyDirection;
-  /** 사람이 읽을 수 있는 설명 */
+  /** Human-readable description */
   description: string;
-  /** 탐지 규칙 (어떤 규칙에 의해 탐지되었는지) */
+  /** Detection rule that triggered */
   rule: 'z-score' | 'zero-drop' | 'plateau' | 'monotonic-increase';
 }
 
@@ -52,29 +52,29 @@ export interface AnomalyResult {
 // ============================================================================
 
 /**
- * 이상 유형 분류
+ * Anomaly type classification
  */
 export type AnomalyType = 'performance' | 'security' | 'consensus' | 'liveness';
 
 /**
- * Layer 2 AI 심층 분석 결과
+ * Layer 2 AI deep analysis result
  */
 export interface DeepAnalysisResult {
-  /** AI가 판단한 심각도 */
+  /** AI-assessed severity */
   severity: AISeverity;
-  /** 이상 유형 */
+  /** Anomaly type */
   anomalyType: AnomalyType;
-  /** 연관된 메트릭/로그 패턴 */
+  /** Correlated metrics/log patterns */
   correlations: string[];
-  /** 예상 영향도 */
+  /** Predicted impact */
   predictedImpact: string;
-  /** 권장 조치 목록 */
+  /** Suggested actions */
   suggestedActions: string[];
-  /** 영향받는 컴포넌트 */
+  /** Affected components */
   relatedComponents: string[];
-  /** 분석 타임스탬프 */
+  /** Analysis timestamp */
   timestamp: string;
-  /** AI 모델 응답의 원본 (디버깅용) */
+  /** Raw AI model response (for debugging) */
   rawResponse?: string;
 }
 
@@ -83,73 +83,73 @@ export interface DeepAnalysisResult {
 // ============================================================================
 
 /**
- * 알림 채널 유형
+ * Alert channel type
  */
 export type AlertChannel = 'slack' | 'webhook' | 'dashboard';
 
 /**
- * 알림 설정
+ * Alert configuration
  */
 export interface AlertConfig {
-  /** Slack/Discord 웹훅 URL (선택) */
+  /** Slack/Discord webhook URL (optional) */
   webhookUrl?: string;
-  /** 알림 임계값 설정 */
+  /** Alert threshold settings */
   thresholds: {
-    /** 이 심각도 이상에서 알림 발송 */
+    /** Notify at this severity level and above */
     notifyOn: AISeverity[];
-    /** 동일 유형 이상에 대한 알림 간격 (분) */
+    /** Cooldown interval for same anomaly type (minutes) */
     cooldownMinutes: number;
   };
-  /** 알림 활성화 여부 */
+  /** Whether alerting is enabled */
   enabled: boolean;
 }
 
 /**
- * 발송된 알림 기록
+ * Dispatched alert record
  */
 export interface AlertRecord {
-  /** 고유 ID */
+  /** Unique ID */
   id: string;
-  /** 원인이 된 이상 탐지 결과 */
+  /** Source anomaly detection result */
   anomaly: AnomalyResult;
-  /** AI 심층 분석 결과 (있는 경우) */
+  /** AI deep analysis result (if available) */
   analysis?: DeepAnalysisResult;
-  /** 발송 시간 */
+  /** Dispatch timestamp */
   sentAt: string;
-  /** 발송 채널 */
+  /** Dispatch channel */
   channel: AlertChannel;
-  /** 발송 성공 여부 */
+  /** Whether dispatch succeeded */
   success: boolean;
-  /** 실패 시 에러 메시지 */
+  /** Error message on failure */
   error?: string;
 }
 
 // ============================================================================
-// Anomaly Event (통합)
+// Anomaly Event (Unified)
 // ============================================================================
 
 /**
- * 이상 이벤트 상태
+ * Anomaly event status
  */
 export type AnomalyEventStatus = 'active' | 'resolved' | 'acknowledged';
 
 /**
- * 이상 이벤트 (Layer 1~3 결과 통합)
+ * Anomaly event (unified Layer 1~3 results)
  */
 export interface AnomalyEvent {
-  /** 고유 ID (UUID v4) */
+  /** Unique ID (UUID v4) */
   id: string;
-  /** 최초 탐지 시간 (Unix timestamp ms) */
+  /** First detection time (Unix timestamp ms) */
   timestamp: number;
-  /** Layer 1에서 탐지된 이상 목록 */
+  /** Layer 1 detected anomalies */
   anomalies: AnomalyResult[];
-  /** Layer 2 AI 심층 분석 결과 (수행된 경우) */
+  /** Layer 2 AI deep analysis result (if performed) */
   deepAnalysis?: DeepAnalysisResult;
-  /** 이벤트 상태 */
+  /** Event status */
   status: AnomalyEventStatus;
-  /** 해결 시간 (있는 경우) */
+  /** Resolution time (if resolved) */
   resolvedAt?: number;
-  /** 발송된 알림 기록 */
+  /** Dispatched alert records */
   alerts: AlertRecord[];
 }
 
@@ -158,30 +158,30 @@ export interface AnomalyEvent {
 // ============================================================================
 
 /**
- * GET /api/anomalies 응답
+ * GET /api/anomalies response
  */
 export interface AnomaliesResponse {
-  /** 이상 이벤트 목록 (최신순) */
+  /** Anomaly events (newest first) */
   events: AnomalyEvent[];
-  /** 전체 이벤트 수 */
+  /** Total event count */
   total: number;
-  /** 현재 활성 이상 수 */
+  /** Currently active anomaly count */
   activeCount: number;
 }
 
 /**
- * GET /api/anomalies/config 응답
+ * GET /api/anomalies/config response
  */
 export interface AlertConfigResponse {
   config: AlertConfig;
-  /** 최근 24시간 알림 발송 수 */
+  /** Alerts sent in last 24 hours */
   alertsSent24h: number;
-  /** 다음 알림 가능 시간 (쿨다운 중인 경우) */
+  /** Next available alert time (when in cooldown) */
   nextAlertAvailableAt?: string;
 }
 
 /**
- * POST /api/anomalies/config 요청 바디
+ * POST /api/anomalies/config request body
  */
 export interface AlertConfigUpdateRequest {
   webhookUrl?: string;
@@ -193,11 +193,11 @@ export interface AlertConfigUpdateRequest {
 }
 
 /**
- * Metrics API 확장 - anomalies 필드
+ * Metrics API extension - anomalies field
  */
 export interface MetricsAnomalyExtension {
-  /** Layer 1 이상 탐지 결과 (실시간) */
+  /** Layer 1 anomaly detection results (real-time) */
   anomalies: AnomalyResult[];
-  /** 현재 활성 이상 이벤트 ID (있는 경우) */
+  /** Currently active anomaly event ID (if any) */
   activeEventId?: string;
 }

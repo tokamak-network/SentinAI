@@ -1,6 +1,6 @@
 /**
  * Layer 2: AI Semantic Anomaly Analyzer
- * Claude 기반 이상 컨텍스트 분석
+ * Claude-based anomaly context analysis
  */
 
 import { MetricDataPoint } from '@/types/prediction';
@@ -14,20 +14,20 @@ import { AISeverity } from '@/types/scaling';
 const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://api.ai.tokamak.network';
 const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
-/** AI 호출 최소 간격 (밀리초) - 1분 */
+/** Minimum interval between AI calls (milliseconds) - 1 minute */
 const MIN_AI_CALL_INTERVAL_MS = 60 * 1000;
 
-/** 최근 분석 결과 캐시 TTL (밀리초) - 5분 */
+/** Analysis result cache TTL (milliseconds) - 5 minutes */
 const ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // ============================================================================
 // In-Memory State
 // ============================================================================
 
-/** 마지막 AI 호출 시간 */
+/** Last AI call time */
 let lastAICallTime = 0;
 
-/** 최근 분석 결과 캐시 */
+/** Recent analysis result cache */
 interface AnalysisCache {
   result: DeepAnalysisResult;
   anomalyHash: string;
@@ -80,7 +80,7 @@ Return ONLY a JSON object (no markdown code blocks):
 // ============================================================================
 
 /**
- * 이상 목록의 해시 생성 (캐시 키용)
+ * Generate hash of anomaly list (for cache key)
  */
 function hashAnomalies(anomalies: AnomalyResult[]): string {
   const sorted = anomalies
@@ -91,7 +91,7 @@ function hashAnomalies(anomalies: AnomalyResult[]): string {
 }
 
 /**
- * 이상 목록을 AI 프롬프트용 텍스트로 변환
+ * Convert anomaly list to text for AI prompt
  */
 function formatAnomaliesForPrompt(anomalies: AnomalyResult[]): string {
   return anomalies
@@ -100,7 +100,7 @@ function formatAnomaliesForPrompt(anomalies: AnomalyResult[]): string {
 }
 
 /**
- * 메트릭을 AI 프롬프트용 텍스트로 변환
+ * Convert metrics to text for AI prompt
  */
 function formatMetricsForPrompt(metrics: MetricDataPoint): string {
   return `
@@ -113,12 +113,12 @@ function formatMetricsForPrompt(metrics: MetricDataPoint): string {
 }
 
 /**
- * 로그를 AI 프롬프트용 텍스트로 변환
+ * Convert logs to text for AI prompt
  */
 function formatLogsForPrompt(logs: Record<string, string>): string {
   let result = '';
   for (const [component, log] of Object.entries(logs)) {
-    // 로그가 너무 길면 마지막 1000자만
+    // Truncate to last 1000 chars if log is too long
     const truncatedLog = log.length > 1000 ? '...' + log.slice(-1000) : log;
     result += `\n[${component}]\n${truncatedLog}\n`;
   }
@@ -126,16 +126,16 @@ function formatLogsForPrompt(logs: Record<string, string>): string {
 }
 
 /**
- * AI 응답 파싱
+ * Parse AI response
  */
 function parseAIResponse(content: string): DeepAnalysisResult {
-  // Markdown 코드 블록 제거
+  // Remove Markdown code blocks
   const jsonStr = content.replace(/```json/g, '').replace(/```/g, '').trim();
 
   try {
     const parsed = JSON.parse(jsonStr);
 
-    // 필수 필드 검증 및 기본값
+    // Validate required fields and apply defaults
     const severity: AISeverity =
       ['low', 'medium', 'high', 'critical'].includes(parsed.severity)
         ? parsed.severity
@@ -157,13 +157,13 @@ function parseAIResponse(content: string): DeepAnalysisResult {
       rawResponse: content,
     };
   } catch {
-    // JSON 파싱 실패 시 기본 응답
+    // Default response on JSON parse failure
     return {
       severity: 'medium',
       anomalyType: 'performance',
       correlations: [],
-      predictedImpact: 'AI 응답 파싱 실패. 원본: ' + content.substring(0, 200),
-      suggestedActions: ['수동으로 로그 확인 필요'],
+      predictedImpact: 'AI response parse failed. Raw: ' + content.substring(0, 200),
+      suggestedActions: ['Manual log inspection required'],
       relatedComponents: [],
       timestamp: new Date().toISOString(),
       rawResponse: content,
@@ -176,17 +176,17 @@ function parseAIResponse(content: string): DeepAnalysisResult {
 // ============================================================================
 
 /**
- * 탐지된 이상에 대한 AI 심층 분석 수행
+ * Perform AI deep analysis on detected anomalies
  *
- * @param anomalies Layer 1에서 탐지된 이상 목록
- * @param metrics 현재 메트릭 데이터
- * @param logs 컴포넌트별 로그 (op-geth, op-node 등)
- * @returns AI 심층 분석 결과
+ * @param anomalies List of anomalies detected by Layer 1
+ * @param metrics Current metric data
+ * @param logs Per-component logs (op-geth, op-node, etc.)
+ * @returns AI deep analysis result
  *
  * @remarks
- * - 최소 1분 간격으로만 AI 호출 (rate limiting)
- * - 동일한 이상 패턴은 5분간 캐시된 결과 반환
- * - AI Gateway 호출 실패 시 기본 응답 반환
+ * - AI calls are rate limited to at least 1 minute intervals
+ * - Identical anomaly patterns return cached results for 5 minutes
+ * - Returns default response on AI Gateway call failure
  */
 export async function analyzeAnomalies(
   anomalies: AnomalyResult[],
@@ -195,7 +195,7 @@ export async function analyzeAnomalies(
 ): Promise<DeepAnalysisResult> {
   const now = Date.now();
 
-  // 1. 캐시 확인: 동일 이상 패턴이면 캐시된 결과 반환
+  // 1. Cache check: return cached result for identical anomaly pattern
   const anomalyHash = hashAnomalies(anomalies);
   if (analysisCache &&
       analysisCache.anomalyHash === anomalyHash &&
@@ -204,7 +204,7 @@ export async function analyzeAnomalies(
     return analysisCache.result;
   }
 
-  // 2. Rate limiting: 최소 간격 미달 시 캐시된 결과 반환 또는 기본 응답
+  // 2. Rate limiting: return cached result or default response if interval not met
   if (now - lastAICallTime < MIN_AI_CALL_INTERVAL_MS) {
     console.log('[AnomalyAIAnalyzer] Rate limited, returning cached or default');
     if (analysisCache) {
@@ -214,14 +214,14 @@ export async function analyzeAnomalies(
       severity: 'medium',
       anomalyType: 'performance',
       correlations: [],
-      predictedImpact: 'Rate limited - 분석 대기 중',
-      suggestedActions: ['잠시 후 다시 시도'],
+      predictedImpact: 'Rate limited - analysis pending',
+      suggestedActions: ['Retry after a short wait'],
       relatedComponents: [],
       timestamp: new Date().toISOString(),
     };
   }
 
-  // 3. User 프롬프트 구성
+  // 3. Build user prompt
   const userPrompt = `## Detected Anomalies
 ${formatAnomaliesForPrompt(anomalies)}
 
@@ -233,7 +233,7 @@ ${formatLogsForPrompt(logs)}
 
 Analyze these anomalies and provide your assessment.`;
 
-  // 4. AI Gateway 호출
+  // 4. Call AI Gateway
   try {
     console.log(`[AnomalyAIAnalyzer] Calling AI Gateway with ${anomalies.length} anomalies...`);
     lastAICallTime = now;
@@ -263,7 +263,7 @@ Analyze these anomalies and provide your assessment.`;
 
     const result = parseAIResponse(content);
 
-    // 5. 캐시 업데이트
+    // 5. Update cache
     analysisCache = {
       result,
       anomalyHash,
@@ -277,13 +277,13 @@ Analyze these anomalies and provide your assessment.`;
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[AnomalyAIAnalyzer] AI Gateway Error:', errorMessage);
 
-    // 실패 시 기본 응답
+    // Default response on failure
     return {
       severity: 'medium',
       anomalyType: 'performance',
       correlations: anomalies.map(a => a.description),
-      predictedImpact: `AI 분석 실패: ${errorMessage}`,
-      suggestedActions: ['수동으로 로그 및 메트릭 확인 필요', 'AI Gateway 연결 상태 확인'],
+      predictedImpact: `AI analysis failed: ${errorMessage}`,
+      suggestedActions: ['Manual log and metric inspection required', 'Check AI Gateway connection status'],
       relatedComponents: [],
       timestamp: new Date().toISOString(),
     };
@@ -291,7 +291,7 @@ Analyze these anomalies and provide your assessment.`;
 }
 
 /**
- * 분석 캐시 초기화 (테스트용)
+ * Clear analysis cache (for testing)
  */
 export function clearAnalysisCache(): void {
   analysisCache = null;
@@ -299,7 +299,7 @@ export function clearAnalysisCache(): void {
 }
 
 /**
- * 현재 rate limit 상태 조회
+ * Get current rate limit status
  */
 export function getRateLimitStatus(): { canCall: boolean; nextAvailableAt: number } {
   const now = Date.now();

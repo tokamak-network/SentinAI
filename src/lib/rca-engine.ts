@@ -1,6 +1,6 @@
 /**
  * Root Cause Analysis Engine
- * Optimism Rollup 장애의 근본 원인을 분석하고 인과 체인을 추적
+ * Analyzes root causes of Optimism Rollup incidents and traces causal chains
  *
  * NOTE: Adapts to the existing MetricDataPoint type from prediction.ts
  * which uses `blockHeight`/`blockInterval` and `timestamp: string`.
@@ -24,13 +24,13 @@ import type { AISeverity } from '@/types/scaling';
 // ============================================================================
 
 /**
- * AI Gateway 설정
+ * AI Gateway configuration
  */
 const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://api.ai.tokamak.network';
 const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
 /**
- * Optimism Rollup 컴포넌트 의존관계 그래프
+ * Optimism Rollup component dependency graph
  */
 export const DEPENDENCY_GRAPH: Record<RCAComponent, ComponentDependency> = {
   'op-geth': {
@@ -60,7 +60,7 @@ export const DEPENDENCY_GRAPH: Record<RCAComponent, ComponentDependency> = {
 };
 
 /**
- * 로그 레벨과 RCAEventType 매핑
+ * Log level to RCAEventType mapping
  */
 const LOG_LEVEL_MAP: Record<string, 'error' | 'warning'> = {
   'ERROR': 'error',
@@ -71,7 +71,7 @@ const LOG_LEVEL_MAP: Record<string, 'error' | 'warning'> = {
 };
 
 /**
- * 컴포넌트 이름 정규화 맵
+ * Component name normalization map
  */
 const COMPONENT_NAME_MAP: Record<string, RCAComponent> = {
   'op-geth': 'op-geth',
@@ -85,7 +85,7 @@ const COMPONENT_NAME_MAP: Record<string, RCAComponent> = {
 };
 
 /**
- * RCA 히스토리 최대 보관 수
+ * Maximum RCA history entries to keep
  */
 const MAX_HISTORY_SIZE = 20;
 
@@ -100,10 +100,10 @@ let rcaHistory: RCAHistoryEntry[] = [];
 // ============================================================================
 
 /**
- * 로그 라인에서 타임스탬프 추출
+ * Extract timestamp from a log line
  */
 function extractTimestamp(logLine: string): number | null {
-  // ISO 8601 포맷
+  // ISO 8601 format
   const isoMatch = logLine.match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z?)/);
   if (isoMatch) {
     const date = new Date(isoMatch[1]);
@@ -112,7 +112,7 @@ function extractTimestamp(logLine: string): number | null {
     }
   }
 
-  // Geth 스타일 [MM-DD|HH:mm:ss.mmm]
+  // Geth-style [MM-DD|HH:mm:ss.mmm]
   const gethMatch = logLine.match(/\[(\d{2})-(\d{2})\|(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?\]/);
   if (gethMatch) {
     const now = new Date();
@@ -129,7 +129,7 @@ function extractTimestamp(logLine: string): number | null {
     return date.getTime();
   }
 
-  // 일반 포맷 YYYY-MM-DD HH:mm:ss
+  // General format YYYY-MM-DD HH:mm:ss
   const generalMatch = logLine.match(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})/);
   if (generalMatch) {
     const date = new Date(`${generalMatch[1]}T${generalMatch[2]}Z`);
@@ -142,7 +142,7 @@ function extractTimestamp(logLine: string): number | null {
 }
 
 /**
- * 로그 라인에서 로그 레벨 추출
+ * Extract log level from a log line
  */
 function extractLogLevel(logLine: string): 'error' | 'warning' | null {
   const upperLine = logLine.toUpperCase();
@@ -158,7 +158,7 @@ function extractLogLevel(logLine: string): 'error' | 'warning' | null {
 }
 
 /**
- * 컴포넌트 이름 정규화
+ * Normalize component name
  */
 function normalizeComponentName(name: string): RCAComponent {
   const lowered = name.toLowerCase().trim();
@@ -166,7 +166,7 @@ function normalizeComponentName(name: string): RCAComponent {
 }
 
 /**
- * 로그에서 RCAEvent 목록 파싱
+ * Parse logs into a list of RCAEvents
  */
 function parseLogsToEvents(logs: Record<string, string>): RCAEvent[] {
   const events: RCAEvent[] = [];
@@ -178,7 +178,7 @@ function parseLogsToEvents(logs: Record<string, string>): RCAEvent[] {
     for (const line of lines) {
       const level = extractLogLevel(line);
 
-      // ERROR 또는 WARN 로그만 이벤트로 추출
+      // Only extract ERROR or WARN logs as events
       if (!level) continue;
 
       const timestamp = extractTimestamp(line) || Date.now();
@@ -204,7 +204,7 @@ function parseLogsToEvents(logs: Record<string, string>): RCAEvent[] {
 }
 
 /**
- * AnomalyResult를 RCAEvent로 변환
+ * Convert AnomalyResult to RCAEvent
  */
 function anomaliesToEvents(anomalies: AnomalyResult[]): RCAEvent[] {
   return anomalies
@@ -237,7 +237,7 @@ function anomaliesToEvents(anomalies: AnomalyResult[]): RCAEvent[] {
 }
 
 /**
- * 이벤트 타임라인 구성
+ * Build event timeline
  */
 export function buildTimeline(
   anomalies: AnomalyResult[],
@@ -261,7 +261,7 @@ export function buildTimeline(
 // ============================================================================
 
 /**
- * 특정 컴포넌트로부터 영향받는 모든 downstream 컴포넌트 탐색
+ * Find all downstream components affected by a given root component
  */
 export function findAffectedComponents(rootComponent: RCAComponent): RCAComponent[] {
   const affected = new Set<RCAComponent>();
@@ -289,7 +289,7 @@ export function findAffectedComponents(rootComponent: RCAComponent): RCAComponen
 }
 
 /**
- * 특정 컴포넌트의 upstream 의존성 조회
+ * Get upstream dependencies of a component
  */
 export function findUpstreamComponents(component: RCAComponent): RCAComponent[] {
   const deps = DEPENDENCY_GRAPH[component];
@@ -377,7 +377,7 @@ Respond ONLY with a valid JSON object (no markdown code blocks):
 }`;
 
 /**
- * RCA 사용자 프롬프트 생성
+ * Build user prompt for RCA
  */
 function buildUserPrompt(
   timeline: RCAEvent[],
@@ -432,7 +432,7 @@ Analyze the above data and identify the root cause of the incident.`;
 }
 
 /**
- * AI Gateway를 통한 RCA 분석 수행
+ * Perform RCA analysis via AI Gateway
  */
 async function callAIForRCA(
   timeline: RCAEvent[],
@@ -503,7 +503,7 @@ async function callAIForRCA(
 }
 
 /**
- * AI 호출 실패 시 폴백 분석
+ * Fallback analysis when AI call fails
  */
 function generateFallbackAnalysis(
   timeline: RCAEvent[],
@@ -548,14 +548,14 @@ function generateFallbackAnalysis(
 // ============================================================================
 
 /**
- * UUID 생성
+ * Generate UUID
  */
 function generateId(): string {
   return 'rca-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 9);
 }
 
 /**
- * RCA 수행
+ * Perform Root Cause Analysis
  */
 export async function performRCA(
   anomalies: AnomalyResult[],
@@ -565,14 +565,14 @@ export async function performRCA(
   const startTime = Date.now();
   console.log('[RCA Engine] Starting root cause analysis...');
 
-  // 1. 이벤트 타임라인 구성
+  // 1. Build event timeline
   const timeline = buildTimeline(anomalies, logs, 5);
   console.log(`[RCA Engine] Built timeline with ${timeline.length} events`);
 
-  // 2. AI를 통한 인과 분석
+  // 2. Causal analysis via AI
   const aiResult = await callAIForRCA(timeline, anomalies, metrics, logs);
 
-  // 3. 결과 구성
+  // 3. Compose result
   const result: RCAResult = {
     id: generateId(),
     rootCause: aiResult.rootCause,
@@ -596,7 +596,7 @@ export async function performRCA(
 // ============================================================================
 
 /**
- * RCA 히스토리에 엔트리 추가
+ * Add an entry to the RCA history
  */
 export function addRCAHistory(result: RCAResult, triggeredBy: 'manual' | 'auto'): void {
   const entry: RCAHistoryEntry = {
@@ -614,21 +614,21 @@ export function addRCAHistory(result: RCAResult, triggeredBy: 'manual' | 'auto')
 }
 
 /**
- * RCA 히스토리 조회
+ * Get RCA history
  */
 export function getRCAHistory(limit: number = 10): RCAHistoryEntry[] {
   return rcaHistory.slice(0, Math.min(limit, MAX_HISTORY_SIZE));
 }
 
 /**
- * 특정 RCA 결과 조회
+ * Get a specific RCA result by ID
  */
 export function getRCAById(id: string): RCAHistoryEntry | undefined {
   return rcaHistory.find(entry => entry.id === id);
 }
 
 /**
- * 히스토리 전체 수 조회
+ * Get total RCA history count
  */
 export function getRCAHistoryCount(): number {
   return rcaHistory.length;

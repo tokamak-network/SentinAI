@@ -1,18 +1,18 @@
 /**
  * Root Cause Analysis Types
- * Optimism Rollup 장애 분석을 위한 타입 정의
+ * Type definitions for Optimism Rollup incident analysis
  */
 
 import type { AISeverity } from './scaling';
 
 /**
- * Optimism Rollup 컴포넌트 식별자
- * - op-geth: Execution Client (L2 블록 실행)
- * - op-node: Consensus Client / Derivation Driver (L1에서 L2 상태 파생)
- * - op-batcher: Transaction Batch Submitter (L2 트랜잭션을 L1에 제출)
- * - op-proposer: State Root Proposer (L2 상태 루트를 L1에 제출)
- * - l1: L1 Ethereum (외부 의존성)
- * - system: 시스템 레벨 이벤트 (K8s, 네트워크 등)
+ * Optimism Rollup component identifier
+ * - op-geth: Execution Client (executes L2 blocks)
+ * - op-node: Consensus Client / Derivation Driver (derives L2 state from L1)
+ * - op-batcher: Transaction Batch Submitter (submits L2 transactions to L1)
+ * - op-proposer: State Root Proposer (submits L2 state roots to L1)
+ * - l1: L1 Ethereum (external dependency)
+ * - system: System-level events (K8s, network, etc.)
  */
 export type RCAComponent =
   | 'op-geth'
@@ -23,150 +23,150 @@ export type RCAComponent =
   | 'system';
 
 /**
- * RCA 이벤트 유형
- * - error: 에러 로그 또는 치명적 실패
- * - warning: 경고 로그 또는 주의 필요 상태
- * - metric_anomaly: 메트릭 이상치 (Z-Score 기반)
- * - state_change: 상태 변화 (스케일링, 재시작 등)
+ * RCA event type
+ * - error: Error log or critical failure
+ * - warning: Warning log or attention-required state
+ * - metric_anomaly: Metric outlier (Z-Score based)
+ * - state_change: State change (scaling, restart, etc.)
  */
 export type RCAEventType = 'error' | 'warning' | 'metric_anomaly' | 'state_change';
 
 /**
- * RCA 이벤트
- * 타임라인을 구성하는 개별 이벤트
+ * RCA Event
+ * Individual event that composes the timeline
  */
 export interface RCAEvent {
   /** Unix timestamp (milliseconds) */
   timestamp: number;
 
-  /** 이벤트 발생 컴포넌트 */
+  /** Component where the event occurred */
   component: RCAComponent;
 
-  /** 이벤트 유형 */
+  /** Event type */
   type: RCAEventType;
 
-  /** 이벤트 설명 (사람이 읽을 수 있는 형태) */
+  /** Event description (human-readable) */
   description: string;
 
-  /** 원본 로그 라인 (있는 경우) */
+  /** Raw log line (if available) */
   rawLog?: string;
 
-  /** 이벤트 심각도 (있는 경우) */
+  /** Event severity (if available) */
   severity?: AISeverity;
 }
 
 /**
- * 컴포넌트 의존관계
- * Optimism Rollup 아키텍처 기반 정의
+ * Component dependency
+ * Defined based on Optimism Rollup architecture
  */
 export interface ComponentDependency {
-  /** 이 컴포넌트가 의존하는 컴포넌트 목록 (upstream) */
+  /** Components this component depends on (upstream) */
   dependsOn: RCAComponent[];
 
-  /** 이 컴포넌트에 의존하는 컴포넌트 목록 (downstream) */
+  /** Components that depend on this component (downstream) */
   feeds: RCAComponent[];
 }
 
 /**
- * 근본 원인 정보
+ * Root cause information
  */
 export interface RootCauseInfo {
-  /** 근본 원인 컴포넌트 */
+  /** Root cause component */
   component: RCAComponent;
 
-  /** 근본 원인 설명 */
+  /** Root cause description */
   description: string;
 
-  /** 분석 신뢰도 (0-1) */
+  /** Analysis confidence (0-1) */
   confidence: number;
 }
 
 /**
- * 조치 권고
+ * Remediation advice
  */
 export interface RemediationAdvice {
-  /** 즉시 조치 사항 */
+  /** Immediate action items */
   immediate: string[];
 
-  /** 재발 방지 대책 */
+  /** Preventive measures */
   preventive: string[];
 }
 
 /**
- * RCA 분석 결과
+ * RCA analysis result
  */
 export interface RCAResult {
-  /** 고유 식별자 (UUID) */
+  /** Unique identifier (UUID) */
   id: string;
 
-  /** 근본 원인 정보 */
+  /** Root cause information */
   rootCause: RootCauseInfo;
 
-  /** 인과 체인 (근본 원인 → 최종 증상 순서) */
+  /** Causal chain (from root cause to final symptoms) */
   causalChain: RCAEvent[];
 
-  /** 영향 받은 컴포넌트 목록 */
+  /** List of affected components */
   affectedComponents: RCAComponent[];
 
-  /** 전체 이벤트 타임라인 (시간순) */
+  /** Full event timeline (chronological) */
   timeline: RCAEvent[];
 
-  /** 조치 권고 */
+  /** Remediation advice */
   remediation: RemediationAdvice;
 
-  /** 분석 완료 시각 (ISO 8601) */
+  /** Analysis completion time (ISO 8601) */
   generatedAt: string;
 }
 
 /**
- * RCA 히스토리 엔트리
+ * RCA history entry
  */
 export interface RCAHistoryEntry {
-  /** RCAResult의 id와 동일 */
+  /** Same as RCAResult.id */
   id: string;
 
-  /** RCA 분석 결과 */
+  /** RCA analysis result */
   result: RCAResult;
 
-  /** 트리거 방식 */
+  /** Trigger method */
   triggeredBy: 'manual' | 'auto';
 
-  /** 트리거 시각 (ISO 8601) */
+  /** Trigger time (ISO 8601) */
   triggeredAt: string;
 }
 
 /**
- * RCA API 요청 본문
+ * RCA API request body
  */
 export interface RCARequest {
-  /** 자동 트리거 여부 (Proposal 2 연동 시 사용) */
+  /** Auto-trigger flag (used with Proposal 2 integration) */
   autoTriggered?: boolean;
 }
 
 /**
- * RCA API 응답
+ * RCA API response
  */
 export interface RCAResponse {
-  /** 성공 여부 */
+  /** Success flag */
   success: boolean;
 
-  /** RCA 결과 (성공 시) */
+  /** RCA result (on success) */
   result?: RCAResult;
 
-  /** 에러 메시지 (실패 시) */
+  /** Error message (on failure) */
   error?: string;
 
-  /** 상세 에러 (디버깅용) */
+  /** Detailed error (for debugging) */
   message?: string;
 }
 
 /**
- * RCA 히스토리 API 응답
+ * RCA history API response
  */
 export interface RCAHistoryResponse {
-  /** RCA 히스토리 목록 */
+  /** RCA history entries */
   history: RCAHistoryEntry[];
 
-  /** 전체 히스토리 수 */
+  /** Total history count */
   total: number;
 }

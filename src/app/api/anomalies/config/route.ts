@@ -1,7 +1,7 @@
 /**
  * Anomaly Alert Config API
- * GET: 현재 알림 설정 조회
- * POST: 알림 설정 업데이트
+ * GET: Retrieve current alert configuration
+ * POST: Update alert configuration
  */
 
 import { NextResponse } from 'next/server';
@@ -19,10 +19,10 @@ export async function GET(): Promise<NextResponse<AlertConfigResponse>> {
   const config = getAlertConfig();
   const history = getAlertHistory();
 
-  // 최근 24시간 알림 수 계산
+  // Calculate alert count in the last 24 hours
   const alertsSent24h = history.length;
 
-  // 다음 알림 가능 시간 (가장 최근 알림 기준)
+  // Next available alert time (based on most recent alert)
   let nextAlertAvailableAt: string | undefined;
   if (history.length > 0) {
     const lastAlert = history[history.length - 1];
@@ -46,7 +46,7 @@ export async function POST(request: Request): Promise<NextResponse<AlertConfigRe
   try {
     const body: AlertConfigUpdateRequest = await request.json();
 
-    // 유효성 검증
+    // Validation
     if (body.thresholds?.notifyOn) {
       const validSeverities: AISeverity[] = ['low', 'medium', 'high', 'critical'];
       const invalidSeverities = body.thresholds.notifyOn.filter(s => !validSeverities.includes(s));
@@ -67,7 +67,7 @@ export async function POST(request: Request): Promise<NextResponse<AlertConfigRe
       }
     }
 
-    // 설정 업데이트 - build thresholds with required fields if provided
+    // Update config - build thresholds with required fields if provided
     const thresholdsUpdate = body.thresholds ? {
       notifyOn: body.thresholds.notifyOn ?? getAlertConfig().thresholds.notifyOn,
       cooldownMinutes: body.thresholds.cooldownMinutes ?? getAlertConfig().thresholds.cooldownMinutes,

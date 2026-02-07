@@ -21,7 +21,7 @@ import {
 import { getAllLiveLogs } from '@/lib/log-ingester';
 import type { AnomalyResult } from '@/types/anomaly';
 
-// 이상 탐지 활성화 여부 (기본: 활성화)
+// Whether anomaly detection is enabled (default: enabled)
 const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'false';
 
 // Block interval tracking for metrics store
@@ -409,18 +409,18 @@ export async function GET(request: Request) {
 
         if (ANOMALY_DETECTION_ENABLED && !isStressTest && dataPoint) {
           try {
-            // Layer 1: 통계 기반 이상 탐지
+            // Layer 1: Statistical anomaly detection
             const history = getRecentMetrics();
             detectedAnomalies = detectAnomalies(dataPoint, history);
 
             if (detectedAnomalies.length > 0) {
               console.log(`[Anomaly] Detected ${detectedAnomalies.length} anomalies`);
 
-              // 이벤트 저장소에 기록
+              // Record in event store
               const event = createOrUpdateEvent(detectedAnomalies);
               activeAnomalyEventId = event.id;
 
-              // Layer 2: AI 심층 분석 (비동기, 응답 블로킹 안 함)
+              // Layer 2: AI deep analysis (async, non-blocking)
               if (!event.deepAnalysis) {
                 (async () => {
                   try {
@@ -428,7 +428,7 @@ export async function GET(request: Request) {
                     const analysis = await analyzeAnomalies(detectedAnomalies, dataPoint!, logs);
                     addDeepAnalysis(event.id, analysis);
 
-                    // Layer 3: 알림 발송
+                    // Layer 3: Alert dispatch
                     const alertRecord = await dispatchAlert(analysis, dataPoint!, detectedAnomalies);
                     if (alertRecord) {
                       addAlertRecord(event.id, alertRecord);
@@ -439,7 +439,7 @@ export async function GET(request: Request) {
                 })();
               }
             } else {
-              // 이상이 없으면 활성 이벤트 해결 처리
+              // Resolve active event if no anomalies detected
               resolveActiveEventIfExists();
               activeAnomalyEventId = getActiveEventId() || undefined;
             }

@@ -1,6 +1,6 @@
 /**
  * Anomalies API
- * GET: 이상 이벤트 목록 조회
+ * GET: Retrieve anomaly event list
  */
 
 import { NextResponse } from 'next/server';
@@ -14,7 +14,7 @@ export async function GET(request: Request): Promise<NextResponse<AnomaliesRespo
   const limit = parseInt(url.searchParams.get('limit') || '20', 10);
   const offset = parseInt(url.searchParams.get('offset') || '0', 10);
 
-  // 유효성 검증
+  // Validation
   const validLimit = Math.min(Math.max(1, limit), 100);
   const validOffset = Math.max(0, offset);
 

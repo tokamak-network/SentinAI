@@ -1,6 +1,6 @@
 /**
  * Anomaly Event Store
- * 탐지된 이상 이벤트 메모리 저장소
+ * In-memory store for detected anomaly events
  */
 
 import { AnomalyEvent, AnomalyResult, DeepAnalysisResult, AlertRecord, AnomalyEventStatus } from '@/types/anomaly';
@@ -9,20 +9,20 @@ import { AnomalyEvent, AnomalyResult, DeepAnalysisResult, AlertRecord, AnomalyEv
 // Configuration
 // ============================================================================
 
-/** 최대 이벤트 저장 수 */
+/** Maximum number of events to store */
 const MAX_EVENTS = 100;
 
-/** 이벤트 자동 해결 시간 (밀리초) - 30분간 새로운 이상 없으면 해결 처리 */
+/** Auto-resolve timeout (ms) - resolve if no new anomaly for 30 min */
 const AUTO_RESOLVE_MS = 30 * 60 * 1000;
 
 // ============================================================================
 // In-Memory State
 // ============================================================================
 
-/** 이벤트 저장소 (최신순) */
+/** Event store (newest first) */
 let events: AnomalyEvent[] = [];
 
-/** 현재 활성 이벤트 ID */
+/** Currently active event ID */
 let activeEventId: string | null = null;
 
 // ============================================================================
@@ -30,7 +30,7 @@ let activeEventId: string | null = null;
 // ============================================================================
 
 /**
- * UUID v4 생성
+ * Generate UUID v4
  */
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -41,15 +41,15 @@ function generateUUID(): string {
 }
 
 /**
- * 오래된 이벤트 정리
+ * Clean up old events
  */
 function cleanup(): void {
-  // 최대 개수 초과 시 오래된 것부터 제거
+  // Remove oldest events when exceeding max count
   if (events.length > MAX_EVENTS) {
     events = events.slice(0, MAX_EVENTS);
   }
 
-  // 자동 해결 처리
+  // Auto-resolve stale events
   const now = Date.now();
   for (const event of events) {
     if (event.status === 'active' && now - event.timestamp > AUTO_RESOLVE_MS) {
@@ -58,7 +58,7 @@ function cleanup(): void {
     }
   }
 
-  // 활성 이벤트 ID 업데이트
+  // Update active event ID
   const activeEvent = events.find(e => e.status === 'active');
   activeEventId = activeEvent?.id || null;
 }
@@ -68,20 +68,20 @@ function cleanup(): void {
 // ============================================================================
 
 /**
- * 새 이상 이벤트 생성 또는 기존 활성 이벤트에 추가
+ * Create a new anomaly event or append to an existing active event
  *
- * @param anomalies Layer 1에서 탐지된 이상 목록
- * @returns 생성/업데이트된 이벤트
+ * @param anomalies List of anomalies detected by Layer 1
+ * @returns Created or updated event
  */
 export function createOrUpdateEvent(anomalies: AnomalyResult[]): AnomalyEvent {
   cleanup();
   const now = Date.now();
 
-  // 활성 이벤트가 있으면 이상 목록 업데이트
+  // If an active event exists, update the anomaly list
   if (activeEventId) {
     const activeEvent = events.find(e => e.id === activeEventId);
     if (activeEvent) {
-      // 기존 이상에 없는 새로운 메트릭의 이상만 추가
+      // Only add anomalies for new metrics not already present
       const existingMetrics = new Set(activeEvent.anomalies.map(a => a.metric));
       const newAnomalies = anomalies.filter(a => !existingMetrics.has(a.metric));
 
@@ -89,7 +89,7 @@ export function createOrUpdateEvent(anomalies: AnomalyResult[]): AnomalyEvent {
         activeEvent.anomalies.push(...newAnomalies);
       }
 
-      // 기존 이상 업데이트 (같은 메트릭이면 최신 값으로)
+      // Update existing anomalies (replace with latest value for the same metric)
       for (const anomaly of anomalies) {
         const existingIndex = activeEvent.anomalies.findIndex(a => a.metric === anomaly.metric);
         if (existingIndex >= 0) {
@@ -101,7 +101,7 @@ export function createOrUpdateEvent(anomalies: AnomalyResult[]): AnomalyEvent {
     }
   }
 
-  // 새 이벤트 생성
+  // Create a new event
   const newEvent: AnomalyEvent = {
     id: generateUUID(),
     timestamp: now,
@@ -117,7 +117,7 @@ export function createOrUpdateEvent(anomalies: AnomalyResult[]): AnomalyEvent {
 }
 
 /**
- * 이벤트에 AI 분석 결과 추가
+ * Add AI analysis result to an event
  */
 export function addDeepAnalysis(eventId: string, analysis: DeepAnalysisResult): void {
   const event = events.find(e => e.id === eventId);
@@ -127,7 +127,7 @@ export function addDeepAnalysis(eventId: string, analysis: DeepAnalysisResult): 
 }
 
 /**
- * 이벤트에 알림 기록 추가
+ * Add alert record to an event
  */
 export function addAlertRecord(eventId: string, alert: AlertRecord): void {
   const event = events.find(e => e.id === eventId);
@@ -137,7 +137,7 @@ export function addAlertRecord(eventId: string, alert: AlertRecord): void {
 }
 
 /**
- * 이벤트 상태 업데이트
+ * Update event status
  */
 export function updateEventStatus(eventId: string, status: AnomalyEventStatus): void {
   const event = events.find(e => e.id === eventId);
@@ -153,7 +153,7 @@ export function updateEventStatus(eventId: string, status: AnomalyEventStatus): 
 }
 
 /**
- * 활성 이벤트 해결 처리 (이상이 더 이상 탐지되지 않을 때 호출)
+ * Resolve the active event (called when no more anomalies are detected)
  */
 export function resolveActiveEventIfExists(): void {
   if (activeEventId) {
@@ -162,7 +162,7 @@ export function resolveActiveEventIfExists(): void {
 }
 
 /**
- * 이벤트 목록 조회 (페이지네이션)
+ * Get events list (with pagination)
  */
 export function getEvents(limit: number = 20, offset: number = 0): { events: AnomalyEvent[]; total: number; activeCount: number } {
   cleanup();
@@ -178,14 +178,14 @@ export function getEvents(limit: number = 20, offset: number = 0): { events: Ano
 }
 
 /**
- * 특정 이벤트 조회
+ * Get a specific event by ID
  */
 export function getEventById(eventId: string): AnomalyEvent | null {
   return events.find(e => e.id === eventId) || null;
 }
 
 /**
- * 현재 활성 이벤트 ID 조회
+ * Get the currently active event ID
  */
 export function getActiveEventId(): string | null {
   cleanup();
@@ -193,7 +193,7 @@ export function getActiveEventId(): string | null {
 }
 
 /**
- * 저장소 초기화 (테스트용)
+ * Clear the event store (for testing)
  */
 export function clearEvents(): void {
   events = [];

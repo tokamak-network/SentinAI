@@ -240,7 +240,7 @@ export async function dispatchAlert(
     success: false,
   };
 
-  // 5. Webhook 발송 (URL이 있는 경우)
+  // 5. Send webhook (if URL configured)
   if (currentConfig.webhookUrl) {
     try {
       const slackMessage = formatSlackMessage(analysis, metrics, anomalies);
@@ -263,12 +263,12 @@ export async function dispatchAlert(
       console.error('[AlertDispatcher] Webhook error:', errorMessage);
     }
   } else {
-    // Dashboard 전용 알림
+    // Dashboard-only alert
     record.success = true;
     console.log(`[AlertDispatcher] Dashboard alert recorded: ${analysis.severity} ${analysis.anomalyType}`);
   }
 
-  // 6. 상태 업데이트
+  // 6. Update state
   lastAlertByType.set(analysis.anomalyType, Date.now());
   alertHistory.push(record);
 
@@ -280,14 +280,14 @@ export async function dispatchAlert(
 // ============================================================================
 
 /**
- * 현재 알림 설정 조회
+ * Get current alert configuration
  */
 export function getAlertConfig(): AlertConfig {
   return { ...currentConfig };
 }
 
 /**
- * 알림 설정 업데이트
+ * Update alert configuration
  */
 export function updateAlertConfig(updates: Partial<AlertConfig>): AlertConfig {
   if (updates.webhookUrl !== undefined) {
@@ -308,7 +308,7 @@ export function updateAlertConfig(updates: Partial<AlertConfig>): AlertConfig {
 }
 
 /**
- * 최근 24시간 알림 기록 조회
+ * Get alert history (last 24 hours)
  */
 export function getAlertHistory(): AlertRecord[] {
   cleanupOldAlerts();
@@ -316,7 +316,7 @@ export function getAlertHistory(): AlertRecord[] {
 }
 
 /**
- * 다음 알림 가능 시간 조회 (쿨다운 중인 경우)
+ * Get next available alert time (when in cooldown)
  */
 export function getNextAlertAvailableAt(anomalyType: string): number | null {
   const lastAlert = lastAlertByType.get(anomalyType);
@@ -329,7 +329,7 @@ export function getNextAlertAvailableAt(anomalyType: string): number | null {
 }
 
 /**
- * 알림 기록 초기화 (테스트용)
+ * Reset alert history (for testing)
  */
 export function clearAlertHistory(): void {
   alertHistory = [];
