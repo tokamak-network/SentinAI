@@ -447,59 +447,79 @@ async function callAIForRCA(
 }> {
   const userPrompt = buildUserPrompt(timeline, anomalies, metrics, logs);
 
-  try {
-    console.log(`[RCA Engine] Calling AI Gateway at ${AI_GATEWAY_URL}...`);
+  const maxRetries = 2;
 
-    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4.5',
-        messages: [
-          { role: 'system', content: RCA_SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.2,
-      }),
-    });
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[RCA Engine] Calling AI Gateway at ${AI_GATEWAY_URL}... (attempt ${attempt + 1}/${maxRetries + 1})`);
 
-    if (!response.ok) {
-      throw new Error(`AI Gateway responded with ${response.status}: ${response.statusText}`);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 30000);
+
+      const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4.5',
+          messages: [
+            { role: 'system', content: RCA_SYSTEM_PROMPT },
+            { role: 'user', content: userPrompt },
+          ],
+          temperature: 0.2,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        const body = await response.text().catch(() => '');
+        throw new Error(`AI Gateway responded with ${response.status}: ${response.statusText} — ${body}`);
+      }
+
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content || data.output || '{}';
+
+      const jsonStr = content.replace(/```json/g, '').replace(/```/g, '').trim();
+      const parsed = JSON.parse(jsonStr);
+
+      return {
+        rootCause: {
+          component: parsed.rootCause?.component || 'system',
+          description: parsed.rootCause?.description || 'Unable to determine root cause',
+          confidence: parsed.rootCause?.confidence || 0.5,
+        },
+        causalChain: (parsed.causalChain || []).map((e: Record<string, unknown>) => ({
+          timestamp: typeof e.timestamp === 'number' ? e.timestamp : Date.now(),
+          component: (e.component as RCAComponent) || 'system',
+          type: (e.type as RCAEvent['type']) || 'error',
+          description: (e.description as string) || '',
+        })),
+        affectedComponents: parsed.affectedComponents || [],
+        remediation: {
+          immediate: parsed.remediation?.immediate || [],
+          preventive: parsed.remediation?.preventive || [],
+        },
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error(`[RCA Engine] AI analysis failed (attempt ${attempt + 1}/${maxRetries + 1}):`, errorMessage);
+
+      if (attempt < maxRetries) {
+        const delay = 1000 * (attempt + 1);
+        console.log(`[RCA Engine] Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      return generateFallbackAnalysis(timeline, anomalies);
     }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || data.output || '{}';
-
-    const jsonStr = content.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(jsonStr);
-
-    return {
-      rootCause: {
-        component: parsed.rootCause?.component || 'system',
-        description: parsed.rootCause?.description || 'Unable to determine root cause',
-        confidence: parsed.rootCause?.confidence || 0.5,
-      },
-      causalChain: (parsed.causalChain || []).map((e: Record<string, unknown>) => ({
-        timestamp: typeof e.timestamp === 'number' ? e.timestamp : Date.now(),
-        component: (e.component as RCAComponent) || 'system',
-        type: (e.type as RCAEvent['type']) || 'error',
-        description: (e.description as string) || '',
-      })),
-      affectedComponents: parsed.affectedComponents || [],
-      remediation: {
-        immediate: parsed.remediation?.immediate || [],
-        preventive: parsed.remediation?.preventive || [],
-      },
-    };
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[RCA Engine] AI analysis failed:', errorMessage);
-
-    return generateFallbackAnalysis(timeline, anomalies);
   }
+
+  return generateFallbackAnalysis(timeline, anomalies);
 }
 
 /**

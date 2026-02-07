@@ -615,7 +615,7 @@ export default function Dashboard() {
           {/* Terminal Header */}
           <div className="bg-[#25282D] px-6 py-4 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
-              <ShieldAlert className={`${rcaResult?.rootCause?.confidence !== undefined && rcaResult.rootCause.confidence >= 0.7 ? 'text-red-500 animate-pulse' : 'text-blue-400'}`} size={20} />
+              <ShieldAlert className={`${rcaResult && rcaResult.rootCause.confidence >= 0.5 ? 'text-red-500 animate-pulse' : 'text-blue-400'}`} size={20} />
               <span className="text-gray-200 font-bold text-sm tracking-wide">ONE-CLICK CHECKUP MONITOR</span>
             </div>
             <span className="text-xs text-gray-500 font-mono">Real-time Analysis</span>
@@ -716,11 +716,15 @@ export default function Dashboard() {
 
               <div className="mt-8">
                 <p className="text-gray-500 text-xs text-center mb-2">System Status</p>
-                <div className={`text-center py-2 rounded-lg font-bold text-sm border ${rcaResult?.rootCause?.confidence !== undefined && rcaResult.rootCause.confidence >= 0.7
+                <div className={`text-center py-2 rounded-lg font-bold text-sm border ${rcaResult && rcaResult.rootCause.confidence >= 0.5
                   ? 'bg-red-500/10 text-red-500 border-red-500/30'
                   : 'bg-green-500/10 text-green-500 border-green-500/30'
                   }`}>
-                  {isRunningRCA ? 'RUNNING CHECKS...' : (rcaResult ? rcaResult.rootCause.component.toUpperCase() + ' ISSUE DETECTED' : 'MONITORING ACTIVE')}
+                  {isRunningRCA
+                    ? 'RUNNING CHECKS...'
+                    : rcaResult && rcaResult.rootCause.confidence >= 0.5
+                      ? rcaResult.rootCause.component.toUpperCase() + ' ISSUE DETECTED'
+                      : 'MONITORING ACTIVE'}
                 </div>
               </div>
             </div>
