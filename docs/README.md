@@ -15,6 +15,8 @@ AI 모델을 활용한 모니터링, 스케일링, 보안, 예측, 운영 자동
 | 3 | **Root Cause Analysis** — 장애 근본 원인 자동 분석 | 명세 완료 | [상세](proposals/proposal-3-rca-engine.md) |
 | 4 | **AI Cost Optimizer** — Fargate 비용 최적화 엔진 | 명세 완료 | [상세](proposals/proposal-4-cost-optimizer.md) |
 | 5 | **Natural Language Ops** — 자연어 기반 운영 인터페이스 | 명세 완료 | [상세](proposals/proposal-5-nlops.md) |
+| 6 | **Zero-Downtime Scaling** — 무중단 수직 스케일링 전략 | 명세 완료 | [상세](proposals/proposal-6-zero-downtime-scaling.md) |
+| 7 | **Redis State Store** — 상태 영속성 계층 (Redis/InMemory 이중 구현) | 명세 완료 | [상세](proposals/proposal-7-redis-state-store.md) |
 
 ## Verification
 
