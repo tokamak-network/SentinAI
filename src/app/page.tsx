@@ -6,10 +6,22 @@ import {
 } from 'recharts';
 import {
   Activity, Server, Zap, ShieldAlert, Cpu, ArrowUpRight,
-  TrendingDown, FileText, CheckCircle2, XCircle, Shield, Database
+  TrendingDown, FileText, CheckCircle2, XCircle, Shield, Database,
+  GitBranch, AlertTriangle, ChevronDown, ChevronRight
 } from 'lucide-react';
+import type { RCAResult, RCAEvent, RCAComponent } from '@/types/rca';
 
 // --- Interfaces ---
+interface AnomalyResultData {
+  isAnomaly: boolean;
+  metric: string;
+  value: number;
+  zScore: number;
+  direction: 'spike' | 'drop' | 'plateau';
+  description: string;
+  rule: string;
+}
+
 interface MetricData {
   timestamp: string;
   metrics: {
@@ -34,6 +46,8 @@ interface MetricData {
     monthlySaving: number;
     isPeakMode: boolean;
   };
+  anomalies?: AnomalyResultData[];
+  activeAnomalyEventId?: string;
 }
 
 interface ComponentData {
@@ -94,6 +108,13 @@ export default function Dashboard() {
   const [stressMode, setStressMode] = useState(false);
   const [logInsight, setLogInsight] = useState<{ summary: string; severity: string; timestamp: string; action_item?: string } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [activeAnomalies, setActiveAnomalies] = useState<AnomalyResultData[]>([]);
+
+  // RCA State
+  const [rcaResult, setRcaResult] = useState<RCAResult | null>(null);
+  const [isRunningRCA, setIsRunningRCA] = useState(false);
+  const [rcaError, setRcaError] = useState<string | null>(null);
+
   const [prediction, setPrediction] = useState<PredictionInfo | null>(null);
   const [predictionMeta, setPredictionMeta] = useState<PredictionMeta | null>(null);
   const [seedScenario, setSeedScenario] = useState<'stable' | 'rising' | 'spike' | 'falling' | 'live'>('rising');
@@ -136,6 +157,31 @@ export default function Dashboard() {
     }
   };
 
+  // RCA Logic
+  const runRCA = async () => {
+    setRcaResult(null);
+    setRcaError(null);
+    setIsRunningRCA(true);
+    try {
+      const res = await fetch('/api/rca', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ autoTriggered: false }),
+      });
+      const data = await res.json();
+      if (data.success && data.result) {
+        setRcaResult(data.result);
+      } else {
+        setRcaError(data.error || 'RCA analysis failed');
+      }
+    } catch (e) {
+      console.error(e);
+      setRcaError('Failed to connect to RCA API');
+    } finally {
+      setIsRunningRCA(false);
+    }
+  };
+
   // Track current stressMode for async operations
   const stressModeRef = useRef(stressMode);
   // Track active abort controller to cancel pending requests
@@ -173,6 +219,13 @@ export default function Dashboard() {
         }
 
         setCurrent(data);
+
+        // Track anomalies from metrics API
+        if (data.anomalies && data.anomalies.length > 0) {
+          setActiveAnomalies(data.anomalies);
+        } else {
+          setActiveAnomalies([]);
+        }
 
         const point = {
           name: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -299,6 +352,29 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* Anomaly Alert Banner */}
+      {activeAnomalies.length > 0 && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-2xl px-6 py-4 mb-6 animate-pulse">
+          <div className="flex items-center gap-3">
+            <ShieldAlert className="text-red-500" size={24} />
+            <div className="flex-1">
+              <h3 className="font-bold text-red-600">
+                Anomaly Detected ({activeAnomalies.length})
+              </h3>
+              <p className="text-sm text-red-500/80">
+                {activeAnomalies.map(a => a.description).join(' | ')}
+              </p>
+            </div>
+            <button
+              onClick={() => checkLogs('live')}
+              className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-600 transition"
+            >
+              Analyze Now
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 2. Top Section: Core Metrics & AI Monitor (5:5 Split) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
@@ -571,6 +647,29 @@ export default function Dashboard() {
 
               <div className="space-y-4">
 
+                {/* Real-time Anomaly Feed */}
+                {activeAnomalies.length > 0 && (
+                  <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                    <div className="flex items-center gap-2 mb-2">
+                      <ShieldAlert size={14} className="text-red-500" />
+                      <span className="text-red-400 font-bold text-xs uppercase">Real-time Anomalies</span>
+                    </div>
+                    {activeAnomalies.map((anomaly, idx) => (
+                      <div key={idx} className="flex items-start gap-2 text-xs mb-2 last:mb-0">
+                        <span className={`shrink-0 font-bold ${
+                          anomaly.direction === 'spike' ? 'text-red-500' :
+                          anomaly.direction === 'drop' ? 'text-yellow-500' :
+                          'text-orange-500'
+                        }`}>
+                          {anomaly.direction.toUpperCase()}
+                        </span>
+                        <span className="text-gray-400">[{anomaly.metric}]</span>
+                        <span className="text-gray-300 break-all">{anomaly.description}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Simulated Stress Logs (Only show when stress mode is active) */}
                 {stressMode && (
                   <LogBlock time={new Date().toLocaleTimeString()} source="op-geth" level="WARN" msg="TxPool overflow: 5021 pending txs. Re-prioritizing gas..." highlight={true} color="text-yellow-400" />
@@ -615,6 +714,32 @@ export default function Dashboard() {
                     )}
                   </div>
                 )}
+
+                {/* RCA Result Display */}
+                {rcaResult && !isRunningRCA && (
+                  <RCAResultDisplay result={rcaResult} />
+                )}
+
+                {/* RCA Error Display */}
+                {rcaError && !isRunningRCA && (
+                  <div className="my-6 p-4 rounded-lg bg-red-900/30 border-l-4 border-red-500">
+                    <div className="flex items-center gap-2 mb-2">
+                      <XCircle size={16} className="text-red-400" />
+                      <span className="text-red-400 font-bold text-xs uppercase">RCA Failed</span>
+                    </div>
+                    <p className="text-gray-300 text-sm">{rcaError}</p>
+                  </div>
+                )}
+
+                {/* RCA Loading State */}
+                {isRunningRCA && (
+                  <div className="flex flex-col items-center justify-center py-10 animate-pulse">
+                    <div className="w-full max-w-xs bg-gray-800 rounded-full h-1.5 mb-4 overflow-hidden">
+                      <div className="bg-orange-500 h-1.5 rounded-full animate-loading-bar"></div>
+                    </div>
+                    <p className="text-orange-400 font-mono text-xs animate-pulse">Performing Root Cause Analysis...</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -625,7 +750,7 @@ export default function Dashboard() {
 
                 <button
                   onClick={() => checkLogs('live')}
-                  disabled={isAnalyzing}
+                  disabled={isAnalyzing || isRunningRCA}
                   className={`w-full font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-3 mb-4 group ${isAnalyzing
                     ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
                     : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/40'
@@ -637,6 +762,23 @@ export default function Dashboard() {
                     <Activity className="group-hover:animate-spin" size={18} />
                   )}
                   {isAnalyzing ? 'ANALYZING...' : 'CHECK HEALTH'}
+                </button>
+
+                {/* RCA Button */}
+                <button
+                  onClick={runRCA}
+                  disabled={isRunningRCA || isAnalyzing}
+                  className={`w-full font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-3 group ${isRunningRCA
+                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                    : 'bg-orange-600 hover:bg-orange-500 text-white shadow-orange-900/40'
+                    }`}
+                >
+                  {isRunningRCA ? (
+                    <GitBranch className="animate-spin" size={18} />
+                  ) : (
+                    <GitBranch className="group-hover:rotate-12 transition-transform" size={18} />
+                  )}
+                  {isRunningRCA ? 'ANALYZING...' : 'ROOT CAUSE ANALYSIS'}
                 </button>
               </div>
 
@@ -765,4 +907,180 @@ function LogBlock({ time, source, level, msg, highlight, color }: { time: string
       <span className={`break-all ${color || 'text-gray-300'}`}>{msg}</span>
     </div>
   )
+}
+
+// RCA Result Display Component
+function RCAResultDisplay({ result }: { result: RCAResult }) {
+  const [expandedChain, setExpandedChain] = useState(true);
+
+  // Component color mapping
+  const componentColors: Record<RCAComponent, string> = {
+    'op-geth': 'bg-blue-500',
+    'op-node': 'bg-green-500',
+    'op-batcher': 'bg-yellow-500',
+    'op-proposer': 'bg-purple-500',
+    'l1': 'bg-red-500',
+    'system': 'bg-gray-500',
+  };
+
+  // Event type icons
+  const getEventIcon = (type: RCAEvent['type']) => {
+    switch (type) {
+      case 'error':
+        return <XCircle size={12} className="text-red-400" />;
+      case 'warning':
+        return <AlertTriangle size={12} className="text-yellow-400" />;
+      case 'metric_anomaly':
+        return <Activity size={12} className="text-orange-400" />;
+      case 'state_change':
+        return <GitBranch size={12} className="text-blue-400" />;
+      default:
+        return <Activity size={12} className="text-gray-400" />;
+    }
+  };
+
+  return (
+    <div className="my-6 space-y-4 animate-slideIn">
+      {/* Header */}
+      <div className="p-4 rounded-lg bg-orange-900/30 border-l-4 border-orange-500">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-orange-400 font-bold text-xs uppercase flex items-center gap-2">
+            <GitBranch size={14} />
+            Root Cause Analysis Report
+          </span>
+          <span className="text-gray-500 text-[10px]">
+            {new Date(result.generatedAt).toLocaleTimeString()}
+          </span>
+        </div>
+
+        {/* Root Cause */}
+        <div className="mt-3 p-3 bg-red-900/40 rounded-lg border border-red-500/50">
+          <div className="flex items-center gap-2 mb-2">
+            <div className={`w-2 h-2 rounded-full ${componentColors[result.rootCause.component]} animate-pulse`}></div>
+            <span className="text-red-400 font-bold text-sm uppercase">{result.rootCause.component}</span>
+            <span className="text-gray-500 text-[10px] ml-auto">
+              Confidence: {(result.rootCause.confidence * 100).toFixed(0)}%
+            </span>
+          </div>
+          <p className="text-gray-200 text-sm leading-relaxed">
+            {result.rootCause.description}
+          </p>
+        </div>
+      </div>
+
+      {/* Causal Chain */}
+      <div className="p-4 rounded-lg bg-gray-800/50 border border-gray-700/50">
+        <button
+          onClick={() => setExpandedChain(!expandedChain)}
+          className="w-full flex items-center justify-between text-gray-400 font-bold text-xs uppercase mb-3 hover:text-gray-200 transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <GitBranch size={14} />
+            Causal Chain ({result.causalChain.length} events)
+          </span>
+          {expandedChain ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+
+        {expandedChain && (
+          <div className="relative pl-4 border-l-2 border-gray-600 space-y-3">
+            {result.causalChain.map((event, index) => (
+              <div
+                key={index}
+                className={`relative pl-4 ${index === 0 ? 'opacity-100' : 'opacity-80'}`}
+              >
+                {/* Timeline dot */}
+                <div
+                  className={`absolute -left-[calc(0.5rem+1px)] top-1 w-3 h-3 rounded-full border-2 border-gray-800 ${
+                    index === 0 ? 'bg-red-500 ring-2 ring-red-500/30' : componentColors[event.component]
+                  }`}
+                ></div>
+
+                <div className="flex items-start gap-2">
+                  {/* Component Badge */}
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${componentColors[event.component]}`}
+                  >
+                    {event.component}
+                  </span>
+
+                  {/* Event Icon */}
+                  {getEventIcon(event.type)}
+
+                  {/* Timestamp */}
+                  <span className="text-gray-500 text-[10px] shrink-0">
+                    {new Date(event.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+
+                <p className="text-gray-300 text-xs mt-1 leading-relaxed">
+                  {event.description}
+                </p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Affected Components */}
+      {result.affectedComponents.length > 0 && (
+        <div className="p-4 rounded-lg bg-gray-800/50 border border-gray-700/50">
+          <span className="text-gray-400 font-bold text-xs uppercase mb-3 block">
+            Affected Components
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {result.affectedComponents.map((comp) => (
+              <span
+                key={comp}
+                className={`px-3 py-1 rounded-full text-xs font-bold text-white ${componentColors[comp]}`}
+              >
+                {comp}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Remediation */}
+      <div className="p-4 rounded-lg bg-gray-800/50 border border-gray-700/50">
+        <span className="text-gray-400 font-bold text-xs uppercase mb-3 block flex items-center gap-2">
+          <CheckCircle2 size={14} className="text-green-400" />
+          Remediation Steps
+        </span>
+
+        {/* Immediate Actions */}
+        {result.remediation.immediate.length > 0 && (
+          <div className="mb-4">
+            <span className="text-red-400 font-bold text-[10px] uppercase block mb-2">
+              Immediate Actions
+            </span>
+            <ul className="space-y-1">
+              {result.remediation.immediate.map((step, i) => (
+                <li key={i} className="text-gray-300 text-xs flex items-start gap-2">
+                  <span className="text-red-400 shrink-0">{i + 1}.</span>
+                  {step}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* Preventive Measures */}
+        {result.remediation.preventive.length > 0 && (
+          <div>
+            <span className="text-blue-400 font-bold text-[10px] uppercase block mb-2">
+              Preventive Measures
+            </span>
+            <ul className="space-y-1">
+              {result.remediation.preventive.map((step, i) => (
+                <li key={i} className="text-gray-300 text-xs flex items-start gap-2">
+                  <span className="text-blue-400 shrink-0">{i + 1}.</span>
+                  {step}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

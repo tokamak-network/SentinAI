@@ -5,9 +5,24 @@ import { NextResponse } from 'next/server';
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-import { pushMetric } from '@/lib/metrics-store';
+import { pushMetric, getRecentMetrics } from '@/lib/metrics-store';
 import { MetricDataPoint } from '@/types/prediction';
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
+import { detectAnomalies } from '@/lib/anomaly-detector';
+import { analyzeAnomalies } from '@/lib/anomaly-ai-analyzer';
+import { dispatchAlert } from '@/lib/alert-dispatcher';
+import {
+  createOrUpdateEvent,
+  addDeepAnalysis,
+  addAlertRecord,
+  resolveActiveEventIfExists,
+  getActiveEventId
+} from '@/lib/anomaly-event-store';
+import { getAllLiveLogs } from '@/lib/log-ingester';
+import type { AnomalyResult } from '@/types/anomaly';
+
+// 이상 탐지 활성화 여부 (기본: 활성화)
+const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'false';
 
 // Block interval tracking for metrics store
 let lastL2BlockHeight: bigint | null = null;
@@ -372,8 +387,9 @@ export async function GET(request: Request) {
         lastL2BlockTime = now;
 
         // Push data point to metrics store (only for real data, not stress test)
+        let dataPoint: MetricDataPoint | null = null;
         if (!isStressTest) {
-          const dataPoint: MetricDataPoint = {
+          dataPoint = {
             timestamp: new Date().toISOString(),
             cpuUsage: effectiveCpu,
             txPoolPending: effectiveTx,
@@ -385,41 +401,83 @@ export async function GET(request: Request) {
           pushMetric(dataPoint);
         }
 
+        // ================================================================
+        // Anomaly Detection Pipeline (Layer 1 → Layer 2 → Layer 3)
+        // ================================================================
+        let detectedAnomalies: AnomalyResult[] = [];
+        let activeAnomalyEventId: string | undefined;
+
+        if (ANOMALY_DETECTION_ENABLED && !isStressTest && dataPoint) {
+          try {
+            // Layer 1: 통계 기반 이상 탐지
+            const history = getRecentMetrics();
+            detectedAnomalies = detectAnomalies(dataPoint, history);
+
+            if (detectedAnomalies.length > 0) {
+              console.log(`[Anomaly] Detected ${detectedAnomalies.length} anomalies`);
+
+              // 이벤트 저장소에 기록
+              const event = createOrUpdateEvent(detectedAnomalies);
+              activeAnomalyEventId = event.id;
+
+              // Layer 2: AI 심층 분석 (비동기, 응답 블로킹 안 함)
+              if (!event.deepAnalysis) {
+                (async () => {
+                  try {
+                    const logs = await getAllLiveLogs();
+                    const analysis = await analyzeAnomalies(detectedAnomalies, dataPoint!, logs);
+                    addDeepAnalysis(event.id, analysis);
+
+                    // Layer 3: 알림 발송
+                    const alertRecord = await dispatchAlert(analysis, dataPoint!, detectedAnomalies);
+                    if (alertRecord) {
+                      addAlertRecord(event.id, alertRecord);
+                    }
+                  } catch (aiError) {
+                    console.error('[Anomaly] AI analysis failed:', aiError);
+                  }
+                })();
+              }
+            } else {
+              // 이상이 없으면 활성 이벤트 해결 처리
+              resolveActiveEventIfExists();
+              activeAnomalyEventId = getActiveEventId() || undefined;
+            }
+          } catch (anomalyError) {
+            console.error('[Anomaly] Detection pipeline error:', anomalyError);
+          }
+        }
+
         const response = NextResponse.json({
             timestamp: new Date().toISOString(),
             metrics: {
                 l1BlockHeight: Number(l1BlockNumber),
                 blockHeight: Number(blockNumber),
                 txPoolCount: effectiveTx,
-                // If we are in Fargate, usage % is hard to get without metrics server.
-                // EVM Load is the best proxy for "Application Load".
                 cpuUsage: Number(effectiveCpu.toFixed(2)),
-                memoryUsage: 2048, // Mock usage inside the pod for now
+                memoryUsage: 2048,
                 gethVcpu: currentVcpu,
                 gethMemGiB: currentVcpu * 2,
-                syncLag: 0, // Assume synced for MVP
+                syncLag: 0,
                 source: "REAL_K8S_CONFIG"
             },
             components,
             cost: {
                 hourlyRate: Number(currentHourlyCost.toFixed(3)),
-                // Monthly op-geth cost based on current vCPU
                 opGethMonthlyCost: Number(opGethMonthlyCost.toFixed(2)),
-                // Current savings vs fixed 4 vCPU
                 currentSaving: Number(currentSaving.toFixed(2)),
-                // Estimated monthly cost with Dynamic Scaler
                 dynamicMonthlyCost: Number(dynamicMonthlyCost.toFixed(2)),
-                // Max monthly savings with Dynamic Scaler
                 maxMonthlySaving: Number(maxMonthlySaving.toFixed(2)),
-                // Cost for fixed 4 vCPU (Baseline)
                 fixedCost: Number(fixedCost.toFixed(2)),
                 isPeakMode: isStressTest,
-                // Legacy fields for backward compatibility
                 monthlyEstimated: Number(opGethMonthlyCost.toFixed(2)),
                 monthlySaving: Number(currentSaving.toFixed(2)),
             },
             status: "healthy",
-            stressMode: isStressTest
+            stressMode: isStressTest,
+            // === Anomaly Detection Fields ===
+            anomalies: detectedAnomalies,
+            activeAnomalyEventId,
         });
 
         // Disable caching
