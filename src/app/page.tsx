@@ -2,14 +2,11 @@
 
 import { useEffect, useState, useRef } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
-} from 'recharts';
-import {
   Activity, Server, Zap, ShieldAlert, Cpu, ArrowUpRight,
-  TrendingDown, FileText, CheckCircle2, XCircle, Shield, Database,
-  GitBranch, AlertTriangle, ChevronDown, ChevronRight
+  TrendingDown, CheckCircle2, XCircle, Shield, Database,
+  AlertTriangle, ChevronDown, ChevronRight
 } from 'lucide-react';
-import type { RCAResult, RCAEvent, RCAComponent } from '@/types/rca';
+import type { RCAResult, RCAComponent } from '@/types/rca';
 
 // --- Interfaces ---
 interface AnomalyResultData {
@@ -102,7 +99,7 @@ interface ScalerState {
 // --- Main Dashboard Component ---
 export default function Dashboard() {
   // State
-  const [dataHistory, setDataHistory] = useState<{ name: string; cpu: number; gethVcpu: number; gethMemGiB: number; saving: number; cost: number }[]>([]);
+  const [, setDataHistory] = useState<{ name: string; cpu: number; gethVcpu: number; gethMemGiB: number; saving: number; cost: number }[]>([]);
   const [current, setCurrent] = useState<MetricData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [stressMode, setStressMode] = useState(false);

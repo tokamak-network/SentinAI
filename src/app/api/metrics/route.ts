@@ -108,7 +108,7 @@ async function getComponentDetails(labelSelector: string, displayName: string, i
                 } else {
                     instanceInfo = "Standard Node";
                 }
-            } catch (e) {
+            } catch {
                 instanceInfo = "Node Access Denied";
             }
         }
@@ -305,7 +305,7 @@ export async function GET(request: Request) {
             if (txPoolData.result?.pending) {
                 txPoolPending = parseInt(txPoolData.result.pending, 16);
             }
-        } catch (e) {
+        } catch {
             // Fallback: use current block tx count if txpool_status not supported
             txPoolPending = block.transactions.length;
         }

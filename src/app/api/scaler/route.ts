@@ -83,7 +83,7 @@ async function fetchAIAnalysis(): Promise<{
 /**
  * GET: Get current scaling state with prediction
  */
-export async function GET(_request: NextRequest) {
+export async function GET() {
   try {
     const state = getScalingState();
     const currentVcpu = await getCurrentVcpu();

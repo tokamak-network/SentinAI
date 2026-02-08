@@ -437,7 +437,7 @@ Analyze the above data and identify the root cause of the incident.`;
  */
 function extractJSON(text: string): string {
   // Strip markdown code fences
-  let cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+  const cleaned = text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
 
   // Find the first '{' and match its closing '}'
   const start = cleaned.indexOf('{');

@@ -31,7 +31,7 @@ const DEFAULT_ALERT_CONFIG: AlertConfig = {
 // ============================================================================
 
 /** Current alert configuration */
-let currentConfig: AlertConfig = { ...DEFAULT_ALERT_CONFIG };
+const currentConfig: AlertConfig = { ...DEFAULT_ALERT_CONFIG };
 
 /** Alert dispatch history (last 24 hours) */
 let alertHistory: AlertRecord[] = [];
