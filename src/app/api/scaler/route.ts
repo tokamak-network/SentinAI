@@ -35,6 +35,7 @@ import { getMetricsCount } from '@/lib/metrics-store';
 import { PredictionResult, DEFAULT_PREDICTION_CONFIG } from '@/types/prediction';
 import { analyzeLogChunk } from '@/lib/ai-analyzer';
 import { getAllLiveLogs } from '@/lib/log-ingester';
+import { addScalingEvent, addLogAnalysisResult } from '@/lib/daily-accumulator';
 
 /**
  * Get current metrics from /api/metrics
@@ -73,6 +74,17 @@ async function fetchAIAnalysis(): Promise<{
   try {
     const logs = await getAllLiveLogs();
     const result = await analyzeLogChunk(logs);
+
+    // Record analysis result in daily accumulator
+    if (result) {
+      addLogAnalysisResult({
+        timestamp: new Date().toISOString(),
+        severity: result.severity,
+        summary: result.summary,
+        actionItem: result.action_item,
+      });
+    }
+
     return { severity: result.severity };
   } catch (error) {
     console.error('Failed to fetch AI analysis:', error);
@@ -261,6 +273,15 @@ export async function POST(request: NextRequest) {
         reason: decision.reason,
         triggeredBy,
         decision,
+      });
+
+      // Record scaling event in daily accumulator
+      addScalingEvent({
+        timestamp: result.timestamp,
+        fromVcpu: result.previousVcpu,
+        toVcpu: result.currentVcpu,
+        trigger: triggeredBy === 'auto' ? 'auto' : 'manual',
+        reason: decision.reason,
       });
     }
 
