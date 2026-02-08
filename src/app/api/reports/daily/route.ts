@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { getAccumulatedData, getAccumulatorStatus } from '@/lib/daily-accumulator';
+import { getAccumulatedData, getAccumulatorStatus, initializeAccumulator, takeSnapshot } from '@/lib/daily-accumulator';
 import { generateDailyReport, readExistingReport, listReports } from '@/lib/daily-report-generator';
 import type { DailyReportRequest } from '@/types/daily-report';
 
@@ -27,6 +27,9 @@ function getTodayKST(): string {
  */
 export async function GET(request: NextRequest) {
   try {
+    // Ensure accumulator is initialized in this module scope
+    initializeAccumulator();
+
     const { searchParams } = new URL(request.url);
 
     // Status mode
@@ -95,6 +98,10 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
+    // Ensure accumulator is initialized and take a fresh snapshot
+    initializeAccumulator();
+    takeSnapshot();
+
     const body: DailyReportRequest = await request.json().catch(() => ({}));
     const targetDate = body.date || getTodayKST();
 
