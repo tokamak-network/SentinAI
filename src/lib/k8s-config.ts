@@ -201,7 +201,7 @@ async function getK8sToken(): Promise<string | undefined> {
  */
 export async function runK8sCommand(
   command: string,
-  options?: { timeout?: number }
+  options?: { timeout?: number; stdin?: string }
 ): Promise<{ stdout: string; stderr: string }> {
   const startTime = Date.now();
 
@@ -226,7 +226,16 @@ export async function runK8sCommand(
   }
 
   try {
-    const result = await execAsync(`${baseCmd} ${command}`, {
+    let fullCmd: string;
+
+    if (options?.stdin) {
+      const escapedStdin = options.stdin.replace(/'/g, "'\\''");
+      fullCmd = `echo '${escapedStdin}' | ${baseCmd} ${command}`;
+    } else {
+      fullCmd = `${baseCmd} ${command}`;
+    }
+
+    const result = await execAsync(fullCmd, {
       timeout: options?.timeout ?? 10000,
     });
     console.log(`[K8s Config] kubectl (${Date.now() - startTime}ms): ${command.substring(0, 40)}...`);

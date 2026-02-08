@@ -19,7 +19,10 @@ import {
   updateScalingState,
   isSimulationMode,
   setSimulationMode,
+  isZeroDowntimeEnabled,
+  setZeroDowntimeEnabled,
 } from '@/lib/k8s-scaler';
+import { getSwapState } from '@/lib/zero-downtime-scaler';
 import {
   ScalerRequest,
   ScalerResponse,
@@ -130,6 +133,11 @@ export async function GET(_request: NextRequest) {
         minRequired: DEFAULT_PREDICTION_CONFIG.minDataPoints,
         nextPredictionIn: getNextPredictionIn(),
         isReady: metricsCount >= DEFAULT_PREDICTION_CONFIG.minDataPoints,
+      },
+      // Zero-downtime scaling state
+      zeroDowntime: {
+        enabled: isZeroDowntimeEnabled(),
+        swapState: getSwapState(),
       },
     });
   } catch (error) {
@@ -283,7 +291,7 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
-    const { autoScalingEnabled, simulationMode } = body;
+    const { autoScalingEnabled, simulationMode, zeroDowntimeEnabled } = body;
 
     if (typeof autoScalingEnabled === 'boolean') {
       setAutoScalingEnabled(autoScalingEnabled);
@@ -293,10 +301,15 @@ export async function PATCH(request: NextRequest) {
       setSimulationMode(simulationMode);
     }
 
+    if (typeof zeroDowntimeEnabled === 'boolean') {
+      setZeroDowntimeEnabled(zeroDowntimeEnabled);
+    }
+
     return NextResponse.json({
       success: true,
       autoScalingEnabled: isAutoScalingEnabled(),
       simulationMode: isSimulationMode(),
+      zeroDowntimeEnabled: isZeroDowntimeEnabled(),
     });
   } catch (error) {
     console.error('PATCH /api/scaler error:', error);

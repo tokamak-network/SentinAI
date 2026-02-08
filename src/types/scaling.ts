@@ -42,6 +42,12 @@ export interface ScaleResult {
   timestamp: string;
   message: string;
   error?: string;
+  /** zero-downtime 모드 사용 여부 */
+  zeroDowntime?: boolean;
+  /** rollout 단계 */
+  rolloutPhase?: string;
+  /** rollout 소요 시간 (ms) */
+  rolloutDurationMs?: number;
 }
 
 // Scaling State
@@ -109,6 +115,8 @@ export interface ScalingConfig {
     idle: number;   // score < idle → 1 vCPU
     normal: number; // score < normal → 2 vCPU, else 4 vCPU
   };
+  /** op-geth K8s Service 이름 */
+  serviceName: string;
 }
 
 // Default Scaling Configuration
@@ -129,6 +137,7 @@ export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
     idle: 30,
     normal: 70,
   },
+  serviceName: 'sepolia-thanos-stack-op-geth',
 };
 
 // Simulation Mode Configuration

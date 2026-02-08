@@ -13,12 +13,16 @@ import {
   DEFAULT_SIMULATION_CONFIG,
 } from '@/types/scaling';
 import { runK8sCommand } from '@/lib/k8s-config';
+import { zeroDowntimeScale } from '@/lib/zero-downtime-scaler';
 
 // Simulation mode (Controlled by env var, default: true = safe mode)
 const simulationConfig: SimulationConfig = {
   ...DEFAULT_SIMULATION_CONFIG,
   enabled: process.env.SCALING_SIMULATION_MODE !== 'false',
 };
+
+// Zero-downtime scaling mode (default: disabled)
+let zeroDowntimeEnabled = false;
 
 // In-memory state storage (Not persisted between requests in Vercel serverless environment)
 // Recommended to use Redis or DB in actual production
@@ -52,6 +56,20 @@ export function setSimulationMode(enabled: boolean): void {
  */
 export function getSimulationConfig(): SimulationConfig {
   return { ...simulationConfig };
+}
+
+/**
+ * Check zero-downtime scaling mode
+ */
+export function isZeroDowntimeEnabled(): boolean {
+  return zeroDowntimeEnabled;
+}
+
+/**
+ * Enable/disable zero-downtime scaling mode
+ */
+export function setZeroDowntimeEnabled(enabled: boolean): void {
+  zeroDowntimeEnabled = enabled;
 }
 
 
@@ -194,8 +212,53 @@ export async function scaleOpGeth(
     };
   }
 
+  // Zero-downtime mode: Parallel Pod Swap orchestration
+  if (zeroDowntimeEnabled) {
+    try {
+      const zdResult = await zeroDowntimeScale(targetVcpu, targetMemoryGiB, config);
+      const previousVcpu = scalingState.currentVcpu;
+      const previousMemoryGiB = scalingState.currentMemoryGiB;
+
+      if (zdResult.success) {
+        scalingState.currentVcpu = targetVcpu;
+        scalingState.currentMemoryGiB = targetMemoryGiB;
+        scalingState.lastScalingTime = timestamp;
+      }
+
+      return {
+        success: zdResult.success,
+        previousVcpu,
+        currentVcpu: zdResult.success ? targetVcpu : previousVcpu,
+        previousMemoryGiB,
+        currentMemoryGiB: zdResult.success ? targetMemoryGiB : previousMemoryGiB,
+        timestamp,
+        message: zdResult.success
+          ? `[Zero-Downtime] Scaled from ${previousVcpu} to ${targetVcpu} vCPU via Parallel Pod Swap`
+          : `[Zero-Downtime] Failed: ${zdResult.error}`,
+        error: zdResult.error,
+        zeroDowntime: true,
+        rolloutPhase: zdResult.finalPhase,
+        rolloutDurationMs: zdResult.totalDurationMs,
+      };
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[Zero-Downtime] Unexpected error:', errorMessage);
+      return {
+        success: false,
+        previousVcpu: currentVcpu,
+        currentVcpu: currentVcpu,
+        previousMemoryGiB: scalingState.currentMemoryGiB,
+        currentMemoryGiB: scalingState.currentMemoryGiB,
+        timestamp,
+        message: '[Zero-Downtime] Unexpected orchestration error',
+        error: errorMessage,
+        zeroDowntime: true,
+      };
+    }
+  }
+
   try {
-    // Execute kubectl patch command
+    // Execute kubectl patch command (legacy rolling update)
     const patchJson = JSON.stringify([
       {
         op: 'replace',
