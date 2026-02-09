@@ -131,7 +131,7 @@ export async function POST(request: NextRequest) {
       debug: body.debug,
     });
 
-    const statusCode = result.success ? 200 : 500;
+    const statusCode = result.success ? 200 : 503;
     return NextResponse.json(result, { status: statusCode });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
           processingTimeMs: 0,
         },
       },
-      { status: 500 }
+      { status: 503 }
     );
   }
 }
