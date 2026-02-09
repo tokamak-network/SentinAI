@@ -114,8 +114,8 @@ async function quickSetup() {
   if (setupK8s) {
     const cluster = await askRequired("▸ EKS Cluster Name: ");
     env.AWS_CLUSTER_NAME = cluster;
-    env.K8S_NAMESPACE = "default";
-    env.K8S_APP_PREFIX = "op";
+    env.K8S_NAMESPACE = await askOptional("▸ K8s Namespace", "default");
+    env.K8S_APP_PREFIX = await askOptional("▸ K8s App Prefix", "op");
   }
 
   // Defaults (no user input)
