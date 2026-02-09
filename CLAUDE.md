@@ -4,138 +4,158 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**SentinAI (Autonomous Node Guardian)** - A monitoring and auto-scaling dashboard for Optimism-based L2 networks.
+**SentinAI (Autonomous Node Guardian)** — Monitoring and auto-scaling dashboard for Optimism-based L2 networks.
 
-Real-time web UI with L1/L2 block monitoring, K8s integration, AI-powered log analysis, and hybrid auto-scaling engine.
-
-## Deployment
-
-> **Note**: This application requires `kubectl` and `aws` CLI for K8s monitoring features.
-> **Vercel/serverless deployment is NOT supported.** Use Docker container deployment.
-
-### Docker Deployment (Recommended)
-
-3-stage multi-stage build: deps → builder → runner (node:20-alpine). kubectl and aws-cli pre-installed.
-Healthcheck: `GET /api/health` (30s interval). Output: `standalone` mode.
-
-```bash
-# Build image
-docker build -t sentinai:latest .
-
-# Run container (minimum - L2 RPC only, K8s features disabled)
-docker run -d \
-  --name sentinai \
-  -p 3000:3000 \
-  -e L2_RPC_URL=https://your-l2-rpc-endpoint.com \
-  sentinai:latest
-
-# Run container (full - with K8s and AI features)
-# K8S_API_URL and AWS_REGION are auto-detected from AWS_CLUSTER_NAME.
-# AWS credentials: mount ~/.aws or pass AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.
-docker run -d \
-  --name sentinai \
-  -p 3000:3000 \
-  -e L2_RPC_URL=https://your-l2-rpc-endpoint.com \
-  -e ANTHROPIC_API_KEY=your-api-key \
-  -e AWS_CLUSTER_NAME=my-cluster-name \
-  -e AWS_ACCESS_KEY_ID=your-access-key \
-  -e AWS_SECRET_ACCESS_KEY=your-secret-key \
-  -e AWS_REGION=ap-northeast-2 \
-  sentinai:latest
-```
-
-### Alternative: K8s Pod
-Deploy as a Pod with ServiceAccount for native kubectl access. Use K8s CronJob for periodic scaling triggers.
-
-### Alternative: EC2/VM
-Install kubectl and aws CLI manually, run with PM2 or systemd.
+Real-time web UI with L1/L2 block monitoring, K8s integration, AI-powered log analysis, anomaly detection, root cause analysis, and hybrid auto-scaling engine.
 
 ## Commands
 
 ```bash
-npm install
-npm run dev      # Starts on port 3002
-npm run build    # Production build
-npm run start    # Production server
-npm run lint     # ESLint check
-npm run setup    # Interactive setup wizard for .env.local
+npm install          # Install dependencies
+npm run dev          # Dev server on port 3002
+npm run build        # Production build (Turbopack)
+npm run start        # Production server
+npm run lint         # ESLint check
+npm run setup        # Interactive .env.local setup wizard
 ```
+
+### Testing (Vitest)
+
+```bash
+npm run test                          # Watch mode
+npm run test:run                      # Single run (CI)
+npm run test:coverage                 # Coverage report (src/lib/**)
+npx vitest run src/lib/__tests__/k8s-scaler.test.ts   # Run single test file
+npx vitest run -t "test name"         # Run specific test by name
+```
+
+Tests live in `src/lib/__tests__/*.test.ts`. Coverage is scoped to `src/lib/**/*.ts`.
 
 ## Architecture
 
+### Data Flow
+
+```
+L1/L2 RPC (viem) ──→ /api/metrics ──→ MetricsStore (ring buffer, 60 capacity)
+                          │                    │
+                          ▼                    ▼
+                    page.tsx (UI)      /api/scaler → PredictiveScaler (AI)
+                          │                    │
+                          ▼                    ▼
+                  AnomalyDetector ──→   ScalingDecision ──→ K8sScaler
+                       │                                        │
+                       ▼                                        ▼
+                  RCA Engine                         StatefulSet patch / simulate
+```
+
+### Scaling Decision Logic
+
+Hybrid score (0–100) = CPU (30%) + Gas (30%) + TxPool (20%) + AI Severity (20%).
+
+| Score   | Target vCPU | Memory   |
+|---------|-------------|----------|
+| < 30    | 1           | 2 GiB   |
+| < 70    | 2           | 4 GiB   |
+| ≥ 70    | 4           | 8 GiB   |
+
+Stress mode simulates 8 vCPU. 5-minute cooldown between scaling operations.
+
+### 3-Layer Anomaly Detection Pipeline
+
+1. **Layer 1** (`anomaly-detector.ts`): Z-Score statistical detection (threshold: Z > 2.5)
+2. **Layer 2** (`anomaly-ai-analyzer.ts`): AI semantic analysis via Claude Haiku
+3. **Layer 3** (`alert-dispatcher.ts`): Alert dispatch (Slack, Webhook)
+
+Events stored in `anomaly-event-store.ts` (in-memory).
+
+### Zero-Downtime Scaling
+
+`zero-downtime-scaler.ts` — Parallel Pod Swap orchestration:
+```
+idle → creating_standby → waiting_ready → switching_traffic → cleanup → syncing_statefulset → completed
+```
+
+### Optimism Component Dependency Graph (used by RCA)
+
+```
+L1 → op-node → op-geth
+           → op-batcher → L1
+           → op-proposer → L1
+```
+
+`rca-engine.ts` uses this graph to trace fault propagation across components.
+
 ### API Routes (`src/app/api/`)
 
-- **`metrics/route.ts`**: Core metrics API - fetches L1/L2 block heights via viem, K8s pod resources via kubectl.
-  - **Fast Path**: When `stress=true`, returns simulated 8 vCPU peak data immediately (no K8s/RPC calls).
+| Route                    | Methods    | Purpose                                                |
+|--------------------------|------------|--------------------------------------------------------|
+| `metrics/route.ts`       | GET        | L1/L2 blocks, K8s pods, anomaly pipeline. `stress=true` → fast path |
+| `metrics/seed/route.ts`  | POST       | Dev-only: inject mock data (stable/rising/spike/falling/live) |
+| `scaler/route.ts`        | GET/POST/PATCH | Scaling state + AI prediction / execute / configure |
+| `anomalies/route.ts`     | GET        | Anomaly event list                                     |
+| `anomalies/config/route.ts` | GET/PUT | Alert configuration                                    |
+| `rca/route.ts`           | POST       | Root cause analysis execution                          |
+| `health/route.ts`        | GET        | Docker healthcheck                                     |
 
-- **`metrics/seed/route.ts`**: Dev-only endpoint for injecting mock time-series data into MetricsStore.
-  - Scenarios: `stable`, `rising`, `spike`, `falling` (mock data), `live` (real accumulated data).
-  - `live` scenario requires ≥20 data points and preserves existing MetricsStore data.
+### Key Libraries (`src/lib/`)
 
-- **`scaler/route.ts`**: Auto-scaling control endpoint.
-  - `GET`: Returns current scaling state, AI prediction, and prediction metadata.
-  - `POST`: Executes manual or auto scaling with metrics collection.
-  - `PATCH`: Updates auto-scaling settings (enable/disable, simulation mode).
-
-- **`analyze-logs/route.ts`**: AI log analysis endpoint using Claude via custom AI Gateway.
-
-- **`health/route.ts`**: Lightweight health check endpoint for Docker HEALTHCHECK and load balancer probes.
-
-### Libraries (`src/lib/`)
-
-- **`scaling-decision.ts`**: Hybrid scoring algorithm (0-100) combining CPU (30%), Gas (30%), TxPool (20%), AI Severity (20%). Maps score to target vCPU: <30 → 1 vCPU, <70 → 2 vCPU, ≥70 → 4 vCPU.
-
-- **`k8s-scaler.ts`**: StatefulSet patching and simulation logic. Maintains in-memory state for safe dry-run testing with 5-minute cooldown between scaling operations.
-
-- **`ai-analyzer.ts`**: Claude-based log analysis for Optimism Rollup components (op-geth, op-node, op-batcher, op-proposer).
-
-- **`predictive-scaler.ts`**: AI-powered time-series prediction using Claude Haiku 4.5 via LiteLLM gateway. Analyzes MetricsStore data to predict optimal vCPU for the next 5 minutes. Includes rate limiting (5-min cooldown) and rule-based fallback.
-
-- **`metrics-store.ts`**: In-memory ring buffer (capacity: 60) for time-series metric data points. Provides statistical analysis (mean, stdDev, trend, slope) for prediction input.
-
-- **`log-ingester.ts`**: Log collection utilities for K8s pods.
+| Module                  | Role                                                            |
+|-------------------------|-----------------------------------------------------------------|
+| `scaling-decision.ts`   | Hybrid scoring algorithm → target vCPU                          |
+| `k8s-scaler.ts`         | StatefulSet patch + simulation, cooldown logic                  |
+| `k8s-config.ts`         | kubectl connection: token caching (10min), API URL auto-detect  |
+| `predictive-scaler.ts`  | AI time-series prediction (Claude Haiku 4.5 via LiteLLM)       |
+| `metrics-store.ts`      | Ring buffer + stats (mean, stdDev, trend, slope)                |
+| `anomaly-detector.ts`   | Z-Score anomaly detection                                       |
+| `anomaly-ai-analyzer.ts`| AI semantic anomaly analysis                                    |
+| `alert-dispatcher.ts`   | Slack/Webhook alert dispatch                                    |
+| `rca-engine.ts`         | AI root cause analysis with component dependency graph          |
+| `zero-downtime-scaler.ts`| Parallel Pod Swap orchestration                                |
+| `ai-analyzer.ts`        | Log chunk analysis (op-geth, op-node, op-batcher, op-proposer) |
+| `prediction-tracker.ts` | Prediction accuracy tracking                                    |
 
 ### Types (`src/types/`)
 
-- **`scaling.ts`**: Core type definitions: `ScalingMetrics`, `ScalingDecision`, `ScalingConfig`, `TargetVcpu` (1|2|4), `AISeverity`.
-- **`prediction.ts`**: Prediction types: `PredictionResult`, `PredictionConfig`, `PredictionFactor`, `MetricDataPoint`.
+- `scaling.ts`: `ScalingMetrics`, `ScalingDecision`, `ScalingConfig`, `TargetVcpu` (1|2|4), `AISeverity`
+- `prediction.ts`: `PredictionResult`, `PredictionConfig`, `MetricDataPoint`
+- `anomaly.ts`: `AnomalyResult`, `DeepAnalysisResult`, `AlertConfig`, `AnomalyEvent`
+- `rca.ts`: `RCAResult`, `RCAEvent`, `RCAComponent`, `RemediationAdvice`
+- `zero-downtime.ts`: `SwapPhase`, `SwapState`, `ZeroDowntimeResult`
 
-### UI (`src/app/`)
+### UI
 
-- **`page.tsx`**: Main dashboard with L1/L2 block display, stress test simulation, AI anomaly detection, and Scaling Forecast card with AI prediction visualization. Includes dev-only Seed Test Data panel for mock/live scenario testing. Uses `AbortController` for optimizing high-frequency polling.
+Single-page dashboard (`src/app/page.tsx`, ~985 lines). All UI is inline — `src/components/` is currently empty. Uses `AbortController` for high-frequency polling optimization.
 
-### Key Patterns
+## Key Patterns
 
-- L1/L2 block heights fetched in parallel via viem
-- K8s commands via centralized `k8s-config.ts` module (auto-detects K8S_API_URL, token, region)
-- Dual-mode operation: Real cluster data or mock fallback for development
-- Cost calculation based on AWS Fargate Seoul pricing ($0.04656/vCPU-hour, $0.00511/GB-hour)
-- Dynamic scaling range: 1-4 vCPU (memory = vCPU × 2 GiB), stress mode simulates 8 vCPU
-- Import alias: `@/*` maps to `./src/*`
+- **Import alias**: `@/*` → `./src/*`
+- **Dual-mode**: Real K8s cluster data or mock fallback for development
+- **AI Gateway**: LiteLLM at `https://api.ai.tokamak.network` (OpenAI-compatible `/v1/chat/completions`), model `claude-haiku-4.5`, auth via `ANTHROPIC_API_KEY`
+- **In-memory state**: MetricsStore, scaling state, anomaly events all reset on server restart (no persistence layer yet)
+- **Cost basis**: AWS Fargate Seoul pricing ($0.04656/vCPU-hour, $0.00511/GB-hour)
+- **Simulation mode**: `SCALING_SIMULATION_MODE=true` by default (no real K8s changes)
 
 ## Environment Variables
 
-Copy the sample and configure (see `ENV_GUIDE.md` for detailed setup instructions):
 ```bash
-cp .env.local.sample .env.local
+cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 ```
 
-**Minimum required (3 variables for full functionality):**
-```bash
-L2_RPC_URL=https://your-l2-rpc-endpoint.com    # L2 Chain RPC
-ANTHROPIC_API_KEY=your-api-key-here             # AI features
-AWS_CLUSTER_NAME=my-cluster-name                # K8s (auto-detects K8S_API_URL & region)
-```
+**Required (3 vars for full functionality):**
+- `L2_RPC_URL` — L2 Chain RPC endpoint
+- `ANTHROPIC_API_KEY` — AI features
+- `AWS_CLUSTER_NAME` — EKS cluster (auto-detects K8S_API_URL & region)
 
-**Optional (sensible defaults):**
-```bash
-# AI_GATEWAY_URL=https://api.ai.tokamak.network  # Default
-# K8S_NAMESPACE=default
-# K8S_APP_PREFIX=op
-# K8S_API_URL=https://...  # Override auto-detection
-```
+**Optional:** `AI_GATEWAY_URL`, `K8S_NAMESPACE`, `K8S_APP_PREFIX`, `K8S_API_URL` (see `ENV_GUIDE.md`)
+
+## Deployment
+
+Docker container only — **Vercel/serverless NOT supported** (requires kubectl + aws CLI).
+
+3-stage multi-stage Dockerfile: deps → builder → runner (node:20-alpine). Healthcheck: `GET /api/health`.
+
+See `README.md` for full Docker/K8s/EC2 deployment instructions.
 
 ## Tech Stack
 
-- Next.js 16, React 19, TypeScript (strict mode)
-- viem (Ethereum client), Recharts, Tailwind CSS 4, Lucide icons
+Next.js 16, React 19, TypeScript (strict), viem, Recharts, Tailwind CSS 4, Lucide icons, Vitest
