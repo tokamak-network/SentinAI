@@ -108,10 +108,11 @@ async function quickSetup() {
     env.ANTHROPIC_API_KEY = await askRequired("▸ Anthropic API Key: ");
   }
 
-  // 4. K8s Cluster (optional)
+  // 4. K8s Monitoring (optional)
   console.log("");
-  const cluster = await askOptional("▸ EKS Cluster Name (optional)");
-  if (cluster && cluster.trim()) {
+  const setupK8s = await askYesNo("▸ Setup K8s monitoring?", true);
+  if (setupK8s) {
+    const cluster = await askRequired("▸ EKS Cluster Name: ");
     env.AWS_CLUSTER_NAME = cluster;
     env.K8S_NAMESPACE = "default";
     env.K8S_APP_PREFIX = "op";
