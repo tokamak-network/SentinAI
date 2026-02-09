@@ -74,7 +74,7 @@ async function main() {
 
   // Check existing .env.local
   if (existsSync(ENV_PATH)) {
-    const overwrite = await askYesNo("➜.env.local already exists. Overwrite?");
+    const overwrite = await askYesNo("▸ .env.local already exists. Overwrite?");
     if (!overwrite) {
       console.log("  Cancelled.");
       rl.close();
@@ -86,7 +86,7 @@ async function main() {
   const env = {};
 
   // --- 1. L2 RPC (Required) ---
-  env.L2_RPC_URL = await askRequired("➜L2 RPC URL: ", (v) => {
+  env.L2_RPC_URL = await askRequired("▸ L2 RPC URL: ", (v) => {
     if (!isValidUrl(v)) {
       console.log("  URL must start with http:// or https://.");
       return false;
@@ -103,23 +103,23 @@ async function main() {
   // 2.1 Primary provider (required)
   console.log("  Priority: Module Override > Gateway > Anthropic > OpenAI > Gemini");
   console.log("");
-  const primaryChoice = await askOptional("➜Primary AI Provider (anthropic/openai/gemini)", "anthropic");
+  const primaryChoice = await askOptional("▸ Primary AI Provider (anthropic/openai/gemini)", "anthropic");
   const primary = primaryChoice.toLowerCase().trim();
 
   if (primary === "anthropic" || primary === "claude") {
-    env.ANTHROPIC_API_KEY = await askRequired("➜Anthropic API Key: ");
+    env.ANTHROPIC_API_KEY = await askRequired("▸ Anthropic API Key: ");
   } else if (primary === "openai" || primary === "gpt") {
-    env.OPENAI_API_KEY = await askRequired("➜OpenAI API Key: ");
+    env.OPENAI_API_KEY = await askRequired("▸ OpenAI API Key: ");
   } else if (primary === "gemini") {
-    env.GEMINI_API_KEY = await askRequired("➜Gemini API Key: ");
+    env.GEMINI_API_KEY = await askRequired("▸ Gemini API Key: ");
   } else {
     // Default to Anthropic
-    env.ANTHROPIC_API_KEY = await askRequired("➜Anthropic API Key: ");
+    env.ANTHROPIC_API_KEY = await askRequired("▸ Anthropic API Key: ");
   }
 
   // 2.2 Additional providers (optional)
   console.log("");
-  const wantMultiple = await askYesNo("➜Add multiple providers for fallback?", true);
+  const wantMultiple = await askYesNo("▸ Add multiple providers for fallback?", true);
   if (wantMultiple) {
     const providers = [];
     if (!env.ANTHROPIC_API_KEY) {
@@ -143,14 +143,14 @@ async function main() {
 
   // 2.3 LiteLLM Gateway (optional)
   console.log("");
-  const useGateway = await askYesNo("➜Use LiteLLM Gateway?", false);
+  const useGateway = await askYesNo("▸ Use LiteLLM Gateway?", false);
   if (useGateway) {
-    env.AI_GATEWAY_URL = await askRequired("➜Gateway URL: ", isValidUrl);
+    env.AI_GATEWAY_URL = await askRequired("▸ Gateway URL: ", isValidUrl);
   }
 
   // 2.4 Module-level provider overrides (optional)
   console.log("");
-  const wantOverrides = await askYesNo("➜Configure module-specific AI providers?", false);
+  const wantOverrides = await askYesNo("▸ Configure module-specific AI providers?", false);
   if (wantOverrides) {
     console.log("  (Leave empty to use primary provider)");
     const modules = [
@@ -169,9 +169,9 @@ async function main() {
 
   // --- 3. K8s Configuration (optional) ---
   console.log("");
-  const setupK8s = await askYesNo("➜Setup K8s monitoring?", false);
+  const setupK8s = await askYesNo("▸ Setup K8s monitoring?", false);
   if (setupK8s) {
-    const cluster = await askOptional("➜EKS Cluster Name");
+    const cluster = await askOptional("▸ EKS Cluster Name");
     if (cluster) {
       env.AWS_CLUSTER_NAME = cluster;
       env.K8S_NAMESPACE = await askOptional("  K8s Namespace", "default");
@@ -181,7 +181,7 @@ async function main() {
 
   // --- 4. Optional Features ---
   console.log("");
-  const webhook = await askOptionalUrl("➜Alert Webhook URL (optional)");
+  const webhook = await askOptionalUrl("▸ Alert Webhook URL (optional)");
   if (webhook) {
     env.ALERT_WEBHOOK_URL = webhook;
   }
