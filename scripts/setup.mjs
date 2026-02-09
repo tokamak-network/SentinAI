@@ -21,7 +21,6 @@ function isValidUrl(value) {
   return /^https?:\/\/.+/.test(value);
 }
 
-
 async function askRequired(prompt, validate) {
   while (true) {
     const answer = (await ask(prompt)).trim();
@@ -62,27 +61,74 @@ async function askYesNo(prompt, defaultNo = true) {
   return answer === "y" || answer === "yes";
 }
 
+// ============================================================
+// Setup Mode Selection
+// ============================================================
+
+async function selectSetupMode() {
+  console.log("  Choose setup mode:");
+  console.log("  1. Quick   - Essential settings only (~30 seconds)");
+  console.log("  2. Advanced - Full configuration with hybrid AI strategy");
+  console.log("");
+  const mode = await askOptional("▸ Setup mode (1=quick, 2=advanced)", "1");
+  return mode === "1" || mode.toLowerCase() === "quick";
+}
 
 // ============================================================
-// Main
+// Quick Setup (5 prompts total)
 // ============================================================
 
-async function main() {
-  console.log("");
-  console.log("  ⚙️  SentinAI Setup (Hybrid AI Strategy)");
-  console.log("");
+async function quickSetup() {
+  const env = {};
 
-  // Check existing .env.local
-  if (existsSync(ENV_PATH)) {
-    const overwrite = await askYesNo("▸ .env.local already exists. Overwrite?");
-    if (!overwrite) {
-      console.log("  Cancelled.");
-      rl.close();
-      return;
+  // 1. L2 RPC URL
+  env.L2_RPC_URL = await askRequired("▸ L2 RPC URL: ", (v) => {
+    if (!isValidUrl(v)) {
+      console.log("  URL must start with http:// or https://.");
+      return false;
     }
-    console.log("");
+    return true;
+  });
+
+  // 2. AI Provider
+  console.log("");
+  console.log("  AI Providers: anthropic | openai | gemini");
+  const provider = await askOptional("▸ AI Provider", "anthropic");
+
+  // 3. API Key
+  const providerName = provider.toLowerCase().trim();
+  if (providerName === "anthropic" || providerName === "claude") {
+    env.ANTHROPIC_API_KEY = await askRequired("▸ Anthropic API Key: ");
+  } else if (providerName === "openai" || providerName === "gpt") {
+    env.OPENAI_API_KEY = await askRequired("▸ OpenAI API Key: ");
+  } else if (providerName === "gemini") {
+    env.GEMINI_API_KEY = await askRequired("▸ Gemini API Key: ");
+  } else {
+    // Default to Anthropic
+    env.ANTHROPIC_API_KEY = await askRequired("▸ Anthropic API Key: ");
   }
 
+  // 4. K8s Cluster (optional)
+  console.log("");
+  const cluster = await askOptional("▸ EKS Cluster Name (optional)");
+  if (cluster && cluster.trim()) {
+    env.AWS_CLUSTER_NAME = cluster;
+    env.K8S_NAMESPACE = "default";
+    env.K8S_APP_PREFIX = "op";
+  }
+
+  // Defaults (no user input)
+  env.COST_TRACKING_ENABLED = "true";
+  env.SCALING_SIMULATION_MODE = "true";
+
+  return env;
+}
+
+// ============================================================
+// Advanced Setup (current implementation)
+// ============================================================
+
+async function advancedSetup() {
   const env = {};
 
   // --- 1. L2 RPC (Required) ---
@@ -113,7 +159,6 @@ async function main() {
   } else if (primary === "gemini") {
     env.GEMINI_API_KEY = await askRequired("▸ Gemini API Key: ");
   } else {
-    // Default to Anthropic
     env.ANTHROPIC_API_KEY = await askRequired("▸ Anthropic API Key: ");
   }
 
@@ -136,7 +181,7 @@ async function main() {
     }
 
     for (const p of providers) {
-      const key = await askRequired(`? ${p.charAt(0).toUpperCase() + p.slice(1)} API Key: `);
+      const key = await askRequired(`▸ ${p.charAt(0).toUpperCase() + p.slice(1)} API Key: `);
       env[`${p.toUpperCase()}_API_KEY`] = key;
     }
   }
@@ -160,7 +205,7 @@ async function main() {
       { name: "PREDICTOR", desc: "Predictive Scaler" },
     ];
     for (const m of modules) {
-      const override = await askOptional(`  ${m.desc} provider (anthropic/openai/gemini/litellm)`);
+      const override = await askOptional(`  ▸ ${m.desc} provider (anthropic/openai/gemini/litellm)`);
       if (override && override.trim()) {
         env[`${m.name}_PROVIDER`] = override.toLowerCase().trim();
       }
@@ -172,7 +217,7 @@ async function main() {
   const setupK8s = await askYesNo("▸ Setup K8s monitoring?", false);
   if (setupK8s) {
     const cluster = await askOptional("▸ EKS Cluster Name");
-    if (cluster) {
+    if (cluster && cluster.trim()) {
       env.AWS_CLUSTER_NAME = cluster;
       env.K8S_NAMESPACE = await askOptional("  K8s Namespace", "default");
       env.K8S_APP_PREFIX = await askOptional("  K8s App Prefix", "op");
@@ -186,16 +231,33 @@ async function main() {
     env.ALERT_WEBHOOK_URL = webhook;
   }
 
-  // Build .env.local
+  // Defaults
+  env.COST_TRACKING_ENABLED = "true";
+  env.SCALING_SIMULATION_MODE = "true";
+
+  return env;
+}
+
+// ============================================================
+// Write .env.local
+// ============================================================
+
+function writeEnvFile(env, isQuickMode) {
   const lines = [
     "# SentinAI Configuration",
-    "# Hybrid AI Strategy: Multiple providers for resilience & optimization",
+    isQuickMode ? "# Quick Setup Mode" : "# Advanced Setup Mode (Hybrid AI Strategy)",
     "",
     "# --- 1. L2 Chain RPC ---",
     `L2_RPC_URL=${env.L2_RPC_URL}`,
     "",
-    "# --- 2. AI Configuration (Priority: Module Override > Gateway > Anthropic > OpenAI > Gemini) ---",
+    "# --- 2. AI Configuration",
   ];
+
+  if (isQuickMode) {
+    lines.push("# (Fallback: Anthropic > OpenAI > Gemini)");
+  } else {
+    lines.push("# (Priority: Module Override > Gateway > Anthropic > OpenAI > Gemini)");
+  }
 
   if (env.AI_GATEWAY_URL) {
     lines.push(`AI_GATEWAY_URL=${env.AI_GATEWAY_URL}`);
@@ -242,15 +304,60 @@ async function main() {
   }
 
   lines.push("");
-  lines.push("# Defaults");
-  lines.push("COST_TRACKING_ENABLED=true");
-  lines.push("SCALING_SIMULATION_MODE=true");
+  lines.push("# --- Defaults ---");
+  lines.push(`COST_TRACKING_ENABLED=${env.COST_TRACKING_ENABLED || "true"}`);
+  lines.push(`SCALING_SIMULATION_MODE=${env.SCALING_SIMULATION_MODE || "true"}`);
+
+  if (isQuickMode) {
+    lines.push("");
+    lines.push("# To add webhooks or hybrid AI settings:");
+    lines.push("# Run: npm run setup (choose Advanced mode)");
+    lines.push("# Or edit this file manually");
+  }
+
   lines.push("");
 
   writeFileSync(ENV_PATH, lines.join("\n"), "utf-8");
+}
 
+// ============================================================
+// Main
+// ============================================================
+
+async function main() {
+  console.log("");
+  console.log("  ⚙️  SentinAI Setup");
+  console.log("");
+
+  // Select setup mode
+  const isQuickMode = await selectSetupMode();
+  console.log("");
+
+  // Check existing .env.local
+  if (existsSync(ENV_PATH)) {
+    const overwrite = await askYesNo("▸ .env.local already exists. Overwrite?");
+    if (!overwrite) {
+      console.log("  Cancelled.");
+      rl.close();
+      return;
+    }
+    console.log("");
+  }
+
+  // Run setup
+  const env = isQuickMode ? await quickSetup() : await advancedSetup();
+
+  // Write .env.local
+  writeEnvFile(env, isQuickMode);
+
+  // Success message
+  console.log("");
   console.log("  ✓ .env.local created");
-  console.log("  ✓ Hybrid strategy configured");
+  if (isQuickMode) {
+    console.log("  ✓ Quick setup complete");
+  } else {
+    console.log("  ✓ Advanced setup with hybrid strategy");
+  }
   console.log("  Run: npm run dev");
   console.log("");
 
