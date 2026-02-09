@@ -83,3 +83,68 @@ AWS_CLUSTER_NAME=my-cluster-name                # K8s (auto-detects K8S_API_URL 
 
 > `K8S_API_URL` and `AWS_REGION` are auto-detected at runtime from `AWS_CLUSTER_NAME`.
 > AWS credentials use the standard chain: env vars, `~/.aws/credentials`, or IAM Role.
+
+## 🚀 Cloud Run Deployment
+
+### Prerequisites
+1. Google Cloud SDK installed: `gcloud --version`
+2. Docker installed: `docker --version`
+3. Authenticated to GCP: `gcloud auth login`
+4. GCP project created
+
+### Quick Deploy
+
+```bash
+# 1. Set your GCP project
+gcloud config set project YOUR_PROJECT_ID
+
+# 2. Enable required APIs
+gcloud services enable run.googleapis.com containerregistry.googleapis.com
+
+# 3. Edit deploy script
+nano deploy-cloudrun.sh  # Change PROJECT_ID
+
+# 4. Deploy
+./deploy-cloudrun.sh
+```
+
+### Environment Variables
+
+See [CLOUDRUN_ENV_SETUP.md](./CLOUDRUN_ENV_SETUP.md) for detailed instructions.
+
+Quick setup:
+```bash
+gcloud run services update sentinai \
+  --region asia-northeast3 \
+  --set-env-vars "L2_RPC_URL=https://your-rpc.com,AWS_REGION=ap-northeast-2"
+```
+
+### Local Docker Test
+
+```bash
+# Build image
+docker build -t sentinai:local .
+
+# Run locally
+docker run -p 8080:8080 \
+  -e L2_RPC_URL="https://..." \
+  -e AWS_REGION="ap-northeast-2" \
+  sentinai:local
+```
+
+### Production URL
+
+After deployment, your service will be available at:
+```
+https://sentinai-<random-hash>-an.a.run.app
+```
+
+### Monitoring
+
+```bash
+# View logs
+gcloud run services logs read sentinai --region asia-northeast3
+
+# Check service status
+gcloud run services describe sentinai --region asia-northeast3
+```

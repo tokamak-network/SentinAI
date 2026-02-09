@@ -6,3 +6,6 @@ node_modules
 .env*.local
 *.tsbuildinfo
 coverage
+
+# Cloud Run / Docker
+env-vars.yaml
