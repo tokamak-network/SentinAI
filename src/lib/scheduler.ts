@@ -27,11 +27,11 @@ export function initializeScheduler(): void {
   initializeAccumulator();
 
   // 5-minute snapshot cron
-  snapshotTask = cron.schedule('*/5 * * * *', () => {
+  snapshotTask = cron.schedule('*/5 * * * *', async () => {
     if (snapshotTaskRunning) return;
     snapshotTaskRunning = true;
     try {
-      takeSnapshot();
+      await takeSnapshot();
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       console.error('[Scheduler] Snapshot error:', msg);

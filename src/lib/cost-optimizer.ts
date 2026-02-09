@@ -352,7 +352,7 @@ export async function generateCostReport(days: number = 7): Promise<CostReport> 
   // 데이터 수집
   const patterns = analyzePatterns(effectiveDays);
   const summary = getUsageSummary(effectiveDays);
-  const scalingHistory = getScalingHistory(50);
+  const scalingHistory = await getScalingHistory(50);
 
   // 현재 비용 계산
   const currentMonthly = calculateMonthlyCost(summary.avgVcpu);

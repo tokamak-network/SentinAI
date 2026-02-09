@@ -93,7 +93,7 @@ export function initializeAccumulator(): void {
  * Take a snapshot from the ring buffer.
  * Returns null if called too frequently (< 4 min gap) or if no data available.
  */
-export function takeSnapshot(): MetricSnapshot | null {
+export async function takeSnapshot(): Promise<MetricSnapshot | null> {
   const now = Date.now();
   const today = getTodayKST();
 
@@ -114,7 +114,7 @@ export function takeSnapshot(): MetricSnapshot | null {
     return null;
   }
 
-  const stats = getMetricsStats();
+  const stats = await getMetricsStats();
 
   // No data in ring buffer
   if (stats.count === 0) {
@@ -123,7 +123,7 @@ export function takeSnapshot(): MetricSnapshot | null {
   }
 
   // Get latest metric for block height and vCPU
-  const recentMetrics = getRecentMetrics(1);
+  const recentMetrics = await getRecentMetrics(1);
   const latestMetric = recentMetrics[recentMetrics.length - 1];
 
   const snapshot: MetricSnapshot = {
