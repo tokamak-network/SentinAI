@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import {
   Activity, Server, Zap, ShieldAlert, Cpu, ArrowUpRight,
   TrendingDown, CheckCircle2, XCircle, Shield, Database,
-  AlertTriangle, ChevronDown, ChevronRight
+  AlertTriangle, ChevronDown, ChevronRight, BarChart3, Calendar, Lightbulb
 } from 'lucide-react';
 import type { RCAResult, RCAComponent } from '@/types/rca';
 
@@ -45,6 +45,36 @@ interface MetricData {
   };
   anomalies?: AnomalyResultData[];
   activeAnomalyEventId?: string;
+}
+
+// === 추가: Cost Report 타입 ===
+interface CostReportData {
+  id: string;
+  generatedAt: string;
+  currentMonthly: number;
+  optimizedMonthly: number;
+  totalSavingsPercent: number;
+  recommendations: Array<{
+    type: 'downscale' | 'schedule' | 'reserved' | 'right-size';
+    title: string;
+    description: string;
+    currentCost: number;
+    projectedCost: number;
+    savingsPercent: number;
+    confidence: number;
+    implementation: string;
+    risk: 'low' | 'medium' | 'high';
+  }>;
+  usagePatterns: Array<{
+    dayOfWeek: number;
+    hourOfDay: number;
+    avgVcpu: number;
+    peakVcpu: number;
+    avgUtilization: number;
+    sampleCount: number;
+  }>;
+  aiInsight: string;
+  periodDays: number;
 }
 
 interface ComponentData {
@@ -115,6 +145,11 @@ export default function Dashboard() {
   const [seedScenario, setSeedScenario] = useState<'stable' | 'rising' | 'spike' | 'falling' | 'live'>('rising');
   const [isSeeding, setIsSeeding] = useState(false);
 
+  // === 추가: Cost Report state ===
+  const [costReport, setCostReport] = useState<CostReportData | null>(null);
+  const [isLoadingCostReport, setIsLoadingCostReport] = useState(false);
+  const [showCostAnalysis, setShowCostAnalysis] = useState(false);
+
   // Seed prediction data for testing
   const seedPredictionData = async () => {
     setIsSeeding(true);
@@ -158,6 +193,23 @@ export default function Dashboard() {
       setRcaError('Failed to connect to RCA API');
     } finally {
       setIsRunningRCA(false);
+    }
+  };
+
+  // === 추가: 비용 분석 함수 ===
+  const fetchCostReport = async () => {
+    setIsLoadingCostReport(true);
+    setCostReport(null);
+    try {
+      const res = await fetch('/api/cost-report?days=7');
+      if (!res.ok) throw new Error('Failed to fetch cost report');
+      const data = await res.json();
+      setCostReport(data);
+      setShowCostAnalysis(true);
+    } catch (e) {
+      console.error('Cost report error:', e);
+    } finally {
+      setIsLoadingCostReport(false);
     }
   };
 
@@ -581,28 +633,89 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Total Saved Card (Dark) */}
+          {/* Cost Dashboard (Dark) - Expanded */}
           <div className="mt-auto bg-[#1A1D21] rounded-2xl p-5 text-white">
-            <div className="flex justify-between items-start mb-2">
-              <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
-                {current?.cost.isPeakMode ? 'Cost Increase (Peak)' : 'Total Saved (MTD)'}
-              </span>
-              {current?.cost.isPeakMode
-                ? <ArrowUpRight size={18} className="text-red-400" />
-                : <TrendingDown size={18} className="text-green-400" />
-              }
+            {/* Header with Cost Analysis Button */}
+            <div className="flex justify-between items-start mb-3">
+              <div>
+                <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
+                  {current?.cost.isPeakMode ? 'Cost Increase (Peak)' : 'Total Saved (MTD)'}
+                </span>
+                <div className="flex items-baseline gap-2 mt-1">
+                  <span className="text-3xl font-black">
+                    ${Math.abs(current?.cost.monthlySaving || 124).toFixed(0)}
+                  </span>
+                  <span className={`text-sm font-bold ${current?.cost.isPeakMode ? 'text-red-400' : 'text-green-400'}`}>
+                    {current?.cost.isPeakMode ? '+' : '-'}{Math.abs((current?.cost.monthlySaving || 0) / (current?.cost.fixedCost || 166) * 100).toFixed(0)}%
+                  </span>
+                </div>
+              </div>
+              <button
+                onClick={fetchCostReport}
+                disabled={isLoadingCostReport}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                  isLoadingCostReport
+                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-500 text-white'
+                }`}
+              >
+                {isLoadingCostReport ? (
+                  <Activity className="animate-spin" size={12} />
+                ) : (
+                  <BarChart3 size={12} />
+                )}
+                {isLoadingCostReport ? '분석 중...' : 'COST ANALYSIS'}
+              </button>
             </div>
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-black">
-                ${Math.abs(current?.cost.monthlySaving || 124).toFixed(0)}
-              </span>
-              <span className={`text-sm font-bold ${current?.cost.isPeakMode ? 'text-red-400' : 'text-green-400'}`}>
-                {current?.cost.isPeakMode ? '+' : '-'}{Math.abs((current?.cost.monthlySaving || 0) / (current?.cost.fixedCost || 166) * 100).toFixed(0)}%
-              </span>
-            </div>
-            <p className="text-gray-400 text-xs mt-2 leading-relaxed">
+
+            <p className="text-gray-400 text-xs leading-relaxed">
               <span className="text-gray-300">vs Fixed 4 vCPU (${current?.cost.fixedCost?.toFixed(0) || '166'}/mo)</span> — {current?.cost.isPeakMode ? 'Scaling up to handle traffic spike.' : 'AI-driven scaling reduced Fargate costs.'}
             </p>
+
+            {/* Cost Analysis Panel (Expandable) */}
+            {showCostAnalysis && costReport && (
+              <div className="mt-4 pt-4 border-t border-gray-700">
+                {/* AI Insight */}
+                <div className="mb-4 p-3 bg-blue-900/30 rounded-xl border border-blue-800/50">
+                  <div className="flex items-start gap-2">
+                    <Lightbulb size={14} className="text-blue-400 mt-0.5 shrink-0" />
+                    <p className="text-xs text-blue-200 leading-relaxed">{costReport.aiInsight}</p>
+                  </div>
+                </div>
+
+                {/* Usage Heatmap */}
+                <div className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Calendar size={12} className="text-gray-400" />
+                    <span className="text-[10px] text-gray-400 font-semibold uppercase">사용 패턴 (최근 {costReport.periodDays}일)</span>
+                  </div>
+                  <UsageHeatmap patterns={costReport.usagePatterns} />
+                </div>
+
+                {/* Recommendations */}
+                {costReport.recommendations.length > 0 && (
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-[10px] text-gray-400 font-semibold uppercase">최적화 추천</span>
+                      <span className="text-[10px] text-green-400 font-bold">최대 {costReport.totalSavingsPercent}% 절감 가능</span>
+                    </div>
+                    <div className="space-y-2">
+                      {costReport.recommendations.slice(0, 3).map((rec, idx) => (
+                        <RecommendationCard key={idx} recommendation={rec} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Close Button */}
+                <button
+                  onClick={() => setShowCostAnalysis(false)}
+                  className="w-full mt-3 py-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
+                >
+                  닫기
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -977,6 +1090,161 @@ function RCAResultDisplay({ result }: { result: RCAResult }) {
               </ul>
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// === 추가: Usage Heatmap 컴포넌트 ===
+function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] }) {
+  const days = ['일', '월', '화', '수', '목', '금', '토'];
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+
+  // 패턴 데이터를 2D 맵으로 변환
+  const patternMap = new Map<string, { avgVcpu: number; avgUtilization: number }>();
+  patterns.forEach(p => {
+    patternMap.set(`${p.dayOfWeek}-${p.hourOfDay}`, {
+      avgVcpu: p.avgVcpu,
+      avgUtilization: p.avgUtilization,
+    });
+  });
+
+  // 사용률에 따른 색상 결정
+  const getColor = (utilization: number): string => {
+    if (utilization === 0) return 'bg-gray-800';
+    if (utilization < 20) return 'bg-green-900/60';
+    if (utilization < 40) return 'bg-green-700/60';
+    if (utilization < 60) return 'bg-yellow-700/60';
+    if (utilization < 80) return 'bg-orange-700/60';
+    return 'bg-red-700/60';
+  };
+
+  return (
+    <div className="overflow-x-auto">
+      <div className="min-w-[400px]">
+        {/* Hour labels */}
+        <div className="flex ml-6 mb-1">
+          {[0, 4, 8, 12, 16, 20].map(h => (
+            <div key={h} className="text-[8px] text-gray-500 font-mono" style={{ marginLeft: h === 0 ? 0 : 'calc((100% - 48px) / 6 - 8px)', width: '16px' }}>
+              {h}시
+            </div>
+          ))}
+        </div>
+
+        {/* Grid */}
+        <div className="space-y-0.5">
+          {days.map((day, dayIdx) => (
+            <div key={day} className="flex items-center gap-1">
+              <span className="w-5 text-[9px] text-gray-500 font-medium">{day}</span>
+              <div className="flex-1 flex gap-px">
+                {hours.map(hour => {
+                  const data = patternMap.get(`${dayIdx}-${hour}`);
+                  const utilization = data?.avgUtilization || 0;
+                  const vcpu = data?.avgVcpu || 0;
+
+                  return (
+                    <div
+                      key={hour}
+                      className={`flex-1 h-3 rounded-sm ${getColor(utilization)} transition-colors hover:ring-1 hover:ring-white/30`}
+                      title={`${days[dayIdx]} ${hour}:00 - 평균 ${vcpu.toFixed(1)} vCPU, ${utilization.toFixed(0)}% 사용률`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Legend */}
+        <div className="flex items-center justify-end gap-2 mt-2">
+          <span className="text-[8px] text-gray-500">낮음</span>
+          <div className="flex gap-px">
+            <div className="w-3 h-2 rounded-sm bg-green-900/60" />
+            <div className="w-3 h-2 rounded-sm bg-green-700/60" />
+            <div className="w-3 h-2 rounded-sm bg-yellow-700/60" />
+            <div className="w-3 h-2 rounded-sm bg-orange-700/60" />
+            <div className="w-3 h-2 rounded-sm bg-red-700/60" />
+          </div>
+          <span className="text-[8px] text-gray-500">높음</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// === 추가: Recommendation Card 컴포넌트 ===
+function RecommendationCard({ recommendation }: { recommendation: CostReportData['recommendations'][0] }) {
+  const [expanded, setExpanded] = useState(false);
+
+  const riskStyles = {
+    low: { bg: 'bg-green-900/30', text: 'text-green-400', label: '낮음' },
+    medium: { bg: 'bg-yellow-900/30', text: 'text-yellow-400', label: '중간' },
+    high: { bg: 'bg-red-900/30', text: 'text-red-400', label: '높음' },
+  };
+
+  const typeIcons = {
+    downscale: TrendingDown,
+    schedule: Calendar,
+    reserved: Shield,
+    'right-size': BarChart3,
+  };
+
+  const Icon = typeIcons[recommendation.type] || BarChart3;
+  const risk = riskStyles[recommendation.risk];
+
+  return (
+    <div
+      className={`p-3 rounded-xl border border-gray-700/50 bg-gray-800/30 cursor-pointer transition-all hover:bg-gray-800/50`}
+      onClick={() => setExpanded(!expanded)}
+    >
+      <div className="flex items-start justify-between">
+        <div className="flex items-start gap-2">
+          <Icon size={14} className="text-blue-400 mt-0.5 shrink-0" />
+          <div>
+            <p className="text-xs font-bold text-white">{recommendation.title}</p>
+            <p className="text-[10px] text-gray-400 mt-0.5">{recommendation.description}</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-xs font-bold text-green-400">-${(recommendation.currentCost - recommendation.projectedCost).toFixed(0)}/월</span>
+          <ChevronRight size={14} className={`text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`} />
+        </div>
+      </div>
+
+      {expanded && (
+        <div className="mt-3 pt-3 border-t border-gray-700/50">
+          {/* Stats */}
+          <div className="grid grid-cols-3 gap-2 mb-3">
+            <div className="text-center">
+              <p className="text-[9px] text-gray-500 uppercase">현재 비용</p>
+              <p className="text-xs font-bold text-white">${recommendation.currentCost.toFixed(0)}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-[9px] text-gray-500 uppercase">예상 비용</p>
+              <p className="text-xs font-bold text-green-400">${recommendation.projectedCost.toFixed(0)}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-[9px] text-gray-500 uppercase">절감률</p>
+              <p className="text-xs font-bold text-green-400">{recommendation.savingsPercent}%</p>
+            </div>
+          </div>
+
+          {/* Risk & Confidence */}
+          <div className="flex items-center gap-3 mb-3">
+            <div className={`px-2 py-0.5 rounded text-[9px] font-bold ${risk.bg} ${risk.text}`}>
+              위험도: {risk.label}
+            </div>
+            <div className="text-[9px] text-gray-400">
+              신뢰도: {(recommendation.confidence * 100).toFixed(0)}%
+            </div>
+          </div>
+
+          {/* Implementation */}
+          <div className="p-2 bg-gray-900/50 rounded-lg">
+            <p className="text-[9px] text-gray-400 uppercase mb-1">구현 방법</p>
+            <p className="text-[10px] text-gray-300 leading-relaxed">{recommendation.implementation}</p>
+          </div>
         </div>
       )}
     </div>
