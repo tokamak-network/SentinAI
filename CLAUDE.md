@@ -126,6 +126,38 @@ L1 → op-node → op-geth
 
 Single-page dashboard (`src/app/page.tsx`, ~985 lines). All UI is inline — `src/components/` is currently empty. Uses `AbortController` for high-frequency polling optimization.
 
+## Documentation (`docs/`)
+
+```
+docs/
+├── README.md                          ← 문서 개요
+├── done/                              ← 구현 완료된 제안서
+│   ├── proposal-1-predictive-scaling.md
+│   ├── proposal-2-anomaly-detection.md
+│   ├── proposal-3-rca-engine.md
+│   └── proposal-4-cost-optimizer.md
+├── spec/                              ← 구현 명세서 (AI 에이전트용)
+│   ├── daily-report-spec.md
+│   └── zero-downtime-scaling-spec.md
+├── todo/                              ← 미구현 제안서
+│   ├── proposal-5-nlops.md
+│   ├── proposal-6-zero-downtime-scaling.md
+│   └── proposal-7-redis-state-store.md
+└── verification/                      ← 구현 검증 보고서
+    ├── daily-report-verification.md
+    ├── predictive-scaling-verification.md
+    ├── predictive-scaling-verification-report.md
+    ├── proposal-2-3-verification-report.md
+    ├── proposal-6-verification-report.md
+    ├── seed-ui-verification.md
+    └── seed-ui-verification-report.md
+```
+
+- **done/**: 구현이 완료된 제안서. 이동 시 `todo/` → `done/`
+- **spec/**: 상세 구현 명세서. AI 에이전트가 추가 질문 없이 구현 가능한 수준
+- **todo/**: 아직 구현되지 않은 제안서
+- **verification/**: 각 구현의 검증 결과 보고서
+
 ## Key Patterns
 
 - **Import alias**: `@/*` → `./src/*`
