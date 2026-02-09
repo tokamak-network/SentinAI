@@ -1,6 +1,8 @@
 /**
  * Predictive Scaler Module
  * AI-powered time-series analysis for preemptive scaling decisions
+ *
+ * Storage: Redis (if REDIS_URL set) or InMemory (fallback)
  */
 
 import {
@@ -11,14 +13,11 @@ import {
 } from '@/types/prediction';
 import { TargetVcpu } from '@/types/scaling';
 import { getRecentMetrics, getMetricsStats, getMetricsCount } from './metrics-store';
+import { getStore } from '@/lib/redis-store';
 
 // Anthropic API Configuration
 const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://api.ai.tokamak.network';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
-
-// Rate limiting state
-let lastPredictionTime: number = 0;
-let lastPrediction: PredictionResult | null = null;
 
 /**
  * Build the system prompt for prediction AI
@@ -68,9 +67,9 @@ IMPORTANT CONSTRAINTS:
 /**
  * Build the user prompt with actual metrics data
  */
-function buildUserPrompt(currentVcpu: number): string {
-  const metrics = getRecentMetrics();
-  const stats = getMetricsStats();
+async function buildUserPrompt(currentVcpu: number): Promise<string> {
+  const metrics = await getRecentMetrics();
+  const stats = await getMetricsStats();
 
   // Format recent metrics as a table for better AI comprehension
   const metricsTable = metrics.slice(-15).map(m => ({
@@ -155,8 +154,8 @@ function parseAIResponse(content: string): PredictionResult | null {
 /**
  * Generate fallback prediction when AI is unavailable
  */
-function generateFallbackPrediction(currentVcpu: number): PredictionResult {
-  const stats = getMetricsStats();
+async function generateFallbackPrediction(currentVcpu: number): Promise<PredictionResult> {
+  const stats = await getMetricsStats();
 
   // Simple rule-based fallback
   let predictedVcpu: TargetVcpu = currentVcpu as TargetVcpu;
@@ -210,22 +209,25 @@ export async function predictScaling(
   currentVcpu: number,
   config: PredictionConfig = DEFAULT_PREDICTION_CONFIG
 ): Promise<PredictionResult | null> {
+  const store = getStore();
+
   // Check rate limiting
   const now = Date.now();
+  const lastPredictionTime = await store.getLastPredictionTime();
   if (now - lastPredictionTime < config.predictionCooldownSeconds * 1000) {
     // Return cached prediction if within cooldown
-    return lastPrediction;
+    return store.getLastPrediction();
   }
 
   // Check minimum data points
-  const dataPointCount = getMetricsCount();
+  const dataPointCount = await getMetricsCount();
   if (dataPointCount < config.minDataPoints) {
     console.log(`Insufficient data for prediction: ${dataPointCount}/${config.minDataPoints} points`);
     return null;
   }
 
   const systemPrompt = buildSystemPrompt();
-  const userPrompt = buildUserPrompt(currentVcpu);
+  const userPrompt = await buildUserPrompt(currentVcpu);
 
   try {
     console.log(`[Predictive Scaler] Requesting prediction from AI Gateway...`);
@@ -256,16 +258,16 @@ export async function predictScaling(
     const prediction = parseAIResponse(content);
 
     if (prediction) {
-      lastPredictionTime = now;
-      lastPrediction = prediction;
+      await store.setLastPredictionTime(now);
+      await store.setLastPrediction(prediction);
       return prediction;
     }
 
     // Fall back to rule-based prediction
     console.warn('AI returned invalid response, using fallback prediction');
-    const fallback = generateFallbackPrediction(currentVcpu);
-    lastPredictionTime = now;
-    lastPrediction = fallback;
+    const fallback = await generateFallbackPrediction(currentVcpu);
+    await store.setLastPredictionTime(now);
+    await store.setLastPrediction(fallback);
     return fallback;
 
   } catch (error) {
@@ -273,9 +275,9 @@ export async function predictScaling(
     console.error('Prediction AI Gateway Error:', errorMessage);
 
     // Fall back to rule-based prediction
-    const fallback = generateFallbackPrediction(currentVcpu);
-    lastPredictionTime = now;
-    lastPrediction = fallback;
+    const fallback = await generateFallbackPrediction(currentVcpu);
+    await store.setLastPredictionTime(now);
+    await store.setLastPrediction(fallback);
     return fallback;
   }
 }
@@ -284,31 +286,32 @@ export async function predictScaling(
  * Get the last prediction without making a new request
  * Useful for displaying in UI
  */
-export function getLastPrediction(): PredictionResult | null {
-  return lastPrediction;
+export async function getLastPrediction(): Promise<PredictionResult | null> {
+  return getStore().getLastPrediction();
 }
 
 /**
  * Check if a new prediction can be made (not rate limited)
  */
-export function canMakePrediction(config: PredictionConfig = DEFAULT_PREDICTION_CONFIG): boolean {
+export async function canMakePrediction(config: PredictionConfig = DEFAULT_PREDICTION_CONFIG): Promise<boolean> {
   const now = Date.now();
-  return now - lastPredictionTime >= config.predictionCooldownSeconds * 1000;
+  const lastTime = await getStore().getLastPredictionTime();
+  return now - lastTime >= config.predictionCooldownSeconds * 1000;
 }
 
 /**
  * Get time until next prediction is allowed (in seconds)
  */
-export function getNextPredictionIn(config: PredictionConfig = DEFAULT_PREDICTION_CONFIG): number {
+export async function getNextPredictionIn(config: PredictionConfig = DEFAULT_PREDICTION_CONFIG): Promise<number> {
   const now = Date.now();
-  const elapsed = (now - lastPredictionTime) / 1000;
+  const lastTime = await getStore().getLastPredictionTime();
+  const elapsed = (now - lastTime) / 1000;
   return Math.max(0, config.predictionCooldownSeconds - elapsed);
 }
 
 /**
  * Reset prediction state (for testing)
  */
-export function resetPredictionState(): void {
-  lastPredictionTime = 0;
-  lastPrediction = null;
+export async function resetPredictionState(): Promise<void> {
+  await getStore().resetPredictionState();
 }

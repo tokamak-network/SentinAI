@@ -2,32 +2,22 @@
  * Metrics Store Module
  * Ring buffer implementation for time-series metric storage
  * Shared across Predictive Scaling, Anomaly Detection, and Analytics
+ *
+ * Storage: Redis (if REDIS_URL set) or InMemory (fallback)
  */
 
 import { MetricDataPoint, MetricsStoreStats, MetricStatSummary } from '@/types/prediction';
-
-/** Maximum number of data points to store (1 hour at 1-minute intervals) */
-const MAX_DATA_POINTS = 60;
+import { getStore } from '@/lib/redis-store';
 
 /** Threshold for trend detection: slope magnitude below this is "stable" */
 const TREND_THRESHOLD = 0.5;
 
-/** In-memory ring buffer storage */
-let metricsBuffer: MetricDataPoint[] = [];
-
 /**
  * Push a new data point to the metrics store
- * Automatically evicts oldest data if buffer is full
- *
- * @param dataPoint - The metric data point to store
+ * Automatically evicts oldest data if buffer is full (max 60)
  */
-export function pushMetric(dataPoint: MetricDataPoint): void {
-  metricsBuffer.push(dataPoint);
-
-  // Evict oldest if over capacity
-  if (metricsBuffer.length > MAX_DATA_POINTS) {
-    metricsBuffer = metricsBuffer.slice(-MAX_DATA_POINTS);
-  }
+export async function pushMetric(dataPoint: MetricDataPoint): Promise<void> {
+  await getStore().pushMetric(dataPoint);
 }
 
 /**
@@ -36,11 +26,8 @@ export function pushMetric(dataPoint: MetricDataPoint): void {
  * @param count - Number of recent points to retrieve (default: all)
  * @returns Array of data points, newest last
  */
-export function getRecentMetrics(count?: number): MetricDataPoint[] {
-  if (count === undefined || count >= metricsBuffer.length) {
-    return [...metricsBuffer];
-  }
-  return metricsBuffer.slice(-count);
+export async function getRecentMetrics(count?: number): Promise<MetricDataPoint[]> {
+  return getStore().getRecentMetrics(count);
 }
 
 /**
@@ -71,9 +58,8 @@ function calculateStats(values: number[]): MetricStatSummary {
   const max = Math.max(...values);
 
   // Linear Regression for Trend Detection
-  // Using least squares method: slope = Σ((x - x̄)(y - ȳ)) / Σ((x - x̄)²)
   const n = values.length;
-  const xMean = (n - 1) / 2; // x values are 0, 1, 2, ... n-1
+  const xMean = (n - 1) / 2;
 
   let numerator = 0;
   let denominator = 0;
@@ -87,7 +73,6 @@ function calculateStats(values: number[]): MetricStatSummary {
 
   const slope = denominator !== 0 ? numerator / denominator : 0;
 
-  // Determine trend based on slope magnitude
   let trend: 'rising' | 'falling' | 'stable';
   if (slope > TREND_THRESHOLD) {
     trend = 'rising';
@@ -109,10 +94,11 @@ function calculateStats(values: number[]): MetricStatSummary {
 
 /**
  * Get comprehensive statistics about stored metrics
- *
- * @returns Statistics including count, time range, and per-metric summaries
+ * Fetches all data points from store, then computes stats in-memory
  */
-export function getMetricsStats(): MetricsStoreStats {
+export async function getMetricsStats(): Promise<MetricsStoreStats> {
+  const metricsBuffer = await getStore().getRecentMetrics();
+
   if (metricsBuffer.length === 0) {
     return {
       count: 0,
@@ -147,22 +133,19 @@ export function getMetricsStats(): MetricsStoreStats {
 
 /**
  * Clear all stored metrics
- * Useful for testing or resetting state
  */
-export function clearMetrics(): void {
-  metricsBuffer = [];
+export async function clearMetrics(): Promise<void> {
+  await getStore().clearMetrics();
 }
 
 /**
  * Get current buffer size
- *
- * @returns Number of data points currently stored
  */
-export function getMetricsCount(): number {
-  return metricsBuffer.length;
+export async function getMetricsCount(): Promise<number> {
+  return getStore().getMetricsCount();
 }
 
 /**
  * Export buffer capacity constant for external use
  */
-export const METRICS_BUFFER_CAPACITY = MAX_DATA_POINTS;
+export const METRICS_BUFFER_CAPACITY = 60;

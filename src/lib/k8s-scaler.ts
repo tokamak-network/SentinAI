@@ -1,6 +1,8 @@
 /**
  * K8s Scaler Module
  * Patch StatefulSet resources via kubectl
+ *
+ * Storage: Redis (if REDIS_URL set) or InMemory (fallback)
  */
 
 import {
@@ -10,68 +12,46 @@ import {
   ScalingConfig,
   DEFAULT_SCALING_CONFIG,
   SimulationConfig,
-  DEFAULT_SIMULATION_CONFIG,
 } from '@/types/scaling';
 import { runK8sCommand } from '@/lib/k8s-config';
 import { zeroDowntimeScale } from '@/lib/zero-downtime-scaler';
-
-// Simulation mode (Controlled by env var, default: true = safe mode)
-const simulationConfig: SimulationConfig = {
-  ...DEFAULT_SIMULATION_CONFIG,
-  enabled: process.env.SCALING_SIMULATION_MODE !== 'false',
-};
-
-// Zero-downtime scaling mode (default: disabled)
-let zeroDowntimeEnabled = false;
-
-// In-memory state storage (Not persisted between requests in Vercel serverless environment)
-// Recommended to use Redis or DB in actual production
-let scalingState: ScalingState = {
-  currentVcpu: 1,
-  currentMemoryGiB: 2,
-  lastScalingTime: null,
-  lastDecision: null,
-  cooldownRemaining: 0,
-  autoScalingEnabled: true,
-};
-
-let scalingHistory: ScalingHistoryEntry[] = [];
+import { getStore } from '@/lib/redis-store';
 
 /**
  * Check simulation mode status
  */
-export function isSimulationMode(): boolean {
-  return simulationConfig.enabled;
+export async function isSimulationMode(): Promise<boolean> {
+  const config = await getStore().getSimulationConfig();
+  return config.enabled;
 }
 
 /**
  * Set simulation mode
  */
-export function setSimulationMode(enabled: boolean): void {
-  simulationConfig.enabled = enabled;
+export async function setSimulationMode(enabled: boolean): Promise<void> {
+  await getStore().setSimulationConfig({ enabled });
 }
 
 /**
  * Get simulation config
  */
-export function getSimulationConfig(): SimulationConfig {
-  return { ...simulationConfig };
+export async function getSimulationConfig(): Promise<SimulationConfig> {
+  return getStore().getSimulationConfig();
 }
 
 /**
  * Check zero-downtime scaling mode
  */
-export function isZeroDowntimeEnabled(): boolean {
-  return zeroDowntimeEnabled;
+export async function isZeroDowntimeEnabled(): Promise<boolean> {
+  return getStore().getZeroDowntimeEnabled();
 }
 
 /**
  * Enable/disable zero-downtime scaling mode
  */
-export function setZeroDowntimeEnabled(enabled: boolean): void {
-  zeroDowntimeEnabled = enabled;
+export async function setZeroDowntimeEnabled(enabled: boolean): Promise<void> {
+  await getStore().setZeroDowntimeEnabled(enabled);
 }
-
 
 /**
  * Get current op-geth vCPU
@@ -79,9 +59,12 @@ export function setZeroDowntimeEnabled(enabled: boolean): void {
 export async function getCurrentVcpu(
   config: ScalingConfig = DEFAULT_SCALING_CONFIG
 ): Promise<number> {
-  // Simulation mode: Return in-memory state
-  if (simulationConfig.enabled) {
-    return scalingState.currentVcpu;
+  const simConfig = await getStore().getSimulationConfig();
+
+  // Simulation mode: Return stored state
+  if (simConfig.enabled) {
+    const state = await getStore().getScalingState();
+    return state.currentVcpu;
   }
 
   try {
@@ -97,21 +80,24 @@ export async function getCurrentVcpu(
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Failed to get current vCPU:', message);
-    return scalingState.currentVcpu || 1;
+    const state = await getStore().getScalingState();
+    return state.currentVcpu || 1;
   }
 }
 
 /**
  * Check cooldown
  */
-export function checkCooldown(
+export async function checkCooldown(
   config: ScalingConfig = DEFAULT_SCALING_CONFIG
-): { inCooldown: boolean; remainingSeconds: number } {
-  if (!scalingState.lastScalingTime) {
+): Promise<{ inCooldown: boolean; remainingSeconds: number }> {
+  const state = await getStore().getScalingState();
+
+  if (!state.lastScalingTime) {
     return { inCooldown: false, remainingSeconds: 0 };
   }
 
-  const lastScaling = new Date(scalingState.lastScalingTime).getTime();
+  const lastScaling = new Date(state.lastScalingTime).getTime();
   const now = Date.now();
   const elapsed = (now - lastScaling) / 1000;
   const remaining = Math.max(0, config.cooldownSeconds - elapsed);
@@ -131,17 +117,19 @@ export async function scaleOpGeth(
   config: ScalingConfig = DEFAULT_SCALING_CONFIG,
   dryRun: boolean = false
 ): Promise<ScaleResult> {
+  const store = getStore();
   const { namespace, statefulSetName, containerIndex, minVcpu, maxVcpu } = config;
   const timestamp = new Date().toISOString();
+  const state = await store.getScalingState();
 
   // Range validation
   if (targetVcpu < minVcpu || targetVcpu > maxVcpu) {
     return {
       success: false,
-      previousVcpu: scalingState.currentVcpu,
-      currentVcpu: scalingState.currentVcpu,
-      previousMemoryGiB: scalingState.currentMemoryGiB,
-      currentMemoryGiB: scalingState.currentMemoryGiB,
+      previousVcpu: state.currentVcpu,
+      currentVcpu: state.currentVcpu,
+      previousMemoryGiB: state.currentMemoryGiB,
+      currentMemoryGiB: state.currentMemoryGiB,
       timestamp,
       message: `vCPU must be between ${minVcpu} and ${maxVcpu}`,
       error: 'OUT_OF_RANGE',
@@ -149,14 +137,14 @@ export async function scaleOpGeth(
   }
 
   // Cooldown check
-  const cooldown = checkCooldown(config);
+  const cooldown = await checkCooldown(config);
   if (cooldown.inCooldown && !dryRun) {
     return {
       success: false,
-      previousVcpu: scalingState.currentVcpu,
-      currentVcpu: scalingState.currentVcpu,
-      previousMemoryGiB: scalingState.currentMemoryGiB,
-      currentMemoryGiB: scalingState.currentMemoryGiB,
+      previousVcpu: state.currentVcpu,
+      currentVcpu: state.currentVcpu,
+      previousMemoryGiB: state.currentMemoryGiB,
+      currentMemoryGiB: state.currentMemoryGiB,
       timestamp,
       message: `Cooldown active. ${cooldown.remainingSeconds}s remaining`,
       error: 'COOLDOWN',
@@ -172,7 +160,7 @@ export async function scaleOpGeth(
       success: true,
       previousVcpu: currentVcpu,
       currentVcpu: currentVcpu,
-      previousMemoryGiB: scalingState.currentMemoryGiB,
+      previousMemoryGiB: state.currentMemoryGiB,
       currentMemoryGiB: targetMemoryGiB,
       timestamp,
       message: 'No scaling needed - already at target',
@@ -185,7 +173,7 @@ export async function scaleOpGeth(
       success: true,
       previousVcpu: currentVcpu,
       currentVcpu: targetVcpu,
-      previousMemoryGiB: scalingState.currentMemoryGiB,
+      previousMemoryGiB: state.currentMemoryGiB,
       currentMemoryGiB: targetMemoryGiB,
       timestamp,
       message: `[DRY RUN] Would scale from ${currentVcpu} to ${targetVcpu} vCPU`,
@@ -193,13 +181,16 @@ export async function scaleOpGeth(
   }
 
   // Simulation mode: Update state only without actual kubectl execution
-  if (simulationConfig.enabled) {
-    const previousVcpu = scalingState.currentVcpu;
-    const previousMemoryGiB = scalingState.currentMemoryGiB;
+  const simConfig = await store.getSimulationConfig();
+  if (simConfig.enabled) {
+    const previousVcpu = state.currentVcpu;
+    const previousMemoryGiB = state.currentMemoryGiB;
 
-    scalingState.currentVcpu = targetVcpu;
-    scalingState.currentMemoryGiB = targetMemoryGiB;
-    scalingState.lastScalingTime = timestamp;
+    await store.updateScalingState({
+      currentVcpu: targetVcpu,
+      currentMemoryGiB: targetMemoryGiB,
+      lastScalingTime: timestamp,
+    });
 
     return {
       success: true,
@@ -213,16 +204,19 @@ export async function scaleOpGeth(
   }
 
   // Zero-downtime mode: Parallel Pod Swap orchestration
-  if (zeroDowntimeEnabled) {
+  const zdEnabled = await store.getZeroDowntimeEnabled();
+  if (zdEnabled) {
     try {
       const zdResult = await zeroDowntimeScale(targetVcpu, targetMemoryGiB, config);
-      const previousVcpu = scalingState.currentVcpu;
-      const previousMemoryGiB = scalingState.currentMemoryGiB;
+      const previousVcpu = state.currentVcpu;
+      const previousMemoryGiB = state.currentMemoryGiB;
 
       if (zdResult.success) {
-        scalingState.currentVcpu = targetVcpu;
-        scalingState.currentMemoryGiB = targetMemoryGiB;
-        scalingState.lastScalingTime = timestamp;
+        await store.updateScalingState({
+          currentVcpu: targetVcpu,
+          currentMemoryGiB: targetMemoryGiB,
+          lastScalingTime: timestamp,
+        });
       }
 
       return {
@@ -247,8 +241,8 @@ export async function scaleOpGeth(
         success: false,
         previousVcpu: currentVcpu,
         currentVcpu: currentVcpu,
-        previousMemoryGiB: scalingState.currentMemoryGiB,
-        currentMemoryGiB: scalingState.currentMemoryGiB,
+        previousMemoryGiB: state.currentMemoryGiB,
+        currentMemoryGiB: state.currentMemoryGiB,
         timestamp,
         message: '[Zero-Downtime] Unexpected orchestration error',
         error: errorMessage,
@@ -286,12 +280,14 @@ export async function scaleOpGeth(
     await runK8sCommand(cmd);
 
     // Update state
-    const previousVcpu = scalingState.currentVcpu;
-    const previousMemoryGiB = scalingState.currentMemoryGiB;
+    const previousVcpu = state.currentVcpu;
+    const previousMemoryGiB = state.currentMemoryGiB;
 
-    scalingState.currentVcpu = targetVcpu;
-    scalingState.currentMemoryGiB = targetMemoryGiB;
-    scalingState.lastScalingTime = timestamp;
+    await store.updateScalingState({
+      currentVcpu: targetVcpu,
+      currentMemoryGiB: targetMemoryGiB,
+      lastScalingTime: timestamp,
+    });
 
     return {
       success: true,
@@ -309,8 +305,8 @@ export async function scaleOpGeth(
       success: false,
       previousVcpu: currentVcpu,
       currentVcpu: currentVcpu,
-      previousMemoryGiB: scalingState.currentMemoryGiB,
-      currentMemoryGiB: scalingState.currentMemoryGiB,
+      previousMemoryGiB: state.currentMemoryGiB,
+      currentMemoryGiB: state.currentMemoryGiB,
       timestamp,
       message: 'Failed to execute kubectl patch',
       error: errorMessage,
@@ -321,12 +317,13 @@ export async function scaleOpGeth(
 /**
  * Get current scaling state
  */
-export function getScalingState(
+export async function getScalingState(
   config: ScalingConfig = DEFAULT_SCALING_CONFIG
-): ScalingState {
-  const cooldown = checkCooldown(config);
+): Promise<ScalingState> {
+  const state = await getStore().getScalingState();
+  const cooldown = await checkCooldown(config);
   return {
-    ...scalingState,
+    ...state,
     cooldownRemaining: cooldown.remainingSeconds,
   };
 }
@@ -334,38 +331,35 @@ export function getScalingState(
 /**
  * Update scaling state (Manual)
  */
-export function updateScalingState(updates: Partial<ScalingState>): void {
-  scalingState = { ...scalingState, ...updates };
+export async function updateScalingState(updates: Partial<ScalingState>): Promise<void> {
+  await getStore().updateScalingState(updates);
 }
 
 /**
  * Add scaling history
  */
-export function addScalingHistory(entry: ScalingHistoryEntry): void {
-  scalingHistory.unshift(entry);
-  // Keep only the last 50 entries
-  if (scalingHistory.length > 50) {
-    scalingHistory = scalingHistory.slice(0, 50);
-  }
+export async function addScalingHistory(entry: ScalingHistoryEntry): Promise<void> {
+  await getStore().addScalingHistory(entry);
 }
 
 /**
  * Get scaling history
  */
-export function getScalingHistory(limit: number = 10): ScalingHistoryEntry[] {
-  return scalingHistory.slice(0, limit);
+export async function getScalingHistory(limit: number = 10): Promise<ScalingHistoryEntry[]> {
+  return getStore().getScalingHistory(limit);
 }
 
 /**
  * Enable/Disable auto-scaling
  */
-export function setAutoScalingEnabled(enabled: boolean): void {
-  scalingState.autoScalingEnabled = enabled;
+export async function setAutoScalingEnabled(enabled: boolean): Promise<void> {
+  await getStore().updateScalingState({ autoScalingEnabled: enabled });
 }
 
 /**
  * Check auto-scaling status
  */
-export function isAutoScalingEnabled(): boolean {
-  return scalingState.autoScalingEnabled;
+export async function isAutoScalingEnabled(): Promise<boolean> {
+  const state = await getStore().getScalingState();
+  return state.autoScalingEnabled;
 }
