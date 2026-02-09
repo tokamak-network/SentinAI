@@ -130,12 +130,47 @@ async function main() {
   console.log("");
 
   // --- 2. AI Configuration ---
-  console.log("  --- 2. AI Configuration ---");
-  env.AI_GATEWAY_URL = await askOptionalUrl(
-    "? AI Gateway URL",
-    "https://api.ai.tokamak.network"
-  );
-  env.ANTHROPIC_API_KEY = await askRequired("? Anthropic API Key (required): ");
+  console.log("  --- 2. AI Configuration (Hybrid Strategy) ---");
+  console.log("");
+  console.log("  Choose AI provider (priorities: LiteLLM Gateway > Anthropic > OpenAI > Gemini)");
+  console.log("    1. Anthropic (Direct API)");
+  console.log("    2. OpenAI (Direct API)");
+  console.log("    3. Gemini (Direct API)");
+  console.log("    4. LiteLLM Gateway (Custom)");
+  console.log("");
+
+  const aiChoice = await ask("? Select AI provider (1-4, default 1): ");
+  const aiProvider = aiChoice.trim() || "1";
+
+  if (aiProvider === "1") {
+    // Anthropic
+    env.ANTHROPIC_API_KEY = await askRequired("? Anthropic API Key (required): ");
+    console.log("  Models: claude-haiku-4-5-20251001 (fast), claude-opus-4-6 (best)");
+  } else if (aiProvider === "2") {
+    // OpenAI
+    env.OPENAI_API_KEY = await askRequired("? OpenAI API Key (required): ");
+    console.log("  Models: gpt-4.1-mini (fast), gpt-4.1 (best)");
+  } else if (aiProvider === "3") {
+    // Gemini
+    env.GEMINI_API_KEY = await askRequired("? Gemini API Key (required): ");
+    console.log("  Models: gemini-2.5-flash-lite (fast), gemini-2.5-pro (best)");
+  } else if (aiProvider === "4") {
+    // LiteLLM Gateway
+    env.AI_GATEWAY_URL = await askOptionalUrl(
+      "? LiteLLM Gateway URL (required)",
+      "https://api.ai.tokamak.network"
+    );
+    if (!env.AI_GATEWAY_URL) {
+      env.AI_GATEWAY_URL = await askRequired("? LiteLLM Gateway URL (required): ", isValidUrl);
+    }
+    env.ANTHROPIC_API_KEY = await askRequired("? LiteLLM API Key (required): ");
+    console.log("  Models: claude-haiku-4.5 (fast), claude-opus-4-6 (best)");
+  } else {
+    // Default to Anthropic
+    env.ANTHROPIC_API_KEY = await askRequired("? Anthropic API Key (required): ");
+    console.log("  Models: claude-haiku-4-5-20251001 (fast), claude-opus-4-6 (best)");
+  }
+
   console.log("");
 
   // --- 3. K8s Configuration ---
@@ -212,15 +247,24 @@ async function main() {
     "# --- 1. L2 Chain RPC (Required) ---",
     `L2_RPC_URL=${env.L2_RPC_URL}`,
     "",
-    "# --- 2. AI Configuration ---",
+    "# --- 2. AI Configuration (Hybrid Strategy) ---",
+    "# Priority: LiteLLM Gateway > Anthropic > OpenAI > Gemini",
   ];
 
   if (env.AI_GATEWAY_URL) {
+    lines.push("# LiteLLM Gateway (preferred)");
     lines.push(`AI_GATEWAY_URL=${env.AI_GATEWAY_URL}`);
-  } else {
-    lines.push("# AI_GATEWAY_URL=https://api.ai.tokamak.network");
+    lines.push(`ANTHROPIC_API_KEY=${env.ANTHROPIC_API_KEY}`);
+  } else if (env.ANTHROPIC_API_KEY) {
+    lines.push("# Anthropic Direct API");
+    lines.push(`ANTHROPIC_API_KEY=${env.ANTHROPIC_API_KEY}`);
+  } else if (env.OPENAI_API_KEY) {
+    lines.push("# OpenAI Direct API");
+    lines.push(`OPENAI_API_KEY=${env.OPENAI_API_KEY}`);
+  } else if (env.GEMINI_API_KEY) {
+    lines.push("# Gemini Direct API");
+    lines.push(`GEMINI_API_KEY=${env.GEMINI_API_KEY}`);
   }
-  lines.push(`ANTHROPIC_API_KEY=${env.ANTHROPIC_API_KEY}`);
 
   if (setupK8s) {
     lines.push("");
@@ -232,6 +276,52 @@ async function main() {
     lines.push(`K8S_NAMESPACE=${env.K8S_NAMESPACE || "default"}`);
     lines.push(`K8S_APP_PREFIX=${env.K8S_APP_PREFIX || "op"}`);
   }
+
+  // --- 4. Optional Features ---
+  const setupOptional = await askYesNo("? Configure optional features?", true);
+
+  if (setupOptional) {
+    console.log("");
+    console.log("  --- 4. Optional Features ---");
+
+    const alertWebhook = await askOptionalUrl("? Alert Webhook URL (for Slack/Discord)");
+    if (alertWebhook) {
+      env.ALERT_WEBHOOK_URL = alertWebhook;
+    }
+
+    const redisUrl = await askOptionalUrl("? Redis URL (for state persistence)");
+    if (redisUrl) {
+      env.REDIS_URL = redisUrl;
+    }
+
+    const costTracking = await askYesNo("? Enable cost tracking?", false);
+    if (costTracking) {
+      env.COST_TRACKING_ENABLED = "true";
+    }
+
+    const simulation = await askYesNo("? Enable scaling simulation mode (no real K8s changes)?", false);
+    if (simulation) {
+      env.SCALING_SIMULATION_MODE = "true";
+    }
+  }
+
+  lines.push("");
+  lines.push("# --- 4. Optional Features ---");
+
+  if (env.ALERT_WEBHOOK_URL) {
+    lines.push(`ALERT_WEBHOOK_URL=${env.ALERT_WEBHOOK_URL}`);
+  } else {
+    lines.push("# ALERT_WEBHOOK_URL=https://hooks.slack.com/services/...");
+  }
+
+  if (env.REDIS_URL) {
+    lines.push(`REDIS_URL=${env.REDIS_URL}`);
+  } else {
+    lines.push("# REDIS_URL=redis://localhost:6379");
+  }
+
+  lines.push(`COST_TRACKING_ENABLED=${env.COST_TRACKING_ENABLED || "true"}`);
+  lines.push(`SCALING_SIMULATION_MODE=${env.SCALING_SIMULATION_MODE || "true"}`);
 
   lines.push("");
 
