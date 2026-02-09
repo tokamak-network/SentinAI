@@ -102,7 +102,7 @@ async function listEksClusters(region) {
 
 async function main() {
   console.log("");
-  console.log("  SentinAI Environment Setup");
+  console.log("  ⚙️  SentinAI Setup");
   console.log("");
 
   // Check existing .env.local
@@ -119,216 +119,91 @@ async function main() {
   const env = {};
 
   // --- 1. L2 RPC (Required) ---
-  console.log("  --- 1. L2 Chain RPC ---");
-  env.L2_RPC_URL = await askRequired("? L2 RPC URL (required): ", (v) => {
+  env.L2_RPC_URL = await askRequired("? L2 RPC URL: ", (v) => {
     if (!isValidUrl(v)) {
       console.log("  URL must start with http:// or https://.");
       return false;
     }
     return true;
   });
+
+  // --- 2. AI Provider (Simple Selection) ---
+  console.log("");
+  console.log("  AI Providers: anthropic (Claude) | openai (GPT) | gemini | gateway");
+  const providerChoice = await askOptional("? AI Provider", "anthropic");
   console.log("");
 
-  // --- 2. AI Configuration ---
-  console.log("  --- 2. AI Configuration (Hybrid Strategy) ---");
-  console.log("");
-  console.log("  Choose AI provider (priorities: LiteLLM Gateway > Anthropic > OpenAI > Gemini)");
-  console.log("    1. Anthropic (Direct API)");
-  console.log("    2. OpenAI (Direct API)");
-  console.log("    3. Gemini (Direct API)");
-  console.log("    4. LiteLLM Gateway (Custom)");
-  console.log("");
-
-  const aiChoice = await ask("? Select AI provider (1-4, default 1): ");
-  const aiProvider = aiChoice.trim() || "1";
-
-  if (aiProvider === "1") {
-    // Anthropic
-    env.ANTHROPIC_API_KEY = await askRequired("? Anthropic API Key (required): ");
-    console.log("  Models: claude-haiku-4-5-20251001 (fast), claude-opus-4-6 (best)");
-  } else if (aiProvider === "2") {
-    // OpenAI
-    env.OPENAI_API_KEY = await askRequired("? OpenAI API Key (required): ");
-    console.log("  Models: gpt-4.1-mini (fast), gpt-4.1 (best)");
-  } else if (aiProvider === "3") {
-    // Gemini
-    env.GEMINI_API_KEY = await askRequired("? Gemini API Key (required): ");
-    console.log("  Models: gemini-2.5-flash-lite (fast), gemini-2.5-pro (best)");
-  } else if (aiProvider === "4") {
-    // LiteLLM Gateway
-    env.AI_GATEWAY_URL = await askOptionalUrl(
-      "? LiteLLM Gateway URL (required)",
-      "https://api.ai.tokamak.network"
+  const provider = providerChoice.toLowerCase().trim();
+  if (provider === "anthropic" || provider === "claude") {
+    env.ANTHROPIC_API_KEY = await askRequired("? Anthropic API Key: ");
+  } else if (provider === "openai" || provider === "gpt") {
+    env.OPENAI_API_KEY = await askRequired("? OpenAI API Key: ");
+  } else if (provider === "gemini") {
+    env.GEMINI_API_KEY = await askRequired("? Gemini API Key: ");
+  } else if (provider === "gateway") {
+    env.AI_GATEWAY_URL = await askRequired(
+      "? Gateway URL",
+      isValidUrl
     );
-    if (!env.AI_GATEWAY_URL) {
-      env.AI_GATEWAY_URL = await askRequired("? LiteLLM Gateway URL (required): ", isValidUrl);
-    }
-    env.ANTHROPIC_API_KEY = await askRequired("? LiteLLM API Key (required): ");
-    console.log("  Models: claude-haiku-4.5 (fast), claude-opus-4-6 (best)");
-  } else {
-    // Default to Anthropic
-    env.ANTHROPIC_API_KEY = await askRequired("? Anthropic API Key (required): ");
-    console.log("  Models: claude-haiku-4-5-20251001 (fast), claude-opus-4-6 (best)");
+    env.ANTHROPIC_API_KEY = await askRequired("? API Key (for Gateway): ");
   }
 
-  console.log("");
-
-  // --- 3. K8s Configuration ---
-  const setupK8s = await askYesNo("? Configure K8s monitoring?");
-
+  // --- 3. Optional: K8s (Simple) ---
+  const setupK8s = await askYesNo("? Setup K8s monitoring?", true);
   if (setupK8s) {
-    console.log("");
-    console.log("  --- 3. Kubernetes (EKS) ---");
-
-    // Auto-detect AWS CLI
-    const hasAwsCli = await checkAwsCli();
-    let detectedRegion = null;
-
-    if (hasAwsCli) {
-      detectedRegion = await getAwsRegion();
-      if (detectedRegion) {
-        console.log(`  \u2713 AWS CLI configured (region: ${detectedRegion})`);
-      } else {
-        console.log("  \u2713 AWS CLI found (no default region configured)");
-      }
-    } else {
-      console.log("  ! AWS CLI not found. Enter cluster name manually.");
+    const cluster = await askOptional("? EKS Cluster Name");
+    if (cluster) {
+      env.AWS_CLUSTER_NAME = cluster;
     }
-
-    // Auto-detect EKS clusters
-    let selectedCluster = null;
-
-    if (hasAwsCli) {
-      console.log("");
-      console.log("  Searching for EKS clusters...");
-      const clusters = await listEksClusters(detectedRegion);
-
-      if (clusters.length > 0) {
-        console.log(`  Found ${clusters.length} cluster(s):`);
-        clusters.forEach((c, i) => console.log(`    ${i + 1}. ${c}`));
-        console.log("");
-
-        const choice = (await ask(`? Select cluster (1-${clusters.length}), or enter name manually: `)).trim();
-        const idx = parseInt(choice, 10);
-        if (idx >= 1 && idx <= clusters.length) {
-          selectedCluster = clusters[idx - 1];
-        } else if (choice) {
-          selectedCluster = choice;
-        }
-      } else {
-        console.log("  No EKS clusters found in this account/region.");
-      }
-    }
-
-    if (!selectedCluster) {
-      selectedCluster = await askOptional("? AWS Cluster Name");
-    }
-
-    if (selectedCluster) {
-      env.AWS_CLUSTER_NAME = selectedCluster;
-      console.log(`  \u2713 Cluster: ${selectedCluster}`);
-      console.log("  (K8S_API_URL will be auto-detected at runtime)");
-    }
-
-    console.log("");
     env.K8S_NAMESPACE = await askOptional("? K8s Namespace", "default");
     env.K8S_APP_PREFIX = await askOptional("? K8s App Prefix", "op");
   }
 
-  console.log("");
+  // --- 4. Optional: Features ---
+  const webhook = await askOptionalUrl("? Alert Webhook URL (optional)");
+  if (webhook) {
+    env.ALERT_WEBHOOK_URL = webhook;
+  }
 
-  // Build file content
+  // Build .env.local
   const lines = [
-    "# ==========================================",
-    "# SentinAI Configuration",
-    "# Generated by: npm run setup",
-    "# ==========================================",
-    "",
-    "# --- 1. L2 Chain RPC (Required) ---",
+    "# SentinAI Config",
     `L2_RPC_URL=${env.L2_RPC_URL}`,
     "",
-    "# --- 2. AI Configuration (Hybrid Strategy) ---",
-    "# Priority: LiteLLM Gateway > Anthropic > OpenAI > Gemini",
   ];
 
   if (env.AI_GATEWAY_URL) {
-    lines.push("# LiteLLM Gateway (preferred)");
     lines.push(`AI_GATEWAY_URL=${env.AI_GATEWAY_URL}`);
+  }
+  if (env.ANTHROPIC_API_KEY) {
     lines.push(`ANTHROPIC_API_KEY=${env.ANTHROPIC_API_KEY}`);
-  } else if (env.ANTHROPIC_API_KEY) {
-    lines.push("# Anthropic Direct API");
-    lines.push(`ANTHROPIC_API_KEY=${env.ANTHROPIC_API_KEY}`);
-  } else if (env.OPENAI_API_KEY) {
-    lines.push("# OpenAI Direct API");
+  }
+  if (env.OPENAI_API_KEY) {
     lines.push(`OPENAI_API_KEY=${env.OPENAI_API_KEY}`);
-  } else if (env.GEMINI_API_KEY) {
-    lines.push("# Gemini Direct API");
+  }
+  if (env.GEMINI_API_KEY) {
     lines.push(`GEMINI_API_KEY=${env.GEMINI_API_KEY}`);
   }
 
-  if (setupK8s) {
+  if (env.AWS_CLUSTER_NAME) {
     lines.push("");
-    lines.push("# --- 3. K8s Monitoring ---");
-    if (env.AWS_CLUSTER_NAME) {
-      lines.push(`AWS_CLUSTER_NAME=${env.AWS_CLUSTER_NAME}`);
-      lines.push("# K8S_API_URL is auto-detected from AWS_CLUSTER_NAME");
-    }
-    lines.push(`K8S_NAMESPACE=${env.K8S_NAMESPACE || "default"}`);
-    lines.push(`K8S_APP_PREFIX=${env.K8S_APP_PREFIX || "op"}`);
+    lines.push(`AWS_CLUSTER_NAME=${env.AWS_CLUSTER_NAME}`);
+    lines.push(`K8S_NAMESPACE=${env.K8S_NAMESPACE}`);
+    lines.push(`K8S_APP_PREFIX=${env.K8S_APP_PREFIX}`);
   }
-
-  // --- 4. Optional Features ---
-  const setupOptional = await askYesNo("? Configure optional features?", true);
-
-  if (setupOptional) {
-    console.log("");
-    console.log("  --- 4. Optional Features ---");
-
-    const alertWebhook = await askOptionalUrl("? Alert Webhook URL (for Slack/Discord)");
-    if (alertWebhook) {
-      env.ALERT_WEBHOOK_URL = alertWebhook;
-    }
-
-    const redisUrl = await askOptionalUrl("? Redis URL (for state persistence)");
-    if (redisUrl) {
-      env.REDIS_URL = redisUrl;
-    }
-
-    const costTracking = await askYesNo("? Enable cost tracking?", false);
-    if (costTracking) {
-      env.COST_TRACKING_ENABLED = "true";
-    }
-
-    const simulation = await askYesNo("? Enable scaling simulation mode (no real K8s changes)?", false);
-    if (simulation) {
-      env.SCALING_SIMULATION_MODE = "true";
-    }
-  }
-
-  lines.push("");
-  lines.push("# --- 4. Optional Features ---");
 
   if (env.ALERT_WEBHOOK_URL) {
     lines.push(`ALERT_WEBHOOK_URL=${env.ALERT_WEBHOOK_URL}`);
-  } else {
-    lines.push("# ALERT_WEBHOOK_URL=https://hooks.slack.com/services/...");
   }
-
-  if (env.REDIS_URL) {
-    lines.push(`REDIS_URL=${env.REDIS_URL}`);
-  } else {
-    lines.push("# REDIS_URL=redis://localhost:6379");
-  }
-
-  lines.push(`COST_TRACKING_ENABLED=${env.COST_TRACKING_ENABLED || "true"}`);
-  lines.push(`SCALING_SIMULATION_MODE=${env.SCALING_SIMULATION_MODE || "true"}`);
 
   lines.push("");
+  lines.push("COST_TRACKING_ENABLED=true");
+  lines.push("SCALING_SIMULATION_MODE=true");
 
   writeFileSync(ENV_PATH, lines.join("\n"), "utf-8");
 
-  console.log("  \u2713 .env.local created successfully");
-  console.log("  Run `npm run dev` to start the server.");
+  console.log("  ✓ .env.local created");
+  console.log("  Run: npm run dev");
   console.log("");
 
   rl.close();
