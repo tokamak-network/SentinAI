@@ -13,13 +13,7 @@ import {
 import { ScalingHistoryEntry } from '@/types/scaling';
 import { analyzePatterns, getUsageSummary } from './usage-tracker';
 import { getScalingHistory } from './k8s-scaler';
-
-// ============================================================
-// AI Gateway Configuration
-// ============================================================
-
-const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://api.ai.tokamak.network';
-const API_KEY = process.env.ANTHROPIC_API_KEY || '';
+import { chatCompletion } from './ai-client';
 
 // ============================================================
 // Cost Calculation Utilities
@@ -203,28 +197,15 @@ async function getAIRecommendations(
   const userPrompt = buildUserPrompt(patterns, scalingHistory, summary, days);
 
   try {
-    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4.5',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.2,
-      }),
+    const aiResult = await chatCompletion({
+      systemPrompt: SYSTEM_PROMPT,
+      userPrompt,
+      modelTier: 'best',
+      temperature: 0.2,
+      moduleName: 'COST',
     });
 
-    if (!response.ok) {
-      throw new Error(`AI Gateway responded with ${response.status}: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || data.output || '{}';
+    const content = aiResult.content || '{}';
 
     // JSON 파싱 (마크다운 코드 블록 제거)
     const jsonStr = content.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -248,7 +229,7 @@ async function getAIRecommendations(
     return { recommendations, insight };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Cost Optimizer] AI Gateway Error:', errorMessage);
+    console.error('[Cost Optimizer] AI provider error:', errorMessage);
 
     // Fallback: 기본 추천 생성
     return generateFallbackRecommendations(summary, days);

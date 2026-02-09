@@ -12,9 +12,8 @@ import type {
   HourlySummary,
   MetricSnapshot,
 } from '@/types/daily-report';
+import { chatCompletion } from './ai-client';
 
-const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://api.ai.tokamak.network';
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const REPORTS_DIR = process.env.REPORTS_DIR || 'data/reports';
 
 // ============================================================
@@ -234,59 +233,31 @@ export async function generateDailyReport(
     console.warn(`[Daily Report] Low data: only ${data.snapshots.length} snapshots available`);
   }
 
-  // Check API key
-  if (!ANTHROPIC_API_KEY) {
-    return {
-      success: false,
-      error: 'ANTHROPIC_API_KEY is not set. Cannot generate AI report.',
-      metadata: {
-        date: data.date,
-        generatedAt,
-        dataCompleteness: data.metadata.dataCompleteness,
-        snapshotCount: data.snapshots.length,
-        processingTimeMs: Date.now() - startTime,
-      },
-    };
-  }
-
   const systemPrompt = SYSTEM_PROMPT;
   const userPrompt = buildUserPrompt(data);
 
   try {
-    console.log('[Daily Report] Requesting report from AI Gateway...');
+    console.log('[Daily Report] Requesting report from AI provider...');
 
-    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${ANTHROPIC_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-6',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.3,
-        max_tokens: 4096,
-      }),
+    const aiResult = await chatCompletion({
+      systemPrompt,
+      userPrompt,
+      modelTier: 'best',
+      temperature: 0.3,
+      maxTokens: 4096,
+      moduleName: 'REPORT',
     });
 
-    if (!response.ok) {
-      throw new Error(`AI Gateway responded with ${response.status}: ${response.statusText}`);
-    }
-
-    const result = await response.json();
-    const content = result.choices?.[0]?.message?.content || '';
-    const promptTokens = result.usage?.prompt_tokens || 0;
-    const completionTokens = result.usage?.completion_tokens || 0;
+    const content = aiResult.content || '';
+    const promptTokens = aiResult.usage?.promptTokens || 0;
+    const completionTokens = aiResult.usage?.completionTokens || 0;
 
     // Build final markdown with frontmatter
     const reportMarkdown = `---
 title: SentinAI 일일 운영 보고서
 date: ${data.date}
 generated: ${generatedAt}
-generator: claude-opus-4-6
+generator: ${aiResult.model}
 ---
 
 ${content}
@@ -335,7 +306,7 @@ ${content}
     return reportResponse;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Daily Report] AI Gateway Error:', errorMessage);
+    console.error('[Daily Report] AI provider error:', errorMessage);
 
     return {
       success: false,

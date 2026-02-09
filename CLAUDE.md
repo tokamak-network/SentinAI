@@ -63,7 +63,7 @@ Stress mode simulates 8 vCPU. 5-minute cooldown between scaling operations.
 ### 3-Layer Anomaly Detection Pipeline
 
 1. **Layer 1** (`anomaly-detector.ts`): Z-Score statistical detection (threshold: Z > 2.5)
-2. **Layer 2** (`anomaly-ai-analyzer.ts`): AI semantic analysis via Claude Haiku
+2. **Layer 2** (`anomaly-ai-analyzer.ts`): AI semantic analysis via ai-client (fast tier)
 3. **Layer 3** (`alert-dispatcher.ts`): Alert dispatch (Slack, Webhook)
 
 Events stored in `anomaly-event-store.ts` (in-memory).
@@ -101,10 +101,11 @@ L1 → op-node → op-geth
 
 | Module                  | Role                                                            |
 |-------------------------|-----------------------------------------------------------------|
+| `ai-client.ts`          | Unified AI client (Anthropic/OpenAI/Gemini/LiteLLM)             |
 | `scaling-decision.ts`   | Hybrid scoring algorithm → target vCPU                          |
 | `k8s-scaler.ts`         | StatefulSet patch + simulation, cooldown logic                  |
 | `k8s-config.ts`         | kubectl connection: token caching (10min), API URL auto-detect  |
-| `predictive-scaler.ts`  | AI time-series prediction (Claude Haiku 4.5 via LiteLLM)       |
+| `predictive-scaler.ts`  | AI time-series prediction via ai-client (fast tier)             |
 | `metrics-store.ts`      | Ring buffer + stats (mean, stdDev, trend, slope)                |
 | `anomaly-detector.ts`   | Z-Score anomaly detection                                       |
 | `anomaly-ai-analyzer.ts`| AI semantic anomaly analysis                                    |
@@ -162,7 +163,7 @@ docs/
 
 - **Import alias**: `@/*` → `./src/*`
 - **Dual-mode**: Real K8s cluster data or mock fallback for development
-- **AI Gateway**: LiteLLM at `https://api.ai.tokamak.network` (OpenAI-compatible `/v1/chat/completions`), model `claude-haiku-4.5`, auth via `ANTHROPIC_API_KEY`
+- **AI Client**: `src/lib/ai-client.ts` — 통합 AI 클라이언트. Anthropic/OpenAI/Gemini 직접 API + LiteLLM Gateway 지원. `chatCompletion()` 단일 함수로 모든 AI 호출 처리. Model tier: `fast` (haiku/gpt-4.1-mini/gemini-flash-lite), `best` (opus/gpt-4.1/gemini-pro)
 - **In-memory state**: MetricsStore, scaling state, anomaly events all reset on server restart (no persistence layer yet)
 - **Cost basis**: AWS Fargate Seoul pricing ($0.04656/vCPU-hour, $0.00511/GB-hour)
 - **Simulation mode**: `SCALING_SIMULATION_MODE=true` by default (no real K8s changes)
@@ -173,12 +174,57 @@ docs/
 cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 ```
 
-**Required (3 vars for full functionality):**
-- `L2_RPC_URL` — L2 Chain RPC endpoint
-- `ANTHROPIC_API_KEY` — AI features
-- `AWS_CLUSTER_NAME` — EKS cluster (auto-detects K8S_API_URL & region)
+### Required
 
-**Optional:** `AI_GATEWAY_URL`, `K8S_NAMESPACE`, `K8S_APP_PREFIX`, `K8S_API_URL` (see `ENV_GUIDE.md`)
+| 변수 | 설명 |
+|------|------|
+| `L2_RPC_URL` | L2 Chain RPC endpoint |
+| AI API Key (택 1) | 아래 AI Provider 섹션 참조 |
+| `AWS_CLUSTER_NAME` | EKS cluster (K8S_API_URL & region 자동 감지) |
+
+### AI Provider (택 1)
+
+`ai-client.ts`가 환경변수를 확인하여 프로바이더를 자동 감지한다. API 키만 설정하면 해당 프로바이더의 공식 API 서버로 직접 연결된다.
+
+| 우선순위 | 환경변수 | 프로바이더 | 엔드포인트 | fast 모델 | best 모델 |
+|---------|---------|-----------|-----------|----------|----------|
+| 1 | `AI_GATEWAY_URL` + API Key | LiteLLM Gateway | 설정된 URL | `claude-haiku-4.5` | `claude-opus-4-6` |
+| 2 | `ANTHROPIC_API_KEY` | Anthropic Direct | `api.anthropic.com` | `claude-haiku-4-5-20251001` | `claude-opus-4-6` |
+| 3 | `OPENAI_API_KEY` | OpenAI Direct | `api.openai.com` | `gpt-4.1-mini` | `gpt-4.1` |
+| 4 | `GEMINI_API_KEY` | Gemini Direct | `generativelanguage.googleapis.com` | `gemini-2.5-flash-lite` | `gemini-2.5-pro` |
+
+```bash
+# 예시 1: Anthropic 직접 연결 (권장)
+ANTHROPIC_API_KEY=sk-ant-...
+
+# 예시 2: OpenAI 직접 연결
+OPENAI_API_KEY=sk-...
+
+# 예시 3: Gemini 직접 연결
+GEMINI_API_KEY=AIza...
+
+# 예시 4: LiteLLM Gateway 경유 (레거시)
+AI_GATEWAY_URL=https://api.ai.tokamak.network
+ANTHROPIC_API_KEY=your-litellm-key
+```
+
+`AI_GATEWAY_URL`이 설정되면 직접 API보다 우선한다. 미설정 시 API 키 종류에 따라 공식 서버로 자동 연결.
+
+### Optional
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `AI_GATEWAY_URL` | — | LiteLLM Gateway URL (설정 시 직접 API 대신 Gateway 사용) |
+| `K8S_NAMESPACE` | `default` | L2 Pod가 배포된 네임스페이스 |
+| `K8S_APP_PREFIX` | `op` | Pod label prefix (`app=op-geth`) |
+| `K8S_API_URL` | 자동 감지 | K8s API URL 수동 지정 |
+| `K8S_INSECURE_TLS` | `false` | TLS 검증 건너뛰기 (개발 전용) |
+| `REDIS_URL` | — | Redis 상태 저장소 (미설정 시 인메모리) |
+| `ALERT_WEBHOOK_URL` | — | 이상 탐지 알림 Slack/Webhook URL |
+| `COST_TRACKING_ENABLED` | `true` | vCPU 사용 패턴 추적 (`false`로 비활성화) |
+| `SCALING_SIMULATION_MODE` | `true` | 실제 K8s 변경 없이 시뮬레이션 |
+
+상세 설정 가이드: `ENV_GUIDE.md`
 
 ## Deployment
 

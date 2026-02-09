@@ -18,16 +18,11 @@ import type {
   RemediationAdvice,
 } from '@/types/rca';
 import type { AISeverity } from '@/types/scaling';
+import { chatCompletion } from './ai-client';
 
 // ============================================================================
 // Constants
 // ============================================================================
-
-/**
- * AI Gateway configuration
- */
-const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://api.ai.tokamak.network';
-const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
 /**
  * Optimism Rollup component dependency graph
@@ -481,37 +476,23 @@ async function callAIForRCA(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      console.log(`[RCA Engine] Calling AI Gateway at ${AI_GATEWAY_URL}... (attempt ${attempt + 1}/${maxRetries + 1})`);
+      console.log(`[RCA Engine] Calling AI provider... (attempt ${attempt + 1}/${maxRetries + 1})`);
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
 
-      const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'claude-haiku-4.5',
-          messages: [
-            { role: 'system', content: RCA_SYSTEM_PROMPT },
-            { role: 'user', content: userPrompt },
-          ],
-          temperature: 0.2,
-        }),
+      const aiResult = await chatCompletion({
+        systemPrompt: RCA_SYSTEM_PROMPT,
+        userPrompt,
+        modelTier: 'best',
+        temperature: 0.2,
         signal: controller.signal,
+        moduleName: 'RCA',
       });
 
       clearTimeout(timeout);
 
-      if (!response.ok) {
-        const body = await response.text().catch(() => '');
-        throw new Error(`AI Gateway responded with ${response.status}: ${response.statusText} — ${body}`);
-      }
-
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content || data.output || '{}';
+      const content = aiResult.content || '{}';
 
       // Extract the first complete JSON object from the response
       const jsonStr = extractJSON(content);

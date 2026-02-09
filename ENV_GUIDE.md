@@ -41,20 +41,55 @@ RPC endpoint for communicating with the Optimism-based L2 network.
 
 ---
 
-## 2. AI Configuration (Required for Log Analysis)
+## 2. AI Provider (Required for AI Features)
 
-### `AI_GATEWAY_URL`
-The address of the internal AI Gateway or external LLM API.
-*   **Default**: `https://api.ai.tokamak.network` (When using Tokamak Network API Server)
-*   **Self-hosted**: Enter your custom AI Gateway address.
+SentinAI는 다수의 AI 프로바이더를 지원합니다. **하나만 선택**하세요.
 
-### `ANTHROPIC_API_KEY`
-API Key for using the Anthropic Claude model (via LiteLLM).
-*   **How to Obtain**:
-    1. Go to [LiteLLM dashboard](https://api.ai.tokamak.network/ui/) and log in (ask administrator for account).
-    2. Click on "Create New Key".
-    3. Enter "Key name", select "Model", and click "Create Key".
-    4. Copy the generated key and paste it into your `.env.local` file.
+### Option 1: Anthropic Direct API (권장)
+
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+*   **Models**: `claude-haiku-4-5-20251001` (fast), `claude-opus-4-6` (best)
+*   **How to Obtain**: [Anthropic Console](https://console.anthropic.com/) → API Keys → Create Key
+
+### Option 2: OpenAI Direct API
+
+```bash
+OPENAI_API_KEY=sk-...
+```
+
+*   **Models**: `gpt-4.1-mini` (fast), `gpt-4.1` (best)
+*   **How to Obtain**: [OpenAI Platform](https://platform.openai.com/) → API Keys → Create new secret key
+
+### Option 3: Google Gemini Direct API
+
+```bash
+GEMINI_API_KEY=AIza...
+```
+
+*   **Models**: `gemini-2.5-flash-lite` (fast), `gemini-2.5-pro` (best)
+*   **How to Obtain**: [Google AI Studio](https://aistudio.google.com/) → Get API Key
+
+### Option 4: LiteLLM Gateway (레거시)
+
+기존 LiteLLM 게이트웨이를 사용하려면 `AI_GATEWAY_URL`을 명시적으로 설정합니다.
+이 경우 위 API 키 중 하나와 함께 설정해야 합니다.
+
+```bash
+AI_GATEWAY_URL=https://api.ai.tokamak.network
+ANTHROPIC_API_KEY=your-litellm-key
+```
+
+### Provider 감지 우선순위
+
+| 우선순위 | 조건 | 사용 프로바이더 |
+|---------|------|---------------|
+| 1 | `AI_GATEWAY_URL` 설정됨 | LiteLLM Gateway |
+| 2 | `ANTHROPIC_API_KEY`만 설정 | Anthropic Direct |
+| 3 | `OPENAI_API_KEY`만 설정 | OpenAI Direct |
+| 4 | `GEMINI_API_KEY`만 설정 | Gemini Direct |
 
 ---
 
@@ -102,3 +137,28 @@ No need to put AWS credentials in `.env.local`. SentinAI uses the standard AWS c
 | `K8S_NAMESPACE` | `default` | Namespace where L2 pods are deployed |
 | `K8S_APP_PREFIX` | `op` | Pod label prefix (e.g., `app=op-geth`) |
 | `KUBECONFIG` | — | Path to kubeconfig file (alternative to EKS auto-detection) |
+
+---
+
+## 4. Alert (Optional)
+
+### `ALERT_WEBHOOK_URL`
+이상 탐지 파이프라인(Layer 3)에서 `high`/`critical` 심각도 이벤트 발생 시 알림을 전송할 웹훅 URL입니다.
+
+*   **Default**: 미설정 (웹훅 알림 비활성화)
+*   **Example**: `https://hooks.slack.com/services/YOUR/WEBHOOK/URL`
+*   **How to Obtain**:
+    1. Slack > Settings & Administration > Manage Apps > Incoming Webhooks
+    2. 채널을 선택하고 Webhook URL을 생성
+    3. 생성된 URL을 `.env.local`에 설정
+
+---
+
+## 5. Cost Tracking (Optional)
+
+### `COST_TRACKING_ENABLED`
+vCPU 사용 패턴 추적을 활성화/비활성화합니다. 활성화 시 최대 7일간의 사용량 데이터를 수집하여 시간대별 프로파일링 및 비용 최적화 분석에 활용합니다.
+
+*   **Default**: `true` (미설정 시 활성화)
+*   **Values**: `true` | `false`
+*   **비활성화**: `COST_TRACKING_ENABLED=false`로 설정하면 사용량 데이터 수집을 중단합니다.

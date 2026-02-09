@@ -1,7 +1,5 @@
+import { chatCompletion } from './ai-client';
 
-// Custom AI Gateway Logic
-const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || "https://api.ai.tokamak.network";
-const API_KEY = process.env.ANTHROPIC_API_KEY || "";
 
 export interface LogAnalysisResult {
     severity: 'normal' | 'warning' | 'critical';
@@ -53,30 +51,17 @@ export async function analyzeLogChunk(logs: Record<string, string> | string): Pr
     }
 
     try {
-        console.log(`[AI Analyzer] Sending request to ${AI_GATEWAY_URL}...`);
+        console.log('[AI Analyzer] Sending request to AI provider...');
 
-        const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, { // Assuming OpenAI-compatible path or adjust as needed
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${API_KEY}`
-            },
-            body: JSON.stringify({
-                model: "claude-haiku-4.5",
-                messages: [
-                    { role: "system", content: systemPrompt },
-                    { role: "user", content: userContent }
-                ],
-                temperature: 0.2
-            })
+        const result = await chatCompletion({
+            systemPrompt,
+            userPrompt: userContent,
+            modelTier: 'fast',
+            temperature: 0.2,
+            moduleName: 'LOG_ANALYZER',
         });
 
-        if (!response.ok) {
-            throw new Error(`Gateway responded with ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-        const content = data.choices?.[0]?.message?.content || data.output || "{}"; // Handle varying API schemas
+        const content = result.content || '{}';
 
         // Clean up markdown if AI wraps it in ```json ... ```
         const jsonStr = content.replace(/```json/g, '').replace(/```/g, '').trim();
@@ -104,7 +89,7 @@ export async function analyzeLogChunk(logs: Record<string, string> | string): Pr
         // Fallback or "Simulation" output if Gateway is unreachable
         return {
             severity: "critical",
-            summary: `Analysis Failed: Could not reach AI Gateway at ${AI_GATEWAY_URL}. (${errorMessage})`,
+            summary: `Analysis Failed: Could not reach AI provider. (${errorMessage})`,
             action_item: "Check API Gateway connectivity and API Key.",
             timestamp: new Date().toISOString()
         };

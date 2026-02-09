@@ -14,10 +14,7 @@ import {
 import { TargetVcpu } from '@/types/scaling';
 import { getRecentMetrics, getMetricsStats, getMetricsCount } from './metrics-store';
 import { getStore } from '@/lib/redis-store';
-
-// Anthropic API Configuration
-const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://api.ai.tokamak.network';
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
+import { chatCompletion } from './ai-client';
 
 /**
  * Build the system prompt for prediction AI
@@ -230,30 +227,17 @@ export async function predictScaling(
   const userPrompt = await buildUserPrompt(currentVcpu);
 
   try {
-    console.log(`[Predictive Scaler] Requesting prediction from AI Gateway...`);
+    console.log('[Predictive Scaler] Requesting prediction from AI provider...');
 
-    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${ANTHROPIC_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4.5',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.2,
-      }),
+    const aiResult = await chatCompletion({
+      systemPrompt,
+      userPrompt,
+      modelTier: 'fast',
+      temperature: 0.2,
+      moduleName: 'PREDICTOR',
     });
 
-    if (!response.ok) {
-      throw new Error(`AI Gateway responded with ${response.status}: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    const content = aiResult.content || '';
 
     const prediction = parseAIResponse(content);
 
@@ -272,7 +256,7 @@ export async function predictScaling(
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Prediction AI Gateway Error:', errorMessage);
+    console.error('Prediction AI provider error:', errorMessage);
 
     // Fall back to rule-based prediction
     const fallback = await generateFallbackPrediction(currentVcpu);

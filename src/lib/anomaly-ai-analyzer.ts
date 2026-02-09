@@ -6,13 +6,11 @@
 import { MetricDataPoint } from '@/types/prediction';
 import { AnomalyResult, DeepAnalysisResult, AnomalyType } from '@/types/anomaly';
 import { AISeverity } from '@/types/scaling';
+import { chatCompletion } from './ai-client';
 
 // ============================================================================
 // Configuration
 // ============================================================================
-
-const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://api.ai.tokamak.network';
-const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
 /** Minimum interval between AI calls (milliseconds) - 1 minute */
 const MIN_AI_CALL_INTERVAL_MS = 60 * 1000;
@@ -235,31 +233,18 @@ Analyze these anomalies and provide your assessment.`;
 
   // 4. Call AI Gateway
   try {
-    console.log(`[AnomalyAIAnalyzer] Calling AI Gateway with ${anomalies.length} anomalies...`);
+    console.log(`[AnomalyAIAnalyzer] Calling AI provider with ${anomalies.length} anomalies...`);
     lastAICallTime = now;
 
-    const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'claude-haiku-4.5',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: userPrompt },
-        ],
-        temperature: 0.2,
-      }),
+    const aiResult = await chatCompletion({
+      systemPrompt: SYSTEM_PROMPT,
+      userPrompt,
+      modelTier: 'fast',
+      temperature: 0.2,
+      moduleName: 'ANOMALY',
     });
 
-    if (!response.ok) {
-      throw new Error(`Gateway responded with ${response.status}: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content || data.output || '{}';
+    const content = aiResult.content || '{}';
 
     const result = parseAIResponse(content);
 
@@ -275,7 +260,7 @@ Analyze these anomalies and provide your assessment.`;
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[AnomalyAIAnalyzer] AI Gateway Error:', errorMessage);
+    console.error('[AnomalyAIAnalyzer] AI provider error:', errorMessage);
 
     // Default response on failure
     return {
