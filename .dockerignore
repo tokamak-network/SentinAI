@@ -1,12 +1,37 @@
+# Dependencies
 node_modules
+npm-debug.log
+yarn-error.log
+
+# Next.js
 .next
 out
+
+# Environment
+.env
+.env.local
 .env*.local
+
+# Git
 .git
 .gitignore
-*.md
-Dockerfile*
-docker-compose*
-.dockerignore
+
+# IDE
+.vscode
+.idea
+
+# OS
 .DS_Store
-.vercel
+Thumbs.db
+
+# Documentation
+README.md
+docs
+
+# CI/CD
+.github
+
+# Tests
+**/*.test.ts
+**/*.test.tsx
+**/__tests__
