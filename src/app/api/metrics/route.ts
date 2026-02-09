@@ -1,6 +1,7 @@
 import { createPublicClient, http } from 'viem';
 import { mainnet, sepolia } from 'viem/chains';
 import { NextResponse } from 'next/server';
+import { recordUsage } from '@/lib/usage-tracker';
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -368,6 +369,12 @@ export async function GET(request: Request) {
         const maxMonthlySaving = fixedCost - dynamicMonthlyCost; // ~$114
 
         const currentHourlyCost = opGethMonthlyCost / HOURS_PER_MONTH;
+
+        // === 추가: 사용량 데이터 기록 ===
+        // 스트레스 테스트 모드가 아닐 때만 기록 (실제 운영 데이터만 수집)
+        if (!isStressTest) {
+          recordUsage(currentVcpu, effectiveCpu);
+        }
 
         // Calculate block interval and push to metrics store
         const now = Date.now();
