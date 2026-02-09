@@ -18,13 +18,66 @@ vi.mock('@/lib/zero-downtime-scaler', () => ({
   getSwapState: mockGetSwapState,
 }));
 
+// Mock redis-store with InMemoryStateStore behavior
+const { mockGetStore } = vi.hoisted(() => {
+  // Inline InMemory state for testing
+  let scalingState = {
+    currentVcpu: 1,
+    currentMemoryGiB: 2,
+    lastScalingTime: null as string | null,
+    lastDecision: null,
+    cooldownRemaining: 0,
+    autoScalingEnabled: true,
+  };
+  let simulationConfig = { enabled: true, mockCurrentVcpu: 1 };
+  let zeroDowntimeEnabled = false;
+
+  const store = {
+    getScalingState: vi.fn(async () => ({ ...scalingState })),
+    updateScalingState: vi.fn(async (updates: Record<string, unknown>) => {
+      scalingState = { ...scalingState, ...updates } as typeof scalingState;
+    }),
+    getSimulationConfig: vi.fn(async () => ({ ...simulationConfig })),
+    setSimulationConfig: vi.fn(async (config: Record<string, unknown>) => {
+      simulationConfig = { ...simulationConfig, ...config } as typeof simulationConfig;
+    }),
+    getZeroDowntimeEnabled: vi.fn(async () => zeroDowntimeEnabled),
+    setZeroDowntimeEnabled: vi.fn(async (enabled: boolean) => {
+      zeroDowntimeEnabled = enabled;
+    }),
+    addScalingHistory: vi.fn(async () => {}),
+    getScalingHistory: vi.fn(async () => []),
+    // Reset helper for tests
+    _reset: () => {
+      scalingState = {
+        currentVcpu: 1,
+        currentMemoryGiB: 2,
+        lastScalingTime: null,
+        lastDecision: null,
+        cooldownRemaining: 0,
+        autoScalingEnabled: true,
+      };
+      simulationConfig = { enabled: true, mockCurrentVcpu: 1 };
+      zeroDowntimeEnabled = false;
+    },
+  };
+
+  return {
+    mockGetStore: vi.fn(() => store),
+    _store: store,
+  };
+});
+
+vi.mock('@/lib/redis-store', () => ({
+  getStore: mockGetStore,
+}));
+
 import {
   scaleOpGeth,
   isZeroDowntimeEnabled,
   setZeroDowntimeEnabled,
   setSimulationMode,
   getScalingState,
-  updateScalingState,
 } from '../k8s-scaler';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 import { INITIAL_SWAP_STATE } from '@/types/zero-downtime';
@@ -32,17 +85,9 @@ import { INITIAL_SWAP_STATE } from '@/types/zero-downtime';
 describe('k8s-scaler', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset to default state
-    setZeroDowntimeEnabled(false);
-    setSimulationMode(true); // default: simulation mode
-    updateScalingState({
-      currentVcpu: 1,
-      currentMemoryGiB: 2,
-      lastScalingTime: null,
-      lastDecision: null,
-      cooldownRemaining: 0,
-      autoScalingEnabled: true,
-    });
+    // Reset store state
+    const store = mockGetStore();
+    (store as unknown as { _reset: () => void })._reset();
     mockGetSwapState.mockReturnValue({ ...INITIAL_SWAP_STATE });
     // Default mock for runK8sCommand (used by getCurrentVcpu in non-simulation mode)
     mockRunK8sCommand.mockResolvedValue({ stdout: "'1'", stderr: '' });
@@ -53,19 +98,19 @@ describe('k8s-scaler', () => {
   // ----------------------------------------------------------
 
   describe('isZeroDowntimeEnabled / setZeroDowntimeEnabled', () => {
-    it('should default to disabled', () => {
-      expect(isZeroDowntimeEnabled()).toBe(false);
+    it('should default to disabled', async () => {
+      expect(await isZeroDowntimeEnabled()).toBe(false);
     });
 
-    it('should enable zero-downtime mode', () => {
-      setZeroDowntimeEnabled(true);
-      expect(isZeroDowntimeEnabled()).toBe(true);
+    it('should enable zero-downtime mode', async () => {
+      await setZeroDowntimeEnabled(true);
+      expect(await isZeroDowntimeEnabled()).toBe(true);
     });
 
-    it('should disable zero-downtime mode', () => {
-      setZeroDowntimeEnabled(true);
-      setZeroDowntimeEnabled(false);
-      expect(isZeroDowntimeEnabled()).toBe(false);
+    it('should disable zero-downtime mode', async () => {
+      await setZeroDowntimeEnabled(true);
+      await setZeroDowntimeEnabled(false);
+      expect(await isZeroDowntimeEnabled()).toBe(false);
     });
   });
 
@@ -74,10 +119,10 @@ describe('k8s-scaler', () => {
   // ----------------------------------------------------------
 
   describe('scaleOpGeth (zero-downtime branch)', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       // Disable simulation mode so we hit the real/zero-downtime branch
-      setSimulationMode(false);
-      setZeroDowntimeEnabled(true);
+      await setSimulationMode(false);
+      await setZeroDowntimeEnabled(true);
     });
 
     it('should call zeroDowntimeScale when zero-downtime mode is enabled', async () => {
@@ -141,14 +186,14 @@ describe('k8s-scaler', () => {
 
       await scaleOpGeth(4, 8, DEFAULT_SCALING_CONFIG);
 
-      const state = getScalingState();
+      const state = await getScalingState();
       expect(state.currentVcpu).toBe(4);
       expect(state.currentMemoryGiB).toBe(8);
       expect(state.lastScalingTime).not.toBeNull();
     });
 
     it('should not update scaling state on failure', async () => {
-      const stateBefore = getScalingState();
+      const stateBefore = await getScalingState();
       const vcpuBefore = stateBefore.currentVcpu;
 
       mockZeroDowntimeScale.mockResolvedValue({
@@ -161,7 +206,7 @@ describe('k8s-scaler', () => {
 
       await scaleOpGeth(4, 8, DEFAULT_SCALING_CONFIG);
 
-      const stateAfter = getScalingState();
+      const stateAfter = await getScalingState();
       expect(stateAfter.currentVcpu).toBe(vcpuBefore);
     });
   });
@@ -171,9 +216,9 @@ describe('k8s-scaler', () => {
   // ----------------------------------------------------------
 
   describe('scaleOpGeth (legacy branch)', () => {
-    beforeEach(() => {
-      setSimulationMode(false);
-      setZeroDowntimeEnabled(false);
+    beforeEach(async () => {
+      await setSimulationMode(false);
+      await setZeroDowntimeEnabled(false);
     });
 
     it('should use kubectl patch when zero-downtime mode is disabled', async () => {
@@ -205,7 +250,7 @@ describe('k8s-scaler', () => {
     });
 
     it('should skip scaling when already at target (simulation mode)', async () => {
-      setSimulationMode(true);
+      await setSimulationMode(true);
       // State defaults to 1 vCPU — scaling to 1 should be a no-op
       const result = await scaleOpGeth(1, 2, DEFAULT_SCALING_CONFIG);
       expect(result.success).toBe(true);

@@ -6,9 +6,14 @@ services:
       - "3002:3000"
     env_file:
       - .env.local
+    environment:
+      - REDIS_URL=redis://redis:6379
     volumes:
       - sentinai-reports:/app/data/reports
     restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
       interval: 30s
@@ -16,6 +21,22 @@ services:
       start_period: 5s
       retries: 3
 
+  redis:
+    image: redis:7-alpine
+    container_name: sentinai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
 volumes:
   sentinai-reports:
+    driver: local
+  redis-data:
     driver: local
