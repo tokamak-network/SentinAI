@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
 
   // Live scenario: use existing real data in MetricsStore
   if (scenario === 'live') {
-    const count = getMetricsCount();
+    const count = await getMetricsCount();
     if (count < LIVE_MIN_DATA_POINTS) {
       return NextResponse.json(
         {
@@ -152,9 +152,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Only reset prediction cache, keep real data intact
-    resetPredictionState();
+    await resetPredictionState();
 
-    const liveData = getRecentMetrics();
+    const liveData = await getRecentMetrics();
     return NextResponse.json({
       success: true,
       scenario: 'live',
@@ -171,12 +171,12 @@ export async function POST(request: NextRequest) {
   }
 
   // Mock scenarios: clear existing data and inject generated data
-  clearMetrics();
-  resetPredictionState();
+  await clearMetrics();
+  await resetPredictionState();
 
   const dataPoints = generateScenarioData(scenario);
   for (const point of dataPoints) {
-    pushMetric(point);
+    await pushMetric(point);
   }
 
   return NextResponse.json({

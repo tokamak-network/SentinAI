@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
   try {
     // Ensure accumulator is initialized and take a fresh snapshot
     initializeAccumulator();
-    takeSnapshot();
+    await takeSnapshot();
 
     const body: DailyReportRequest = await request.json().catch(() => ({}));
     const targetDate = body.date || getTodayKST();

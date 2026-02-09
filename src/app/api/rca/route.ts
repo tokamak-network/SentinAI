@@ -39,7 +39,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
     console.log(`[API /rca] Triggered by: ${triggeredBy}`);
 
     // 1. Collect recent metrics from MetricsStore
-    const metrics = getRecentMetrics();
+    const metrics = await getRecentMetrics();
     console.log(`[API /rca] Collected ${metrics.length} metric data points`);
 
     // 2. Detect anomalies using the latest metrics

@@ -9,6 +9,7 @@ export const revalidate = 0;
 import { pushMetric, getRecentMetrics } from '@/lib/metrics-store';
 import { MetricDataPoint } from '@/types/prediction';
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
+import { getStore } from '@/lib/redis-store';
 import { detectAnomalies } from '@/lib/anomaly-detector';
 import { analyzeAnomalies } from '@/lib/anomaly-ai-analyzer';
 import { dispatchAlert } from '@/lib/alert-dispatcher';
@@ -25,9 +26,7 @@ import type { AnomalyResult } from '@/types/anomaly';
 // Whether anomaly detection is enabled (default: enabled)
 const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'false';
 
-// Block interval tracking for metrics store
-let lastL2BlockHeight: bigint | null = null;
-let lastL2BlockTime: number | null = null;
+// Block interval tracking moved to state store (Redis or InMemory)
 
 interface ComponentDetail {
     name: string;
@@ -380,18 +379,20 @@ export async function GET(request: Request) {
         const now = Date.now();
         let blockInterval = 2.0; // Default block interval (L2 typical)
 
-        if (lastL2BlockHeight !== null && lastL2BlockTime !== null) {
-          if (blockNumber > lastL2BlockHeight) {
+        const lastBlock = await getStore().getLastBlock();
+        if (lastBlock.height !== null && lastBlock.time !== null) {
+          const lastHeight = BigInt(lastBlock.height);
+          const lastTime = Number(lastBlock.time);
+          if (blockNumber > lastHeight) {
             // New block detected, calculate interval
-            const timeDiff = (now - lastL2BlockTime) / 1000; // Convert to seconds
-            const blockDiff = Number(blockNumber - lastL2BlockHeight);
+            const timeDiff = (now - lastTime) / 1000; // Convert to seconds
+            const blockDiff = Number(blockNumber - lastHeight);
             blockInterval = timeDiff / blockDiff;
           }
         }
 
-        // Update tracking variables
-        lastL2BlockHeight = blockNumber;
-        lastL2BlockTime = now;
+        // Update tracking in store
+        await getStore().setLastBlock(String(blockNumber), String(now));
 
         // Push data point to metrics store (only for real data, not stress test)
         let dataPoint: MetricDataPoint | null = null;
@@ -405,7 +406,7 @@ export async function GET(request: Request) {
             blockInterval,
             currentVcpu,
           };
-          pushMetric(dataPoint);
+          await pushMetric(dataPoint);
         }
 
         // ================================================================
@@ -417,7 +418,7 @@ export async function GET(request: Request) {
         if (ANOMALY_DETECTION_ENABLED && !isStressTest && dataPoint) {
           try {
             // Layer 1: Statistical anomaly detection
-            const history = getRecentMetrics();
+            const history = await getRecentMetrics();
             detectedAnomalies = detectAnomalies(dataPoint, history);
 
             if (detectedAnomalies.length > 0) {

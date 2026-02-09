@@ -97,20 +97,20 @@ async function fetchAIAnalysis(): Promise<{
  */
 export async function GET() {
   try {
-    const state = getScalingState();
+    const state = await getScalingState();
     const currentVcpu = await getCurrentVcpu();
 
     // Sync with actual K8s state
     if (currentVcpu !== state.currentVcpu) {
-      updateScalingState({
+      await updateScalingState({
         currentVcpu,
         currentMemoryGiB: (currentVcpu * 2) as 2 | 4 | 8,
       });
     }
 
     // Get or generate prediction
-    let prediction: PredictionResult | null = getLastPrediction();
-    const metricsCount = getMetricsCount();
+    let prediction: PredictionResult | null = await getLastPrediction();
+    const metricsCount = await getMetricsCount();
 
     // Try to generate new prediction if we have enough data
     if (metricsCount >= DEFAULT_PREDICTION_CONFIG.minDataPoints) {
@@ -135,20 +135,20 @@ export async function GET() {
       : null;
 
     return NextResponse.json({
-      ...getScalingState(),
-      simulationMode: isSimulationMode(),
+      ...(await getScalingState()),
+      simulationMode: await isSimulationMode(),
       timestamp: new Date().toISOString(),
       // New prediction fields
       prediction: predictionInfo,
       predictionMeta: {
         metricsCount,
         minRequired: DEFAULT_PREDICTION_CONFIG.minDataPoints,
-        nextPredictionIn: getNextPredictionIn(),
+        nextPredictionIn: await getNextPredictionIn(),
         isReady: metricsCount >= DEFAULT_PREDICTION_CONFIG.minDataPoints,
       },
       // Zero-downtime scaling state
       zeroDowntime: {
-        enabled: isZeroDowntimeEnabled(),
+        enabled: await isZeroDowntimeEnabled(),
         swapState: getSwapState(),
       },
     });
@@ -199,7 +199,7 @@ export async function POST(request: NextRequest) {
       };
     } else {
       // Auto-scaling (with optional predictive mode)
-      if (!isAutoScalingEnabled()) {
+      if (!(await isAutoScalingEnabled())) {
         return NextResponse.json(
           { error: 'Auto-scaling is disabled', autoScalingEnabled: false },
           { status: 400 }
@@ -266,7 +266,7 @@ export async function POST(request: NextRequest) {
 
     // Add history (Only when not dry run and actual change occurred)
     if (!dryRun && result.success && result.previousVcpu !== result.currentVcpu) {
-      addScalingHistory({
+      await addScalingHistory({
         timestamp: result.timestamp,
         fromVcpu: result.previousVcpu,
         toVcpu: result.currentVcpu,
@@ -290,7 +290,7 @@ export async function POST(request: NextRequest) {
       previousVcpu: result.previousVcpu,
       currentVcpu: result.currentVcpu,
       decision,
-      cooldownRemaining: getScalingState().cooldownRemaining,
+      cooldownRemaining: (await getScalingState()).cooldownRemaining,
       dryRun,
       error: result.error,
     };
@@ -315,22 +315,22 @@ export async function PATCH(request: NextRequest) {
     const { autoScalingEnabled, simulationMode, zeroDowntimeEnabled } = body;
 
     if (typeof autoScalingEnabled === 'boolean') {
-      setAutoScalingEnabled(autoScalingEnabled);
+      await setAutoScalingEnabled(autoScalingEnabled);
     }
 
     if (typeof simulationMode === 'boolean') {
-      setSimulationMode(simulationMode);
+      await setSimulationMode(simulationMode);
     }
 
     if (typeof zeroDowntimeEnabled === 'boolean') {
-      setZeroDowntimeEnabled(zeroDowntimeEnabled);
+      await setZeroDowntimeEnabled(zeroDowntimeEnabled);
     }
 
     return NextResponse.json({
       success: true,
-      autoScalingEnabled: isAutoScalingEnabled(),
-      simulationMode: isSimulationMode(),
-      zeroDowntimeEnabled: isZeroDowntimeEnabled(),
+      autoScalingEnabled: await isAutoScalingEnabled(),
+      simulationMode: await isSimulationMode(),
+      zeroDowntimeEnabled: await isZeroDowntimeEnabled(),
     });
   } catch (error) {
     console.error('PATCH /api/scaler error:', error);
