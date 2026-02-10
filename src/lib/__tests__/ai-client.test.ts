@@ -64,7 +64,7 @@ describe('ai-client', () => {
       });
 
       expect(result.provider).toBe('litellm');
-      expect(result.model).toBe('claude-haiku-4.5');
+      expect(result.model).toBe('claude-3-5-haiku-20241022');
       expect(result.content).toBe('response');
 
       // Verify fetch was called with gateway URL
