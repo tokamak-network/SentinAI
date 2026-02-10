@@ -24,27 +24,68 @@ SentinAI는 Optimism L2 노드를 위한 AI 기반 모니터링 및 자동 스�
 
 ---
 
-## 1.2 Unit Test Coverage (Phase 1 완료: 2026-02-10)
+## 1.2 Unit Test Coverage (완료: 2026-02-10)
 
-**목표 달성:** 23% → ~70% ✅ (+47%)
+**최종 달성:** 23% → ~51% ✅ (전체), ~70% (핵심 모듈)
 
-### 테스트 추가 현황
+### 테스트 현황 (23개 파일, 541개 테스트)
+
+#### Phase 1-2: 핵심 비즈니스 로직 (10개 모듈, 211테스트)
 
 | 모듈 | 테스트 | 커버리지 | 설명 |
 |------|--------|---------|------|
-| `anomaly-detector.test.ts` | 24 | 98.92% | Z-Score, CPU zero-drop, block plateau, TxPool monotonic |
-| `metrics-store.test.ts` | 19 | 100% | Ring buffer, stats, trend detection (rising/falling/stable) |
-| `scaling-decision.test.ts` | 36 | 100% | Hybrid scoring, vCPU tiers, confidence, reason generation |
-| `predictive-scaler.test.ts` | 20 | ~75% | Rate limiting, min data points, AI parsing, fallback |
-| `rca-engine.test.ts` | 25 | ~60% | Dependency graph, timeline, fault propagation |
+| `anomaly-detector.test.ts` | 24 | 98.92% | Z-Score, CPU zero-drop, block plateau |
+| `metrics-store.test.ts` | 19 | 100% | Ring buffer, stats, trend detection |
+| `scaling-decision.test.ts` | 36 | 100% | Hybrid scoring, vCPU tiers |
+| `predictive-scaler.test.ts` | 20 | ~75% | Rate limiting, AI parsing, fallback |
+| `rca-engine.test.ts` | 25 | ~60% | Dependency graph, fault propagation |
+| `cost-optimizer.test.ts` | 23 | ~75% | Fargate pricing, recommendations |
+| `anomaly-ai-analyzer.test.ts` | 16 | ~75% | AI semantic analysis, fallback |
+| `usage-tracker.test.ts` | 19 | ~85% | Usage patterns, stress filtering |
+| `alert-dispatcher.test.ts` | 18 | ~80% | Slack formatting, cooldown |
+| `daily-accumulator.test.ts` | 36 | 97.6% | Snapshot capture, hourly summaries |
+
+#### Phase 3: 시스템 모듈 (2개 모듈, 80테스트)
+
+| 모듈 | 테스트 | 커버리지 | 설명 |
+|------|--------|---------|------|
+| `scheduler.test.ts` | 27 | ~90% | Cron scheduling, idempotency |
+| `redis-store.test.ts` | 53 | ~95% | InMemory/Redis state management |
+
+#### Round 2: 데이터/추적 모듈 (3개 모듈, 93테스트)
+
+| 모듈 | 테스트 | 커버리지 | 설명 |
+|------|--------|---------|------|
+| `ai-response-parser.test.ts` | 37 | ~85% | JSON extraction, error handling |
+| `prediction-tracker.test.ts` | 30 | ~90% | Prediction accuracy tracking |
+| `anomaly-event-store.test.ts` | 27 | ~88% | Event lifecycle management |
+
+#### Round 3: 로그/보고 모듈 (3개 모듈, 50테스트) ✨ NEW
+
+| 모듈 | 테스트 | 커버리지 | 설명 |
+|------|--------|---------|------|
+| `ai-analyzer.test.ts` | 12 | ~80% | Log chunk AI analysis |
+| `log-ingester.test.ts` | 19 | ~85% | K8s log fetching |
+| `daily-report-generator.test.ts` | 20 | ~80% | Report generation + fallback |
+
+#### 기존 모듈 (5개 모듈, 56테스트)
+
+| 모듈 | 테스트 | 커버리지 | 설명 |
+|------|--------|---------|------|
+| `ai-client.test.ts` | 17 | ~90% | Multi-provider AI fallback |
+| `k8s-scaler.test.ts` | 11 | ~85% | StatefulSet patching |
+| `k8s-config.test.ts` | 7 | ~80% | kubectl configuration |
+| `nlops-engine.test.ts` | 31 | ~90% | Natural language intent classification |
+| `zero-downtime-scaler.test.ts` | 21 | ~95% | Pod swap orchestration |
 
 ### 전체 테스트 현황
 
-| 지표 | 이전 | 신규 | 합계 |
-|------|------|------|------|
-| **테스트 파일** | 5 | 5 | **10** |
-| **테스트 수** | 87 | +124 | **211** |
-| **커버리지** | 23% | +47% | **~70%** |
+| 지표 | 2026-02-09 | 2026-02-10 | 증가율 |
+|------|-----------|-----------|--------|
+| **테스트 파일** | 10 | **23** | +130% |
+| **테스트 수** | 211 | **541** | +156% |
+| **커버리지** | 23% | **~51%** (전체), **~70%** (핵심) | +50% |
+| **실행 시간** | 0.4s | 1.0s | - |
 
 ---
 
@@ -87,26 +128,51 @@ npm run dev
 ### 3.2 단위 테스트
 
 ```bash
-# 전체 테스트 (211 tests)
+# 전체 테스트 (541 tests, 23 파일)
 npm run test:run
 
 # 전체 테스트 + 커버리지 리포트
 npm run test:coverage
 
-# 기존 핵심 기능 테스트
-npm test -- src/lib/__tests__/ai-client.test.ts        # 17 tests
-npm test -- src/lib/__tests__/k8s-scaler.test.test.ts  # 11 tests
-npm test -- src/lib/__tests__/zero-downtime-scaler.test.ts # 21 tests
+# 구간별 테스트 실행
+## 기존 기능 (5개 모듈, 56 tests)
+npx vitest run src/lib/__tests__/ai-client.test.ts              # 17 tests
+npx vitest run src/lib/__tests__/k8s-scaler.test.ts            # 11 tests
+npx vitest run src/lib/__tests__/k8s-config.test.ts            # 7 tests
+npx vitest run src/lib/__tests__/nlops-engine.test.ts          # 31 tests
+npx vitest run src/lib/__tests__/zero-downtime-scaler.test.ts  # 21 tests
 
-# Phase 1 신규 테스트
-npm test -- src/lib/__tests__/anomaly-detector.test.ts    # 24 tests (98.92% coverage)
-npm test -- src/lib/__tests__/metrics-store.test.ts       # 19 tests (100% coverage)
-npm test -- src/lib/__tests__/scaling-decision.test.ts    # 36 tests (100% coverage)
-npm test -- src/lib/__tests__/predictive-scaler.test.ts   # 20 tests (~75% coverage)
-npm test -- src/lib/__tests__/rca-engine.test.ts          # 25 tests (~60% coverage)
+## Phase 1-2: 핵심 비즈니스 로직 (10개 모듈, 211 tests)
+npx vitest run src/lib/__tests__/anomaly-detector.test.ts      # 24 tests
+npx vitest run src/lib/__tests__/metrics-store.test.ts         # 19 tests
+npx vitest run src/lib/__tests__/scaling-decision.test.ts      # 36 tests
+npx vitest run src/lib/__tests__/predictive-scaler.test.ts     # 20 tests
+npx vitest run src/lib/__tests__/rca-engine.test.ts            # 25 tests
+npx vitest run src/lib/__tests__/cost-optimizer.test.ts        # 23 tests
+npx vitest run src/lib/__tests__/anomaly-ai-analyzer.test.ts   # 16 tests
+npx vitest run src/lib/__tests__/usage-tracker.test.ts         # 19 tests
+npx vitest run src/lib/__tests__/alert-dispatcher.test.ts      # 18 tests
+npx vitest run src/lib/__tests__/daily-accumulator.test.ts     # 36 tests
+
+## Phase 3: 시스템 모듈 (2개 모듈, 80 tests)
+npx vitest run src/lib/__tests__/scheduler.test.ts             # 27 tests
+npx vitest run src/lib/__tests__/redis-store.test.ts           # 53 tests
+
+## Round 2: 데이터/추적 모듈 (3개 모듈, 93 tests)
+npx vitest run src/lib/__tests__/ai-response-parser.test.ts    # 37 tests
+npx vitest run src/lib/__tests__/prediction-tracker.test.ts    # 30 tests
+npx vitest run src/lib/__tests__/anomaly-event-store.test.ts   # 27 tests
+
+## Round 3: 로그/보고 모듈 (3개 모듈, 50 tests) ✨ NEW
+npx vitest run src/lib/__tests__/ai-analyzer.test.ts           # 12 tests
+npx vitest run src/lib/__tests__/log-ingester.test.ts          # 19 tests
+npx vitest run src/lib/__tests__/daily-report-generator.test.ts # 20 tests
 
 # Watch 모드
 npm test
+
+# 특정 테스트만 실행
+npx vitest run -t "should detect spike"  # 특정 테스트 이름으로 검색
 ```
 
 ### 3.3 E2E 테스트
