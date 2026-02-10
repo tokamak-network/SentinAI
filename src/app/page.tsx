@@ -4,9 +4,11 @@ import { useEffect, useState, useRef } from 'react';
 import {
   Activity, Server, Zap, ShieldAlert, Cpu, ArrowUpRight,
   TrendingDown, CheckCircle2, XCircle, Shield, Database,
-  AlertTriangle, ChevronDown, ChevronRight, BarChart3, Calendar, Lightbulb
+  AlertTriangle, ChevronDown, ChevronRight, BarChart3, Calendar, Lightbulb,
+  MessageSquare, Send, Bot, User
 } from 'lucide-react';
 import type { RCAResult, RCAComponent } from '@/types/rca';
+import type { ChatMessage, NLOpsResponse, NLOpsIntent } from '@/types/nlops';
 
 // --- Interfaces ---
 interface AnomalyResultData {
@@ -150,6 +152,18 @@ export default function Dashboard() {
   const [isLoadingCostReport, setIsLoadingCostReport] = useState(false);
   const [showCostAnalysis, setShowCostAnalysis] = useState(false);
 
+  // --- NLOps Chat State ---
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [pendingConfirmation, setPendingConfirmation] = useState<{
+    message: string;
+    originalInput: string;
+    intent: NLOpsIntent;
+  } | null>(null);
+  const chatMessagesEndRef = useRef<HTMLDivElement>(null);
+
   // Seed prediction data for testing
   const seedPredictionData = async () => {
     setIsSeeding(true);
@@ -210,6 +224,104 @@ export default function Dashboard() {
       console.error('Cost report error:', e);
     } finally {
       setIsLoadingCostReport(false);
+    }
+  };
+
+  // --- NLOps Chat Handlers ---
+
+  useEffect(() => {
+    if (chatMessagesEndRef.current) {
+      chatMessagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages]);
+
+  const generateMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+  const sendChatMessage = async (message: string, confirmAction?: boolean) => {
+    if (!message.trim() && !confirmAction) return;
+
+    const userMessage: ChatMessage = {
+      id: generateMessageId(),
+      role: 'user',
+      content: confirmAction ? '확인' : message.trim(),
+      timestamp: new Date().toISOString(),
+    };
+
+    if (!confirmAction) {
+      setChatMessages(prev => [...prev, userMessage]);
+      setChatInput('');
+    }
+
+    setIsSending(true);
+
+    try {
+      const response = await fetch('/api/nlops', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: confirmAction ? pendingConfirmation?.originalInput : message.trim(),
+          confirmAction,
+        }),
+      });
+
+      const data: NLOpsResponse = await response.json();
+
+      const assistantMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: 'assistant',
+        content: data.response,
+        timestamp: new Date().toISOString(),
+        intent: data.intent,
+        data: data.data,
+        awaitingConfirmation: data.needsConfirmation,
+      };
+
+      setChatMessages(prev => [...prev, assistantMessage]);
+
+      if (data.needsConfirmation && data.confirmationMessage) {
+        setPendingConfirmation({
+          message: data.confirmationMessage,
+          originalInput: message.trim(),
+          intent: data.intent,
+        });
+      } else {
+        setPendingConfirmation(null);
+      }
+    } catch {
+      const errorMessage: ChatMessage = {
+        id: generateMessageId(),
+        role: 'assistant',
+        content: '죄송합니다, 요청을 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+        timestamp: new Date().toISOString(),
+      };
+      setChatMessages(prev => [...prev, errorMessage]);
+      setPendingConfirmation(null);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleConfirm = () => {
+    if (pendingConfirmation) {
+      sendChatMessage(pendingConfirmation.originalInput, true);
+    }
+  };
+
+  const handleCancel = () => {
+    const cancelMessage: ChatMessage = {
+      id: generateMessageId(),
+      role: 'assistant',
+      content: '작업이 취소되었습니다.',
+      timestamp: new Date().toISOString(),
+    };
+    setChatMessages(prev => [...prev, cancelMessage]);
+    setPendingConfirmation(null);
+  };
+
+  const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey && !isSending) {
+      e.preventDefault();
+      sendChatMessage(chatInput);
     }
   };
 
@@ -938,6 +1050,129 @@ export default function Dashboard() {
         </div>
 
       </div>
+
+      {/* ============================================================ */}
+      {/* NLOps Chat Interface                                         */}
+      {/* ============================================================ */}
+
+      {/* Chat Toggle Button */}
+      {!chatOpen && (
+        <button
+          onClick={() => setChatOpen(true)}
+          className="fixed bottom-6 right-6 bg-slate-900 text-white rounded-full p-4 shadow-xl hover:bg-slate-800 transition-all hover:scale-105 z-50 flex items-center gap-2"
+        >
+          <MessageSquare size={24} />
+          <span className="text-sm font-semibold pr-1">SentinAI 어시스턴트</span>
+        </button>
+      )}
+
+      {/* Chat Panel */}
+      {chatOpen && (
+        <div className="fixed bottom-0 right-6 w-96 bg-white rounded-t-2xl shadow-2xl border border-gray-200 z-50 flex flex-col max-h-[600px]">
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-slate-900 rounded-t-2xl">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-500 p-2 rounded-xl">
+                <Bot size={18} className="text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white text-sm">SentinAI Ops 어시스턴트</h3>
+                <p className="text-[10px] text-gray-400">자연어로 시스템을 제어하세요</p>
+              </div>
+            </div>
+            <button onClick={() => setChatOpen(false)} className="text-gray-400 hover:text-white transition-colors p-1">
+              <ChevronDown size={20} />
+            </button>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px] max-h-[400px] bg-gray-50">
+            {chatMessages.length === 0 && (
+              <div className="text-center text-gray-400 mt-8">
+                <Bot size={40} className="mx-auto mb-3 opacity-50" />
+                <p className="text-sm">안녕하세요! SentinAI 어시스턴트입니다.</p>
+                <p className="text-xs mt-1">아래 예시를 클릭하거나 직접 입력해보세요.</p>
+                <div className="flex flex-wrap gap-2 justify-center mt-4">
+                  {['현재 상태', '로그 분석 해줘', '비용 확인'].map((example) => (
+                    <button key={example} onClick={() => sendChatMessage(example)}
+                      className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded-full hover:border-blue-300 hover:text-blue-600 transition-colors">
+                      {example}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {chatMessages.map((msg) => (
+              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-[85%] ${
+                  msg.role === 'user'
+                    ? 'bg-blue-500 text-white rounded-2xl rounded-br-md'
+                    : 'bg-white text-gray-800 rounded-2xl rounded-bl-md border border-gray-100 shadow-sm'
+                } px-4 py-3`}>
+                  <div className={`flex items-center gap-2 mb-1 ${msg.role === 'user' ? 'justify-end' : ''}`}>
+                    {msg.role === 'assistant' && <Bot size={12} className="text-blue-500" />}
+                    <span className={`text-[10px] ${msg.role === 'user' ? 'text-blue-100' : 'text-gray-400'}`}>
+                      {msg.role === 'user' ? '나' : 'SentinAI'}
+                    </span>
+                    {msg.role === 'user' && <User size={12} className="text-blue-100" />}
+                  </div>
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.content}</p>
+                  <p className={`text-[9px] mt-1 ${msg.role === 'user' ? 'text-blue-100' : 'text-gray-300'}`}>
+                    {new Date(msg.timestamp).toLocaleTimeString()}
+                  </p>
+                </div>
+              </div>
+            ))}
+
+            {isSending && (
+              <div className="flex justify-start">
+                <div className="bg-white text-gray-500 rounded-2xl rounded-bl-md border border-gray-100 shadow-sm px-4 py-3">
+                  <div className="flex items-center gap-1">
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={chatMessagesEndRef} />
+          </div>
+
+          {/* Confirmation */}
+          {pendingConfirmation && (
+            <div className="px-4 py-3 bg-yellow-50 border-t border-yellow-100">
+              <p className="text-sm text-yellow-800 mb-2 font-medium">{pendingConfirmation.message}</p>
+              <div className="flex gap-2">
+                <button onClick={handleConfirm} disabled={isSending}
+                  className="flex-1 bg-blue-500 text-white text-sm font-semibold py-2 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50">
+                  확인
+                </button>
+                <button onClick={handleCancel} disabled={isSending}
+                  className="flex-1 bg-gray-200 text-gray-700 text-sm font-semibold py-2 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50">
+                  취소
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Input */}
+          <div className="p-4 border-t border-gray-100 bg-white rounded-b-none">
+            <div className="flex items-center gap-2">
+              <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)}
+                onKeyDown={handleChatKeyDown} placeholder="명령을 입력하세요..."
+                disabled={isSending || !!pendingConfirmation}
+                className="flex-1 bg-gray-100 border-none rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
+              <button onClick={() => sendChatMessage(chatInput)}
+                disabled={isSending || !chatInput.trim() || !!pendingConfirmation}
+                className="bg-blue-500 text-white p-3 rounded-xl hover:bg-blue-600 transition-colors disabled:opacity-50">
+                <Send size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }
