@@ -7,5 +7,12 @@ node_modules
 *.tsbuildinfo
 coverage
 
+# Generated data
+data/
+
+# Playwright
+playwright-report/
+test-results/
+
 # Cloud Run / Docker
 env-vars.yaml

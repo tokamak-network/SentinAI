@@ -31,6 +31,43 @@ npx vitest run -t "test name"         # Run specific test by name
 
 Tests live in `src/lib/__tests__/*.test.ts`. Coverage is scoped to `src/lib/**/*.ts`.
 
+### E2E Testing (Playwright)
+
+```bash
+npm run test:e2e                     # 전체 실행 (3 브라우저)
+npm run test:e2e:chromium            # Chromium만 실행 (가장 빠름)
+npm run test:e2e:headed              # 브라우저 창 열고 실행
+npm run test:e2e:debug               # 디버그 모드 (step-by-step)
+npm run test:e2e:ui                  # Playwright UI 모드
+npm run test:e2e:report              # 마지막 실행 결과 HTML 리포트
+```
+
+Tests live in `tests/e2e/*.spec.ts`. Dev server(`localhost:3002`)는 자동 시작된다.
+
+| 테스트 파일 | 대상 | 테스트 수 |
+|------------|------|----------|
+| `anomaly-detection.spec.ts` | 이상 탐지 배너/피드 UI | 5 |
+| `cost-heatmap.spec.ts` | 비용 히트맵 시각화 | 5 |
+| `daily-report.spec.ts` | 메트릭 표시 + 데이터 갱신 | 3 |
+
+```bash
+# 특정 테스트만 실행
+npx playwright test anomaly-detection
+npx playwright test -g "should display anomaly banner"
+
+# 실패 시 trace 확인
+npx playwright show-trace test-results/<test-name>/trace.zip
+```
+
+### E2E Verification (Cluster)
+
+```bash
+npm run verify                       # 실제 클러스터 대상 6단계 검증
+bash scripts/verify-e2e.sh --phase 2 # 특정 Phase만 실행
+```
+
+`scripts/verify-e2e.sh` — 실제 EKS + L2 RPC + AI Provider 환경에서 전체 기능(메트릭 수집, 이상 탐지, 예측, 비용, 보고서, RCA)을 자동 검증한다. Dev server 미실행 시 자동 시작.
+
 ## Architecture
 
 ### Data Flow

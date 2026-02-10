@@ -17,14 +17,14 @@ let reportTaskRunning = false;
 /**
  * Initialize cron jobs. Idempotent — safe to call multiple times.
  */
-export function initializeScheduler(): void {
+export async function initializeScheduler(): Promise<void> {
   if (initialized) {
     console.log('[Scheduler] Already initialized, skipping');
     return;
   }
 
   // Initialize accumulator for today
-  initializeAccumulator();
+  await initializeAccumulator();
 
   // 5-minute snapshot cron
   snapshotTask = cron.schedule('*/5 * * * *', async () => {
@@ -46,7 +46,7 @@ export function initializeScheduler(): void {
     reportTaskRunning = true;
     try {
       console.log('[Scheduler] Starting daily report generation...');
-      const data = getAccumulatedData();
+      const data = await getAccumulatedData();
       if (data) {
         const result = await generateDailyReport(data);
         if (result.success) {

@@ -28,7 +28,7 @@ function getTodayKST(): string {
 export async function GET(request: NextRequest) {
   try {
     // Ensure accumulator is initialized in this module scope
-    initializeAccumulator();
+    await initializeAccumulator();
 
     const { searchParams } = new URL(request.url);
 
@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     if (searchParams.get('status') === 'true') {
       return NextResponse.json({
         success: true,
-        data: getAccumulatorStatus(),
+        data: await getAccumulatorStatus(),
       });
     }
 
@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        accumulator: getAccumulatorStatus(),
+        accumulator: await getAccumulatorStatus(),
         recentReports: reports.slice(0, 7),
       },
     });
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // Ensure accumulator is initialized and take a fresh snapshot
-    initializeAccumulator();
+    await initializeAccumulator();
     await takeSnapshot();
 
     const body: DailyReportRequest = await request.json().catch(() => ({}));
@@ -114,7 +114,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get accumulated data
-    const data = getAccumulatedData(targetDate);
+    const data = await getAccumulatedData(targetDate);
     if (!data) {
       return NextResponse.json(
         {

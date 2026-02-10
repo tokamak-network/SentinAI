@@ -1,18 +1,12 @@
 /**
- * Prediction Tracker Module
+ * Prediction Tracker Module (Redis-backed)
  * Tracks prediction accuracy by comparing predictions with actual outcomes
  */
 
 import { PredictionResult, PredictionRecord } from '@/types/prediction';
 import { TargetVcpu } from '@/types/scaling';
+import { getStore } from '@/lib/redis-store';
 
-/** Maximum number of prediction records to keep */
-const MAX_RECORDS = 100;
-
-/** In-memory storage for prediction records */
-let predictionRecords: PredictionRecord[] = [];
-
-/** Counter for generating unique IDs */
 let idCounter = 0;
 
 /**
@@ -29,7 +23,7 @@ function generateId(): string {
  * @param prediction - The prediction result to record
  * @returns The ID of the recorded prediction
  */
-export function recordPrediction(prediction: PredictionResult): string {
+export async function recordPrediction(prediction: PredictionResult): Promise<string> {
   const id = generateId();
 
   const record: PredictionRecord = {
@@ -40,12 +34,8 @@ export function recordPrediction(prediction: PredictionResult): string {
     verifiedAt: undefined,
   };
 
-  predictionRecords.push(record);
-
-  // Evict oldest records if over capacity
-  if (predictionRecords.length > MAX_RECORDS) {
-    predictionRecords = predictionRecords.slice(-MAX_RECORDS);
-  }
+  const store = getStore();
+  await store.addPredictionRecord(record);
 
   return id;
 }
@@ -57,21 +47,23 @@ export function recordPrediction(prediction: PredictionResult): string {
  * @param actualVcpu - The actual vCPU that was needed
  * @returns Whether the record was found and updated
  */
-export function recordActual(id: string, actualVcpu: TargetVcpu): boolean {
-  const record = predictionRecords.find(r => r.id === id);
+export async function recordActual(id: string, actualVcpu: TargetVcpu): Promise<boolean> {
+  const store = getStore();
+  const records = await store.getPredictionRecords(100);
+  const record = records.find((r) => r.id === id);
 
   if (!record) {
     console.warn(`Prediction record not found: ${id}`);
     return false;
   }
 
-  record.actualVcpu = actualVcpu;
-  record.verifiedAt = new Date().toISOString();
-
-  // A prediction is "accurate" if within 1 vCPU of actual
-  // e.g., predicted 2, actual 2 or 1 or 4 with small tolerance
   const diff = Math.abs(record.prediction.predictedVcpu - actualVcpu);
-  record.wasAccurate = diff <= 1;
+
+  await store.updatePredictionRecord(id, {
+    actualVcpu,
+    verifiedAt: new Date().toISOString(),
+    wasAccurate: diff <= 1,
+  });
 
   return true;
 }
@@ -83,11 +75,10 @@ export function recordActual(id: string, actualVcpu: TargetVcpu): boolean {
  * @param actualVcpu - The actual vCPU that was needed
  * @returns Whether a record was found and updated
  */
-export function recordActualForRecent(actualVcpu: TargetVcpu): boolean {
-  // Find the most recent unverified prediction
-  const record = [...predictionRecords]
-    .reverse()
-    .find(r => r.actualVcpu === undefined);
+export async function recordActualForRecent(actualVcpu: TargetVcpu): Promise<boolean> {
+  const store = getStore();
+  const records = await store.getPredictionRecords(100);
+  const record = records.find((r) => r.actualVcpu === undefined);
 
   if (!record) {
     return false;
@@ -101,22 +92,25 @@ export function recordActualForRecent(actualVcpu: TargetVcpu): boolean {
  *
  * @returns Accuracy statistics
  */
-export function getAccuracy(): {
+export async function getAccuracy(): Promise<{
   totalPredictions: number;
   verifiedPredictions: number;
   accuratePredictions: number;
   accuracyRate: number;
   recentAccuracy: number;
-} {
-  const verified = predictionRecords.filter(r => r.wasAccurate !== undefined);
-  const accurate = verified.filter(r => r.wasAccurate === true);
+}> {
+  const store = getStore();
+  const records = await store.getPredictionRecords(100);
+
+  const verified = records.filter((r) => r.wasAccurate !== undefined);
+  const accurate = verified.filter((r) => r.wasAccurate === true);
 
   // Recent accuracy (last 20 verified predictions)
-  const recentVerified = verified.slice(-20);
-  const recentAccurate = recentVerified.filter(r => r.wasAccurate === true);
+  const recentVerified = verified.slice(0, 20);
+  const recentAccurate = recentVerified.filter((r) => r.wasAccurate === true);
 
   return {
-    totalPredictions: predictionRecords.length,
+    totalPredictions: records.length,
     verifiedPredictions: verified.length,
     accuratePredictions: accurate.length,
     accuracyRate: verified.length > 0 ? accurate.length / verified.length : 0,
@@ -130,8 +124,9 @@ export function getAccuracy(): {
  * @param limit - Maximum number of records to return
  * @returns Array of prediction records, newest first
  */
-export function getPredictionRecords(limit: number = 20): PredictionRecord[] {
-  return [...predictionRecords].reverse().slice(0, limit);
+export async function getPredictionRecords(limit: number = 20): Promise<PredictionRecord[]> {
+  const store = getStore();
+  return store.getPredictionRecords(limit);
 }
 
 /**
@@ -139,14 +134,16 @@ export function getPredictionRecords(limit: number = 20): PredictionRecord[] {
  *
  * @returns Array of unverified prediction records
  */
-export function getUnverifiedPredictions(): PredictionRecord[] {
-  return predictionRecords.filter(r => r.actualVcpu === undefined);
+export async function getUnverifiedPredictions(): Promise<PredictionRecord[]> {
+  const store = getStore();
+  const records = await store.getPredictionRecords(100);
+  return records.filter((r) => r.actualVcpu === undefined);
 }
 
 /**
  * Clear all prediction records (for testing)
  */
-export function clearPredictionRecords(): void {
-  predictionRecords = [];
-  idCounter = 0;
+export async function clearPredictionRecords(): Promise<void> {
+  const store = getStore();
+  await store.clearPredictionRecords();
 }

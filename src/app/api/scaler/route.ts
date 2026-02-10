@@ -77,7 +77,7 @@ async function fetchAIAnalysis(): Promise<{
 
     // Record analysis result in daily accumulator
     if (result) {
-      addLogAnalysisResult({
+      await addLogAnalysisResult({
         timestamp: new Date().toISOString(),
         severity: result.severity,
         summary: result.summary,
@@ -276,7 +276,7 @@ export async function POST(request: NextRequest) {
       });
 
       // Record scaling event in daily accumulator
-      addScalingEvent({
+      await addScalingEvent({
         timestamp: result.timestamp,
         fromVcpu: result.previousVcpu,
         toVcpu: result.currentVcpu,

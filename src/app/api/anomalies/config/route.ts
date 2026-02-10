@@ -16,8 +16,8 @@ import type { AISeverity } from '@/types/scaling';
 export const dynamic = 'force-dynamic';
 
 export async function GET(): Promise<NextResponse<AlertConfigResponse>> {
-  const config = getAlertConfig();
-  const history = getAlertHistory();
+  const config = await getAlertConfig();
+  const history = await getAlertHistory();
 
   // Calculate alert count in the last 24 hours
   const alertsSent24h = history.length;
@@ -68,18 +68,19 @@ export async function POST(request: Request): Promise<NextResponse<AlertConfigRe
     }
 
     // Update config - build thresholds with required fields if provided
+    const currentConfig = await getAlertConfig();
     const thresholdsUpdate = body.thresholds ? {
-      notifyOn: body.thresholds.notifyOn ?? getAlertConfig().thresholds.notifyOn,
-      cooldownMinutes: body.thresholds.cooldownMinutes ?? getAlertConfig().thresholds.cooldownMinutes,
+      notifyOn: body.thresholds.notifyOn ?? currentConfig.thresholds.notifyOn,
+      cooldownMinutes: body.thresholds.cooldownMinutes ?? currentConfig.thresholds.cooldownMinutes,
     } : undefined;
 
-    const updatedConfig = updateAlertConfig({
+    const updatedConfig = await updateAlertConfig({
       webhookUrl: body.webhookUrl,
       enabled: body.enabled,
       thresholds: thresholdsUpdate,
     });
 
-    const history = getAlertHistory();
+    const history = await getAlertHistory();
 
     return NextResponse.json({
       config: updatedConfig,

@@ -1,5 +1,5 @@
 /**
- * Layer 3: Alert Dispatcher
+ * Layer 3: Alert Dispatcher (Redis-backed)
  * Slack/Webhook alert dispatch and cooldown management
  */
 
@@ -12,32 +12,7 @@ import {
   AnomalyResult
 } from '@/types/anomaly';
 import { AISeverity } from '@/types/scaling';
-
-// ============================================================================
-// Configuration Defaults
-// ============================================================================
-
-const DEFAULT_ALERT_CONFIG: AlertConfig = {
-  webhookUrl: process.env.ALERT_WEBHOOK_URL,
-  thresholds: {
-    notifyOn: ['high', 'critical'],
-    cooldownMinutes: 10,
-  },
-  enabled: true,
-};
-
-// ============================================================================
-// In-Memory State
-// ============================================================================
-
-/** Current alert configuration */
-const currentConfig: AlertConfig = { ...DEFAULT_ALERT_CONFIG };
-
-/** Alert dispatch history (last 24 hours) */
-let alertHistory: AlertRecord[] = [];
-
-/** Last alert time per anomaly type */
-const lastAlertByType: Map<string, number> = new Map();
+import { getStore } from '@/lib/redis-store';
 
 // ============================================================================
 // Slack Message Formatting
@@ -169,27 +144,24 @@ function generateUUID(): string {
 /**
  * Check if an anomaly type is in cooldown
  */
-function isInCooldown(anomalyType: string): boolean {
-  const lastAlert = lastAlertByType.get(anomalyType);
+async function isInCooldown(anomalyType: string): Promise<boolean> {
+  const store = getStore();
+  const config = await store.getAlertConfig();
+  const lastAlert = await store.getLastAlertTime(anomalyType);
+
   if (!lastAlert) return false;
 
-  const cooldownMs = currentConfig.thresholds.cooldownMinutes * 60 * 1000;
+  const cooldownMs = config.thresholds.cooldownMinutes * 60 * 1000;
   return Date.now() - lastAlert < cooldownMs;
 }
 
 /**
  * Check if severity level qualifies for notification
  */
-function shouldNotifyForSeverity(severity: AISeverity): boolean {
-  return currentConfig.thresholds.notifyOn.includes(severity);
-}
-
-/**
- * Clean up old alert records (older than 24 hours)
- */
-function cleanupOldAlerts(): void {
-  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-  alertHistory = alertHistory.filter(a => new Date(a.sentAt).getTime() > cutoff);
+async function shouldNotifyForSeverity(severity: AISeverity): Promise<boolean> {
+  const store = getStore();
+  const config = await store.getAlertConfig();
+  return config.thresholds.notifyOn.includes(severity);
 }
 
 // ============================================================================
@@ -209,28 +181,29 @@ export async function dispatchAlert(
   metrics: MetricDataPoint,
   anomalies: AnomalyResult[]
 ): Promise<AlertRecord | null> {
-  cleanupOldAlerts();
+  const store = getStore();
+  const config = await store.getAlertConfig();
 
   // 1. Check if alerts are enabled
-  if (!currentConfig.enabled) {
+  if (!config.enabled) {
     console.log('[AlertDispatcher] Alerts disabled, skipping');
     return null;
   }
 
   // 2. Check severity level
-  if (!shouldNotifyForSeverity(analysis.severity)) {
+  if (!(await shouldNotifyForSeverity(analysis.severity))) {
     console.log(`[AlertDispatcher] Severity ${analysis.severity} not in notify list, skipping`);
     return null;
   }
 
   // 3. Check cooldown
-  if (isInCooldown(analysis.anomalyType)) {
+  if (await isInCooldown(analysis.anomalyType)) {
     console.log(`[AlertDispatcher] Anomaly type ${analysis.anomalyType} in cooldown, skipping`);
     return null;
   }
 
   // 4. Create alert record
-  const channel: AlertChannel = currentConfig.webhookUrl ? 'slack' : 'dashboard';
+  const channel: AlertChannel = config.webhookUrl ? 'slack' : 'dashboard';
   const record: AlertRecord = {
     id: generateUUID(),
     anomaly: anomalies[0], // Representative anomaly
@@ -241,11 +214,11 @@ export async function dispatchAlert(
   };
 
   // 5. Send webhook (if URL configured)
-  if (currentConfig.webhookUrl) {
+  if (config.webhookUrl) {
     try {
       const slackMessage = formatSlackMessage(analysis, metrics, anomalies);
 
-      const response = await fetch(currentConfig.webhookUrl, {
+      const response = await fetch(config.webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(slackMessage),
@@ -269,8 +242,8 @@ export async function dispatchAlert(
   }
 
   // 6. Update state
-  lastAlertByType.set(analysis.anomalyType, Date.now());
-  alertHistory.push(record);
+  await store.setLastAlertTime(analysis.anomalyType, Date.now());
+  await store.addAlertToHistory(record);
 
   return record;
 }
@@ -282,47 +255,56 @@ export async function dispatchAlert(
 /**
  * Get current alert configuration
  */
-export function getAlertConfig(): AlertConfig {
-  return { ...currentConfig };
+export async function getAlertConfig(): Promise<AlertConfig> {
+  const store = getStore();
+  return store.getAlertConfig();
 }
 
 /**
  * Update alert configuration
  */
-export function updateAlertConfig(updates: Partial<AlertConfig>): AlertConfig {
+export async function updateAlertConfig(updates: Partial<AlertConfig>): Promise<AlertConfig> {
+  const store = getStore();
+  const current = await store.getAlertConfig();
+
   if (updates.webhookUrl !== undefined) {
-    currentConfig.webhookUrl = updates.webhookUrl;
+    current.webhookUrl = updates.webhookUrl;
   }
   if (updates.enabled !== undefined) {
-    currentConfig.enabled = updates.enabled;
+    current.enabled = updates.enabled;
   }
   if (updates.thresholds) {
     if (updates.thresholds.notifyOn) {
-      currentConfig.thresholds.notifyOn = updates.thresholds.notifyOn;
+      current.thresholds.notifyOn = updates.thresholds.notifyOn;
     }
     if (updates.thresholds.cooldownMinutes !== undefined) {
-      currentConfig.thresholds.cooldownMinutes = updates.thresholds.cooldownMinutes;
+      current.thresholds.cooldownMinutes = updates.thresholds.cooldownMinutes;
     }
   }
-  return { ...currentConfig };
+
+  await store.setAlertConfig(current);
+  return current;
 }
 
 /**
  * Get alert history (last 24 hours)
  */
-export function getAlertHistory(): AlertRecord[] {
-  cleanupOldAlerts();
-  return [...alertHistory];
+export async function getAlertHistory(): Promise<AlertRecord[]> {
+  const store = getStore();
+  return store.getAlertHistory();
 }
 
 /**
  * Get next available alert time (when in cooldown)
  */
-export function getNextAlertAvailableAt(anomalyType: string): number | null {
-  const lastAlert = lastAlertByType.get(anomalyType);
+export async function getNextAlertAvailableAt(anomalyType: string): Promise<number | null> {
+  const store = getStore();
+  const config = await store.getAlertConfig();
+  const lastAlert = await store.getLastAlertTime(anomalyType);
+
   if (!lastAlert) return null;
 
-  const cooldownMs = currentConfig.thresholds.cooldownMinutes * 60 * 1000;
+  const cooldownMs = config.thresholds.cooldownMinutes * 60 * 1000;
   const nextAvailable = lastAlert + cooldownMs;
 
   return Date.now() < nextAvailable ? nextAvailable : null;
@@ -331,7 +313,7 @@ export function getNextAlertAvailableAt(anomalyType: string): number | null {
 /**
  * Reset alert history (for testing)
  */
-export function clearAlertHistory(): void {
-  alertHistory = [];
-  lastAlertByType.clear();
+export async function clearAlertHistory(): Promise<void> {
+  const store = getStore();
+  await store.clearAlertHistory();
 }
