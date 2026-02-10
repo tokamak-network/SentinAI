@@ -362,6 +362,7 @@ ${content}
         dataCompleteness: data.metadata.dataCompleteness,
         snapshotCount: data.snapshots.length,
         processingTimeMs: Date.now() - startTime,
+        aiModel: aiResult.model,
       },
     };
 
@@ -417,6 +418,7 @@ ${fallbackContent}
         dataCompleteness: data.metadata.dataCompleteness,
         snapshotCount: data.snapshots.length,
         processingTimeMs: Date.now() - startTime,
+        aiModel: 'fallback',
       },
       fallback: {
         enabled: true,
