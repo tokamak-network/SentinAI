@@ -440,6 +440,19 @@ export async function GET(request: Request) {
                     if (alertRecord) {
                       await addAlertRecord(event.id, alertRecord);
                     }
+
+                    // Layer 4: Auto-Remediation trigger (non-blocking, async)
+                    if (process.env.AUTO_REMEDIATION_ENABLED === 'true') {
+                      import('@/lib/remediation-engine')
+                        .then(({ executeRemediation }) => {
+                          executeRemediation(event, analysis).catch(err =>
+                            console.error('[Layer4] Remediation failed:', err)
+                          );
+                        })
+                        .catch(err => {
+                          console.error('[Layer4] Failed to load remediation engine:', err);
+                        });
+                    }
                   } catch (aiError) {
                     const errorMsg = aiError instanceof Error ? aiError.message : 'Unknown error';
                     console.error('[Anomaly] AI analysis failed:', errorMsg);
