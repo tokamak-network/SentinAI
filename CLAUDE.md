@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **SentinAI (Autonomous Node Guardian)** — Monitoring and auto-scaling dashboard for Optimism-based L2 networks.
 
-Real-time web UI with L1/L2 block monitoring, K8s integration, AI-powered log analysis, anomaly detection, root cause analysis, and hybrid auto-scaling engine.
+Real-time web UI with L1/L2 block monitoring, K8s integration, AI-powered log analysis, anomaly detection, root cause analysis, NLOps chat interface, and hybrid auto-scaling engine.
 
 ## Commands
 
@@ -29,22 +29,16 @@ npx vitest run src/lib/__tests__/k8s-scaler.test.ts   # Run single test file
 npx vitest run -t "test name"         # Run specific test by name
 ```
 
-Tests live in `src/lib/__tests__/*.test.ts`. Coverage is scoped to `src/lib/**/*.ts`.
-
-### UI Testing
-
-브라우저 UI 테스트 가이드: `docs/verification/dashboard-ui-testing-guide.md`
-
-대시보드와 NLOps 채팅 UI에 `data-testid` 속성이 설정되어 있어 자동화 테스트에 활용 가능하다.
+Tests: `src/lib/__tests__/*.test.ts` (23 files, 541+ tests). Coverage scoped to `src/lib/**/*.ts`.
 
 ### E2E Verification (Cluster)
 
 ```bash
-npm run verify                       # 실제 클러스터 대상 6단계 검증
-bash scripts/verify-e2e.sh --phase 2 # 특정 Phase만 실행
+npm run verify                       # Full 6-phase cluster verification
+bash scripts/verify-e2e.sh --phase 2 # Run specific phase only
 ```
 
-`scripts/verify-e2e.sh` — 실제 EKS + L2 RPC + AI Provider 환경에서 전체 기능(메트릭 수집, 이상 탐지, 예측, 비용, 보고서, RCA)을 자동 검증한다. Dev server 미실행 시 자동 시작.
+`scripts/verify-e2e.sh` runs against a live EKS + L2 RPC + AI Provider environment. Auto-starts dev server if not running.
 
 ## Architecture
 
@@ -63,72 +57,60 @@ L1/L2 RPC (viem) ──→ /api/metrics ──→ MetricsStore (ring buffer, 60 
                   RCA Engine                         StatefulSet patch / simulate
 ```
 
-### Scaling Decision Logic
+### Core Subsystems
 
-Hybrid score (0–100) = CPU (30%) + Gas (30%) + TxPool (20%) + AI Severity (20%).
+**Scaling Engine** — Hybrid scoring (0–100) = CPU 30% + Gas 30% + TxPool 20% + AI Severity 20%. Three tiers: Idle (<30, 1 vCPU), Normal (30–70, 2 vCPU), High (≥70, 4 vCPU). 5-minute cooldown. Stress mode simulates 8 vCPU.
+- `scaling-decision.ts` → `k8s-scaler.ts` → `zero-downtime-scaler.ts`
+- `predictive-scaler.ts`: AI time-series prediction via fast tier model
 
-| Score   | Target vCPU | Memory   |
-|---------|-------------|----------|
-| < 30    | 1           | 2 GiB   |
-| < 70    | 2           | 4 GiB   |
-| ≥ 70    | 4           | 8 GiB   |
+**3-Layer Anomaly Detection** — Statistical → AI → Alert pipeline:
+1. `anomaly-detector.ts`: Z-Score detection (threshold: Z > 2.5)
+2. `anomaly-ai-analyzer.ts`: AI semantic analysis (fast tier)
+3. `alert-dispatcher.ts`: Slack/Webhook dispatch. Events in `anomaly-event-store.ts` (in-memory).
 
-Stress mode simulates 8 vCPU. 5-minute cooldown between scaling operations.
-
-### 3-Layer Anomaly Detection Pipeline
-
-1. **Layer 1** (`anomaly-detector.ts`): Z-Score statistical detection (threshold: Z > 2.5)
-2. **Layer 2** (`anomaly-ai-analyzer.ts`): AI semantic analysis via ai-client (fast tier)
-3. **Layer 3** (`alert-dispatcher.ts`): Alert dispatch (Slack, Webhook)
-
-Events stored in `anomaly-event-store.ts` (in-memory).
-
-### Zero-Downtime Scaling
-
-`zero-downtime-scaler.ts` — Parallel Pod Swap orchestration:
-```
-idle → creating_standby → waiting_ready → switching_traffic → cleanup → syncing_statefulset → completed
-```
-
-### Optimism Component Dependency Graph (used by RCA)
-
+**RCA Engine** — `rca-engine.ts` traces fault propagation using Optimism component dependency graph:
 ```
 L1 → op-node → op-geth
            → op-batcher → L1
            → op-proposer → L1
 ```
 
-`rca-engine.ts` uses this graph to trace fault propagation across components.
+**NLOps Chat** — Natural language operations interface:
+- `nlops-engine.ts`: 7 intents (query, scale, analyze, config, explain, rca, unknown)
+- `nlops-responder.ts`: AI response generation (fast tier)
+- Dangerous actions (scale, config) require confirmation flow
+
+**Cost & Reporting** — `cost-optimizer.ts` + `usage-tracker.ts` for vCPU cost tracking (AWS Fargate Seoul pricing). `daily-report-generator.ts` + `daily-accumulator.ts` for scheduled reports via `scheduler.ts`.
+
+**AI Client** (`ai-client.ts`) — Unified AI interface. `chatCompletion()` single function for all AI calls.
+- Model tiers: `fast` (haiku/gpt-4.1-mini/gemini-flash-lite), `best` (sonnet-4.5/gpt-4.1/gemini-pro)
+- Priority: Module Override > Gateway (with fallback) > Anthropic > OpenAI > Gemini
+- Gateway 400/401 errors auto-fallback to Anthropic Direct
+- All AI features have graceful degradation (service continues if AI fails)
+
+**State Management** — InMemory default, Redis optional (`REDIS_URL`). `state-store.ts` abstract interface, `redis-store.ts` implementation. MetricsStore, scaling state, anomaly events reset on restart unless Redis configured.
+
+### Zero-Downtime Scaling
+
+`zero-downtime-scaler.ts` — Parallel Pod Swap state machine:
+```
+idle → creating_standby → waiting_ready → switching_traffic → cleanup → syncing_statefulset → completed
+```
 
 ### API Routes (`src/app/api/`)
 
-| Route                    | Methods    | Purpose                                                |
-|--------------------------|------------|--------------------------------------------------------|
-| `metrics/route.ts`       | GET        | L1/L2 blocks, K8s pods, anomaly pipeline. `stress=true` → fast path |
-| `metrics/seed/route.ts`  | POST       | Dev-only: inject mock data (stable/rising/spike/falling/live) |
-| `scaler/route.ts`        | GET/POST/PATCH | Scaling state + AI prediction / execute / configure |
-| `anomalies/route.ts`     | GET        | Anomaly event list                                     |
-| `anomalies/config/route.ts` | GET/PUT | Alert configuration                                    |
-| `rca/route.ts`           | POST       | Root cause analysis execution                          |
-| `health/route.ts`        | GET        | Docker healthcheck                                     |
-
-### Key Libraries (`src/lib/`)
-
-| Module                  | Role                                                            |
-|-------------------------|-----------------------------------------------------------------|
-| `ai-client.ts`          | Unified AI client (Anthropic/OpenAI/Gemini/LiteLLM)             |
-| `scaling-decision.ts`   | Hybrid scoring algorithm → target vCPU                          |
-| `k8s-scaler.ts`         | StatefulSet patch + simulation, cooldown logic                  |
-| `k8s-config.ts`         | kubectl connection: token caching (10min), API URL auto-detect  |
-| `predictive-scaler.ts`  | AI time-series prediction via ai-client (fast tier)             |
-| `metrics-store.ts`      | Ring buffer + stats (mean, stdDev, trend, slope)                |
-| `anomaly-detector.ts`   | Z-Score anomaly detection                                       |
-| `anomaly-ai-analyzer.ts`| AI semantic anomaly analysis                                    |
-| `alert-dispatcher.ts`   | Slack/Webhook alert dispatch                                    |
-| `rca-engine.ts`         | AI root cause analysis with component dependency graph          |
-| `zero-downtime-scaler.ts`| Parallel Pod Swap orchestration                                |
-| `ai-analyzer.ts`        | Log chunk analysis (op-geth, op-node, op-batcher, op-proposer) |
-| `prediction-tracker.ts` | Prediction accuracy tracking                                    |
+| Route                       | Methods        | Purpose                                                |
+|-----------------------------|----------------|--------------------------------------------------------|
+| `metrics/route.ts`          | GET            | L1/L2 blocks, K8s pods, anomaly pipeline. `stress=true` → fast path |
+| `metrics/seed/route.ts`     | POST           | Dev-only: inject mock data (stable/rising/spike/falling/live) |
+| `scaler/route.ts`           | GET/POST/PATCH | Scaling state + AI prediction / execute / configure |
+| `anomalies/route.ts`        | GET            | Anomaly event list                                     |
+| `anomalies/config/route.ts` | GET/PUT        | Alert configuration                                    |
+| `nlops/route.ts`            | POST           | NLOps chat (natural language operations)               |
+| `rca/route.ts`              | POST           | Root cause analysis execution                          |
+| `cost-report/route.ts`      | GET            | Cost optimization report                               |
+| `reports/daily/route.ts`    | GET/POST       | Daily report generation and retrieval                  |
+| `health/route.ts`           | GET            | Docker healthcheck                                     |
 
 ### Types (`src/types/`)
 
@@ -137,66 +119,26 @@ L1 → op-node → op-geth
 - `anomaly.ts`: `AnomalyResult`, `DeepAnalysisResult`, `AlertConfig`, `AnomalyEvent`
 - `rca.ts`: `RCAResult`, `RCAEvent`, `RCAComponent`, `RemediationAdvice`
 - `zero-downtime.ts`: `SwapPhase`, `SwapState`, `ZeroDowntimeResult`
+- `nlops.ts`: `NLOpsIntent`, `NLOpsResult`, `ChatMessage`
+- `cost.ts`: Cost optimization types
+- `daily-report.ts`: Daily report types
+- `redis.ts`: Redis state store types
 
 ### UI
 
-Single-page dashboard (`src/app/page.tsx`, ~985 lines). All UI is inline — `src/components/` is currently empty. Uses `AbortController` for high-frequency polling optimization.
+Single-page dashboard (`src/app/page.tsx`, ~1186 lines). All UI is inline — no components extracted to `src/components/`. Uses `AbortController` for high-frequency polling. NLOps chat panel integrated with `data-testid` attributes for test automation.
 
-## Documentation (`docs/`)
-
-```
-docs/
-├── README.md                          # 문서 개요
-├── todo.md                            # 작업 계획 (CI/CD, Proposal 8-9)
-├── done/                              # 구현 완료된 제안서 (7개)
-│   ├── proposal-1-predictive-scaling.md
-│   ├── proposal-2-anomaly-detection.md
-│   ├── proposal-3-rca-engine.md
-│   ├── proposal-4-cost-optimizer.md
-│   ├── proposal-5-nlops.md
-│   ├── proposal-6-zero-downtime-scaling.md
-│   └── proposal-7-redis-state-store.md
-├── spec/                              # 구현 명세서 (AI 에이전트용)
-│   ├── anomaly-detection-guide.md
-│   ├── daily-report-spec.md
-│   ├── rca-engine-guide.md
-│   └── zero-downtime-scaling-spec.md
-├── todo/                              # 미구현 제안서 (2개)
-│   ├── proposal-8-auto-remediation.md
-│   └── universal-blockchain-platform.md
-└── verification/                      # 검증 보고서 (13개)
-    ├── daily-report-verification.md
-    ├── daily-report-verification-report.md
-    ├── dashboard-ui-testing-guide.md
-    ├── integration-test-report.md
-    ├── predictive-scaling-verification.md
-    ├── predictive-scaling-verification-report.md
-    ├── proposal-2-3-verification-report.md
-    ├── proposal-2-test-results.md
-    ├── proposal-5-nlops-verification-report.md
-    ├── proposal-6-verification-report.md
-    ├── seed-ui-verification.md
-    ├── seed-ui-verification-report.md
-    ├── testing-guide.md
-    └── unit-test-coverage-report.md
-```
-
-- **done/**: 구현이 완료된 제안서 (1-7, 88%)
-- **spec/**: 상세 구현 명세서 (AI 에이전트가 추가 질문 없이 구현 가능한 수준)
-- **todo/**: 아직 구현되지 않은 제안서 (8-9)
-- **verification/**: 각 구현의 검증 결과 보고서 (13개)
+Browser UI testing guide: `docs/verification/dashboard-ui-testing-guide.md`
 
 ## Key Patterns
 
 - **Import alias**: `@/*` → `./src/*`
 - **Dual-mode**: Real K8s cluster data or mock fallback for development
-- **AI Client**: `src/lib/ai-client.ts` — 통합 AI 클라이언트. Anthropic/OpenAI/Gemini 직접 API + LiteLLM Gateway 지원. `chatCompletion()` 단일 함수로 모든 AI 호출 처리. Model tier: `fast` (haiku/gpt-4.1-mini/gemini-flash-lite), `best` (opus/gpt-4.1/gemini-pro)
-  - **Resilience**: LiteLLM Gateway 실패 시 자동으로 Anthropic Direct로 폴백 (400/401 감지)
-  - **Priority**: Module Override > Gateway (fallback 포함) > Anthropic > OpenAI > Gemini
-- **In-memory state**: MetricsStore, scaling state, anomaly events reset on server restart unless Redis configured (see `REDIS_URL`)
-- **Daily Reports**: AI 실패 시 데이터 기반 Fallback 보고서 자동 생성 (API 200 응답, 사용자 경험 무중단)
-- **Cost basis**: AWS Fargate Seoul pricing ($0.04656/vCPU-hour, $0.00511/GB-hour)
 - **Simulation mode**: `SCALING_SIMULATION_MODE=true` by default (no real K8s changes)
+- **AI resilience**: Every AI feature has a non-AI fallback path (e.g., daily reports generate data-based fallback if AI fails)
+- **Cost basis**: AWS Fargate Seoul pricing ($0.04656/vCPU-hour, $0.00511/GB-hour)
+- **Ring buffer**: MetricsStore holds 60 data points with stats (mean, stdDev, trend, slope)
+- **AI response parsing**: `ai-response-parser.ts` extracts structured JSON from AI text responses (handles markdown code blocks, partial JSON)
 
 ## Environment Variables
 
@@ -206,61 +148,48 @@ cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 
 ### Required
 
-| 변수 | 설명 |
-|------|------|
+| Variable | Description |
+|----------|-------------|
 | `L2_RPC_URL` | L2 Chain RPC endpoint |
-| AI API Key (택 1) | 아래 AI Provider 섹션 참조 |
-| `AWS_CLUSTER_NAME` | EKS cluster (K8S_API_URL & region 자동 감지) |
+| AI API Key (one of) | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` |
+| `AWS_CLUSTER_NAME` | EKS cluster name (auto-detects K8S_API_URL & region) |
 
-### AI Provider (택 1)
+### AI Provider Priority
 
-`ai-client.ts`가 환경변수를 확인하여 프로바이더를 자동 감지한다. API 키만 설정하면 해당 프로바이더의 공식 API 서버로 직접 연결된다.
+`ai-client.ts` auto-detects provider from env vars. Set only the API key — it connects to the official API server directly.
 
-| 우선순위 | 환경변수 | 프로바이더 | 엔드포인트 | fast 모델 | best 모델 |
-|---------|---------|-----------|-----------|----------|----------|
-| 1 | `AI_GATEWAY_URL` + API Key | LiteLLM Gateway | 설정된 URL | `claude-haiku-4.5` | `claude-sonnet-4-5-20250929` |
-| 2 | `ANTHROPIC_API_KEY` | Anthropic Direct | `api.anthropic.com` | `claude-haiku-4-5-20251001` | `claude-sonnet-4-5-20250929` |
-| 3 | `OPENAI_API_KEY` | OpenAI Direct | `api.openai.com` | `gpt-4.1-mini` | `gpt-4.1` |
-| 4 | `GEMINI_API_KEY` | Gemini Direct | `generativelanguage.googleapis.com` | `gemini-2.5-flash-lite` | `gemini-2.5-pro` |
-
-```bash
-# 예시 1: Anthropic 직접 연결 (권장)
-ANTHROPIC_API_KEY=sk-ant-...
-
-# 예시 2: OpenAI 직접 연결
-OPENAI_API_KEY=sk-...
-
-# 예시 3: Gemini 직접 연결
-GEMINI_API_KEY=AIza...
-
-# 예시 4: LiteLLM Gateway 경유 (레거시)
-AI_GATEWAY_URL=https://api.ai.tokamak.network
-ANTHROPIC_API_KEY=your-litellm-key
-```
-
-`AI_GATEWAY_URL`이 설정되면 직접 API보다 우선한다. 미설정 시 API 키 종류에 따라 공식 서버로 자동 연결.
-
-**LiteLLM Gateway 복원력 (2026-02-10 추가):**
-- Gateway 400/401 에러 발생 시 자동으로 Anthropic Direct로 폴백
-- 모든 AI 호출 (anomaly detection, cost reports, daily reports) 계속 작동
-- 사용자 개입 불필요 — 시스템이 자동으로 대체 경로 사용
+| Priority | Env Var | Provider | fast model | best model |
+|----------|---------|----------|------------|------------|
+| 1 | `AI_GATEWAY_URL` + Key | LiteLLM Gateway | `claude-haiku-4.5` | `claude-sonnet-4-5-20250929` |
+| 2 | `ANTHROPIC_API_KEY` | Anthropic Direct | `claude-haiku-4-5-20251001` | `claude-sonnet-4-5-20250929` |
+| 3 | `OPENAI_API_KEY` | OpenAI Direct | `gpt-4.1-mini` | `gpt-4.1` |
+| 4 | `GEMINI_API_KEY` | Gemini Direct | `gemini-2.5-flash-lite` | `gemini-2.5-pro` |
 
 ### Optional
 
-| 변수 | 기본값 | 설명 |
-|------|--------|------|
-| `AI_GATEWAY_URL` | — | LiteLLM Gateway URL (설정 시 직접 API 대신 Gateway 사용) |
-| `AWS_PROFILE` | — | AWS CLI 프로필 (멀티 계정/credential 분리 시) |
-| `K8S_NAMESPACE` | `default` | L2 Pod가 배포된 네임스페이스 |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AI_GATEWAY_URL` | — | LiteLLM Gateway URL (overrides direct API when set) |
+| `AWS_PROFILE` | — | AWS CLI profile for multi-account setups |
+| `K8S_NAMESPACE` | `default` | Namespace where L2 pods are deployed |
 | `K8S_APP_PREFIX` | `op` | Pod label prefix (`app=op-geth`) |
-| `K8S_API_URL` | 자동 감지 | K8s API URL 수동 지정 |
-| `K8S_INSECURE_TLS` | `false` | TLS 검증 건너뛰기 (개발 전용) |
-| `REDIS_URL` | — | Redis 상태 저장소 (미설정 시 인메모리) |
-| `ALERT_WEBHOOK_URL` | — | 이상 탐지 알림 Slack/Webhook URL |
-| `COST_TRACKING_ENABLED` | `true` | vCPU 사용 패턴 추적 (`false`로 비활성화) |
-| `SCALING_SIMULATION_MODE` | `true` | 실제 K8s 변경 없이 시뮬레이션 |
+| `K8S_API_URL` | auto-detect | Manual K8s API URL override |
+| `K8S_INSECURE_TLS` | `false` | Skip TLS verification (dev only) |
+| `REDIS_URL` | — | Redis state store (in-memory if unset) |
+| `ALERT_WEBHOOK_URL` | — | Slack/Webhook URL for anomaly alerts |
+| `COST_TRACKING_ENABLED` | `true` | vCPU usage pattern tracking |
+| `SCALING_SIMULATION_MODE` | `true` | Simulate K8s changes without real patches |
 
-상세 설정 가이드: `ENV_GUIDE.md`
+Full env guide: `ENV_GUIDE.md`
+
+## Documentation
+
+- `docs/done/`: Completed proposals (1–7, implementation details)
+- `docs/spec/`: Implementation specs for AI agent consumption
+- `docs/todo/`: Unimplemented proposals (8: Auto-Remediation, 9: Universal Blockchain Platform)
+- `docs/verification/`: Test and verification reports
+- `FEATURES.md`: Complete feature inventory
+- `ARCHITECTURE.md`: System architecture with diagrams
 
 ## Deployment
 
@@ -268,8 +197,8 @@ Docker container only — **Vercel/serverless NOT supported** (requires kubectl 
 
 3-stage multi-stage Dockerfile: deps → builder → runner (node:20-alpine). Healthcheck: `GET /api/health`.
 
-See `README.md` for full Docker/K8s/EC2 deployment instructions.
+See `README.md` for Docker/K8s/EC2/Cloudflare Tunnel deployment instructions.
 
 ## Tech Stack
 
-Next.js 16, React 19, TypeScript (strict), viem, Recharts, Tailwind CSS 4, Lucide icons, Vitest
+Next.js 16, React 19, TypeScript (strict), viem, Recharts, Tailwind CSS 4, Lucide icons, Vitest, ioredis
