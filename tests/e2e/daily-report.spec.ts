@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { seedMetrics, waitForMetricsUpdate } from './helpers/seed-data';
 
 test.describe('Daily Report Generation', () => {
   test('should have all required metric Test IDs', async ({ page }) => {

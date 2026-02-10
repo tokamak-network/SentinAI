@@ -1,0 +1,11 @@
+# Auto-generated files
+coverage/
+.next/
+dist/
+build/
+
+# Dependencies
+node_modules/
+
+# Config
+.turbo/

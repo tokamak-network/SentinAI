@@ -1,5 +1,4 @@
 import { test, expect } from '@playwright/test';
-import { seedStableData, seedMetrics, waitForCostReport } from './helpers/seed-data';
 
 test.describe('Usage Heatmap Visualization', () => {
   test('should have heatmap Test IDs in page structure', async ({ page }) => {

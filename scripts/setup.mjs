@@ -130,7 +130,7 @@ async function testAIConnection(apiKey, provider, gatewayUrl = null) {
       });
       return response.ok;
     }
-  } catch (e) {
+  } catch {
     return false;
   }
   return false;

@@ -16,7 +16,7 @@ test.describe('Anomaly Detection Pipeline', () => {
       await waitForMetricsUpdate(page, 5000).catch(() => {
         // It's ok if this times out - just means anomaly wasn't detected
       });
-    } catch (e) {
+    } catch {
       // Seed may fail, continue with test
       console.log('Seed failed, continuing test');
     }
@@ -44,7 +44,7 @@ test.describe('Anomaly Detection Pipeline', () => {
     try {
       await seedMetrics(page, 'spike');
       await waitForMetricsUpdate(page, 3000).catch(() => null);
-    } catch (e) {
+    } catch {
       console.log('Seed attempt failed');
     }
 
