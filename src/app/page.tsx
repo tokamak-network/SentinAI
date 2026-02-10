@@ -1058,6 +1058,7 @@ export default function Dashboard() {
       {/* Chat Toggle Button */}
       {!chatOpen && (
         <button
+          data-testid="chat-toggle"
           onClick={() => setChatOpen(true)}
           className="fixed bottom-6 right-6 bg-slate-900 text-white rounded-full p-4 shadow-xl hover:bg-slate-800 transition-all hover:scale-105 z-50 flex items-center gap-2"
         >
@@ -1068,7 +1069,7 @@ export default function Dashboard() {
 
       {/* Chat Panel */}
       {chatOpen && (
-        <div className="fixed bottom-0 right-6 w-96 bg-white rounded-t-2xl shadow-2xl border border-gray-200 z-50 flex flex-col max-h-[600px]">
+        <div data-testid="chat-panel" className="fixed bottom-0 right-6 w-96 bg-white rounded-t-2xl shadow-2xl border border-gray-200 z-50 flex flex-col max-h-[600px]">
           {/* Header */}
           <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-slate-900 rounded-t-2xl">
             <div className="flex items-center gap-3">
@@ -1080,21 +1081,21 @@ export default function Dashboard() {
                 <p className="text-[10px] text-gray-400">자연어로 시스템을 제어하세요</p>
               </div>
             </div>
-            <button onClick={() => setChatOpen(false)} className="text-gray-400 hover:text-white transition-colors p-1">
+            <button data-testid="chat-close" onClick={() => setChatOpen(false)} className="text-gray-400 hover:text-white transition-colors p-1">
               <ChevronDown size={20} />
             </button>
           </div>
 
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px] max-h-[400px] bg-gray-50">
+          <div data-testid="chat-messages" className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px] max-h-[400px] bg-gray-50">
             {chatMessages.length === 0 && (
-              <div className="text-center text-gray-400 mt-8">
+              <div data-testid="chat-welcome" className="text-center text-gray-400 mt-8">
                 <Bot size={40} className="mx-auto mb-3 opacity-50" />
                 <p className="text-sm">안녕하세요! SentinAI 어시스턴트입니다.</p>
                 <p className="text-xs mt-1">아래 예시를 클릭하거나 직접 입력해보세요.</p>
                 <div className="flex flex-wrap gap-2 justify-center mt-4">
                   {['현재 상태', '로그 분석 해줘', '비용 확인'].map((example) => (
-                    <button key={example} onClick={() => sendChatMessage(example)}
+                    <button key={example} data-testid={`chat-example-${example}`} onClick={() => sendChatMessage(example)}
                       className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded-full hover:border-blue-300 hover:text-blue-600 transition-colors">
                       {example}
                     </button>
@@ -1104,7 +1105,7 @@ export default function Dashboard() {
             )}
 
             {chatMessages.map((msg) => (
-              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div key={msg.id} data-testid={`chat-msg-${msg.role}`} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`max-w-[85%] ${
                   msg.role === 'user'
                     ? 'bg-blue-500 text-white rounded-2xl rounded-br-md'
@@ -1126,7 +1127,7 @@ export default function Dashboard() {
             ))}
 
             {isSending && (
-              <div className="flex justify-start">
+              <div data-testid="chat-loading" className="flex justify-start">
                 <div className="bg-white text-gray-500 rounded-2xl rounded-bl-md border border-gray-100 shadow-sm px-4 py-3">
                   <div className="flex items-center gap-1">
                     <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
@@ -1141,14 +1142,14 @@ export default function Dashboard() {
 
           {/* Confirmation */}
           {pendingConfirmation && (
-            <div className="px-4 py-3 bg-yellow-50 border-t border-yellow-100">
-              <p className="text-sm text-yellow-800 mb-2 font-medium">{pendingConfirmation.message}</p>
+            <div data-testid="chat-confirmation" className="px-4 py-3 bg-yellow-50 border-t border-yellow-100">
+              <p data-testid="chat-confirmation-msg" className="text-sm text-yellow-800 mb-2 font-medium">{pendingConfirmation.message}</p>
               <div className="flex gap-2">
-                <button onClick={handleConfirm} disabled={isSending}
+                <button data-testid="chat-confirm-btn" onClick={handleConfirm} disabled={isSending}
                   className="flex-1 bg-blue-500 text-white text-sm font-semibold py-2 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50">
                   확인
                 </button>
-                <button onClick={handleCancel} disabled={isSending}
+                <button data-testid="chat-cancel-btn" onClick={handleCancel} disabled={isSending}
                   className="flex-1 bg-gray-200 text-gray-700 text-sm font-semibold py-2 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50">
                   취소
                 </button>
@@ -1159,11 +1160,11 @@ export default function Dashboard() {
           {/* Input */}
           <div className="p-4 border-t border-gray-100 bg-white rounded-b-none">
             <div className="flex items-center gap-2">
-              <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)}
+              <input data-testid="chat-input" type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={handleChatKeyDown} placeholder="명령을 입력하세요..."
                 disabled={isSending || !!pendingConfirmation}
                 className="flex-1 bg-gray-100 border-none rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
-              <button onClick={() => sendChatMessage(chatInput)}
+              <button data-testid="chat-send" onClick={() => sendChatMessage(chatInput)}
                 disabled={isSending || !chatInput.trim() || !!pendingConfirmation}
                 className="bg-blue-500 text-white p-3 rounded-xl hover:bg-blue-600 transition-colors disabled:opacity-50">
                 <Send size={18} />
