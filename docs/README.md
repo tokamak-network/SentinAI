@@ -10,13 +10,31 @@ AI 모델을 활용한 모니터링, 스케일링, 보안, 예측, 운영 자동
 
 | # | 제안 | 상태 | 문서 |
 |---|------|------|------|
-| 1 | **Predictive Scaling** — 시계열 분석 기반 선제적 스케일링 | 구현 완료 | [상세](proposals/proposal-1-predictive-scaling.md) |
-| 2 | **Anomaly Detection** — 다층 이상 탐지 파이프라인 | 명세 완료 | [상세](proposals/proposal-2-anomaly-detection.md) |
-| 3 | **Root Cause Analysis** — 장애 근본 원인 자동 분석 | 명세 완료 | [상세](proposals/proposal-3-rca-engine.md) |
-| 4 | **AI Cost Optimizer** — Fargate 비용 최적화 엔진 | 명세 완료 | [상세](proposals/proposal-4-cost-optimizer.md) |
-| 5 | **Natural Language Ops** — 자연어 기반 운영 인터페이스 | 명세 완료 | [상세](proposals/proposal-5-nlops.md) |
-| 6 | **Zero-Downtime Scaling** — 무중단 수직 스케일링 전략 | 명세 완료 | [상세](proposals/proposal-6-zero-downtime-scaling.md) |
-| 7 | **Redis State Store** — 상태 영속성 계층 (Redis/InMemory 이중 구현) | 명세 완료 | [상세](proposals/proposal-7-redis-state-store.md) |
+| 1 | **Predictive Scaling** — 시계열 분석 기반 선제적 스케일링 | 구현 완료 | [상세](done/proposal-1-predictive-scaling.md) |
+| 2 | **Anomaly Detection** — 다층 이상 탐지 파이프라인 | 구현 완료 | [상세](done/proposal-2-anomaly-detection.md) |
+| 3 | **Root Cause Analysis** — 장애 근본 원인 자동 분석 | 구현 완료 | [상세](done/proposal-3-rca-engine.md) |
+| 4 | **AI Cost Optimizer** — Fargate 비용 최적화 엔진 | 구현 완료 | [상세](done/proposal-4-cost-optimizer.md) |
+| 5 | **Natural Language Ops** — 자연어 기반 운영 인터페이스 | 구현 완료 | [상세](done/proposal-5-nlops.md) |
+| 6 | **Zero-Downtime Scaling** — 무중단 수직 스케일링 전략 | 구현 완료 | [상세](done/proposal-6-zero-downtime-scaling.md) |
+| 7 | **Redis State Store** — 상태 영속성 계층 (Redis/InMemory 이중 구현) | 구현 완료 | [상세](done/proposal-7-redis-state-store.md) |
+
+## Testing
+
+### Unit Tests
+- **통과율**: 541개 테스트 100% 통과 (23개 파일)
+- **커버리지**:
+  - 전체: ~51%
+  - 핵심 모듈: ~70%
+- **실행**: `npm run test:run`
+- **커버리지 리포트**: `npm run test:coverage`
+
+### E2E Verification (클러스터)
+- **스크립트**: `scripts/verify-e2e.sh`
+- **대상**: 실제 EKS + L2 RPC + AI Provider
+- **6 Phase 검증**: 메트릭 수집 → 이상 탐지 → 예측 → 비용 → 보고서 → RCA
+- **실행**: `npm run verify` 또는 `bash scripts/verify-e2e.sh --phase 2`
+
+---
 
 ## Verification
 
@@ -28,3 +46,14 @@ AI 모델을 활용한 모니터링, 스케일링, 보안, 예측, 운영 자동
 | Predictive Scaling | 실행 결과 | [상세](verification/predictive-scaling-verification-report.md) |
 | Seed UI (Mock 데이터 검증) | 검증 가이드 | [상세](verification/seed-ui-verification.md) |
 | Seed UI (Mock 데이터 검증) | 실행 결과 | [상세](verification/seed-ui-verification-report.md) |
+
+---
+
+## Future Work
+
+미래 작업 로드맵 및 계획 중인 Proposal들.
+
+| # | 제안 | 상태 | 문서 |
+|---|------|------|------|
+| 8 | **Auto-Remediation Engine** — RCA 기반 자동 복구 루프 및 Playbook 시스템 | 계획 중 | [상세](../todo/proposal-8-auto-remediation.md) |
+| — | **Universal Blockchain Platform** — Optimism 외 L2/L1 체인 확장 (Arbitrum, zkSync 등) | 계획 중 | [상세](../todo/universal-blockchain-platform.md) |

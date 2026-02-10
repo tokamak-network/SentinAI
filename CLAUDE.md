@@ -146,33 +146,45 @@ Single-page dashboard (`src/app/page.tsx`, ~985 lines). All UI is inline — `sr
 
 ```
 docs/
-├── README.md                          ← 문서 개요
-├── done/                              ← 구현 완료된 제안서
+├── README.md                          # 문서 개요
+├── todo.md                            # 작업 계획 (CI/CD, Proposal 8-9)
+├── done/                              # 구현 완료된 제안서 (7개)
 │   ├── proposal-1-predictive-scaling.md
 │   ├── proposal-2-anomaly-detection.md
 │   ├── proposal-3-rca-engine.md
-│   └── proposal-4-cost-optimizer.md
-├── spec/                              ← 구현 명세서 (AI 에이전트용)
-│   ├── daily-report-spec.md
-│   └── zero-downtime-scaling-spec.md
-├── todo/                              ← 미구현 제안서
+│   ├── proposal-4-cost-optimizer.md
 │   ├── proposal-5-nlops.md
 │   ├── proposal-6-zero-downtime-scaling.md
 │   └── proposal-7-redis-state-store.md
-└── verification/                      ← 구현 검증 보고서
+├── spec/                              # 구현 명세서 (AI 에이전트용)
+│   ├── anomaly-detection-guide.md
+│   ├── daily-report-spec.md
+│   ├── rca-engine-guide.md
+│   └── zero-downtime-scaling-spec.md
+├── todo/                              # 미구현 제안서 (2개)
+│   ├── proposal-8-auto-remediation.md
+│   └── universal-blockchain-platform.md
+└── verification/                      # 검증 보고서 (13개)
     ├── daily-report-verification.md
+    ├── daily-report-verification-report.md
+    ├── dashboard-ui-testing-guide.md
+    ├── integration-test-report.md
     ├── predictive-scaling-verification.md
     ├── predictive-scaling-verification-report.md
     ├── proposal-2-3-verification-report.md
+    ├── proposal-2-test-results.md
+    ├── proposal-5-nlops-verification-report.md
     ├── proposal-6-verification-report.md
     ├── seed-ui-verification.md
-    └── seed-ui-verification-report.md
+    ├── seed-ui-verification-report.md
+    ├── testing-guide.md
+    └── unit-test-coverage-report.md
 ```
 
-- **done/**: 구현이 완료된 제안서. 이동 시 `todo/` → `done/`
-- **spec/**: 상세 구현 명세서. AI 에이전트가 추가 질문 없이 구현 가능한 수준
-- **todo/**: 아직 구현되지 않은 제안서
-- **verification/**: 각 구현의 검증 결과 보고서
+- **done/**: 구현이 완료된 제안서 (1-7, 88%)
+- **spec/**: 상세 구현 명세서 (AI 에이전트가 추가 질문 없이 구현 가능한 수준)
+- **todo/**: 아직 구현되지 않은 제안서 (8-9)
+- **verification/**: 각 구현의 검증 결과 보고서 (13개)
 
 ## Key Patterns
 
