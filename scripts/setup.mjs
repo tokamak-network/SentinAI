@@ -75,7 +75,69 @@ async function selectSetupMode() {
 }
 
 // ============================================================
-// Quick Setup (5 prompts total)
+// AI Connection Test
+// ============================================================
+
+async function testAIConnection(apiKey, provider, gatewayUrl = null) {
+  const baseUrl = gatewayUrl || (
+    provider === 'anthropic' ? 'https://api.anthropic.com' :
+    provider === 'openai' ? 'https://api.openai.com' :
+    'https://generativelanguage.googleapis.com'
+  );
+
+  try {
+    if (provider === 'anthropic') {
+      const response = await fetch(`${baseUrl}/v1/messages`, {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-haiku-4-5-20251001',
+          max_tokens: 10,
+          messages: [{ role: 'user', content: 'Hi' }],
+        }),
+      });
+      return response.ok;
+    } else if (provider === 'openai') {
+      const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-4.1-mini',
+          max_tokens: 10,
+          messages: [{ role: 'user', content: 'Hi' }],
+        }),
+      });
+      return response.ok;
+    } else if (provider === 'gemini') {
+      const response = await fetch(`${baseUrl}/v1beta/openai/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'x-goog-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gemini-2.5-flash-lite',
+          max_tokens: 10,
+          messages: [{ role: 'user', content: 'Hi' }],
+        }),
+      });
+      return response.ok;
+    }
+  } catch (e) {
+    return false;
+  }
+  return false;
+}
+
+// ============================================================
+// Quick Setup (Simplified AI Flow)
 // ============================================================
 
 async function quickSetup() {
@@ -90,32 +152,92 @@ async function quickSetup() {
     return true;
   });
 
-  // 2. AI Provider
+  // 2. AI Gateway 사용 여부
   console.log("");
-  console.log("  AI Providers: anthropic | openai | gemini");
-  const provider = await askOptional("▸ AI Provider", "anthropic");
+  console.log("  === AI Configuration ===");
+  console.log("  모델 우선순위: Claude > GPT > Gemini");
+  console.log("");
+  const useGateway = await askYesNo("▸ AI Gateway 서버 사용?", true);
 
-  // 3. API Key
-  const providerName = provider.toLowerCase().trim();
-  if (providerName === "anthropic" || providerName === "claude") {
-    env.ANTHROPIC_API_KEY = await askRequired("▸ Anthropic API Key: ");
-  } else if (providerName === "openai" || providerName === "gpt") {
-    env.OPENAI_API_KEY = await askRequired("▸ OpenAI API Key: ");
-  } else if (providerName === "gemini") {
-    env.GEMINI_API_KEY = await askRequired("▸ Gemini API Key: ");
-  } else {
-    // Default to Anthropic
-    env.ANTHROPIC_API_KEY = await askRequired("▸ Anthropic API Key: ");
+  if (useGateway) {
+    // Gateway URL 입력
+    env.AI_GATEWAY_URL = await askRequired("▸ Gateway URL: ", (v) => {
+      if (!isValidUrl(v)) {
+        console.log("  URL must start with http:// or https://.");
+        return false;
+      }
+      return true;
+    });
+    console.log("  ℹ️  Gateway 사용 시에도 API Key가 필요합니다.");
+  }
+
+  // 3. API Key 입력 (우선순위 순서대로 시도)
+  console.log("");
+  console.log("  API Key를 입력하세요 (우선순위: Claude > GPT > Gemini)");
+  console.log("  하나만 입력해도 됩니다.");
+  console.log("");
+
+  // Claude (1순위)
+  const anthropicKey = await askOptional("▸ Anthropic API Key (Claude)");
+  if (anthropicKey) {
+    process.stdout.write("  🔄 연결 테스트 중...");
+    const ok = await testAIConnection(anthropicKey, 'anthropic', env.AI_GATEWAY_URL);
+    if (ok) {
+      console.log(" ✅ 성공!");
+      env.ANTHROPIC_API_KEY = anthropicKey;
+    } else {
+      console.log(" ❌ 실패 - 키를 확인하세요.");
+    }
+  }
+
+  // GPT (2순위) - Claude 없을 때만 필수
+  if (!env.ANTHROPIC_API_KEY) {
+    const openaiKey = await askOptional("▸ OpenAI API Key (GPT)");
+    if (openaiKey) {
+      process.stdout.write("  🔄 연결 테스트 중...");
+      const ok = await testAIConnection(openaiKey, 'openai', env.AI_GATEWAY_URL);
+      if (ok) {
+        console.log(" ✅ 성공!");
+        env.OPENAI_API_KEY = openaiKey;
+      } else {
+        console.log(" ❌ 실패 - 키를 확인하세요.");
+      }
+    }
+  }
+
+  // Gemini (3순위) - 위 둘 다 없을 때만 필수
+  if (!env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY) {
+    const geminiKey = await askOptional("▸ Gemini API Key");
+    if (geminiKey) {
+      process.stdout.write("  🔄 연결 테스트 중...");
+      const ok = await testAIConnection(geminiKey, 'gemini', env.AI_GATEWAY_URL);
+      if (ok) {
+        console.log(" ✅ 성공!");
+        env.GEMINI_API_KEY = geminiKey;
+      } else {
+        console.log(" ❌ 실패 - 키를 확인하세요.");
+      }
+    }
+  }
+
+  // 최소 하나의 API 키 필요
+  if (!env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY && !env.GEMINI_API_KEY) {
+    console.log("");
+    console.log("  ⚠️  최소 하나의 유효한 API Key가 필요합니다.");
+    console.log("  다시 시도하세요.");
+    return quickSetup();  // 재시도
   }
 
   // 4. K8s Monitoring (optional)
   console.log("");
   const setupK8s = await askYesNo("▸ Setup K8s monitoring?", true);
   if (setupK8s) {
-    const cluster = await askRequired("▸ EKS Cluster Name: ");
-    env.AWS_CLUSTER_NAME = cluster;
-    env.K8S_NAMESPACE = await askOptional("▸ K8s Namespace", "default");
-    env.K8S_APP_PREFIX = await askOptional("▸ K8s App Prefix", "op");
+    const cluster = await askOptional("▸ EKS Cluster Name");
+    if (cluster && cluster.trim()) {
+      env.AWS_CLUSTER_NAME = cluster;
+      env.K8S_NAMESPACE = await askOptional("▸ K8s Namespace", "default");
+      env.K8S_APP_PREFIX = await askOptional("▸ K8s App Prefix", "op");
+    }
   }
 
   // Defaults (no user input)
