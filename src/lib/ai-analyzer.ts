@@ -58,7 +58,6 @@ export async function analyzeLogChunk(logs: Record<string, string> | string): Pr
             userPrompt: userContent,
             modelTier: 'fast',
             temperature: 0.2,
-            moduleName: 'LOG_ANALYZER',
         });
 
         const content = result.content || '{}';

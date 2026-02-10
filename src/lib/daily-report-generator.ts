@@ -317,7 +317,6 @@ export async function generateDailyReport(
       modelTier: 'best',
       temperature: 0.3,
       maxTokens: 4096,
-      moduleName: 'REPORT',
     });
 
     const content = aiResult.content || '';

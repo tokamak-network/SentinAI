@@ -241,7 +241,6 @@ Analyze these anomalies and provide your assessment.`;
       userPrompt,
       modelTier: 'fast',
       temperature: 0.2,
-      moduleName: 'ANOMALY',
     });
 
     const content = aiResult.content || '{}';

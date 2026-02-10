@@ -41,18 +41,18 @@ describe('ai-client', () => {
         systemPrompt: 'test',
         userPrompt: 'test',
         modelTier: 'fast',
-      })).rejects.toThrow('AI 프로바이더가 설정되지 않았습니다');
+      })).rejects.toThrow('AI API 키가 설정되지 않았습니다');
     });
 
-    it('should use LiteLLM when AI_GATEWAY_URL is set', async () => {
+    it('should route through gateway when AI_GATEWAY_URL is set', async () => {
       process.env.AI_GATEWAY_URL = 'https://gateway.example.com';
       process.env.ANTHROPIC_API_KEY = 'test-key';
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          choices: [{ message: { content: 'response' } }],
-          usage: { prompt_tokens: 10, completion_tokens: 20 },
+          content: [{ type: 'text', text: 'response' }],
+          usage: { input_tokens: 10, output_tokens: 20 },
         }),
       });
 
@@ -63,17 +63,17 @@ describe('ai-client', () => {
         modelTier: 'fast',
       });
 
-      expect(result.provider).toBe('litellm');
-      expect(result.model).toBe('claude-3-5-haiku-20241022');
+      expect(result.provider).toBe('anthropic');
+      expect(result.model).toBe('claude-haiku-4-5-20251001');
       expect(result.content).toBe('response');
 
-      // Verify fetch was called with gateway URL
+      // Verify fetch was called with gateway URL (Anthropic endpoint)
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://gateway.example.com/v1/chat/completions',
+        'https://gateway.example.com/v1/messages',
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Authorization': 'Bearer test-key',
+            'x-api-key': 'test-key',
           }),
         }),
       );
@@ -187,7 +187,7 @@ describe('ai-client', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          content: [{ type: 'text', text: 'opus response' }],
+          content: [{ type: 'text', text: 'sonnet response' }],
         }),
       });
 
@@ -198,11 +198,11 @@ describe('ai-client', () => {
         modelTier: 'best',
       });
 
-      expect(result.model).toBe('claude-opus-4-6');
+      expect(result.model).toBe('claude-sonnet-4-5-20251022');
 
       // Verify model in request body
       const fetchBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(fetchBody.model).toBe('claude-opus-4-6');
+      expect(fetchBody.model).toBe('claude-sonnet-4-5-20251022');
     });
 
     it('should map OpenAI best tier to gpt-4.1', async () => {
@@ -347,7 +347,7 @@ describe('ai-client', () => {
         systemPrompt: 'sys',
         userPrompt: 'user',
         modelTier: 'fast',
-      })).rejects.toThrow('AI API error 429: Too Many Requests');
+      })).rejects.toThrow('Anthropic API error 429');
     });
 
     it('should throw when gateway URL set but no API key', async () => {
@@ -359,7 +359,7 @@ describe('ai-client', () => {
         systemPrompt: 'sys',
         userPrompt: 'user',
         modelTier: 'fast',
-      })).rejects.toThrow('API 키가 없습니다');
+      })).rejects.toThrow('AI API 키가 설정되지 않았습니다');
     });
   });
 
@@ -418,11 +418,11 @@ describe('ai-client', () => {
   });
 
   // ============================================================
-  // LiteLLM Backward Compatibility
+  // Gateway Routing
   // ============================================================
 
-  describe('LiteLLM backward compatibility', () => {
-    it('should prioritize AI_GATEWAY_URL over direct API', async () => {
+  describe('gateway routing', () => {
+    it('should route Anthropic requests through gateway when AI_GATEWAY_URL is set', async () => {
       process.env.AI_GATEWAY_URL = 'https://gateway.example.com';
       process.env.ANTHROPIC_API_KEY = 'test-key';
       process.env.OPENAI_API_KEY = 'should-not-use';
@@ -430,7 +430,7 @@ describe('ai-client', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          choices: [{ message: { content: 'gateway response' } }],
+          content: [{ type: 'text', text: 'gateway response' }],
         }),
       });
 
@@ -441,29 +441,30 @@ describe('ai-client', () => {
         modelTier: 'fast',
       });
 
-      expect(result.provider).toBe('litellm');
-      expect(mockFetch.mock.calls[0][0]).toBe('https://gateway.example.com/v1/chat/completions');
+      // Anthropic is priority 1, so it's used even when OpenAI key is also set
+      expect(result.provider).toBe('anthropic');
+      // Request goes through gateway URL with Anthropic endpoint
+      expect(mockFetch.mock.calls[0][0]).toBe('https://gateway.example.com/v1/messages');
     });
 
-    it('should handle LiteLLM output fallback field', async () => {
-      process.env.AI_GATEWAY_URL = 'https://gateway.example.com';
+    it('should use direct API when no gateway URL is set', async () => {
       process.env.ANTHROPIC_API_KEY = 'test-key';
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          output: 'fallback output',
+          content: [{ type: 'text', text: 'direct response' }],
         }),
       });
 
       const { chatCompletion } = await importAiClient();
-      const result = await chatCompletion({
+      await chatCompletion({
         systemPrompt: 'sys',
         userPrompt: 'user',
         modelTier: 'fast',
       });
 
-      expect(result.content).toBe('fallback output');
+      expect(mockFetch.mock.calls[0][0]).toBe('https://api.anthropic.com/v1/messages');
     });
   });
 });

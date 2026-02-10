@@ -487,7 +487,6 @@ async function callAIForRCA(
         modelTier: 'best',
         temperature: 0.2,
         signal: controller.signal,
-        moduleName: 'RCA',
       });
 
       clearTimeout(timeout);

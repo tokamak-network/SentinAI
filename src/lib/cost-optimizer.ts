@@ -202,7 +202,6 @@ async function getAIRecommendations(
       userPrompt,
       modelTier: 'best',
       temperature: 0.2,
-      moduleName: 'COST',
     });
 
     const content = aiResult.content || '{}';

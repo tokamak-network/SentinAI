@@ -234,7 +234,6 @@ export async function predictScaling(
       userPrompt,
       modelTier: 'fast',
       temperature: 0.2,
-      moduleName: 'PREDICTOR',
     });
 
     const content = aiResult.content || '';
