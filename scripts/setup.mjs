@@ -2,6 +2,7 @@
 
 import { createInterface } from "node:readline";
 import { existsSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -137,6 +138,117 @@ async function testAIConnection(apiKey, provider, gatewayUrl = null) {
 }
 
 // ============================================================
+// AWS Profile Configuration
+// ============================================================
+
+async function configureNewAwsProfile() {
+  const profileName = (await askRequired("  ▸ Profile name: ")).trim();
+  const accessKeyId = (await askRequired("  ▸ AWS Access Key ID: ")).trim();
+  const secretAccessKey = (await askRequired("  ▸ AWS Secret Access Key: ")).trim();
+  const region = await askOptional("  ▸ AWS Region", "ap-northeast-2");
+
+  try {
+    const opts = { timeout: 5000 };
+    execFileSync('aws', ['configure', 'set', 'aws_access_key_id', accessKeyId, '--profile', profileName], opts);
+    execFileSync('aws', ['configure', 'set', 'aws_secret_access_key', secretAccessKey, '--profile', profileName], opts);
+    execFileSync('aws', ['configure', 'set', 'region', region, '--profile', profileName], opts);
+    execFileSync('aws', ['configure', 'set', 'output', 'json', '--profile', profileName], opts);
+
+    process.stdout.write("  Verifying credentials...");
+    execFileSync('aws', ['sts', 'get-caller-identity', '--profile', profileName], { timeout: 10000 });
+    console.log(" OK");
+    return profileName;
+  } catch {
+    console.log(" Failed - check your credentials.");
+    return null;
+  }
+}
+
+async function askAwsProfile() {
+  const createNew = await askYesNo("▸ Configure new AWS profile?", true);
+  if (createNew) {
+    const profileName = await configureNewAwsProfile();
+    if (profileName) return profileName;
+    console.log("  Falling back to manual profile input.");
+  }
+  const existing = await askOptional("▸ AWS Profile (existing)");
+  return existing && existing.trim() ? existing.trim() : null;
+}
+
+// ============================================================
+// K8s Auto-Detection
+// ============================================================
+
+const SYSTEM_NAMESPACES = ['kube-system', 'kube-public', 'kube-node-lease'];
+const OP_COMPONENTS = ['geth', 'node', 'batcher', 'proposer'];
+
+function detectAppPrefix(podNames) {
+  for (const pod of podNames) {
+    for (const comp of OP_COMPONENTS) {
+      // StatefulSet: <prefix>-<comp>-0, Deployment: <prefix>-<comp>-<hash>
+      const pattern = `-${comp}-`;
+      const idx = pod.indexOf(pattern);
+      if (idx > 0) return pod.substring(0, idx);
+    }
+  }
+  return null;
+}
+
+async function autoDetectK8sConfig(clusterName, profile) {
+  const result = { namespace: null, appPrefix: null, namespaces: [] };
+
+  try {
+    // 1. Update kubeconfig for kubectl access
+    const args = ['eks', 'update-kubeconfig', '--name', clusterName];
+    if (profile) args.push('--profile', profile);
+    process.stdout.write("  Connecting to cluster...");
+    execFileSync('aws', args, { timeout: 15000, stdio: 'pipe' });
+    console.log(" OK");
+  } catch {
+    console.log(" Failed");
+    return result;
+  }
+
+  try {
+    // 2. List namespaces
+    const nsOutput = execFileSync(
+      'kubectl', ['get', 'namespaces', '-o', 'jsonpath={.items[*].metadata.name}'],
+      { timeout: 10000, encoding: 'utf-8', stdio: 'pipe' }
+    );
+    const allNs = nsOutput.trim().split(/\s+/).filter(Boolean);
+    result.namespaces = allNs.filter(ns => !SYSTEM_NAMESPACES.includes(ns));
+
+    // Prefer non-default namespace (likely the workload namespace)
+    const candidates = result.namespaces.filter(ns => ns !== 'default');
+    if (candidates.length === 1) {
+      result.namespace = candidates[0];
+    } else if (candidates.length > 1) {
+      // Heuristic: namespace matching cluster name
+      const match = candidates.find(ns => clusterName.includes(ns) || ns.includes(clusterName));
+      if (match) result.namespace = match;
+    }
+  } catch {
+    // kubectl not available or no access
+    return result;
+  }
+
+  try {
+    // 3. Detect app prefix from pod names
+    const targetNs = result.namespace || 'default';
+    const podsOutput = execFileSync(
+      'kubectl', ['get', 'pods', '-n', targetNs, '-o', 'jsonpath={.items[*].metadata.name}'],
+      { timeout: 10000, encoding: 'utf-8', stdio: 'pipe' }
+    );
+    const pods = podsOutput.trim().split(/\s+/).filter(Boolean);
+    result.appPrefix = detectAppPrefix(pods);
+  } catch {
+    // No pods or no access to namespace
+  }
+
+  return result;
+}
+
+// ============================================================
 // Quick Setup (Simplified AI Flow)
 // ============================================================
 
@@ -152,15 +264,14 @@ async function quickSetup() {
     return true;
   });
 
-  // 2. AI Gateway 사용 여부
+  // 2. AI Gateway
   console.log("");
   console.log("  === AI Configuration ===");
-  console.log("  모델 우선순위: Claude > GPT > Gemini");
+  console.log("  Priority: Claude > GPT > Gemini");
   console.log("");
-  const useGateway = await askYesNo("▸ AI Gateway 서버 사용?", true);
+  const useGateway = await askYesNo("▸ Use AI Gateway server?", true);
 
   if (useGateway) {
-    // Gateway URL 입력
     env.AI_GATEWAY_URL = await askRequired("▸ Gateway URL: ", (v) => {
       if (!isValidUrl(v)) {
         console.log("  URL must start with http:// or https://.");
@@ -168,64 +279,64 @@ async function quickSetup() {
       }
       return true;
     });
-    console.log("  ℹ️  Gateway 사용 시에도 API Key가 필요합니다.");
+    console.log("  Note: API Key is still required when using Gateway.");
   }
 
-  // 3. API Key 입력 (우선순위 순서대로 시도)
+  // 3. API Keys (try in priority order)
   console.log("");
-  console.log("  API Key를 입력하세요 (우선순위: Claude > GPT > Gemini)");
-  console.log("  하나만 입력해도 됩니다.");
+  console.log("  Enter API Key (priority: Claude > GPT > Gemini)");
+  console.log("  At least one is required.");
   console.log("");
 
-  // Claude (1순위)
+  // Claude (primary)
   const anthropicKey = await askOptional("▸ Anthropic API Key (Claude)");
   if (anthropicKey) {
-    process.stdout.write("  🔄 연결 테스트 중...");
+    process.stdout.write("  Testing connection...");
     const ok = await testAIConnection(anthropicKey, 'anthropic', env.AI_GATEWAY_URL);
     if (ok) {
-      console.log(" ✅ 성공!");
+      console.log(" OK");
       env.ANTHROPIC_API_KEY = anthropicKey;
     } else {
-      console.log(" ❌ 실패 - 키를 확인하세요.");
+      console.log(" Failed - check your key.");
     }
   }
 
-  // GPT (2순위) - Claude 없을 때만 필수
+  // GPT (secondary)
   if (!env.ANTHROPIC_API_KEY) {
     const openaiKey = await askOptional("▸ OpenAI API Key (GPT)");
     if (openaiKey) {
-      process.stdout.write("  🔄 연결 테스트 중...");
+      process.stdout.write("  Testing connection...");
       const ok = await testAIConnection(openaiKey, 'openai', env.AI_GATEWAY_URL);
       if (ok) {
-        console.log(" ✅ 성공!");
+        console.log(" OK");
         env.OPENAI_API_KEY = openaiKey;
       } else {
-        console.log(" ❌ 실패 - 키를 확인하세요.");
+        console.log(" Failed - check your key.");
       }
     }
   }
 
-  // Gemini (3순위) - 위 둘 다 없을 때만 필수
+  // Gemini (tertiary)
   if (!env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY) {
     const geminiKey = await askOptional("▸ Gemini API Key");
     if (geminiKey) {
-      process.stdout.write("  🔄 연결 테스트 중...");
+      process.stdout.write("  Testing connection...");
       const ok = await testAIConnection(geminiKey, 'gemini', env.AI_GATEWAY_URL);
       if (ok) {
-        console.log(" ✅ 성공!");
+        console.log(" OK");
         env.GEMINI_API_KEY = geminiKey;
       } else {
-        console.log(" ❌ 실패 - 키를 확인하세요.");
+        console.log(" Failed - check your key.");
       }
     }
   }
 
-  // 최소 하나의 API 키 필요
+  // At least one valid API key required
   if (!env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY && !env.GEMINI_API_KEY) {
     console.log("");
-    console.log("  ⚠️  최소 하나의 유효한 API Key가 필요합니다.");
-    console.log("  다시 시도하세요.");
-    return quickSetup();  // 재시도
+    console.log("  At least one valid API Key is required.");
+    console.log("  Please try again.");
+    return quickSetup();
   }
 
   // 4. K8s Monitoring (optional)
@@ -235,8 +346,16 @@ async function quickSetup() {
     const cluster = await askOptional("▸ EKS Cluster Name");
     if (cluster && cluster.trim()) {
       env.AWS_CLUSTER_NAME = cluster;
-      env.K8S_NAMESPACE = await askOptional("▸ K8s Namespace", "default");
-      env.K8S_APP_PREFIX = await askOptional("▸ K8s App Prefix", "op");
+      const profile = await askAwsProfile();
+      if (profile) env.AWS_PROFILE = profile;
+
+      // Auto-detect namespace and app prefix
+      const detected = await autoDetectK8sConfig(cluster, profile);
+      if (detected.namespaces.length > 0) {
+        console.log(`  Namespaces: ${detected.namespaces.join(', ')}`);
+      }
+      env.K8S_NAMESPACE = await askOptional("▸ K8s Namespace", detected.namespace || "default");
+      env.K8S_APP_PREFIX = await askOptional("▸ K8s App Prefix", detected.appPrefix || "op");
     }
   }
 
@@ -342,8 +461,16 @@ async function advancedSetup() {
     const cluster = await askOptional("▸ EKS Cluster Name");
     if (cluster && cluster.trim()) {
       env.AWS_CLUSTER_NAME = cluster;
-      env.K8S_NAMESPACE = await askOptional("  K8s Namespace", "default");
-      env.K8S_APP_PREFIX = await askOptional("  K8s App Prefix", "op");
+      const profile = await askAwsProfile();
+      if (profile) env.AWS_PROFILE = profile;
+
+      // Auto-detect namespace and app prefix
+      const detected = await autoDetectK8sConfig(cluster, profile);
+      if (detected.namespaces.length > 0) {
+        console.log(`  Namespaces: ${detected.namespaces.join(', ')}`);
+      }
+      env.K8S_NAMESPACE = await askOptional("  K8s Namespace", detected.namespace || "default");
+      env.K8S_APP_PREFIX = await askOptional("  K8s App Prefix", detected.appPrefix || "op");
     }
   }
 
@@ -416,6 +543,9 @@ function writeEnvFile(env, isQuickMode) {
     lines.push("");
     lines.push("# --- 4. Kubernetes Monitoring ---");
     lines.push(`AWS_CLUSTER_NAME=${env.AWS_CLUSTER_NAME}`);
+    if (env.AWS_PROFILE) {
+      lines.push(`AWS_PROFILE=${env.AWS_PROFILE}`);
+    }
     lines.push(`K8S_NAMESPACE=${env.K8S_NAMESPACE || "default"}`);
     lines.push(`K8S_APP_PREFIX=${env.K8S_APP_PREFIX || "op"}`);
   }
