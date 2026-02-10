@@ -361,7 +361,7 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="h-8 w-px bg-gray-200"></div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3" data-testid="l2-block-number">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             <div>
               <p className="text-[10px] text-gray-400 font-semibold uppercase">L2 Block</p>
@@ -386,14 +386,14 @@ export default function Dashboard() {
 
       {/* Anomaly Alert Banner */}
       {activeAnomalies.length > 0 && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-2xl px-6 py-4 mb-6 animate-pulse">
+        <div data-testid="anomaly-banner" className="bg-red-500/10 border border-red-500/30 rounded-2xl px-6 py-4 mb-6 animate-pulse">
           <div className="flex items-center gap-3">
             <ShieldAlert className="text-red-500" size={24} />
             <div className="flex-1">
-              <h3 className="font-bold text-red-600">
+              <h3 data-testid="anomaly-banner-title" className="font-bold text-red-600">
                 Anomaly Detected ({activeAnomalies.length})
               </h3>
-              <p className="text-sm text-red-500/80">
+              <p data-testid="anomaly-banner-message" className="text-sm text-red-500/80">
                 {activeAnomalies.map(a => a.description).join(' | ')}
               </p>
             </div>
@@ -453,7 +453,7 @@ export default function Dashboard() {
                 </div>
                 <div className="space-y-2">
                   {/* vCPU Row */}
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3" data-testid="current-vcpu">
                     <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
                       <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
                     </div>
@@ -637,7 +637,7 @@ export default function Dashboard() {
           <div className="mt-auto bg-[#1A1D21] rounded-2xl p-5 text-white">
             {/* Header with Cost Analysis Button */}
             <div className="flex justify-between items-start mb-3">
-              <div>
+              <div data-testid="monthly-cost">
                 <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
                   {current?.cost.isPeakMode ? 'Cost Increase (Peak)' : 'Total Saved (MTD)'}
                 </span>
@@ -741,14 +741,14 @@ export default function Dashboard() {
 
                 {/* Real-time Anomaly Feed */}
                 {activeAnomalies.length > 0 && (
-                  <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                  <div data-testid="anomaly-feed" className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
                     <div className="flex items-center gap-2 mb-2">
                       <ShieldAlert size={14} className="text-red-500" />
                       <span className="text-red-400 font-bold text-xs uppercase">Real-time Anomalies</span>
                     </div>
                     {activeAnomalies.map((anomaly, idx) => (
-                      <div key={idx} className="flex items-start gap-2 text-xs mb-2 last:mb-0">
-                        <span className={`shrink-0 font-bold ${
+                      <div key={idx} data-testid={`anomaly-feed-item-${idx}`} className="flex items-start gap-2 text-xs mb-2 last:mb-0">
+                        <span data-testid={`anomaly-severity-${idx}`} className={`shrink-0 font-bold ${
                           anomaly.direction === 'spike' ? 'text-red-500' :
                           anomaly.direction === 'drop' ? 'text-yellow-500' :
                           'text-orange-500'
@@ -756,7 +756,7 @@ export default function Dashboard() {
                           {anomaly.direction.toUpperCase()}
                         </span>
                         <span className="text-gray-400">[{anomaly.metric}]</span>
-                        <span className="text-gray-300 break-words">{anomaly.description}</span>
+                        <span data-testid={`anomaly-message-${idx}`} className="text-gray-300 break-words">{anomaly.description}</span>
                       </div>
                     ))}
                   </div>
@@ -1121,7 +1121,7 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
   };
 
   return (
-    <div className="overflow-x-auto">
+    <div className="overflow-x-auto" data-testid="usage-heatmap">
       <div className="min-w-[400px]">
         {/* Hour labels */}
         <div className="flex ml-6 mb-1">
@@ -1135,7 +1135,7 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
         {/* Grid */}
         <div className="space-y-0.5">
           {days.map((day, dayIdx) => (
-            <div key={day} className="flex items-center gap-1">
+            <div key={day} className="flex items-center gap-1" data-testid={`heatmap-day-${dayIdx}`}>
               <span className="w-5 text-[9px] text-gray-500 font-medium">{day}</span>
               <div className="flex-1 flex gap-px">
                 {hours.map(hour => {
@@ -1148,6 +1148,7 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
                       key={hour}
                       className={`flex-1 h-3 rounded-sm ${getColor(utilization)} transition-colors hover:ring-1 hover:ring-white/30`}
                       title={`${days[dayIdx]} ${hour}:00 - 평균 ${vcpu.toFixed(1)} vCPU, ${utilization.toFixed(0)}% 사용률`}
+                      data-testid={`heatmap-cell-${dayIdx}-${hour}`}
                     />
                   );
                 })}

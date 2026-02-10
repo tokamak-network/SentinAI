@@ -331,8 +331,8 @@ export async function generateCostReport(days: number = 7): Promise<CostReport> 
   const effectiveDays = Math.min(Math.max(days, 1), 30);
 
   // 데이터 수집
-  const patterns = analyzePatterns(effectiveDays);
-  const summary = getUsageSummary(effectiveDays);
+  const patterns = await analyzePatterns(effectiveDays);
+  const summary = await getUsageSummary(effectiveDays);
   const scalingHistory = await getScalingHistory(50);
 
   // 현재 비용 계산

@@ -10,7 +10,14 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "setup": "node scripts/setup.mjs"
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:chromium": "playwright test --project=chromium",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report",
+    "setup": "node scripts/setup.mjs",
+    "verify": "bash scripts/verify-e2e.sh"
   },
   "dependencies": {
     "@kubernetes/client-node": "^1.4.0",
@@ -26,6 +33,7 @@
     "viem": "^2.45.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/node-cron": "^3.0.11",

@@ -425,7 +425,7 @@ export async function GET(request: Request) {
               console.log(`[Anomaly] Detected ${detectedAnomalies.length} anomalies`);
 
               // Record in event store
-              const event = createOrUpdateEvent(detectedAnomalies);
+              const event = await createOrUpdateEvent(detectedAnomalies);
               activeAnomalyEventId = event.id;
 
               // Layer 2: AI deep analysis (async, non-blocking)
@@ -434,12 +434,12 @@ export async function GET(request: Request) {
                   try {
                     const logs = await getAllLiveLogs();
                     const analysis = await analyzeAnomalies(detectedAnomalies, dataPoint!, logs);
-                    addDeepAnalysis(event.id, analysis);
+                    await addDeepAnalysis(event.id, analysis);
 
                     // Layer 3: Alert dispatch
                     const alertRecord = await dispatchAlert(analysis, dataPoint!, detectedAnomalies);
                     if (alertRecord) {
-                      addAlertRecord(event.id, alertRecord);
+                      await addAlertRecord(event.id, alertRecord);
                     }
                   } catch (aiError) {
                     console.error('[Anomaly] AI analysis failed:', aiError);
@@ -448,8 +448,8 @@ export async function GET(request: Request) {
               }
             } else {
               // Resolve active event if no anomalies detected
-              resolveActiveEventIfExists();
-              activeAnomalyEventId = getActiveEventId() || undefined;
+              await resolveActiveEventIfExists();
+              activeAnomalyEventId = (await getActiveEventId()) || undefined;
             }
           } catch (anomalyError) {
             console.error('[Anomaly] Detection pipeline error:', anomalyError);

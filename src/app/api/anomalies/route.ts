@@ -18,7 +18,7 @@ export async function GET(request: Request): Promise<NextResponse<AnomaliesRespo
   const validLimit = Math.min(Math.max(1, limit), 100);
   const validOffset = Math.max(0, offset);
 
-  const result = getEvents(validLimit, validOffset);
+  const result = await getEvents(validLimit, validOffset);
 
   return NextResponse.json({
     events: result.events,
