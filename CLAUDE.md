@@ -206,8 +206,8 @@ cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 
 | 우선순위 | 환경변수 | 프로바이더 | 엔드포인트 | fast 모델 | best 모델 |
 |---------|---------|-----------|-----------|----------|----------|
-| 1 | `AI_GATEWAY_URL` + API Key | LiteLLM Gateway | 설정된 URL | `claude-haiku-4.5` | `claude-opus-4-6` |
-| 2 | `ANTHROPIC_API_KEY` | Anthropic Direct | `api.anthropic.com` | `claude-haiku-4-5-20251001` | `claude-opus-4-6` |
+| 1 | `AI_GATEWAY_URL` + API Key | LiteLLM Gateway | 설정된 URL | `claude-haiku-4.5` | `claude-sonnet-4-5-20250929` |
+| 2 | `ANTHROPIC_API_KEY` | Anthropic Direct | `api.anthropic.com` | `claude-haiku-4-5-20251001` | `claude-sonnet-4-5-20250929` |
 | 3 | `OPENAI_API_KEY` | OpenAI Direct | `api.openai.com` | `gpt-4.1-mini` | `gpt-4.1` |
 | 4 | `GEMINI_API_KEY` | Gemini Direct | `generativelanguage.googleapis.com` | `gemini-2.5-flash-lite` | `gemini-2.5-pro` |
 

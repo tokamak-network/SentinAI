@@ -198,11 +198,11 @@ describe('ai-client', () => {
         modelTier: 'best',
       });
 
-      expect(result.model).toBe('claude-opus-4-6');
+      expect(result.model).toBe('claude-sonnet-4-5-20250929');
 
       // Verify model in request body
       const fetchBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(fetchBody.model).toBe('claude-opus-4-6');
+      expect(fetchBody.model).toBe('claude-sonnet-4-5-20250929');
     });
 
     it('should map OpenAI best tier to gpt-4.1', async () => {
