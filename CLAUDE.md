@@ -201,7 +201,10 @@ docs/
 - **Import alias**: `@/*` → `./src/*`
 - **Dual-mode**: Real K8s cluster data or mock fallback for development
 - **AI Client**: `src/lib/ai-client.ts` — 통합 AI 클라이언트. Anthropic/OpenAI/Gemini 직접 API + LiteLLM Gateway 지원. `chatCompletion()` 단일 함수로 모든 AI 호출 처리. Model tier: `fast` (haiku/gpt-4.1-mini/gemini-flash-lite), `best` (opus/gpt-4.1/gemini-pro)
-- **In-memory state**: MetricsStore, scaling state, anomaly events all reset on server restart (no persistence layer yet)
+  - **Resilience**: LiteLLM Gateway 실패 시 자동으로 Anthropic Direct로 폴백 (400/401 감지)
+  - **Priority**: Module Override > Gateway (fallback 포함) > Anthropic > OpenAI > Gemini
+- **In-memory state**: MetricsStore, scaling state, anomaly events reset on server restart unless Redis configured (see `REDIS_URL`)
+- **Daily Reports**: AI 실패 시 데이터 기반 Fallback 보고서 자동 생성 (API 200 응답, 사용자 경험 무중단)
 - **Cost basis**: AWS Fargate Seoul pricing ($0.04656/vCPU-hour, $0.00511/GB-hour)
 - **Simulation mode**: `SCALING_SIMULATION_MODE=true` by default (no real K8s changes)
 
@@ -246,6 +249,11 @@ ANTHROPIC_API_KEY=your-litellm-key
 ```
 
 `AI_GATEWAY_URL`이 설정되면 직접 API보다 우선한다. 미설정 시 API 키 종류에 따라 공식 서버로 자동 연결.
+
+**LiteLLM Gateway 복원력 (2026-02-10 추가):**
+- Gateway 400/401 에러 발생 시 자동으로 Anthropic Direct로 폴백
+- 모든 AI 호출 (anomaly detection, cost reports, daily reports) 계속 작동
+- 사용자 개입 불필요 — 시스템이 자동으로 대체 경로 사용
 
 ### Optional
 
