@@ -84,15 +84,190 @@ AWS_CLUSTER_NAME=my-cluster-name                # K8s (auto-detects K8S_API_URL 
 > `K8S_API_URL` and `AWS_REGION` are auto-detected at runtime from `AWS_CLUSTER_NAME`.
 > AWS credentials use the standard chain: env vars, `~/.aws/credentials`, or IAM Role.
 
-## 🚀 Cloud Run Deployment
+## Deployment
 
-### Prerequisites
+### AWS EC2 + Docker Compose (Recommended)
+
+#### Prerequisites
+
+| Item | Description |
+|------|-------------|
+| EC2 Instance | t3.medium or larger (2 vCPU, 4 GiB RAM) |
+| IAM Role | EC2 Instance Profile with EKS permissions |
+| Security Group | Inbound: 3002/tcp, Outbound: 443/tcp + L2 RPC port |
+| EKS RBAC | EC2 IAM Role mapped in `aws-auth` ConfigMap |
+| IMDSv2 | `http-put-response-hop-limit` must be 2 or higher |
+
+#### IAM Policy (Minimum)
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["eks:DescribeCluster", "eks:ListClusters"],
+      "Resource": "arn:aws:eks:REGION:ACCOUNT:cluster/CLUSTER_NAME"
+    },
+    {
+      "Effect": "Allow",
+      "Action": "sts:GetCallerIdentity",
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+#### EKS RBAC Mapping
+
+Add EC2 IAM Role to the EKS `aws-auth` ConfigMap:
+
+```bash
+kubectl edit configmap aws-auth -n kube-system
+```
+
+```yaml
+mapRoles:
+  - rolearn: arn:aws:iam::ACCOUNT:role/EC2_ROLE_NAME
+    username: sentinai
+    groups:
+      - system:masters
+```
+
+> **Note**: For production, create a dedicated ClusterRole with minimum permissions (get/list pods, patch statefulsets) instead of `system:masters`.
+
+#### IMDSv2 Hop Limit
+
+Docker containers need hop-limit >= 2 to access EC2 IAM Role:
+
+```bash
+aws ec2 modify-instance-metadata-options \
+  --instance-id i-XXXXX \
+  --http-put-response-hop-limit 2 \
+  --http-tokens required
+```
+
+#### Quick Install
+
+```bash
+# SSH into EC2
+ssh ec2-user@<ec2-ip>
+
+# One-line install (Docker + Git + SentinAI)
+curl -sSL https://raw.githubusercontent.com/tokamak-network/SentinAI/main/scripts/install.sh | bash
+```
+
+The script automatically installs Docker, Docker Compose, Git, clones the repository, and guides you through environment configuration.
+
+#### Manual Install
+
+```bash
+# 1. Install Docker (Amazon Linux 2023)
+sudo dnf install -y docker git
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER
+# Re-login for group change to take effect
+
+# 2. Install Docker Compose plugin
+sudo mkdir -p /usr/local/lib/docker/cli-plugins
+COMPOSE_VER=$(curl -sL https://api.github.com/repos/docker/compose/releases/latest | grep '"tag_name"' | head -1 | cut -d'"' -f4)
+sudo curl -SL "https://github.com/docker/compose/releases/download/${COMPOSE_VER}/docker-compose-$(uname -s)-$(uname -m)" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+
+# 3. Clone and configure
+git clone https://github.com/tokamak-network/SentinAI.git /opt/sentinai
+cd /opt/sentinai
+cp .env.local.sample .env.local
+# Edit .env.local: set L2_RPC_URL, ANTHROPIC_API_KEY, AWS_CLUSTER_NAME
+
+# 4. Start (builds Docker image with aws-cli + kubectl included)
+docker compose up -d
+
+# 5. Verify
+curl http://localhost:3002/api/health
+```
+
+#### Operations
+
+```bash
+cd /opt/sentinai
+
+# View logs
+docker compose logs -f sentinai
+
+# Update to latest version
+git pull origin main && docker compose build && docker compose up -d
+
+# Stop services
+docker compose down
+
+# Stop and remove all data (Redis, reports)
+docker compose down -v
+```
+
+### Public Access with Cloudflare Tunnel (HTTPS + Auth)
+
+SentinAI has no built-in authentication. Use Cloudflare Tunnel + Access to expose the dashboard securely with HTTPS and email-based login.
+
+```
+User → Cloudflare Edge (HTTPS + Access auth)
+         ↓ (encrypted tunnel)
+       cloudflared container (EC2)
+         ↓ (Docker internal network)
+       sentinai:8080
+```
+
+#### 1. Create Tunnel on Cloudflare
+
+1. Sign up at [Cloudflare Zero Trust](https://one.dash.cloudflare.com) (free)
+2. Add a domain to Cloudflare (or register one, e.g. `.xyz` ~$2/year)
+3. Go to **Networks → Tunnels → Create a Tunnel**
+4. Name: `sentinai`, copy the **Tunnel Token**
+5. Add **Public Hostname**:
+   - Subdomain: `sentinai` (e.g. `sentinai.yourdomain.com`)
+   - Service: `http://sentinai:8080`
+6. Go to **Access → Applications → Add Application**
+   - Domain: `sentinai.yourdomain.com`
+   - Policy: Allow specific email addresses
+
+#### 2. Add Token to .env.local
+
+```bash
+# Add to .env.local
+CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoiYWJj...
+```
+
+#### 3. Start with Tunnel
+
+```bash
+# Start with tunnel profile
+docker compose --profile tunnel up -d
+
+# Verify tunnel is running
+docker compose logs cloudflared
+```
+
+The dashboard is now accessible at `https://sentinai.yourdomain.com` with Cloudflare Access authentication.
+
+#### Security Group Update
+
+With Cloudflare Tunnel, inbound port 3002 is no longer needed:
+
+| Direction | Port | Source | Purpose |
+|-----------|------|--------|---------|
+| Inbound | 22 | Admin IP | SSH only |
+| Outbound | 443 | 0.0.0.0/0 | AI API + AWS API + Cloudflare |
+
+### Google Cloud Run
+
+#### Prerequisites
 1. Google Cloud SDK installed: `gcloud --version`
 2. Docker installed: `docker --version`
 3. Authenticated to GCP: `gcloud auth login`
 4. GCP project created
 
-### Quick Deploy
+#### Quick Deploy
 
 ```bash
 # 1. Set your GCP project
@@ -108,7 +283,7 @@ nano deploy-cloudrun.sh  # Change PROJECT_ID
 ./deploy-cloudrun.sh
 ```
 
-### Environment Variables
+#### Environment Variables
 
 See [CLOUDRUN_ENV_SETUP.md](./CLOUDRUN_ENV_SETUP.md) for detailed instructions.
 
@@ -128,23 +303,6 @@ docker build -t sentinai:local .
 # Run locally
 docker run -p 8080:8080 \
   -e L2_RPC_URL="https://..." \
-  -e AWS_REGION="ap-northeast-2" \
+  -e ANTHROPIC_API_KEY="sk-ant-..." \
   sentinai:local
-```
-
-### Production URL
-
-After deployment, your service will be available at:
-```
-https://sentinai-<random-hash>-an.a.run.app
-```
-
-### Monitoring
-
-```bash
-# View logs
-gcloud run services logs read sentinai --region asia-northeast3
-
-# Check service status
-gcloud run services describe sentinai --region asia-northeast3
 ```

@@ -3,7 +3,7 @@ services:
     build: .
     container_name: sentinai
     ports:
-      - "3002:3000"
+      - "3002:8080"
     env_file:
       - .env.local
     environment:
@@ -15,25 +15,42 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
       interval: 30s
       timeout: 10s
-      start_period: 5s
+      start_period: 10s
       retries: 3
 
   redis:
     image: redis:7-alpine
     container_name: sentinai-redis
-    ports:
-      - "6379:6379"
+    expose:
+      - "6379"
     volumes:
       - redis-data:/data
+    command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 3
+
+  # Cloudflare Tunnel: HTTPS + Access 인증으로 대시보드 공개
+  # 활성화: docker compose --profile tunnel up -d
+  # 사전 설정: https://one.dash.cloudflare.com → Networks → Tunnels
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: sentinai-tunnel
+    command: tunnel run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      sentinai:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - tunnel
 
 volumes:
   sentinai-reports:

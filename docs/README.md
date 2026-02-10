@@ -49,6 +49,14 @@ AI 모델을 활용한 모니터링, 스케일링, 보안, 예측, 운영 자동
 
 ---
 
+## Deployment
+
+| 가이드 | 대상 | 문서 |
+|--------|------|------|
+| EC2 설치 가이드 (비개발자용) | AWS EC2 + Docker Compose + Cloudflare Tunnel | [상세](ec2-setup-guide.md) |
+
+---
+
 ## Future Work
 
 미래 작업 로드맵 및 계획 중인 Proposal들.
