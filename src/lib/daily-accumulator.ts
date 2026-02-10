@@ -1,10 +1,11 @@
 /**
- * Daily Accumulator Module
+ * Daily Accumulator Module (Redis-backed)
  * Accumulates 24-hour metric snapshots from the ring buffer for daily report generation.
  * Takes snapshots every 5 minutes, storing statistical summaries (not raw data) for memory efficiency.
  */
 
 import { getMetricsStats, getRecentMetrics } from '@/lib/metrics-store';
+import { getStore } from '@/lib/redis-store';
 import type {
   MetricSnapshot,
   HourlySummary,
@@ -16,9 +17,6 @@ import type {
 
 const MAX_SNAPSHOTS_PER_DAY = 288; // 24 * 60 / 5
 const MIN_SNAPSHOT_GAP_MS = 4 * 60 * 1000; // 4 minutes (dedup guard)
-
-/** Module-level singleton state */
-let state: AccumulatorState | null = null;
 
 /** Get today's date string in KST (YYYY-MM-DD) */
 function getTodayKST(): string {
@@ -71,21 +69,24 @@ function createEmptyData(date: string): DailyAccumulatedData {
  * Initialize the accumulator for today.
  * Skips if already initialized for the current date.
  */
-export function initializeAccumulator(): void {
+export async function initializeAccumulator(): Promise<void> {
   const today = getTodayKST();
+  const store = getStore();
+  const existing = await store.getDailyAccumulatorState(today);
 
-  if (state && state.currentDate === today) {
+  if (existing && existing.currentDate === today) {
     return; // Already initialized for today
   }
 
   const now = new Date().toISOString();
-  state = {
+  const newState: AccumulatorState = {
     currentDate: today,
     data: createEmptyData(today),
     lastSnapshotTimestamp: 0,
     startedAt: now,
   };
 
+  await store.setDailyAccumulatorState(today, newState);
   console.log(`[Daily Accumulator] Initialized for ${today}`);
 }
 
@@ -96,10 +97,13 @@ export function initializeAccumulator(): void {
 export async function takeSnapshot(): Promise<MetricSnapshot | null> {
   const now = Date.now();
   const today = getTodayKST();
+  const store = getStore();
 
-  // Handle date change
+  // Get or initialize state
+  let state = await store.getDailyAccumulatorState(today);
   if (!state || state.currentDate !== today) {
-    initializeAccumulator();
+    await initializeAccumulator();
+    state = await store.getDailyAccumulatorState(today);
   }
 
   if (!state) return null;
@@ -181,7 +185,10 @@ export async function takeSnapshot(): Promise<MetricSnapshot | null> {
   }
 
   // Update data completeness
-  updateDataCompleteness();
+  updateDataCompleteness(state);
+
+  // Persist state to store
+  await store.setDailyAccumulatorState(today, state);
 
   console.log(`[Daily Accumulator] Snapshot #${state.data.snapshots.length} taken (${stats.count} data points)`);
 
@@ -189,9 +196,7 @@ export async function takeSnapshot(): Promise<MetricSnapshot | null> {
 }
 
 /** Update data completeness calculation */
-function updateDataCompleteness(): void {
-  if (!state) return;
-
+function updateDataCompleteness(state: AccumulatorState): void {
   const startOfDay = new Date(state.data.startTime).getTime();
   const now = Date.now();
   const elapsedMinutes = (now - startOfDay) / 60000;
@@ -204,22 +209,33 @@ function updateDataCompleteness(): void {
 /**
  * Add a log analysis result entry.
  */
-export function addLogAnalysisResult(entry: LogAnalysisEntry): void {
+export async function addLogAnalysisResult(entry: LogAnalysisEntry): Promise<void> {
+  const today = getTodayKST();
+  const store = getStore();
+
+  let state = await store.getDailyAccumulatorState(today);
   if (!state) {
-    initializeAccumulator();
+    await initializeAccumulator();
+    state = await store.getDailyAccumulatorState(today);
   }
   if (!state) return;
 
   state.data.logAnalysisResults.push(entry);
+  await store.setDailyAccumulatorState(today, state);
 }
 
 /**
  * Add a scaling event.
  * Also records vCPU change in the hourly summary.
  */
-export function addScalingEvent(event: ScalingEvent): void {
+export async function addScalingEvent(event: ScalingEvent): Promise<void> {
+  const today = getTodayKST();
+  const store = getStore();
+
+  let state = await store.getDailyAccumulatorState(today);
   if (!state) {
-    initializeAccumulator();
+    await initializeAccumulator();
+    state = await store.getDailyAccumulatorState(today);
   }
   if (!state) return;
 
@@ -232,21 +248,24 @@ export function addScalingEvent(event: ScalingEvent): void {
     from: event.fromVcpu,
     to: event.toVcpu,
   });
+
+  await store.setDailyAccumulatorState(today, state);
 }
 
 /**
  * Get accumulated data.
- * Only returns data for today (in-memory, no persistence).
  * Returns null if date doesn't match or not initialized.
  */
-export function getAccumulatedData(date?: string): DailyAccumulatedData | null {
-  if (!state) return null;
-
+export async function getAccumulatedData(date?: string): Promise<DailyAccumulatedData | null> {
   const targetDate = date || getTodayKST();
-  if (state.currentDate !== targetDate) return null;
+  const store = getStore();
+  const state = await store.getDailyAccumulatorState(targetDate);
+
+  if (!state || state.currentDate !== targetDate) return null;
 
   // Refresh completeness before returning
-  updateDataCompleteness();
+  updateDataCompleteness(state);
+  await store.setDailyAccumulatorState(targetDate, state);
 
   return state.data;
 }
@@ -254,13 +273,17 @@ export function getAccumulatedData(date?: string): DailyAccumulatedData | null {
 /**
  * Get accumulator status for debugging/API use.
  */
-export function getAccumulatorStatus(): {
+export async function getAccumulatorStatus(): Promise<{
   initialized: boolean;
   currentDate: string | null;
   snapshotCount: number;
   lastSnapshotTime: string | null;
   dataCompleteness: number;
-} {
+}> {
+  const today = getTodayKST();
+  const store = getStore();
+  const state = await store.getDailyAccumulatorState(today);
+
   if (!state) {
     return {
       initialized: false,
@@ -271,7 +294,8 @@ export function getAccumulatorStatus(): {
     };
   }
 
-  updateDataCompleteness();
+  updateDataCompleteness(state);
+  await store.setDailyAccumulatorState(today, state);
 
   return {
     initialized: true,
@@ -285,6 +309,8 @@ export function getAccumulatorStatus(): {
 /**
  * Reset accumulator state (for testing).
  */
-export function resetAccumulator(): void {
-  state = null;
+export async function resetAccumulator(): Promise<void> {
+  const today = getTodayKST();
+  const store = getStore();
+  await store.deleteDailyAccumulatorState(today);
 }
