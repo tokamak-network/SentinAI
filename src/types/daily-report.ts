@@ -146,5 +146,6 @@ export interface DailyReportResponse {
     dataCompleteness: number;
     snapshotCount: number;
     processingTimeMs: number;
+    aiModel?: string;
   };
 }

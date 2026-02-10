@@ -192,8 +192,8 @@ export async function GET(request: Request) {
 
         // Simulated Block Data (Auto-increment based on time to look alive)
         const now = Date.now();
-        const simL1Block = 6200000 + Math.floor(now / 12000) % 10000;
-        const simL2Block = 12500000 + Math.floor(now / 2000) % 10000;
+        const simL1Block = 12500000 + Math.floor(now / 12000) % 10000;
+        const simL2Block = 6200000 + Math.floor(now / 2000) % 10000;
 
         return NextResponse.json({
             timestamp: new Date().toISOString(),
@@ -203,7 +203,7 @@ export async function GET(request: Request) {
                 blockHeight: simL2Block,
                 txPoolCount: 5021 + Math.floor(Math.random() * 50), // Jitter
                 cpuUsage: 96.5 + (Math.random() * 2), // High CPU jitter
-                memoryUsage: 12450,
+                memoryUsage: memoryGiB * 1024,
                 gethVcpu: 8,
                 gethMemGiB: 16,
                 syncLag: 0,
@@ -369,8 +369,7 @@ export async function GET(request: Request) {
 
         const currentHourlyCost = opGethMonthlyCost / HOURS_PER_MONTH;
 
-        // === 추가: 사용량 데이터 기록 ===
-        // 스트레스 테스트 모드가 아닐 때만 기록 (실제 운영 데이터만 수집)
+        // Record usage data (only for real data, not stress test)
         if (!isStressTest) {
           recordUsage(currentVcpu, effectiveCpu);
         }
@@ -475,7 +474,7 @@ export async function GET(request: Request) {
                 blockHeight: Number(blockNumber),
                 txPoolCount: effectiveTx,
                 cpuUsage: Number(effectiveCpu.toFixed(2)),
-                memoryUsage: 2048,
+                memoryUsage: currentVcpu * 2 * 1024,
                 gethVcpu: currentVcpu,
                 gethMemGiB: currentVcpu * 2,
                 syncLag: 0,

@@ -56,10 +56,10 @@ function generateScenarioData(scenario: Scenario): MetricDataPoint[] {
         break;
 
       case 'rising':
-        cpuUsage = jitter(lerp(20, 70, t), 3);
-        txPoolPending = Math.round(jitter(lerp(20, 200, t), 10));
-        gasUsedRatio = jitter(lerp(0.15, 0.65, t), 0.03);
-        blockInterval = jitter(lerp(2.0, 3.5, t), 0.2);
+        cpuUsage = jitter(lerp(15, 50, t), 3);
+        txPoolPending = Math.round(jitter(lerp(10, 80, t), 10));
+        gasUsedRatio = jitter(lerp(0.10, 0.45, t), 0.03);
+        blockInterval = jitter(lerp(2.0, 2.8, t), 0.2);
         break;
 
       case 'spike':
