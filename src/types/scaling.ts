@@ -42,11 +42,11 @@ export interface ScaleResult {
   timestamp: string;
   message: string;
   error?: string;
-  /** zero-downtime 모드 사용 여부 */
+  /** Whether zero-downtime mode is enabled */
   zeroDowntime?: boolean;
-  /** rollout 단계 */
+  /** Rollout phase */
   rolloutPhase?: string;
-  /** rollout 소요 시간 (ms) */
+  /** Rollout duration in milliseconds */
   rolloutDurationMs?: number;
 }
 
@@ -115,7 +115,7 @@ export interface ScalingConfig {
     idle: number;   // score < idle → 1 vCPU
     normal: number; // score < normal → 2 vCPU, else 4 vCPU
   };
-  /** op-geth K8s Service 이름 */
+  /** op-geth K8s Service name */
   serviceName: string;
 }
 

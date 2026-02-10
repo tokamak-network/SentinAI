@@ -250,6 +250,7 @@ ANTHROPIC_API_KEY=your-litellm-key
 | 변수 | 기본값 | 설명 |
 |------|--------|------|
 | `AI_GATEWAY_URL` | — | LiteLLM Gateway URL (설정 시 직접 API 대신 Gateway 사용) |
+| `AWS_PROFILE` | — | AWS CLI 프로필 (멀티 계정/credential 분리 시) |
 | `K8S_NAMESPACE` | `default` | L2 Pod가 배포된 네임스페이스 |
 | `K8S_APP_PREFIX` | `op` | Pod label prefix (`app=op-geth`) |
 | `K8S_API_URL` | 자동 감지 | K8s API URL 수동 지정 |

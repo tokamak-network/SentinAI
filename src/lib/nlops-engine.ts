@@ -1,9 +1,9 @@
 /**
  * NLOps Engine - Natural Language Operations Processing Engine
- * 자연어 명령 처리의 핵심 로직
+ * Core logic for processing natural language commands
  *
- * AI 호출: chatCompletion() from src/lib/ai-client.ts
- * 로그 분석: analyzeLogChunk() from src/lib/ai-analyzer.ts
+ * AI calls: chatCompletion() from src/lib/ai-client.ts
+ * Log analysis: analyzeLogChunk() from src/lib/ai-analyzer.ts
  */
 
 import type {

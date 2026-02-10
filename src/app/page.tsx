@@ -48,7 +48,7 @@ interface MetricData {
   activeAnomalyEventId?: string;
 }
 
-// === 추가: Cost Report 타입 ===
+// === Added: Cost Report type ===
 interface CostReportData {
   id: string;
   generatedAt: string;
@@ -141,7 +141,7 @@ export default function Dashboard() {
   const [seedScenario, setSeedScenario] = useState<'stable' | 'rising' | 'spike' | 'falling' | 'live'>('rising');
   const [isSeeding, setIsSeeding] = useState(false);
 
-  // === 추가: Cost Report state ===
+  // === Added: Cost Report state ===
   const [costReport, setCostReport] = useState<CostReportData | null>(null);
   const [isLoadingCostReport, setIsLoadingCostReport] = useState(false);
   const [showCostAnalysis, setShowCostAnalysis] = useState(false);
@@ -179,7 +179,7 @@ export default function Dashboard() {
     }
   };
 
-  // === 추가: 비용 분석 함수 ===
+  // === Cost report analysis function ===
   const fetchCostReport = async () => {
     setIsLoadingCostReport(true);
     setCostReport(null);
@@ -212,7 +212,7 @@ export default function Dashboard() {
     const userMessage: ChatMessage = {
       id: generateMessageId(),
       role: 'user',
-      content: confirmAction ? '확인' : message.trim(),
+      content: confirmAction ? 'confirm' : message.trim(),
       timestamp: new Date().toISOString(),
     };
 
@@ -260,7 +260,7 @@ export default function Dashboard() {
       const errorMessage: ChatMessage = {
         id: generateMessageId(),
         role: 'assistant',
-        content: '죄송합니다, 요청을 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+        content: 'Sorry, an error occurred while processing your request. Please try again in a moment.',
         timestamp: new Date().toISOString(),
       };
       setChatMessages(prev => [...prev, errorMessage]);
@@ -280,7 +280,7 @@ export default function Dashboard() {
     const cancelMessage: ChatMessage = {
       id: generateMessageId(),
       role: 'assistant',
-      content: '작업이 취소되었습니다.',
+      content: 'Action cancelled.',
       timestamp: new Date().toISOString(),
     };
     setChatMessages(prev => [...prev, cancelMessage]);
@@ -479,7 +479,7 @@ export default function Dashboard() {
               </p>
             </div>
             <span className="text-xs text-red-400 font-mono">
-              채팅에서 &quot;근본 원인 분석&quot; 요청 가능
+              Request &quot;root cause analysis&quot; in chat
             </span>
           </div>
         </div>
@@ -662,7 +662,7 @@ export default function Dashboard() {
                 ) : (
                   <BarChart3 size={12} />
                 )}
-                {isLoadingCostReport ? '분석 중...' : 'COST ANALYSIS'}
+                {isLoadingCostReport ? 'Analyzing...' : 'COST ANALYSIS'}
               </button>
             </div>
 
@@ -685,7 +685,7 @@ export default function Dashboard() {
                 <div className="mb-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Calendar size={12} className="text-gray-400" />
-                    <span className="text-[10px] text-gray-400 font-semibold uppercase">사용 패턴 (최근 {costReport.periodDays}일)</span>
+                    <span className="text-[10px] text-gray-400 font-semibold uppercase">Usage Pattern (Last {costReport.periodDays} days)</span>
                   </div>
                   <UsageHeatmap patterns={costReport.usagePatterns} />
                 </div>
@@ -694,8 +694,8 @@ export default function Dashboard() {
                 {costReport.recommendations.length > 0 && (
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] text-gray-400 font-semibold uppercase">최적화 추천</span>
-                      <span className="text-[10px] text-green-400 font-bold">최대 {costReport.totalSavingsPercent}% 절감 가능</span>
+                      <span className="text-[10px] text-gray-400 font-semibold uppercase">Optimization Recommendations</span>
+                      <span className="text-[10px] text-green-400 font-bold">Up to {costReport.totalSavingsPercent}% savings possible</span>
                     </div>
                     <div className="space-y-2">
                       {costReport.recommendations.slice(0, 3).map((rec, idx) => (
@@ -710,7 +710,7 @@ export default function Dashboard() {
                   onClick={() => setShowCostAnalysis(false)}
                   className="w-full mt-3 py-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
                 >
-                  닫기
+                  Close
                 </button>
               </div>
             )}
@@ -766,7 +766,7 @@ export default function Dashboard() {
                 <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 mt-16">
                   <CheckCircle2 size={40} className="mb-3 text-green-500/50" />
                   <p className="text-green-400/60 font-semibold text-sm">All systems operational</p>
-                  <p className="text-gray-600 text-xs mt-1">이상 탐지 시 자동으로 표시됩니다</p>
+                  <p className="text-gray-600 text-xs mt-1">Anomalies will appear here when detected</p>
                 </div>
               )}
             </div>
@@ -782,7 +782,7 @@ export default function Dashboard() {
                 ? `${activeAnomalies.length} ANOMALIES DETECTED`
                 : 'MONITORING ACTIVE'}
             </div>
-            <span className="text-[10px] text-gray-500">채팅에서 상세 분석 가능</span>
+            <span className="text-[10px] text-gray-500">Detailed analysis available in chat</span>
           </div>
         </div>
       </div>
@@ -872,7 +872,7 @@ export default function Dashboard() {
           className="fixed bottom-6 right-6 bg-slate-900 text-white rounded-full p-4 shadow-xl hover:bg-slate-800 transition-all hover:scale-105 z-50 flex items-center gap-2"
         >
           <MessageSquare size={24} />
-          <span className="text-sm font-semibold pr-1">SentinAI 어시스턴트</span>
+          <span className="text-sm font-semibold pr-1">SentinAI Assistant</span>
         </button>
       )}
 
@@ -886,8 +886,8 @@ export default function Dashboard() {
                 <Bot size={18} className="text-white" />
               </div>
               <div>
-                <h3 className="font-bold text-white text-sm">SentinAI Ops 어시스턴트</h3>
-                <p className="text-[10px] text-gray-400">자연어로 시스템을 제어하세요</p>
+                <h3 className="font-bold text-white text-sm">SentinAI Ops Assistant</h3>
+                <p className="text-[10px] text-gray-400">Control the system with natural language</p>
               </div>
             </div>
             <button data-testid="chat-close" onClick={() => setChatOpen(false)} className="text-gray-400 hover:text-white transition-colors p-1">
@@ -900,10 +900,10 @@ export default function Dashboard() {
             {chatMessages.length === 0 && (
               <div data-testid="chat-welcome" className="text-center text-gray-400 mt-8">
                 <Bot size={40} className="mx-auto mb-3 opacity-50" />
-                <p className="text-sm">안녕하세요! SentinAI 어시스턴트입니다.</p>
-                <p className="text-xs mt-1">아래 예시를 클릭하거나 직접 입력해보세요.</p>
+                <p className="text-sm">Hello! I'm SentinAI Assistant.</p>
+                <p className="text-xs mt-1">Click examples below or type your command.</p>
                 <div className="flex flex-wrap gap-2 justify-center mt-4">
-                  {['현재 상태', '로그 분석 해줘', '비용 확인'].map((example) => (
+                  {['Show current status', 'Analyze logs', 'Check cost'].map((example) => (
                     <button key={example} data-testid={`chat-example-${example}`} onClick={() => sendChatMessage(example)}
                       className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded-full hover:border-blue-300 hover:text-blue-600 transition-colors">
                       {example}
@@ -923,7 +923,7 @@ export default function Dashboard() {
                   <div className={`flex items-center gap-2 mb-1 ${msg.role === 'user' ? 'justify-end' : ''}`}>
                     {msg.role === 'assistant' && <Bot size={12} className="text-blue-500" />}
                     <span className={`text-[10px] ${msg.role === 'user' ? 'text-blue-100' : 'text-gray-400'}`}>
-                      {msg.role === 'user' ? '나' : 'SentinAI'}
+                      {msg.role === 'user' ? 'You' : 'SentinAI'}
                     </span>
                     {msg.role === 'user' && <User size={12} className="text-blue-100" />}
                   </div>
@@ -956,11 +956,11 @@ export default function Dashboard() {
               <div className="flex gap-2">
                 <button data-testid="chat-confirm-btn" onClick={handleConfirm} disabled={isSending}
                   className="flex-1 bg-blue-500 text-white text-sm font-semibold py-2 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50">
-                  확인
+                  Confirm
                 </button>
                 <button data-testid="chat-cancel-btn" onClick={handleCancel} disabled={isSending}
                   className="flex-1 bg-gray-200 text-gray-700 text-sm font-semibold py-2 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50">
-                  취소
+                  Cancel
                 </button>
               </div>
             </div>
@@ -970,7 +970,7 @@ export default function Dashboard() {
           <div className="p-4 border-t border-gray-100 bg-white rounded-b-none">
             <div className="flex items-center gap-2">
               <input data-testid="chat-input" type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={handleChatKeyDown} placeholder="명령을 입력하세요..."
+                onKeyDown={handleChatKeyDown} placeholder="Enter your command..."
                 disabled={isSending || !!pendingConfirmation}
                 className="flex-1 bg-gray-100 border-none rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
               <button data-testid="chat-send" onClick={() => sendChatMessage(chatInput)}
@@ -1000,12 +1000,12 @@ function LogBlock({ time, source, level, msg, highlight, color }: { time: string
   )
 }
 
-// === 추가: Usage Heatmap 컴포넌트 ===
+// === Added: Usage Heatmap component ===
 function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] }) {
-  const days = ['일', '월', '화', '수', '목', '금', '토'];
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
-  // 패턴 데이터를 2D 맵으로 변환
+  // Convert pattern data to 2D map
   const patternMap = new Map<string, { avgVcpu: number; avgUtilization: number }>();
   patterns.forEach(p => {
     patternMap.set(`${p.dayOfWeek}-${p.hourOfDay}`, {
@@ -1014,7 +1014,7 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
     });
   });
 
-  // 사용률에 따른 색상 결정
+  // Determine color based on utilization
   const getColor = (utilization: number): string => {
     if (utilization === 0) return 'bg-gray-800';
     if (utilization < 20) return 'bg-green-900/60';
@@ -1031,7 +1031,7 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
         <div className="flex ml-6 mb-1">
           {[0, 4, 8, 12, 16, 20].map(h => (
             <div key={h} className="text-[8px] text-gray-500 font-mono" style={{ marginLeft: h === 0 ? 0 : 'calc((100% - 48px) / 6 - 8px)', width: '16px' }}>
-              {h}시
+              {h}h
             </div>
           ))}
         </div>
@@ -1051,7 +1051,7 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
                     <div
                       key={hour}
                       className={`flex-1 h-3 rounded-sm ${getColor(utilization)} transition-colors hover:ring-1 hover:ring-white/30`}
-                      title={`${days[dayIdx]} ${hour}:00 - 평균 ${vcpu.toFixed(1)} vCPU, ${utilization.toFixed(0)}% 사용률`}
+                      title={`${days[dayIdx]} ${hour}:00 - Avg ${vcpu.toFixed(1)} vCPU, ${utilization.toFixed(0)}% utilization`}
                       data-testid={`heatmap-cell-${dayIdx}-${hour}`}
                     />
                   );
@@ -1063,7 +1063,7 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
 
         {/* Legend */}
         <div className="flex items-center justify-end gap-2 mt-2">
-          <span className="text-[8px] text-gray-500">낮음</span>
+          <span className="text-[8px] text-gray-500">Low</span>
           <div className="flex gap-px">
             <div className="w-3 h-2 rounded-sm bg-green-900/60" />
             <div className="w-3 h-2 rounded-sm bg-green-700/60" />
@@ -1071,21 +1071,21 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
             <div className="w-3 h-2 rounded-sm bg-orange-700/60" />
             <div className="w-3 h-2 rounded-sm bg-red-700/60" />
           </div>
-          <span className="text-[8px] text-gray-500">높음</span>
+          <span className="text-[8px] text-gray-500">High</span>
         </div>
       </div>
     </div>
   );
 }
 
-// === 추가: Recommendation Card 컴포넌트 ===
+// === Added: Recommendation Card component ===
 function RecommendationCard({ recommendation }: { recommendation: CostReportData['recommendations'][0] }) {
   const [expanded, setExpanded] = useState(false);
 
   const riskStyles = {
-    low: { bg: 'bg-green-900/30', text: 'text-green-400', label: '낮음' },
-    medium: { bg: 'bg-yellow-900/30', text: 'text-yellow-400', label: '중간' },
-    high: { bg: 'bg-red-900/30', text: 'text-red-400', label: '높음' },
+    low: { bg: 'bg-green-900/30', text: 'text-green-400', label: 'Low' },
+    medium: { bg: 'bg-yellow-900/30', text: 'text-yellow-400', label: 'Medium' },
+    high: { bg: 'bg-red-900/30', text: 'text-red-400', label: 'High' },
   };
 
   const typeIcons = {
@@ -1112,7 +1112,7 @@ function RecommendationCard({ recommendation }: { recommendation: CostReportData
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-bold text-green-400">-${(recommendation.currentCost - recommendation.projectedCost).toFixed(0)}/월</span>
+          <span className="text-xs font-bold text-green-400">-${(recommendation.currentCost - recommendation.projectedCost).toFixed(0)}/mo</span>
           <ChevronRight size={14} className={`text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`} />
         </div>
       </div>
@@ -1122,15 +1122,15 @@ function RecommendationCard({ recommendation }: { recommendation: CostReportData
           {/* Stats */}
           <div className="grid grid-cols-3 gap-2 mb-3">
             <div className="text-center">
-              <p className="text-[9px] text-gray-500 uppercase">현재 비용</p>
+              <p className="text-[9px] text-gray-500 uppercase">Current Cost</p>
               <p className="text-xs font-bold text-white">${recommendation.currentCost.toFixed(0)}</p>
             </div>
             <div className="text-center">
-              <p className="text-[9px] text-gray-500 uppercase">예상 비용</p>
+              <p className="text-[9px] text-gray-500 uppercase">Estimated Cost</p>
               <p className="text-xs font-bold text-green-400">${recommendation.projectedCost.toFixed(0)}</p>
             </div>
             <div className="text-center">
-              <p className="text-[9px] text-gray-500 uppercase">절감률</p>
+              <p className="text-[9px] text-gray-500 uppercase">Savings Rate</p>
               <p className="text-xs font-bold text-green-400">{recommendation.savingsPercent}%</p>
             </div>
           </div>
@@ -1138,16 +1138,16 @@ function RecommendationCard({ recommendation }: { recommendation: CostReportData
           {/* Risk & Confidence */}
           <div className="flex items-center gap-3 mb-3">
             <div className={`px-2 py-0.5 rounded text-[9px] font-bold ${risk.bg} ${risk.text}`}>
-              위험도: {risk.label}
+              Risk: {risk.label}
             </div>
             <div className="text-[9px] text-gray-400">
-              신뢰도: {(recommendation.confidence * 100).toFixed(0)}%
+              Confidence: {(recommendation.confidence * 100).toFixed(0)}%
             </div>
           </div>
 
           {/* Implementation */}
           <div className="p-2 bg-gray-900/50 rounded-lg">
-            <p className="text-[9px] text-gray-400 uppercase mb-1">구현 방법</p>
+            <p className="text-[9px] text-gray-400 uppercase mb-1">Implementation Method</p>
             <p className="text-[10px] text-gray-300 leading-relaxed">{recommendation.implementation}</p>
           </div>
         </div>

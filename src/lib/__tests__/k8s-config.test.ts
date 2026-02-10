@@ -39,6 +39,7 @@ describe('k8s-config', () => {
       KUBECONFIG: undefined,
       AWS_REGION: undefined,
       AWS_DEFAULT_REGION: undefined,
+      AWS_PROFILE: undefined,
       K8S_INSECURE_TLS: undefined,
     };
   });
@@ -131,6 +132,43 @@ describe('k8s-config', () => {
       );
 
       await expect(runK8sCommand('get pods')).rejects.toThrow('kubectl failed');
+    });
+
+    it('should pass --profile to aws commands when AWS_PROFILE is set', async () => {
+      process.env.AWS_CLUSTER_NAME = 'my-cluster';
+      process.env.AWS_REGION = 'us-east-1';
+      process.env.AWS_PROFILE = 'production';
+
+      mockExec.mockImplementation(
+        (cmd: string, opts: unknown, cb: (err: Error | null, stdout: string, stderr: string) => void) => {
+          if (cmd === 'aws') {
+            // execFileAsync('aws', args, options) → promisify mock receives (cmd='aws', opts=argsArray)
+            const args = opts as string[];
+            if (args.includes('get-token')) {
+              cb(null, JSON.stringify({ status: { token: 'k8s-token' } }), '');
+            } else {
+              // describe-cluster
+              cb(null, 'https://eks.example.com', '');
+            }
+          } else {
+            // kubectl via execAsync (full command string)
+            cb(null, 'ok', '');
+          }
+        }
+      );
+
+      await runK8sCommand('get pods');
+
+      // Verify --profile was passed to all aws CLI calls
+      const awsCalls = mockExec.mock.calls.filter(
+        (call: unknown[]) => call[0] === 'aws'
+      );
+      expect(awsCalls.length).toBe(2); // get-token + describe-cluster
+      for (const call of awsCalls) {
+        const args = call[1] as string[];
+        expect(args).toContain('--profile');
+        expect(args).toContain('production');
+      }
     });
 
     it('should not use echo pipe when stdin is not provided', async () => {

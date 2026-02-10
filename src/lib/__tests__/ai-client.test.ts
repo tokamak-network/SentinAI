@@ -41,7 +41,7 @@ describe('ai-client', () => {
         systemPrompt: 'test',
         userPrompt: 'test',
         modelTier: 'fast',
-      })).rejects.toThrow('AI API 키가 설정되지 않았습니다');
+      })).rejects.toThrow('No AI API key configured');
     });
 
     it('should route through gateway when AI_GATEWAY_URL is set', async () => {
@@ -359,7 +359,7 @@ describe('ai-client', () => {
         systemPrompt: 'sys',
         userPrompt: 'user',
         modelTier: 'fast',
-      })).rejects.toThrow('AI API 키가 설정되지 않았습니다');
+      })).rejects.toThrow('No AI API key configured');
     });
   });
 

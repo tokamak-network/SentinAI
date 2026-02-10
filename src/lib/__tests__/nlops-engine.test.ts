@@ -364,20 +364,20 @@ describe('nlops-engine', () => {
       const intent: NLOpsIntent = { type: 'scale', targetVcpu: 4, force: false };
       const response = await generateResponse(intent, null, false);
       expect(response).toContain('4 vCPU');
-      expect(response).toContain('확인');
+      expect(response).toContain('confirm');
     });
 
     it('should return static confirmation for config', async () => {
       const intent: NLOpsIntent = { type: 'config', setting: 'autoScaling', value: true };
       const response = await generateResponse(intent, null, false);
-      expect(response).toContain('자동 스케일링');
-      expect(response).toContain('활성화');
+      expect(response).toContain('Auto-scaling');
+      expect(response).toContain('enable');
     });
 
     it('should return help text for unknown', async () => {
       const intent: NLOpsIntent = { type: 'unknown', originalInput: 'asdf' };
       const response = await generateResponse(intent, null, false);
-      expect(response).toContain('이해하지 못했습니다');
+      expect(response).toContain('didn\'t understand');
     });
 
     it('should return explain result directly', async () => {
@@ -392,14 +392,14 @@ describe('nlops-engine', () => {
 
       const intent: NLOpsIntent = { type: 'query', target: 'status' };
       const response = await generateResponse(intent, { metrics: { metrics: { gethVcpu: 2, cpuUsage: 30.5, txPoolCount: 5 } } }, true);
-      expect(response).toContain('현재 상태');
+      expect(response).toContain('Current status');
     });
 
     it('should generate follow-up suggestions', () => {
-      expect(getSuggestedFollowUps({ type: 'query', target: 'status' })).toContain('로그 분석 해줘');
-      expect(getSuggestedFollowUps({ type: 'scale', targetVcpu: 2, force: false })).toContain('현재 상태 확인해줘');
-      expect(getSuggestedFollowUps({ type: 'rca' })).toContain('로그 분석 해줘');
-      expect(getSuggestedFollowUps({ type: 'unknown', originalInput: '' })).toContain('현재 상태 알려줘');
+      expect(getSuggestedFollowUps({ type: 'query', target: 'status' })).toContain('Analyze logs');
+      expect(getSuggestedFollowUps({ type: 'scale', targetVcpu: 2, force: false })).toContain('Check current status');
+      expect(getSuggestedFollowUps({ type: 'rca' })).toContain('Analyze logs');
+      expect(getSuggestedFollowUps({ type: 'unknown', originalInput: '' })).toContain('Show current status');
     });
   });
 });

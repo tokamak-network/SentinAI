@@ -1,8 +1,8 @@
 /**
  * Unified AI Client (Simplified)
  *
- * Claude 우선 사용, 폴백 체인: Claude > GPT > Gemini
- * Gateway 지원: AI_GATEWAY_URL 설정 시 프록시 경유
+ * Use Claude first, fallback chain: Claude > GPT > Gemini
+ * Gateway support: Route through proxy when AI_GATEWAY_URL is set
  */
 
 // =====================================================
@@ -37,10 +37,8 @@ export interface ChatCompletionResult {
 
 const MODEL_MAP: Record<AIProvider, Record<ModelTier, string>> = {
   anthropic: {
-
-
-    fast: 'claude-haiku-4.5',
-    best: 'claude-sonnet-4.5',
+    fast: 'claude-haiku-4-5-20251001',
+    best: 'claude-sonnet-4-5-20250929',
   },
   openai: {
     fast: 'gpt-4.1-mini',
@@ -105,7 +103,7 @@ function detectProvider(modelTier: ModelTier): ProviderConfig {
   }
 
   throw new Error(
-    'AI API 키가 설정되지 않았습니다. ANTHROPIC_API_KEY, OPENAI_API_KEY, 또는 GEMINI_API_KEY 중 하나를 설정하세요.'
+    'No AI API key configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY.'
   );
 }
 
@@ -268,7 +266,7 @@ export async function chatCompletion(options: ChatCompletionOptions): Promise<Ch
 }
 
 /**
- * 현재 설정된 AI 프로바이더 정보 반환
+ * Return information about the current configured AI provider
  */
 export function getProviderInfo(): { provider: AIProvider; hasGateway: boolean } | null {
   try {

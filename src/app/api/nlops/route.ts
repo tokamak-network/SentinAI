@@ -45,7 +45,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<NLOpsResp
         error: 'Failed to process command',
         intent: { type: 'unknown' as const, originalInput: '' },
         executed: false,
-        response: `명령 처리 중 오류가 발생했습니다: ${errorMessage}`,
+        response: `An error occurred while processing the command: ${errorMessage}`,
       },
       { status: 500 }
     );

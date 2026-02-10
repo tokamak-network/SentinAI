@@ -51,6 +51,20 @@ export function getAppPrefix(): string {
 }
 
 // ============================================================
+// AWS Profile
+// ============================================================
+
+function getAwsProfile(): string | undefined {
+  const profile = process.env.AWS_PROFILE;
+  if (!profile) return undefined;
+  if (!isValidShellIdentifier(profile)) {
+    console.warn(`[K8s Config] Invalid AWS_PROFILE value: ${profile.substring(0, 30)}`);
+    return undefined;
+  }
+  return profile;
+}
+
+// ============================================================
 // AWS Region Resolution
 // ============================================================
 
@@ -58,7 +72,7 @@ export function getAppPrefix(): string {
  * Resolve AWS region with fallback chain:
  * 1. AWS_REGION env
  * 2. AWS_DEFAULT_REGION env
- * 3. aws configure get region (CLI config)
+ * 3. aws configure get region (CLI config, respects AWS_PROFILE)
  */
 async function resolveAwsRegion(): Promise<string | undefined> {
   if (regionCache) return regionCache;
@@ -76,7 +90,10 @@ async function resolveAwsRegion(): Promise<string | undefined> {
 
   // 2. AWS CLI config
   try {
-    const { stdout } = await execFileAsync('aws', ['configure', 'get', 'region'], { timeout: 5000 });
+    const args = ['configure', 'get', 'region'];
+    const profile = getAwsProfile();
+    if (profile) args.push('--profile', profile);
+    const { stdout } = await execFileAsync('aws', args, { timeout: 5000 });
     const region = stdout.trim();
     if (region) {
       regionCache = region;
@@ -118,10 +135,10 @@ async function resolveK8sApiUrl(): Promise<string | undefined> {
 
   try {
     const region = await resolveAwsRegion();
+    const profile = getAwsProfile();
     const args = ['eks', 'describe-cluster', '--name', clusterName];
-    if (region) {
-      args.push('--region', region);
-    }
+    if (profile) args.push('--profile', profile);
+    if (region) args.push('--region', region);
     args.push('--query', 'cluster.endpoint', '--output', 'text');
 
     const startTime = Date.now();
@@ -171,10 +188,10 @@ async function getK8sToken(): Promise<string | undefined> {
 
   try {
     const region = await resolveAwsRegion();
+    const profile = getAwsProfile();
     const args = ['eks', 'get-token', '--cluster-name', clusterName];
-    if (region) {
-      args.push('--region', region);
-    }
+    if (profile) args.push('--profile', profile);
+    if (region) args.push('--region', region);
 
     const startTime = Date.now();
     const { stdout } = await execFileAsync('aws', args, { timeout: 10000 });
