@@ -135,6 +135,11 @@ export interface DailyReportResponse {
     systemPrompt: string;
     userPrompt: string;
   };
+  /** Fallback 보고서 정보 (AI provider 실패 시) */
+  fallback?: {
+    enabled: boolean;
+    reason: string;
+  };
   metadata: {
     date: string;
     generatedAt: string;

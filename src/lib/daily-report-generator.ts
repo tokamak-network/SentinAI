@@ -195,11 +195,83 @@ ${dataGaps}
 }
 
 // ============================================================
+// Fallback Report Generation
+// ============================================================
+
+/**
+ * Generate a fallback report when AI provider fails.
+ * Provides data-driven analysis without AI enrichment.
+ */
+function generateFallbackReport(data: DailyAccumulatedData): string {
+  const overall = calculateOverallStats(data.snapshots);
+
+  return `# SentinAI 일일 운영 보고서 — ${data.date}
+
+> ⚠️ **주의**: 이 보고서는 AI 분석 없이 수집된 운영 데이터만으로 생성되었습니다.
+
+## 1. 요약 (Executive Summary)
+
+${data.date} 일일 운영 데이터를 바탕으로 한 자동 보고서입니다. 자세한 분석은 AI provider 복구 후 다시 생성해주세요.
+
+---
+
+## 2. 핵심 지표 분석
+
+### 2.1 CPU 사용률
+- 평균: ${overall.avgCpu}%
+- 최대: ${overall.maxCpu}%
+- 데이터 포인트: ${data.snapshots.length}개
+
+### 2.2 트랜잭션 풀
+- 평균 대기: ${overall.avgTxPool}건
+- 최대 대기: ${overall.maxTxPool}건
+
+### 2.3 Gas 사용률
+- 평균: ${overall.avgGasRatio}%
+
+### 2.4 블록 생성
+- 평균 블록 간격: ${overall.avgBlockInterval}초
+- 수집 기간: ${data.startTime} ~ ${data.lastSnapshotTime}
+
+---
+
+## 3. 시간별 상세
+
+${formatHourlySummaryTable(data.hourlySummaries)}
+
+---
+
+## 4. 리소스 스케일링 리뷰
+
+${summarizeScalingEvents(data)}
+
+---
+
+## 5. 로그 분석 결과
+
+${summarizeLogAnalysis(data)}
+
+---
+
+## 6. 데이터 완성도
+
+- 완성도: ${(data.metadata.dataCompleteness * 100).toFixed(1)}%
+- 수집된 스냅샷: ${data.snapshots.length}개
+- 스케일링 이벤트: ${data.scalingEvents.length}건
+- 로그 분석 항목: ${data.logAnalysisResults.length}건
+
+---
+
+*이 보고서는 AI 분석 없이 SentinAI에 의해 자동 생성되었습니다. 자세한 분석은 AI provider 복구 후 재생성됩니다.*`;
+}
+
+// ============================================================
 // Report Generation
 // ============================================================
 
 /**
  * Generate a daily report using AI analysis.
+ * Falls back to data-driven report if AI provider fails.
  */
 export async function generateDailyReport(
   data: DailyAccumulatedData,
@@ -307,16 +379,49 @@ ${content}
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Daily Report] AI provider error:', errorMessage);
+    console.log('[Daily Report] Generating fallback report with collected data...');
+
+    // Generate fallback report using collected data
+    const fallbackContent = generateFallbackReport(data);
+    const reportMarkdown = `---
+title: SentinAI 일일 운영 보고서 (Fallback)
+date: ${data.date}
+generated: ${generatedAt}
+generator: fallback
+aiError: ${errorMessage}
+---
+
+${fallbackContent}
+`;
+
+    // Save fallback report to filesystem
+    let reportPath: string | undefined;
+    try {
+      const dir = path.resolve(REPORTS_DIR);
+      await fs.mkdir(dir, { recursive: true });
+      const filePath = path.join(dir, `${data.date}.md`);
+      await fs.writeFile(filePath, reportMarkdown, 'utf-8');
+      reportPath = filePath;
+      console.log(`[Daily Report] Fallback report saved to ${filePath}`);
+    } catch (fsError) {
+      const msg = fsError instanceof Error ? fsError.message : 'Unknown FS error';
+      console.error(`[Daily Report] Failed to save fallback report: ${msg}`);
+    }
 
     return {
-      success: false,
-      error: `AI report generation failed: ${errorMessage}`,
+      success: true,
+      reportPath,
+      reportContent: reportMarkdown,
       metadata: {
         date: data.date,
         generatedAt,
         dataCompleteness: data.metadata.dataCompleteness,
         snapshotCount: data.snapshots.length,
         processingTimeMs: Date.now() - startTime,
+      },
+      fallback: {
+        enabled: true,
+        reason: `AI provider error: ${errorMessage}`,
       },
     };
   }
