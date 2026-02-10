@@ -479,7 +479,7 @@ export default function Dashboard() {
               </p>
             </div>
             <span className="text-xs text-red-400 font-mono">
-              Request &quot;root cause analysis&quot; in chat
+              Ask RCA in chat
             </span>
           </div>
         </div>
@@ -647,6 +647,17 @@ export default function Dashboard() {
                     {current?.cost.isPeakMode ? '+' : '-'}{Math.abs((current?.cost.monthlySaving || 0) / (current?.cost.fixedCost || 166) * 100).toFixed(0)}%
                   </span>
                 </div>
+                {prediction && prediction.predictedVcpu !== (current?.metrics.gethVcpu || 1) && (() => {
+                  const pVcpu = prediction.predictedVcpu;
+                  const pMem = pVcpu * 2;
+                  const pCost = (pVcpu * 0.04656 + pMem * 0.00511) * 730;
+                  const pSaving = (current?.cost.fixedCost || 165.67) - pCost;
+                  return (
+                    <p className="text-[10px] text-gray-400 mt-1">
+                      Projected: <span className={pSaving > 0 ? 'text-green-400' : 'text-red-400'}>${Math.abs(pSaving).toFixed(0)}/mo</span> {pSaving > 0 ? 'saved' : 'increase'} if scaled to {pVcpu} vCPU
+                    </p>
+                  );
+                })()}
               </div>
               <button
                 onClick={fetchCostReport}
@@ -666,8 +677,8 @@ export default function Dashboard() {
               </button>
             </div>
 
-            <p className="text-gray-400 text-xs leading-relaxed">
-              <span className="text-gray-300">vs Fixed 4 vCPU (${current?.cost.fixedCost?.toFixed(0) || '166'}/mo)</span> — {current?.cost.isPeakMode ? 'Scaling up to handle traffic spike.' : 'AI-driven scaling reduced Fargate costs.'}
+            <p className="text-gray-500 text-[10px]">
+              vs Fixed 4 vCPU baseline (${current?.cost.fixedCost?.toFixed(0) || '166'}/mo)
             </p>
 
             {/* Cost Analysis Panel (Expandable) */}
@@ -726,7 +737,25 @@ export default function Dashboard() {
               <ShieldAlert className={`${activeAnomalies.length > 0 ? 'text-red-500 animate-pulse' : 'text-blue-400'}`} size={20} />
               <span className="text-gray-200 font-bold text-sm tracking-wide">ANOMALY MONITOR</span>
             </div>
-            <span className="text-xs text-gray-500 font-mono">Real-time Detection</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500 font-mono">Real-time</span>
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch(`/api/metrics?t=${Date.now()}`, { cache: 'no-store' });
+                    const data = await res.json();
+                    if (data.anomalies && data.anomalies.length > 0) {
+                      setActiveAnomalies(data.anomalies);
+                    } else {
+                      setActiveAnomalies([]);
+                    }
+                  } catch { /* ignore */ }
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-600 text-white hover:bg-blue-500 transition-colors"
+              >
+                <Activity size={10} /> RUN CHECK
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 bg-[#0D1117] p-6 overflow-y-auto font-mono text-sm custom-scrollbar relative">
@@ -782,7 +811,7 @@ export default function Dashboard() {
                 ? `${activeAnomalies.length} ANOMALIES DETECTED`
                 : 'MONITORING ACTIVE'}
             </div>
-            <span className="text-[10px] text-gray-500">Detailed analysis available in chat</span>
+            <span className="text-[10px] text-gray-500">Use chat for analysis</span>
           </div>
         </div>
       </div>
@@ -843,8 +872,8 @@ export default function Dashboard() {
 
           <div>
             <h3 className="text-xl font-bold mb-3 relative z-10">Documentation</h3>
-            <p className="text-blue-200 text-sm mb-6 leading-relaxed relative z-10">
-              Explore Tokamak Network technical docs for deeper insights into L2 optimization and infrastructure.
+            <p className="text-blue-200 text-sm mb-6 relative z-10">
+              Tokamak Network L2 technical documentation
             </p>
           </div>
 
