@@ -3,9 +3,12 @@
  * Strategy Pattern interface for Redis / InMemory dual implementation
  */
 
-import { MetricDataPoint } from './prediction';
+import { MetricDataPoint, PredictionRecord } from './prediction';
 import { ScalingState, ScalingHistoryEntry, SimulationConfig } from './scaling';
 import { PredictionResult } from './prediction';
+import { AnomalyEvent, AlertRecord, DeepAnalysisResult, AlertConfig } from './anomaly';
+import { UsageDataPoint } from './cost';
+import { AccumulatorState, DailyAccumulatedData } from './daily-report';
 
 // ============================================================
 // Store Interface
@@ -52,6 +55,59 @@ export interface IStateStore {
   // --- Connection Management ---
   isConnected(): boolean;
   disconnect(): Promise<void>;
+
+  // === P1 (HIGH PRIORITY): Anomaly Event Store ===
+  // Event storage and retrieval
+  getAnomalyEvents(limit?: number, offset?: number): Promise<{
+    events: AnomalyEvent[];
+    total: number;
+    activeCount: number;
+  }>;
+  getAnomalyEventById(eventId: string): Promise<AnomalyEvent | null>;
+  createAnomalyEvent(event: AnomalyEvent): Promise<void>;
+  updateAnomalyEvent(eventId: string, updates: Partial<AnomalyEvent>): Promise<void>;
+  addDeepAnalysis(eventId: string, analysis: DeepAnalysisResult): Promise<void>;
+  addAlertRecord(eventId: string, alert: AlertRecord): Promise<void>;
+
+  // Active event management
+  getActiveAnomalyEventId(): Promise<string | null>;
+  setActiveAnomalyEventId(eventId: string | null): Promise<void>;
+
+  // Cleanup
+  cleanupStaleAnomalyEvents(): Promise<void>;
+  clearAnomalyEvents(): Promise<void>;
+
+  // === P1 (HIGH PRIORITY): Usage Tracker ===
+  // Usage data storage
+  pushUsageData(point: UsageDataPoint): Promise<void>;
+  getUsageData(days: number): Promise<UsageDataPoint[]>;
+  getUsageDataCount(): Promise<number>;
+  clearUsageData(): Promise<void>;
+
+  // === P2 (MEDIUM PRIORITY): Daily Accumulator ===
+  // Daily metric snapshots and summaries storage
+  getDailyAccumulatorState(date: string): Promise<AccumulatorState | null>;
+  setDailyAccumulatorState(date: string, state: AccumulatorState): Promise<void>;
+  updateDailyAccumulatorData(date: string, updates: Partial<DailyAccumulatedData>): Promise<void>;
+  deleteDailyAccumulatorState(date: string): Promise<void>;
+
+  // === P2 (MEDIUM PRIORITY): Alert Dispatcher ===
+  // Alert configuration, history, and cooldown management
+  getAlertConfig(): Promise<AlertConfig>;
+  setAlertConfig(config: AlertConfig): Promise<void>;
+  getAlertHistory(): Promise<AlertRecord[]>;
+  addAlertToHistory(record: AlertRecord): Promise<void>;
+  getLastAlertTime(anomalyType: string): Promise<number | null>;
+  setLastAlertTime(anomalyType: string, timestamp: number): Promise<void>;
+  cleanupOldAlerts(): Promise<void>;
+  clearAlertHistory(): Promise<void>;
+
+  // === P3 (LOW PRIORITY): Prediction Tracker ===
+  // AI prediction accuracy tracking
+  getPredictionRecords(limit?: number): Promise<PredictionRecord[]>;
+  addPredictionRecord(record: PredictionRecord): Promise<void>;
+  updatePredictionRecord(id: string, updates: Partial<PredictionRecord>): Promise<void>;
+  clearPredictionRecords(): Promise<void>;
 }
 
 // ============================================================

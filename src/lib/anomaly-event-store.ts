@@ -1,33 +1,10 @@
 /**
- * Anomaly Event Store
- * In-memory store for detected anomaly events
+ * Anomaly Event Store (Redis-backed)
+ * Async wrapper for detected anomaly events
  */
 
 import { AnomalyEvent, AnomalyResult, DeepAnalysisResult, AlertRecord, AnomalyEventStatus } from '@/types/anomaly';
-
-// ============================================================================
-// Configuration
-// ============================================================================
-
-/** Maximum number of events to store */
-const MAX_EVENTS = 100;
-
-/** Auto-resolve timeout (ms) - resolve if no new anomaly for 30 min */
-const AUTO_RESOLVE_MS = 30 * 60 * 1000;
-
-// ============================================================================
-// In-Memory State
-// ============================================================================
-
-/** Event store (newest first) */
-let events: AnomalyEvent[] = [];
-
-/** Currently active event ID */
-let activeEventId: string | null = null;
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
+import { getStore } from './redis-store';
 
 /**
  * Generate UUID v4
@@ -41,49 +18,26 @@ function generateUUID(): string {
 }
 
 /**
- * Clean up old events
- */
-function cleanup(): void {
-  // Remove oldest events when exceeding max count
-  if (events.length > MAX_EVENTS) {
-    events = events.slice(0, MAX_EVENTS);
-  }
-
-  // Auto-resolve stale events
-  const now = Date.now();
-  for (const event of events) {
-    if (event.status === 'active' && now - event.timestamp > AUTO_RESOLVE_MS) {
-      event.status = 'resolved';
-      event.resolvedAt = now;
-    }
-  }
-
-  // Update active event ID
-  const activeEvent = events.find(e => e.status === 'active');
-  activeEventId = activeEvent?.id || null;
-}
-
-// ============================================================================
-// Main Exports
-// ============================================================================
-
-/**
  * Create a new anomaly event or append to an existing active event
  *
  * @param anomalies List of anomalies detected by Layer 1
  * @returns Created or updated event
  */
-export function createOrUpdateEvent(anomalies: AnomalyResult[]): AnomalyEvent {
-  cleanup();
+export async function createOrUpdateEvent(anomalies: AnomalyResult[]): Promise<AnomalyEvent> {
+  const store = getStore();
+  await store.cleanupStaleAnomalyEvents();
   const now = Date.now();
+
+  // Get the active event ID
+  const activeEventId = await store.getActiveAnomalyEventId();
 
   // If an active event exists, update the anomaly list
   if (activeEventId) {
-    const activeEvent = events.find(e => e.id === activeEventId);
+    const activeEvent = await store.getAnomalyEventById(activeEventId);
     if (activeEvent) {
       // Only add anomalies for new metrics not already present
-      const existingMetrics = new Set(activeEvent.anomalies.map(a => a.metric));
-      const newAnomalies = anomalies.filter(a => !existingMetrics.has(a.metric));
+      const existingMetrics = new Set(activeEvent.anomalies.map((a) => a.metric));
+      const newAnomalies = anomalies.filter((a) => !existingMetrics.has(a.metric));
 
       if (newAnomalies.length > 0) {
         activeEvent.anomalies.push(...newAnomalies);
@@ -91,12 +45,13 @@ export function createOrUpdateEvent(anomalies: AnomalyResult[]): AnomalyEvent {
 
       // Update existing anomalies (replace with latest value for the same metric)
       for (const anomaly of anomalies) {
-        const existingIndex = activeEvent.anomalies.findIndex(a => a.metric === anomaly.metric);
+        const existingIndex = activeEvent.anomalies.findIndex((a) => a.metric === anomaly.metric);
         if (existingIndex >= 0) {
           activeEvent.anomalies[existingIndex] = anomaly;
         }
       }
 
+      await store.updateAnomalyEvent(activeEventId, { anomalies: activeEvent.anomalies });
       return activeEvent;
     }
   }
@@ -110,8 +65,8 @@ export function createOrUpdateEvent(anomalies: AnomalyResult[]): AnomalyEvent {
     alerts: [],
   };
 
-  events.unshift(newEvent);
-  activeEventId = newEvent.id;
+  await store.createAnomalyEvent(newEvent);
+  await store.setActiveAnomalyEventId(newEvent.id);
 
   return newEvent;
 }
@@ -119,35 +74,33 @@ export function createOrUpdateEvent(anomalies: AnomalyResult[]): AnomalyEvent {
 /**
  * Add AI analysis result to an event
  */
-export function addDeepAnalysis(eventId: string, analysis: DeepAnalysisResult): void {
-  const event = events.find(e => e.id === eventId);
-  if (event) {
-    event.deepAnalysis = analysis;
-  }
+export async function addDeepAnalysis(eventId: string, analysis: DeepAnalysisResult): Promise<void> {
+  const store = getStore();
+  await store.addDeepAnalysis(eventId, analysis);
 }
 
 /**
  * Add alert record to an event
  */
-export function addAlertRecord(eventId: string, alert: AlertRecord): void {
-  const event = events.find(e => e.id === eventId);
-  if (event) {
-    event.alerts.push(alert);
-  }
+export async function addAlertRecord(eventId: string, alert: AlertRecord): Promise<void> {
+  const store = getStore();
+  await store.addAlertRecord(eventId, alert);
 }
 
 /**
  * Update event status
  */
-export function updateEventStatus(eventId: string, status: AnomalyEventStatus): void {
-  const event = events.find(e => e.id === eventId);
-  if (event) {
-    event.status = status;
-    if (status === 'resolved') {
-      event.resolvedAt = Date.now();
-    }
-    if (status !== 'active' && activeEventId === eventId) {
-      activeEventId = null;
+export async function updateEventStatus(eventId: string, status: AnomalyEventStatus): Promise<void> {
+  const store = getStore();
+  await store.updateAnomalyEvent(eventId, {
+    status,
+    resolvedAt: status === 'resolved' ? Date.now() : undefined,
+  });
+
+  if (status !== 'active') {
+    const activeId = await store.getActiveAnomalyEventId();
+    if (activeId === eventId) {
+      await store.setActiveAnomalyEventId(null);
     }
   }
 }
@@ -155,47 +108,46 @@ export function updateEventStatus(eventId: string, status: AnomalyEventStatus): 
 /**
  * Resolve the active event (called when no more anomalies are detected)
  */
-export function resolveActiveEventIfExists(): void {
+export async function resolveActiveEventIfExists(): Promise<void> {
+  const store = getStore();
+  const activeEventId = await store.getActiveAnomalyEventId();
   if (activeEventId) {
-    updateEventStatus(activeEventId, 'resolved');
+    await updateEventStatus(activeEventId, 'resolved');
   }
 }
 
 /**
  * Get events list (with pagination)
  */
-export function getEvents(limit: number = 20, offset: number = 0): { events: AnomalyEvent[]; total: number; activeCount: number } {
-  cleanup();
-
-  const activeCount = events.filter(e => e.status === 'active').length;
-  const paginatedEvents = events.slice(offset, offset + limit);
-
-  return {
-    events: paginatedEvents,
-    total: events.length,
-    activeCount,
-  };
+export async function getEvents(limit: number = 20, offset: number = 0): Promise<{
+  events: AnomalyEvent[];
+  total: number;
+  activeCount: number;
+}> {
+  const store = getStore();
+  return store.getAnomalyEvents(limit, offset);
 }
 
 /**
  * Get a specific event by ID
  */
-export function getEventById(eventId: string): AnomalyEvent | null {
-  return events.find(e => e.id === eventId) || null;
+export async function getEventById(eventId: string): Promise<AnomalyEvent | null> {
+  const store = getStore();
+  return store.getAnomalyEventById(eventId);
 }
 
 /**
  * Get the currently active event ID
  */
-export function getActiveEventId(): string | null {
-  cleanup();
-  return activeEventId;
+export async function getActiveEventId(): Promise<string | null> {
+  const store = getStore();
+  return store.getActiveAnomalyEventId();
 }
 
 /**
  * Clear the event store (for testing)
  */
-export function clearEvents(): void {
-  events = [];
-  activeEventId = null;
+export async function clearEvents(): Promise<void> {
+  const store = getStore();
+  await store.clearAnomalyEvents();
 }

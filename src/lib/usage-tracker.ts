@@ -1,5 +1,5 @@
 /**
- * Usage Tracker Module
+ * Usage Tracker Module (Redis-backed)
  * vCPU 사용 패턴을 추적하여 비용 최적화 분석에 활용
  */
 
@@ -9,18 +9,7 @@ import {
   HourlyProfile,
   TIME_CONSTANTS,
 } from '@/types/cost';
-
-// ============================================================
-// In-Memory Storage
-// ============================================================
-
-/**
- * 사용량 데이터 저장소
- * - 최대 7일간 데이터 보관
- * - 1분 간격 수집 시 최대 10,080개 (7 * 24 * 60)
- */
-const MAX_DATA_POINTS = 10080;
-let usageData: UsageDataPoint[] = [];
+import { getStore } from './redis-store';
 
 /**
  * 환경 변수로 추적 활성화 여부 결정
@@ -29,29 +18,18 @@ function isTrackingEnabled(): boolean {
   return process.env.COST_TRACKING_ENABLED !== 'false';
 }
 
-// ============================================================
-// Data Collection
-// ============================================================
-
 /**
  * 사용량 데이터 기록
  *
  * @param vcpu - 현재 할당된 vCPU (1, 2, 4, 8 등)
  * @param cpuUtilization - 현재 CPU 사용률 (0-100)
- *
- * @example
- * ```typescript
- * // metrics API에서 호출
- * recordUsage(currentVcpu, effectiveCpu);
- * ```
  */
-export function recordUsage(vcpu: number, cpuUtilization: number): void {
+export async function recordUsage(vcpu: number, cpuUtilization: number): Promise<void> {
   if (!isTrackingEnabled()) {
     return;
   }
 
   // 스트레스 테스트 모드의 시뮬레이션 데이터는 제외 (vcpu가 8인 경우)
-  // 실제 운영에서는 8 vCPU도 가능하므로, 필요시 이 조건 수정
   if (vcpu === 8) {
     return;
   }
@@ -59,15 +37,11 @@ export function recordUsage(vcpu: number, cpuUtilization: number): void {
   const dataPoint: UsageDataPoint = {
     timestamp: Date.now(),
     vcpu,
-    cpuUtilization: Math.min(Math.max(cpuUtilization, 0), 100), // 0-100 범위로 클램프
+    cpuUtilization: Math.min(Math.max(cpuUtilization, 0), 100),
   };
 
-  usageData.push(dataPoint);
-
-  // 최대 크기 초과 시 오래된 데이터 제거
-  if (usageData.length > MAX_DATA_POINTS) {
-    usageData = usageData.slice(-MAX_DATA_POINTS);
-  }
+  const store = getStore();
+  await store.pushUsageData(dataPoint);
 }
 
 /**
@@ -76,23 +50,25 @@ export function recordUsage(vcpu: number, cpuUtilization: number): void {
  * @param days - 조회할 기간 (일)
  * @returns 해당 기간의 UsageDataPoint 배열
  */
-export function getUsageData(days: number): UsageDataPoint[] {
-  const cutoff = Date.now() - days * TIME_CONSTANTS.MS_PER_DAY;
-  return usageData.filter((point) => point.timestamp >= cutoff);
+export async function getUsageData(days: number): Promise<UsageDataPoint[]> {
+  const store = getStore();
+  return store.getUsageData(days);
 }
 
 /**
  * 전체 사용량 데이터 개수 조회 (디버깅용)
  */
-export function getUsageDataCount(): number {
-  return usageData.length;
+export async function getUsageDataCount(): Promise<number> {
+  const store = getStore();
+  return store.getUsageDataCount();
 }
 
 /**
  * 사용량 데이터 초기화 (테스트용)
  */
-export function clearUsageData(): void {
-  usageData = [];
+export async function clearUsageData(): Promise<void> {
+  const store = getStore();
+  await store.clearUsageData();
 }
 
 // ============================================================
@@ -106,23 +82,15 @@ export function clearUsageData(): void {
  *
  * @param days - 분석할 기간 (일), 기본값 7
  * @returns UsagePattern 배열 (최대 168개)
- *
- * @example
- * ```typescript
- * const patterns = analyzePatterns(7);
- * // 월요일 오전 10시 패턴
- * const mondayMorning = patterns.find(p => p.dayOfWeek === 1 && p.hourOfDay === 10);
- * console.log(`평균 vCPU: ${mondayMorning?.avgVcpu}`);
- * ```
  */
-export function analyzePatterns(days: number = 7): UsagePattern[] {
-  const data = getUsageData(days);
+export async function analyzePatterns(days: number = 7): Promise<UsagePattern[]> {
+  const data = await getUsageData(days);
 
   if (data.length === 0) {
     return [];
   }
 
-  // 버킷 초기화: [dayOfWeek][hourOfDay] = { vcpuSum, vcpuMax, utilSum, count }
+  // 버킷 초기화
   type Bucket = {
     vcpuSum: number;
     vcpuMax: number;
@@ -135,8 +103,8 @@ export function analyzePatterns(days: number = 7): UsagePattern[] {
   // 데이터를 버킷에 분류
   for (const point of data) {
     const date = new Date(point.timestamp);
-    const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    const hourOfDay = date.getHours(); // 0-23
+    const dayOfWeek = date.getDay();
+    const hourOfDay = date.getHours();
     const key = `${dayOfWeek}-${hourOfDay}`;
 
     const bucket = buckets.get(key) || {
@@ -186,15 +154,12 @@ export function analyzePatterns(days: number = 7): UsagePattern[] {
 /**
  * 24시간 프로파일 생성 (요일 무관)
  *
- * 모든 요일의 같은 시간대 데이터를 합쳐서 시간별 평균 계산
- *
  * @returns 24개의 HourlyProfile
  */
-export function getHourlyBreakdown(): HourlyProfile[] {
-  const data = getUsageData(7); // 최근 7일 데이터
+export async function getHourlyBreakdown(): Promise<HourlyProfile[]> {
+  const data = await getUsageData(7);
 
   if (data.length === 0) {
-    // 데이터가 없으면 기본값 반환
     return Array.from({ length: 24 }, (_, hour) => ({
       hour,
       avgVcpu: 1,
@@ -230,14 +195,14 @@ export function getHourlyBreakdown(): HourlyProfile[] {
  * @param days - 분석 기간
  * @returns 요약 통계
  */
-export function getUsageSummary(days: number = 7): {
+export async function getUsageSummary(days: number = 7): Promise<{
   avgVcpu: number;
   peakVcpu: number;
   avgUtilization: number;
   dataPointCount: number;
-  oldestDataAge: number; // hours
-} {
-  const data = getUsageData(days);
+  oldestDataAge: number;
+}> {
+  const data = await getUsageData(days);
 
   if (data.length === 0) {
     return {
@@ -260,7 +225,7 @@ export function getUsageSummary(days: number = 7): {
   }
 
   const oldestTimestamp = data[0].timestamp;
-  const oldestDataAge = (Date.now() - oldestTimestamp) / (1000 * 60 * 60); // hours
+  const oldestDataAge = (Date.now() - oldestTimestamp) / (1000 * 60 * 60);
 
   return {
     avgVcpu: Math.round((vcpuSum / data.length) * 100) / 100,
