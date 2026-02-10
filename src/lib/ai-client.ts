@@ -38,7 +38,7 @@ export interface ChatCompletionResult {
 const MODEL_MAP: Record<AIProvider, Record<ModelTier, string>> = {
   anthropic: {
     fast: 'claude-haiku-4-5-20251001',
-    best: 'claude-sonnet-4-5-20251022',
+    best: 'claude-opus-4-6',
   },
   openai: {
     fast: 'gpt-4.1-mini',

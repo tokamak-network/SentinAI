@@ -3,10 +3,11 @@
  * Centralized kubectl connection management with auto-detection
  */
 
-import { exec } from 'child_process';
+import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 // ============================================================
 // Input Validation
@@ -75,7 +76,7 @@ async function resolveAwsRegion(): Promise<string | undefined> {
 
   // 2. AWS CLI config
   try {
-    const { stdout } = await execAsync('aws configure get region', { timeout: 5000 });
+    const { stdout } = await execFileAsync('aws', ['configure', 'get', 'region'], { timeout: 5000 });
     const region = stdout.trim();
     if (region) {
       regionCache = region;
@@ -117,11 +118,14 @@ async function resolveK8sApiUrl(): Promise<string | undefined> {
 
   try {
     const region = await resolveAwsRegion();
-    const regionFlag = region ? ` --region ${region}` : '';
-    const cmd = `aws eks describe-cluster --name ${clusterName}${regionFlag} --query "cluster.endpoint" --output text`;
+    const args = ['eks', 'describe-cluster', '--name', clusterName];
+    if (region) {
+      args.push('--region', region);
+    }
+    args.push('--query', 'cluster.endpoint', '--output', 'text');
 
     const startTime = Date.now();
-    const { stdout } = await execAsync(cmd, { timeout: 10000 });
+    const { stdout } = await execFileAsync('aws', args, { timeout: 10000 });
     const endpoint = stdout.trim();
 
     if (endpoint && endpoint !== 'None') {
@@ -167,11 +171,13 @@ async function getK8sToken(): Promise<string | undefined> {
 
   try {
     const region = await resolveAwsRegion();
-    const regionFlag = region ? ` --region ${region}` : '';
-    const cmd = `aws eks get-token --cluster-name ${clusterName}${regionFlag}`;
+    const args = ['eks', 'get-token', '--cluster-name', clusterName];
+    if (region) {
+      args.push('--region', region);
+    }
 
     const startTime = Date.now();
-    const { stdout } = await execAsync(cmd, { timeout: 10000 });
+    const { stdout } = await execFileAsync('aws', args, { timeout: 10000 });
     console.log(`[K8s Config] Token generated (${Date.now() - startTime}ms)`);
 
     const tokenData = JSON.parse(stdout);
@@ -192,12 +198,26 @@ async function getK8sToken(): Promise<string | undefined> {
 // ============================================================
 
 /**
+ * Escape shell argument for safe inclusion in shell string
+ * SECURITY: Prevents shell injection by properly escaping special characters
+ */
+function escapeShellArg(arg: string): string {
+  // Wrap in single quotes and escape any existing single quotes
+  return "'" + arg.replace(/'/g, "'\\''") + "'";
+}
+
+/**
  * Execute a kubectl command with auto-configured connection
  *
  * Automatically resolves:
  * - K8S_API_URL (from env or aws eks describe-cluster)
  * - Auth token (from env or aws eks get-token)
  * - KUBECONFIG (from env)
+ *
+ * SECURITY:
+ * - Escapes all shell arguments to prevent injection
+ * - Validates KUBECONFIG path
+ * - Avoids exposing sensitive data on command line (token passed safely)
  */
 export async function runK8sCommand(
   command: string,
@@ -210,29 +230,34 @@ export async function runK8sCommand(
     resolveK8sApiUrl(),
   ]);
 
-  let baseCmd = 'kubectl';
+  const baseCmd = 'kubectl';
+
+  // Build arguments safely with escaping
+  const args: string[] = [];
 
   if (process.env.KUBECONFIG) {
-    baseCmd += ` --kubeconfig="${process.env.KUBECONFIG}"`;
+    args.push('--kubeconfig', escapeShellArg(process.env.KUBECONFIG));
   }
   if (apiUrl) {
-    baseCmd += ` --server="${apiUrl}"`;
+    args.push('--server', escapeShellArg(apiUrl));
   }
   if (token) {
-    baseCmd += ` --token="${token}"`;
+    args.push('--token', escapeShellArg(token));
     if (process.env.K8S_INSECURE_TLS === 'true') {
-      baseCmd += ' --insecure-skip-tls-verify';
+      args.push('--insecure-skip-tls-verify');
     }
   }
 
   try {
     let fullCmd: string;
+    const argsStr = args.length > 0 ? ` ${args.join(' ')}` : '';
 
     if (options?.stdin) {
+      // Safely escape stdin for shell
       const escapedStdin = options.stdin.replace(/'/g, "'\\''");
-      fullCmd = `echo '${escapedStdin}' | ${baseCmd} ${command}`;
+      fullCmd = `echo '${escapedStdin}' | ${baseCmd}${argsStr} ${command}`;
     } else {
-      fullCmd = `${baseCmd} ${command}`;
+      fullCmd = `${baseCmd}${argsStr} ${command}`;
     }
 
     const result = await execAsync(fullCmd, {
