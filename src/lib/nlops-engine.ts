@@ -1,6 +1,8 @@
 /**
- * NLOps Engine - Natural Language Operations Processing Engine
- * Core logic for processing natural language commands
+ * NLOps Engine v2 - Function Calling Based Natural Language Operations
+ *
+ * Instead of intent classification → fixed handler,
+ * LLM decides when to call tools and generates natural responses.
  *
  * AI calls: chatCompletion() from src/lib/ai-client.ts
  * Log analysis: analyzeLogChunk() from src/lib/ai-analyzer.ts
@@ -9,18 +11,12 @@
 import type {
   NLOpsIntent,
   NLOpsResponse,
-  IntentClassificationResult,
-  ActionExecutionResult,
-  CurrentSystemState,
   NLOpsTargetVcpu,
-  QueryTarget,
-  AnalyzeMode,
-  ConfigSetting,
+  CurrentSystemState,
 } from '@/types/nlops';
 import { chatCompletion } from '@/lib/ai-client';
 import { analyzeLogChunk } from '@/lib/ai-analyzer';
 import { getAllLiveLogs, generateMockLogs } from '@/lib/log-ingester';
-import { generateResponse, getSuggestedFollowUps } from '@/lib/nlops-responder';
 
 // ============================================================
 // Constants
@@ -28,121 +24,303 @@ import { generateResponse, getSuggestedFollowUps } from '@/lib/nlops-responder';
 
 const NLOPS_ENABLED = process.env.NLOPS_ENABLED !== 'false';
 
-const DANGEROUS_ACTION_TYPES: NLOpsIntent['type'][] = ['scale', 'config'];
+const DANGEROUS_TOOLS = ['scale_node', 'update_config'];
 
 // ============================================================
-// Intent Classification
+// Tool Definitions
 // ============================================================
 
-const INTENT_CLASSIFICATION_SYSTEM_PROMPT = `You are a command interpreter for SentinAI, an Optimism L2 node monitoring and auto-scaling system.
-
-Your task is to classify user input into one of the following intent types:
-
-## Available Intent Types
-
-1. **query** - Check current status, metrics, history, cost, or anomalies
-   - target: "status" | "metrics" | "history" | "cost" | "anomalies"
-   - params: optional key-value pairs for filtering
-
-2. **scale** - Change vCPU allocation
-   - targetVcpu: 1 | 2 | 4 (only these values are valid)
-   - force: boolean (true if user explicitly says to force/override)
-
-3. **analyze** - Run AI log analysis
-   - mode: "normal" | "attack" | "live"
-
-4. **config** - Update system settings
-   - setting: "autoScaling" | "simulationMode" | "zeroDowntimeEnabled"
-   - value: boolean
-
-5. **explain** - Explain a concept, metric, or current state
-   - topic: string describing what to explain
-
-6. **rca** - Trigger Root Cause Analysis
-   - No parameters needed
-
-7. **unknown** - Cannot understand the user's intent
-   - originalInput: the original user message
-
-## Classification Rules
-
-1. Support BOTH Korean and English input
-2. For "scale" intent, extract the target vCPU value (must be 1, 2, or 4)
-3. For "query" intent, determine the most appropriate target based on keywords
-4. For "config" intent, extract both the setting name and desired value
-5. If the request is ambiguous, prefer "query/status" over "unknown"
-6. Set requireConfirmation=true for "scale" and "config" intents
-
-## Common Patterns
-
-Korean:
-- "현재 상태" → query/status
-- "메트릭 보여줘" → query/metrics
-- "비용 얼마야" / "비용 분석" → query/cost
-- "이상 탐지" / "이상 현황" → query/anomalies
-- "4 vCPU로 스케일업" / "4코어로 올려" → scale/4
-- "1 vCPU로 줄여" / "스케일다운" → scale/1
-- "로그 분석 해줘" → analyze/live
-- "자동 스케일링 켜줘" → config/autoScaling/true
-- "자동 스케일링 꺼줘" → config/autoScaling/false
-- "시뮬레이션 모드 켜줘" → config/simulationMode/true
-- "무중단 스케일링 켜줘" → config/zeroDowntimeEnabled/true
-- "왜 CPU가 높아?" → explain
-- "근본 원인 분석" / "RCA 실행" → rca
-
-English:
-- "current status" → query/status
-- "show metrics" → query/metrics
-- "how much does it cost" → query/cost
-- "show anomalies" → query/anomalies
-- "scale up to 4 vCPU" → scale/4
-- "analyze logs" → analyze/live
-- "enable auto-scaling" → config/autoScaling/true
-- "run root cause analysis" → rca
-
-Respond ONLY with a valid JSON object (no markdown code blocks):
-{
-  "intent": { "type": "<type>", ... },
-  "requireConfirmation": <boolean>,
-  "clarification": "<optional>"
-}`;
-
-function buildIntentClassificationUserPrompt(
-  userInput: string,
-  currentState: CurrentSystemState
-): string {
-  return `User input: "${userInput}"
-
-Current system state:
-- vCPU: ${currentState.vcpu}
-- Memory: ${currentState.memoryGiB} GiB
-- Auto-scaling: ${currentState.autoScalingEnabled ? 'enabled' : 'disabled'}
-- Simulation mode: ${currentState.simulationMode ? 'enabled' : 'disabled'}
-- CPU usage: ${currentState.cpuUsage.toFixed(1)}%
-- TxPool pending: ${currentState.txPoolCount}
-- Cooldown remaining: ${currentState.cooldownRemaining}s
-
-Parse the user's intent and respond with a JSON object.`;
+interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
 }
 
+const TOOLS: ToolDefinition[] = [
+  {
+    name: 'get_system_status',
+    description: 'Get current system status including L2 metrics, vCPU, memory, scaling state, and component health. Use when user asks about current state, status, or health.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'get_metrics',
+    description: 'Get detailed L2 metrics: CPU usage, TxPool count, block height, gas ratio, memory usage. Use when user asks about specific metrics or numbers.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'get_cost_report',
+    description: 'Generate AI-powered cost optimization report with savings recommendations. Use when user asks about costs, expenses, savings, or budget.',
+    parameters: {
+      type: 'object',
+      properties: {
+        days: { type: 'number', description: 'Number of days to analyze (default: 7)' },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'get_anomalies',
+    description: 'Get current anomaly detection results. Use when user asks about anomalies, issues, problems, or alerts.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'analyze_logs',
+    description: 'Run AI-powered log analysis across all L2 components (op-geth, op-node, batcher, proposer). Use when user asks to analyze logs, check for issues, or diagnose problems.',
+    parameters: {
+      type: 'object',
+      properties: {
+        mode: {
+          type: 'string',
+          enum: ['normal', 'attack', 'live'],
+          description: 'Analysis mode: normal (standard), attack (security focused), live (real-time logs)',
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: 'run_rca',
+    description: 'Run Root Cause Analysis to identify the root cause of current issues. Use when user asks why something is happening, wants diagnosis, or asks about root cause.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'get_prediction',
+    description: 'Get AI prediction for future resource needs. Use when user asks about predictions, forecasts, or what to expect.',
+    parameters: {
+      type: 'object',
+      properties: {},
+      required: [],
+    },
+  },
+  {
+    name: 'scale_node',
+    description: 'Scale the node to a target vCPU count. DANGEROUS: requires user confirmation. Only use when user explicitly requests scaling.',
+    parameters: {
+      type: 'object',
+      properties: {
+        targetVcpu: {
+          type: 'number',
+          enum: [1, 2, 4],
+          description: 'Target vCPU count (1, 2, or 4)',
+        },
+      },
+      required: ['targetVcpu'],
+    },
+  },
+  {
+    name: 'update_config',
+    description: 'Update system configuration. DANGEROUS: requires user confirmation. Only use when user explicitly requests config changes.',
+    parameters: {
+      type: 'object',
+      properties: {
+        setting: {
+          type: 'string',
+          enum: ['autoScaling', 'simulationMode', 'zeroDowntimeEnabled'],
+          description: 'Setting to update',
+        },
+        value: { type: 'boolean', description: 'New value for the setting' },
+      },
+      required: ['setting', 'value'],
+    },
+  },
+];
+
+// ============================================================
+// System Prompt
+// ============================================================
+
+const SYSTEM_PROMPT = `You are SentinAI Assistant, a friendly and knowledgeable AI assistant for SentinAI — an Optimism L2 node monitoring and auto-scaling system.
+
+## Your Personality
+- Friendly, professional, and concise
+- You can have normal conversations (greetings, small talk, jokes)
+- When asked about the system, you use the available tools to get real data
+- You explain technical concepts in an accessible way
+
+## Available Tools
+You have tools to query system status, metrics, costs, anomalies, run log analysis, RCA, get predictions, scale nodes, and update configuration.
+
+## Rules
+1. For general conversation (greetings, thanks, jokes, etc.) — respond naturally WITHOUT calling any tools
+2. For system-related questions — call the appropriate tool(s) first, then respond based on the data
+3. For dangerous actions (scaling, config changes) — always explain what you're about to do and ask for confirmation
+4. Support BOTH Korean and English — respond in the same language the user uses
+5. Keep responses concise but informative (under 200 words)
+6. When presenting data, format numbers nicely and highlight important values
+7. If multiple tools are needed, call them and synthesize the results
+
+## Response Format
+- Use bullet points for lists
+- Don't use markdown headers
+- Include relevant numbers and metrics when available`;
+
+// ============================================================
+// Tool Execution
+// ============================================================
+
+async function executeTool(
+  toolName: string,
+  params: Record<string, unknown>,
+  baseUrl: string
+): Promise<Record<string, unknown>> {
+  try {
+    switch (toolName) {
+      case 'get_system_status': {
+        const [metricsRes, scalerRes] = await Promise.all([
+          fetch(`${baseUrl}/api/metrics`, { cache: 'no-store' }),
+          fetch(`${baseUrl}/api/scaler`, { cache: 'no-store' }),
+        ]);
+        const metricsData = metricsRes.ok ? await metricsRes.json() : { error: 'Failed to fetch metrics' };
+        const scalerData = scalerRes.ok ? await scalerRes.json() : { error: 'Failed to fetch scaler' };
+        return { metrics: metricsData, scaler: scalerData };
+      }
+
+      case 'get_metrics': {
+        const res = await fetch(`${baseUrl}/api/metrics`, { cache: 'no-store' });
+        return res.ok ? await res.json() : { error: 'Failed to fetch metrics' };
+      }
+
+      case 'get_cost_report': {
+        const days = (params.days as number) || 7;
+        const res = await fetch(`${baseUrl}/api/cost-report?days=${days}`, { cache: 'no-store' });
+        return res.ok ? await res.json() : { error: 'Failed to fetch cost report' };
+      }
+
+      case 'get_anomalies': {
+        const res = await fetch(`${baseUrl}/api/anomalies`, { cache: 'no-store' });
+        return res.ok ? await res.json() : { error: 'Failed to fetch anomalies' };
+      }
+
+      case 'analyze_logs': {
+        const mode = (params.mode as string) || 'live';
+        let logs: Record<string, string>;
+        try {
+          logs = await getAllLiveLogs();
+        } catch {
+          logs = generateMockLogs(mode === 'attack' ? 'attack' : 'normal');
+        }
+        const analysis = await analyzeLogChunk(logs);
+        return {
+          source: 'ai-analyzer',
+          mode,
+          severity: analysis.severity,
+          summary: analysis.summary,
+          action_item: analysis.action_item,
+          timestamp: analysis.timestamp,
+        };
+      }
+
+      case 'run_rca': {
+        const res = await fetch(`${baseUrl}/api/rca`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ autoTriggered: false }),
+        });
+        return res.ok ? await res.json() : { error: 'RCA analysis failed' };
+      }
+
+      case 'get_prediction': {
+        const res = await fetch(`${baseUrl}/api/scaler`, { cache: 'no-store' });
+        if (!res.ok) return { error: 'Failed to fetch prediction' };
+        const data = await res.json();
+        return {
+          prediction: data.prediction || null,
+          predictionMeta: data.predictionMeta || null,
+        };
+      }
+
+      case 'scale_node': {
+        const targetVcpu = params.targetVcpu as number;
+        const res = await fetch(`${baseUrl}/api/scaler`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetVcpu }),
+        });
+        return res.ok ? await res.json() : { error: `Scale request failed: ${res.status}` };
+      }
+
+      case 'update_config': {
+        const setting = params.setting as string;
+        const value = params.value as boolean;
+        const bodyMap: Record<string, Record<string, boolean>> = {
+          autoScaling: { autoScalingEnabled: value },
+          simulationMode: { simulationMode: value },
+          zeroDowntimeEnabled: { zeroDowntimeEnabled: value },
+        };
+        const res = await fetch(`${baseUrl}/api/scaler`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(bodyMap[setting] || {}),
+        });
+        return res.ok ? await res.json() : { error: `Config update failed: ${res.status}` };
+      }
+
+      default:
+        return { error: `Unknown tool: ${toolName}` };
+    }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Tool execution failed' };
+  }
+}
+
+// ============================================================
+// Simulated Tool Use Flow
+// ============================================================
+
 /**
- * Classify user input into an Intent
+ * Step 1: Ask LLM what tools to call (if any)
  */
-export async function classifyIntent(
+async function planToolCalls(
   userInput: string,
   currentState: CurrentSystemState
-): Promise<IntentClassificationResult> {
-  if (!userInput.trim()) {
-    return {
-      intent: { type: 'unknown', originalInput: userInput },
-      requireConfirmation: false,
-    };
-  }
+): Promise<{ toolCalls: Array<{ name: string; params: Record<string, unknown> }>; directResponse: string | null }> {
+  const toolDescriptions = TOOLS.map(
+    (t) => `- ${t.name}: ${t.description}\n  params: ${JSON.stringify(t.parameters.properties || {})}`
+  ).join('\n');
+
+  const planPrompt = `You are deciding whether to call tools for the user's message.
+
+Available tools:
+${toolDescriptions}
+
+Current system state:
+- vCPU: ${currentState.vcpu}, Memory: ${currentState.memoryGiB} GiB
+- CPU: ${currentState.cpuUsage.toFixed(1)}%, TxPool: ${currentState.txPoolCount}
+- Auto-scaling: ${currentState.autoScalingEnabled ? 'on' : 'off'}, Simulation: ${currentState.simulationMode ? 'on' : 'off'}
+
+User message: "${userInput}"
+
+If the user is making casual conversation (greeting, thanks, joke, general question not about the system), respond with:
+{"tools": [], "directResponse": "<your friendly response>"}
+
+If the user is asking about the system or wants an action, respond with the tools to call:
+{"tools": [{"name": "<tool_name>", "params": {<params>}}], "directResponse": null}
+
+For dangerous tools (scale_node, update_config), include them ONLY if the user explicitly requests it.
+You can call multiple tools if needed.
+
+Respond ONLY with valid JSON (no markdown).`;
 
   try {
     const result = await chatCompletion({
-      systemPrompt: INTENT_CLASSIFICATION_SYSTEM_PROMPT,
-      userPrompt: buildIntentClassificationUserPrompt(userInput, currentState),
+      systemPrompt: 'You are a tool planning assistant. Respond only with JSON.',
+      userPrompt: planPrompt,
       modelTier: 'fast',
       temperature: 0.1,
     });
@@ -150,287 +328,102 @@ export async function classifyIntent(
     const jsonStr = result.content.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(jsonStr);
 
-    const intent = normalizeIntent(parsed.intent, userInput);
-    const requireConfirmation =
-      parsed.requireConfirmation === true || DANGEROUS_ACTION_TYPES.includes(intent.type);
-
     return {
-      intent,
-      requireConfirmation,
-      clarification: parsed.clarification,
+      toolCalls: Array.isArray(parsed.tools) ? parsed.tools : [],
+      directResponse: parsed.directResponse || null,
     };
   } catch (error) {
-    console.error('[NLOps] Intent classification failed:', error);
-    return {
-      intent: { type: 'unknown', originalInput: userInput },
-      requireConfirmation: false,
-    };
+    console.error('[NLOps v2] Plan failed:', error);
+    return { toolCalls: [], directResponse: null };
   }
 }
 
 /**
- * Normalize and validate intent
+ * Step 2: Generate final response with tool results
  */
-function normalizeIntent(rawIntent: Record<string, unknown>, originalInput: string): NLOpsIntent {
-  const type = rawIntent.type as string;
-
-  switch (type) {
-    case 'query': {
-      const validTargets: QueryTarget[] = ['status', 'metrics', 'history', 'cost', 'anomalies'];
-      const target = (rawIntent.target as QueryTarget) || 'status';
-      return {
-        type: 'query',
-        target: validTargets.includes(target) ? target : 'status',
-        params: (rawIntent.params as Record<string, string>) || undefined,
-      };
-    }
-
-    case 'scale': {
-      const validVcpus: NLOpsTargetVcpu[] = [1, 2, 4];
-      const targetVcpu = Number(rawIntent.targetVcpu) as NLOpsTargetVcpu;
-      if (!validVcpus.includes(targetVcpu)) {
-        return { type: 'unknown', originalInput };
-      }
-      return { type: 'scale', targetVcpu, force: rawIntent.force === true };
-    }
-
-    case 'analyze': {
-      const validModes: AnalyzeMode[] = ['normal', 'attack', 'live'];
-      const mode = (rawIntent.mode as AnalyzeMode) || 'live';
-      return { type: 'analyze', mode: validModes.includes(mode) ? mode : 'live' };
-    }
-
-    case 'config': {
-      const validSettings: ConfigSetting[] = ['autoScaling', 'simulationMode', 'zeroDowntimeEnabled'];
-      const setting = rawIntent.setting as ConfigSetting;
-      if (!validSettings.includes(setting)) {
-        return { type: 'unknown', originalInput };
-      }
-      return { type: 'config', setting, value: rawIntent.value === true };
-    }
-
-    case 'explain':
-      return { type: 'explain', topic: (rawIntent.topic as string) || originalInput };
-
-    case 'rca':
-      return { type: 'rca' };
-
-    default:
-      return { type: 'unknown', originalInput };
-  }
-}
-
-// ============================================================
-// Action Execution
-// ============================================================
-
-export async function executeAction(
-  intent: NLOpsIntent,
-  baseUrl: string,
-  confirmAction?: boolean
-): Promise<ActionExecutionResult> {
-  if (DANGEROUS_ACTION_TYPES.includes(intent.type) && !confirmAction) {
-    return { executed: false, result: null };
-  }
+async function generateResponseWithData(
+  userInput: string,
+  toolResults: Array<{ name: string; data: Record<string, unknown> }>,
+  currentState: CurrentSystemState
+): Promise<string> {
+  const toolDataStr = toolResults
+    .map((r) => `[${r.name}] Result:\n${JSON.stringify(r.data, null, 2)}`)
+    .join('\n\n');
 
   try {
-    switch (intent.type) {
-      case 'query':
-        return await executeQueryAction(intent.target, baseUrl, intent.params);
-      case 'scale':
-        return await executeScaleAction(intent.targetVcpu, baseUrl);
-      case 'analyze':
-        return await executeAnalyzeAction(intent.mode);
-      case 'config':
-        return await executeConfigAction(intent.setting, intent.value, baseUrl);
-      case 'explain':
-        return await executeExplainAction(intent.topic);
-      case 'rca':
-        return await executeRcaAction(baseUrl);
-      case 'unknown':
-        return { executed: false, result: null, error: 'Cannot understand the command' };
-      default:
-        return { executed: false, result: null, error: 'Unsupported intent type' };
-    }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[NLOps] Action execution failed:', errorMessage);
-    return { executed: false, result: null, error: errorMessage };
-  }
-}
+    const result = await chatCompletion({
+      systemPrompt: SYSTEM_PROMPT,
+      userPrompt: `User asked: "${userInput}"
 
-async function executeQueryAction(
-  target: QueryTarget,
-  baseUrl: string,
-  params?: Record<string, string>
-): Promise<ActionExecutionResult> {
-  const queryParams = new URLSearchParams(params || {}).toString();
+Current system: ${currentState.vcpu} vCPU, CPU ${currentState.cpuUsage.toFixed(1)}%, TxPool ${currentState.txPoolCount}
 
-  switch (target) {
-    case 'status': {
-      const [metricsRes, scalerRes] = await Promise.all([
-        fetch(`${baseUrl}/api/metrics`, { cache: 'no-store' }),
-        fetch(`${baseUrl}/api/scaler`, { cache: 'no-store' }),
-      ]);
-      if (!metricsRes.ok || !scalerRes.ok) throw new Error('Failed to fetch status');
-      const [metricsData, scalerData] = await Promise.all([metricsRes.json(), scalerRes.json()]);
-      return { executed: true, result: { metrics: metricsData, scaler: scalerData } };
-    }
+Tool results:
+${toolDataStr}
 
-    case 'metrics': {
-      const res = await fetch(`${baseUrl}/api/metrics`, { cache: 'no-store' });
-      if (!res.ok) throw new Error('Failed to fetch metrics');
-      return { executed: true, result: await res.json() };
-    }
+Generate a natural, helpful response based on this data. Be concise and highlight key information.`,
+      modelTier: 'fast',
+      temperature: 0.3,
+    });
 
-    case 'history': {
-      const res = await fetch(`${baseUrl}/api/scaler`, { cache: 'no-store' });
-      if (!res.ok) throw new Error('Failed to fetch scaler state');
-      return { executed: true, result: await res.json() };
-    }
-
-    case 'cost': {
-      const res = await fetch(
-        `${baseUrl}/api/cost-report${queryParams ? `?${queryParams}` : '?days=7'}`,
-        { cache: 'no-store' }
-      );
-      if (!res.ok) throw new Error('Failed to fetch cost report');
-      return { executed: true, result: await res.json() };
-    }
-
-    case 'anomalies': {
-      const res = await fetch(
-        `${baseUrl}/api/anomalies${queryParams ? `?${queryParams}` : ''}`,
-        { cache: 'no-store' }
-      );
-      if (!res.ok) throw new Error('Failed to fetch anomalies');
-      return { executed: true, result: await res.json() };
-    }
-
-    default:
-      return { executed: false, result: null, error: 'Unknown query target' };
-  }
-}
-
-async function executeScaleAction(
-  targetVcpu: NLOpsTargetVcpu,
-  baseUrl: string
-): Promise<ActionExecutionResult> {
-  const response = await fetch(`${baseUrl}/api/scaler`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ targetVcpu }),
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error((errorData as Record<string, string>).error || `Scale request failed: ${response.status}`);
-  }
-
-  return { executed: true, result: await response.json() };
-}
-
-/**
- * Execute analyze action
- * Calls analyzeLogChunk() from ai-analyzer.ts directly
- */
-async function executeAnalyzeAction(mode: AnalyzeMode): Promise<ActionExecutionResult> {
-  let logs: Record<string, string>;
-
-  try {
-    logs = await getAllLiveLogs();
+    return result.content;
   } catch {
-    // Use mock logs when K8s is not connected
-    logs = generateMockLogs(mode === 'attack' ? 'attack' : 'normal');
+    // Fallback: return raw summary
+    return toolResults
+      .map((r) => {
+        if (r.data.error) return `Error from ${r.name}: ${r.data.error}`;
+        return `${r.name}: Data retrieved successfully.`;
+      })
+      .join('\n');
   }
-
-  const analysis = await analyzeLogChunk(logs);
-
-  return {
-    executed: true,
-    result: {
-      source: 'ai-analyzer',
-      mode,
-      analysis: {
-        severity: analysis.severity,
-        summary: analysis.summary,
-        action_item: analysis.action_item,
-        timestamp: analysis.timestamp,
-      },
-    },
-  };
-}
-
-async function executeConfigAction(
-  setting: ConfigSetting,
-  value: boolean,
-  baseUrl: string
-): Promise<ActionExecutionResult> {
-  const bodyMap: Record<ConfigSetting, Record<string, boolean>> = {
-    autoScaling: { autoScalingEnabled: value },
-    simulationMode: { simulationMode: value },
-    zeroDowntimeEnabled: { zeroDowntimeEnabled: value },
-  };
-
-  const response = await fetch(`${baseUrl}/api/scaler`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(bodyMap[setting]),
-  });
-
-  if (!response.ok) throw new Error(`Config update failed: ${response.status}`);
-
-  return { executed: true, result: await response.json() };
-}
-
-async function executeExplainAction(topic: string): Promise<ActionExecutionResult> {
-  const explanations: Record<string, string> = {
-    cpu: 'CPU usage indicates the processing load of the op-geth execution client. High CPU means either high transaction throughput or block synchronization in progress.',
-    vcpu: 'vCPU is the number of virtual CPU cores. SentinAI dynamically scales between 1, 2, and 4 vCPU to optimize costs.',
-    txpool: 'TxPool is the pool of transactions waiting to be processed. A continuously growing TxPool may indicate batcher delays or network congestion.',
-    autoscaling: 'Auto-scaling automatically adjusts vCPU based on a hybrid score combining CPU (30%), Gas (30%), TxPool (20%), and AI severity (20%).',
-    cooldown: 'Cooldown is the waiting period to prevent consecutive scaling operations. The default is 5 minutes (300 seconds).',
-    fargate: 'AWS Fargate is a serverless container runtime. SentinAI runs op-geth on Fargate and is billed based on vCPU and memory usage.',
-    optimism: 'Optimism is an Ethereum L2 rollup solution consisting of op-geth (execution), op-node (consensus), op-batcher (batch submission), and op-proposer (state proposals).',
-    scaling: 'The scaling score is calculated with weights: CPU (30%), Gas (30%), TxPool (20%), AI (20%). Below 30 → 1 vCPU, below 70 → 2 vCPU, 70 or above → 4 vCPU.',
-    rca: 'Root Cause Analysis (RCA) uses AI to trace fault propagation across op-geth, op-node, op-batcher, op-proposer, and L1 dependency relationships when anomalies are detected.',
-    anomaly: 'Anomaly detection combines Z-Score statistical methods with rule-based detection (block plateau, TxPool monotonic increase).',
-    zerodowntime: 'Zero-downtime scaling uses a Blue-Green strategy: prepares a new instance first, then switches traffic to achieve scaling without downtime.',
-  };
-
-  const topicLower = topic.toLowerCase();
-  let explanation: string | undefined;
-
-  for (const [key, value] of Object.entries(explanations)) {
-    if (topicLower.includes(key) || key.includes(topicLower)) {
-      explanation = value;
-      break;
-    }
-  }
-
-  return {
-    executed: true,
-    result: {
-      topic,
-      explanation: explanation || `No explanation found for "${topic}". Try keywords like cpu, vcpu, txpool, autoscaling, cooldown, fargate, optimism, rca, anomaly.`,
-    },
-  };
-}
-
-async function executeRcaAction(baseUrl: string): Promise<ActionExecutionResult> {
-  const response = await fetch(`${baseUrl}/api/rca`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ autoTriggered: false }),
-  });
-
-  if (!response.ok) throw new Error(`RCA analysis failed: ${response.status}`);
-
-  return { executed: true, result: await response.json() };
 }
 
 // ============================================================
-// Main Command Processor
+// Intent Extraction (for backwards compatibility with UI)
+// ============================================================
+
+function extractIntent(
+  toolCalls: Array<{ name: string; params: Record<string, unknown> }>,
+  userInput: string
+): NLOpsIntent {
+  if (toolCalls.length === 0) {
+    return { type: 'unknown', originalInput: userInput };
+  }
+
+  const primary = toolCalls[0];
+  switch (primary.name) {
+    case 'get_system_status':
+      return { type: 'query', target: 'status' };
+    case 'get_metrics':
+      return { type: 'query', target: 'metrics' };
+    case 'get_cost_report':
+      return { type: 'query', target: 'cost' };
+    case 'get_anomalies':
+      return { type: 'query', target: 'anomalies' };
+    case 'analyze_logs':
+      return { type: 'analyze', mode: (primary.params.mode as 'normal' | 'attack' | 'live') || 'live' };
+    case 'run_rca':
+      return { type: 'rca' };
+    case 'get_prediction':
+      return { type: 'query', target: 'status' };
+    case 'scale_node':
+      return {
+        type: 'scale',
+        targetVcpu: (primary.params.targetVcpu as NLOpsTargetVcpu) || 2,
+        force: false,
+      };
+    case 'update_config':
+      return {
+        type: 'config',
+        setting: (primary.params.setting as 'autoScaling' | 'simulationMode' | 'zeroDowntimeEnabled') || 'autoScaling',
+        value: (primary.params.value as boolean) ?? true,
+      };
+    default:
+      return { type: 'explain', topic: userInput };
+  }
+}
+
+// ============================================================
+// Current State Fetcher
 // ============================================================
 
 async function fetchCurrentState(baseUrl: string): Promise<CurrentSystemState> {
@@ -453,7 +446,7 @@ async function fetchCurrentState(baseUrl: string): Promise<CurrentSystemState> {
       cooldownRemaining: scalerData.cooldownRemaining || 0,
     };
   } catch (error) {
-    console.error('[NLOps] Failed to fetch current state:', error);
+    console.error('[NLOps v2] Failed to fetch state:', error);
     return {
       vcpu: 1, memoryGiB: 2, autoScalingEnabled: true,
       simulationMode: true, cpuUsage: 0, txPoolCount: 0, cooldownRemaining: 0,
@@ -461,8 +454,13 @@ async function fetchCurrentState(baseUrl: string): Promise<CurrentSystemState> {
   }
 }
 
+// ============================================================
+// Main Command Processor
+// ============================================================
+
 /**
- * NLOps main command processor
+ * NLOps v2 main command processor
+ * Uses tool-use pattern instead of intent classification
  */
 export async function processCommand(
   userInput: string,
@@ -478,55 +476,101 @@ export async function processCommand(
   }
 
   const currentState = await fetchCurrentState(baseUrl);
-  const { intent, requireConfirmation, clarification } = await classifyIntent(userInput, currentState);
 
-  // Requires confirmation but not yet confirmed
-  if (requireConfirmation && !confirmAction) {
-    const confirmMessage = generateConfirmationMessage(intent);
-    const response = await generateResponse(intent, null, false);
+  // Step 1: Plan tool calls
+  const { toolCalls, directResponse } = await planToolCalls(userInput, currentState);
 
+  // If LLM decided to respond directly (casual conversation)
+  if (directResponse && toolCalls.length === 0) {
     return {
-      intent,
+      intent: { type: 'unknown', originalInput: userInput },
       executed: false,
-      response,
-      needsConfirmation: true,
-      confirmationMessage: confirmMessage,
-      suggestedFollowUp: ['Cancel', 'Confirm'],
+      response: directResponse,
+      suggestedFollowUp: ['현재 상태', '로그 분석', '비용 확인'],
     };
   }
 
-  // Execute action
-  const actionResult = await executeAction(intent, baseUrl, confirmAction);
-
-  // Generate response
-  const response = await generateResponse(intent, actionResult.result, actionResult.executed);
-  const suggestedFollowUp = getSuggestedFollowUps(intent);
-
-  return {
-    intent,
-    executed: actionResult.executed,
-    response: clarification ? `${response}\n\n(Note: ${clarification})` : response,
-    data: actionResult.result || undefined,
-    suggestedFollowUp,
-  };
-}
-
-function generateConfirmationMessage(intent: NLOpsIntent): string {
-  switch (intent.type) {
-    case 'scale':
-      return `Scale to ${intent.targetVcpu} vCPU?`;
-    case 'config': {
-      const settingNames: Record<ConfigSetting, string> = {
+  // Check for dangerous tools needing confirmation
+  const hasDangerousTool = toolCalls.some((tc) => DANGEROUS_TOOLS.includes(tc.name));
+  if (hasDangerousTool && !confirmAction) {
+    const intent = extractIntent(toolCalls, userInput);
+    const dangerousTool = toolCalls.find((tc) => DANGEROUS_TOOLS.includes(tc.name));
+    let confirmMsg = 'Proceed with this action?';
+    if (dangerousTool?.name === 'scale_node') {
+      confirmMsg = `Scale to ${dangerousTool.params.targetVcpu} vCPU?`;
+    } else if (dangerousTool?.name === 'update_config') {
+      const settingNames: Record<string, string> = {
         autoScaling: 'Auto-scaling',
         simulationMode: 'Simulation mode',
         zeroDowntimeEnabled: 'Zero-downtime scaling',
       };
-      const action = intent.value ? 'enable' : 'disable';
-      return `${action.charAt(0).toUpperCase() + action.slice(1)} ${settingNames[intent.setting]}?`;
+      const setting = dangerousTool.params.setting as string;
+      const value = dangerousTool.params.value as boolean;
+      confirmMsg = `${value ? 'Enable' : 'Disable'} ${settingNames[setting] || setting}?`;
     }
-    default:
-      return 'Proceed with this action?';
+
+    return {
+      intent,
+      executed: false,
+      response: confirmMsg,
+      needsConfirmation: true,
+      confirmationMessage: confirmMsg,
+      suggestedFollowUp: ['Confirm', 'Cancel'],
+    };
   }
+
+  // Step 2: Execute tools
+  const toolResults: Array<{ name: string; data: Record<string, unknown> }> = [];
+  for (const tc of toolCalls) {
+    const data = await executeTool(tc.name, tc.params, baseUrl);
+    toolResults.push({ name: tc.name, data });
+  }
+
+  // Step 3: Generate response
+  const intent = extractIntent(toolCalls, userInput);
+  let response: string;
+
+  if (toolResults.length > 0) {
+    response = await generateResponseWithData(userInput, toolResults, currentState);
+  } else {
+    // Shouldn't reach here, but fallback
+    response = "I'm not sure how to help with that. Try asking about system status, costs, or log analysis.";
+  }
+
+  // Generate follow-up suggestions based on tools used
+  const suggestedFollowUp = generateFollowUps(toolCalls);
+
+  return {
+    intent,
+    executed: toolResults.length > 0,
+    response,
+    data: toolResults.length === 1 ? toolResults[0].data : { results: toolResults },
+    suggestedFollowUp,
+  };
+}
+
+function generateFollowUps(toolCalls: Array<{ name: string; params: Record<string, unknown> }>): string[] {
+  if (toolCalls.length === 0) return ['현재 상태', '로그 분석', '비용 확인'];
+
+  const used = new Set(toolCalls.map((tc) => tc.name));
+  const suggestions: string[] = [];
+
+  if (!used.has('get_system_status')) suggestions.push('현재 상태');
+  if (!used.has('analyze_logs')) suggestions.push('로그 분석 해줘');
+  if (!used.has('get_cost_report')) suggestions.push('비용 확인');
+  if (!used.has('get_anomalies')) suggestions.push('이상 탐지');
+  if (!used.has('run_rca')) suggestions.push('근본 원인 분석');
+
+  return suggestions.slice(0, 3);
+}
+
+// Legacy export for backwards compatibility
+export async function classifyIntent() {
+  throw new Error('classifyIntent is deprecated in NLOps v2. Use processCommand directly.');
+}
+
+export async function executeAction() {
+  throw new Error('executeAction is deprecated in NLOps v2. Use processCommand directly.');
 }
 
 export function isNLOpsEnabled(): boolean {
