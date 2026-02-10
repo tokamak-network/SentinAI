@@ -15,6 +15,27 @@ import { TargetVcpu } from '@/types/scaling';
 import { getRecentMetrics, getMetricsStats, getMetricsCount } from './metrics-store';
 import { getStore } from '@/lib/redis-store';
 import { chatCompletion } from './ai-client';
+import { parseAIJSON } from './ai-response-parser';
+
+// ============================================================================
+// Helper Functions for TargetVcpu
+// ============================================================================
+
+const VALID_VCPUS: TargetVcpu[] = [1, 2, 4];
+
+/**
+ * Get the next higher valid vCPU tier
+ */
+function nextVcpuUp(current: number): TargetVcpu {
+  return VALID_VCPUS.find(v => v > current) ?? 4;
+}
+
+/**
+ * Get the next lower valid vCPU tier
+ */
+function nextVcpuDown(current: number): TargetVcpu {
+  return [...VALID_VCPUS].reverse().find(v => v < current) ?? 1;
+}
 
 /**
  * Build the system prompt for prediction AI
@@ -100,21 +121,17 @@ Based on this data, predict the optimal vCPU for the next 5 minutes.`;
  */
 function parseAIResponse(content: string): PredictionResult | null {
   try {
-    // Clean markdown formatting if present
-    const jsonStr = content
-      .replace(/```json/g, '')
-      .replace(/```/g, '')
-      .trim();
-
-    const parsed = JSON.parse(jsonStr);
+    const parsed = parseAIJSON<Record<string, unknown>>(content);
 
     // Validate required fields
+    const predictedVcpu = Number(parsed.predictedVcpu);
+    const confidence = Number(parsed.confidence);
     if (
-      typeof parsed.predictedVcpu !== 'number' ||
-      ![1, 2, 4].includes(parsed.predictedVcpu) ||
-      typeof parsed.confidence !== 'number' ||
-      parsed.confidence < 0 ||
-      parsed.confidence > 1
+      typeof predictedVcpu !== 'number' ||
+      ![1, 2, 4].includes(predictedVcpu) ||
+      typeof confidence !== 'number' ||
+      confidence < 0 ||
+      confidence > 1
     ) {
       console.error('Invalid AI response structure:', parsed);
       return null;
@@ -122,20 +139,25 @@ function parseAIResponse(content: string): PredictionResult | null {
 
     // Ensure factors array is valid
     const factors: PredictionFactor[] = Array.isArray(parsed.factors)
-      ? parsed.factors.map((f: { name?: string; impact?: number; description?: string }) => ({
-        name: String(f.name || 'unknown'),
-        impact: Number(f.impact) || 0,
-        description: String(f.description || ''),
-      }))
+      ? (parsed.factors as unknown[]).map((f: unknown) => {
+        const factor = f as Record<string, unknown>;
+        return {
+          name: String(factor.name || 'unknown'),
+          impact: Number(factor.impact) || 0,
+          description: String(factor.description || ''),
+        };
+      })
       : [];
 
+    const trendStr = String(parsed.trend || 'stable');
+    const actionStr = String(parsed.recommendedAction || 'maintain');
     return {
-      predictedVcpu: parsed.predictedVcpu as TargetVcpu,
-      confidence: parsed.confidence,
-      trend: ['rising', 'falling', 'stable'].includes(parsed.trend) ? parsed.trend : 'stable',
+      predictedVcpu: predictedVcpu as TargetVcpu,
+      confidence,
+      trend: ['rising', 'falling', 'stable'].includes(trendStr) ? (trendStr as 'rising' | 'falling' | 'stable') : 'stable',
       reasoning: String(parsed.reasoning || 'No reasoning provided'),
-      recommendedAction: ['scale_up', 'scale_down', 'maintain'].includes(parsed.recommendedAction)
-        ? parsed.recommendedAction
+      recommendedAction: ['scale_up', 'scale_down', 'maintain'].includes(actionStr)
+        ? (actionStr as 'scale_up' | 'scale_down' | 'maintain')
         : 'maintain',
       generatedAt: new Date().toISOString(),
       predictionWindow: 'next 5 minutes',
@@ -155,12 +177,12 @@ async function generateFallbackPrediction(currentVcpu: number): Promise<Predicti
   const stats = await getMetricsStats();
 
   // Simple rule-based fallback
-  let predictedVcpu: TargetVcpu = currentVcpu as TargetVcpu;
+  let predictedVcpu: TargetVcpu = 2; // Default to 2 for safe fallback
   let recommendedAction: 'scale_up' | 'scale_down' | 'maintain' = 'maintain';
   const factors: PredictionFactor[] = [];
 
   if (stats.stats.cpu.trend === 'rising' && stats.stats.cpu.mean > 50) {
-    predictedVcpu = Math.min(4, currentVcpu + 1) as TargetVcpu;
+    predictedVcpu = nextVcpuUp(currentVcpu);
     recommendedAction = 'scale_up';
     factors.push({
       name: 'cpuTrend',
@@ -168,18 +190,13 @@ async function generateFallbackPrediction(currentVcpu: number): Promise<Predicti
       description: 'CPU trend is rising with high mean usage',
     });
   } else if (stats.stats.cpu.trend === 'falling' && stats.stats.cpu.mean < 30) {
-    predictedVcpu = Math.max(1, currentVcpu - 1) as TargetVcpu;
+    predictedVcpu = nextVcpuDown(currentVcpu);
     recommendedAction = 'scale_down';
     factors.push({
       name: 'cpuTrend',
       impact: -0.5,
       description: 'CPU trend is falling with low mean usage',
     });
-  }
-
-  // Ensure valid TargetVcpu
-  if (![1, 2, 4].includes(predictedVcpu)) {
-    predictedVcpu = 2;
   }
 
   return {

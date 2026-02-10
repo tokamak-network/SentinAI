@@ -7,6 +7,7 @@ import { MetricDataPoint } from '@/types/prediction';
 import { AnomalyResult, DeepAnalysisResult, AnomalyType } from '@/types/anomaly';
 import { AISeverity } from '@/types/scaling';
 import { chatCompletion } from './ai-client';
+import { parseAIJSON } from './ai-response-parser';
 
 // ============================================================================
 // Configuration
@@ -127,30 +128,27 @@ function formatLogsForPrompt(logs: Record<string, string>): string {
  * Parse AI response
  */
 function parseAIResponse(content: string): DeepAnalysisResult {
-  // Remove Markdown code blocks
-  const jsonStr = content.replace(/```json/g, '').replace(/```/g, '').trim();
-
   try {
-    const parsed = JSON.parse(jsonStr);
+    const parsed = parseAIJSON<Record<string, unknown>>(content);
 
     // Validate required fields and apply defaults
     const severity: AISeverity =
-      ['low', 'medium', 'high', 'critical'].includes(parsed.severity)
-        ? parsed.severity
+      ['low', 'medium', 'high', 'critical'].includes(String(parsed.severity))
+        ? (parsed.severity as AISeverity)
         : 'medium';
 
     const anomalyType: AnomalyType =
-      ['performance', 'security', 'consensus', 'liveness'].includes(parsed.anomalyType)
-        ? parsed.anomalyType
+      ['performance', 'security', 'consensus', 'liveness'].includes(String(parsed.anomalyType))
+        ? (parsed.anomalyType as AnomalyType)
         : 'performance';
 
     return {
       severity,
       anomalyType,
-      correlations: Array.isArray(parsed.correlations) ? parsed.correlations : [],
+      correlations: Array.isArray(parsed.correlations) ? (parsed.correlations as string[]) : [],
       predictedImpact: typeof parsed.predictedImpact === 'string' ? parsed.predictedImpact : 'Unknown impact',
-      suggestedActions: Array.isArray(parsed.suggestedActions) ? parsed.suggestedActions : [],
-      relatedComponents: Array.isArray(parsed.relatedComponents) ? parsed.relatedComponents : [],
+      suggestedActions: Array.isArray(parsed.suggestedActions) ? (parsed.suggestedActions as string[]) : [],
+      relatedComponents: Array.isArray(parsed.relatedComponents) ? (parsed.relatedComponents as string[]) : [],
       timestamp: new Date().toISOString(),
       rawResponse: content,
     };

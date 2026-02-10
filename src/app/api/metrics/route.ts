@@ -281,12 +281,12 @@ export async function GET(request: Request) {
         const l2RpcClient = createPublicClient({ chain: mainnet, transport: http(rpcUrl) });
         const l1RpcClient = createPublicClient({ chain: sepolia, transport: http(l1RpcUrl) });
 
-        // Fetch L1 and L2 block numbers in parallel
-        const [blockNumber, l1BlockNumber] = await Promise.all([
-            l2RpcClient.getBlockNumber(),
+        // Fetch L2 block details and L1 block number in parallel (1 less RPC call)
+        const [block, l1BlockNumber] = await Promise.all([
+            l2RpcClient.getBlock({ blockTag: 'latest' }),
             l1RpcClient.getBlockNumber()
         ]);
-        const block = await l2RpcClient.getBlock({ blockNumber });
+        const blockNumber = block.number;
 
         // Get actual TxPool pending count via txpool_status RPC
         let txPoolPending = 0;
@@ -430,7 +430,7 @@ export async function GET(request: Request) {
 
               // Layer 2: AI deep analysis (async, non-blocking)
               if (!event.deepAnalysis) {
-                (async () => {
+                const analyzeInBackground = async () => {
                   try {
                     const logs = await getAllLiveLogs();
                     const analysis = await analyzeAnomalies(detectedAnomalies, dataPoint!, logs);
@@ -442,9 +442,21 @@ export async function GET(request: Request) {
                       await addAlertRecord(event.id, alertRecord);
                     }
                   } catch (aiError) {
-                    console.error('[Anomaly] AI analysis failed:', aiError);
+                    const errorMsg = aiError instanceof Error ? aiError.message : 'Unknown error';
+                    console.error('[Anomaly] AI analysis failed:', errorMsg);
+                    // Record failure state so it's visible to the UI
+                    await addDeepAnalysis(event.id, {
+                      severity: 'medium',
+                      anomalyType: 'performance',
+                      correlations: [],
+                      predictedImpact: `AI analysis failed: ${errorMsg}`,
+                      suggestedActions: ['Manual inspection required'],
+                      relatedComponents: [],
+                      timestamp: new Date().toISOString(),
+                    }).catch(() => {}); // Ignore nested errors
                   }
-                })();
+                };
+                analyzeInBackground().catch(() => {}); // Prevent unhandled promise rejection
               }
             } else {
               // Resolve active event if no anomalies detected

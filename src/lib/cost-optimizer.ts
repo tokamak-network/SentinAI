@@ -14,6 +14,7 @@ import { ScalingHistoryEntry } from '@/types/scaling';
 import { analyzePatterns, getUsageSummary } from './usage-tracker';
 import { getScalingHistory } from './k8s-scaler';
 import { chatCompletion } from './ai-client';
+import { parseAIJSON } from './ai-response-parser';
 
 // ============================================================
 // Cost Calculation Utilities
@@ -206,22 +207,24 @@ async function getAIRecommendations(
 
     const content = aiResult.content || '{}';
 
-    // JSON 파싱 (마크다운 코드 블록 제거)
-    const jsonStr = content.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(jsonStr);
+    // JSON 파싱
+    const parsed = parseAIJSON<Record<string, unknown>>(content);
 
     // 응답 검증
-    const recommendations: CostRecommendation[] = (parsed.recommendations || []).map((r: Record<string, unknown>) => ({
-      type: validateRecommendationType(r.type as string),
-      title: String(r.title || '추천 사항'),
-      description: String(r.description || ''),
-      currentCost: Number(r.currentCost) || calculateMonthlyCost(summary.avgVcpu),
-      projectedCost: Number(r.projectedCost) || calculateMonthlyCost(summary.avgVcpu),
-      savingsPercent: Math.min(Math.max(Number(r.savingsPercent) || 0, 0), 100),
-      confidence: Math.min(Math.max(Number(r.confidence) || 0.5, 0), 1),
-      implementation: String(r.implementation || ''),
-      risk: validateRisk(r.risk as string),
-    }));
+    const recommendations: CostRecommendation[] = (Array.isArray(parsed.recommendations) ? parsed.recommendations : []).map((r: unknown) => {
+      const rec = r as Record<string, unknown>;
+      return {
+        type: validateRecommendationType(String(rec.type || '')),
+        title: String(rec.title || '추천 사항'),
+        description: String(rec.description || ''),
+        currentCost: Number(rec.currentCost) || calculateMonthlyCost(summary.avgVcpu),
+        projectedCost: Number(rec.projectedCost) || calculateMonthlyCost(summary.avgVcpu),
+        savingsPercent: Math.min(Math.max(Number(rec.savingsPercent) || 0, 0), 100),
+        confidence: Math.min(Math.max(Number(rec.confidence) || 0.5, 0), 1),
+        implementation: String(rec.implementation || ''),
+        risk: validateRisk(String(rec.risk || '')),
+      };
+    });
 
     const insight = String(parsed.insight || '데이터 분석을 완료했습니다.');
 

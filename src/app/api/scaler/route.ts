@@ -38,26 +38,23 @@ import { getAllLiveLogs } from '@/lib/log-ingester';
 import { addScalingEvent, addLogAnalysisResult } from '@/lib/daily-accumulator';
 
 /**
- * Get current metrics from /api/metrics
+ * Get current metrics directly from store (no HTTP overhead)
  */
-async function fetchCurrentMetrics(baseUrl: string): Promise<{
+async function fetchCurrentMetrics(): Promise<{
   cpuUsage: number;
   txPoolPending: number;
   gasUsedRatio: number;
 } | null> {
   try {
-    const res = await fetch(`${baseUrl}/api/metrics`, {
-      cache: 'no-store',
-    });
+    const { getRecentMetrics } = await import('@/lib/metrics-store');
+    const recent = await getRecentMetrics(1);
+    if (recent.length === 0) return null;
 
-    if (!res.ok) return null;
-
-    const data = await res.json();
+    const latest = recent[recent.length - 1];
     return {
-      cpuUsage: data.metrics?.cpuUsage || 0,
-      txPoolPending: data.metrics?.txPoolCount || 0,
-      // gasUsedRatio is not directly provided, so cpuUsage is used as a proxy
-      gasUsedRatio: (data.metrics?.cpuUsage || 0) / 100,
+      cpuUsage: latest.cpuUsage,
+      txPoolPending: latest.txPoolPending,
+      gasUsedRatio: latest.gasUsedRatio, // Use actual value instead of approximation
     };
   } catch (error) {
     console.error('Failed to fetch metrics:', error);
@@ -207,7 +204,7 @@ export async function POST(request: NextRequest) {
       }
 
       // Collect metrics
-      const metrics = await fetchCurrentMetrics(baseUrl);
+      const metrics = await fetchCurrentMetrics();
       if (!metrics) {
         return NextResponse.json(
           { error: 'Failed to fetch metrics' },
