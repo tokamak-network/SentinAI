@@ -320,7 +320,7 @@ describe('nlops-engine', () => {
       const result = await executeAction(intent, BASE_URL);
       expect(result.executed).toBe(true);
       const explanation = (result.result as Record<string, string>)?.explanation;
-      expect(explanation).toContain('키워드를 시도해보세요');
+      expect(explanation).toContain('Try keywords like');
     });
 
     it('should execute rca', async () => {

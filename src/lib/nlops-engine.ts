@@ -126,7 +126,7 @@ Parse the user's intent and respond with a JSON object.`;
 }
 
 /**
- * 사용자 입력을 Intent로 분류
+ * Classify user input into an Intent
  */
 export async function classifyIntent(
   userInput: string,
@@ -169,7 +169,7 @@ export async function classifyIntent(
 }
 
 /**
- * Intent 정규화 및 유효성 검증
+ * Normalize and validate intent
  */
 function normalizeIntent(rawIntent: Record<string, unknown>, originalInput: string): NLOpsIntent {
   const type = rawIntent.type as string;
@@ -331,8 +331,8 @@ async function executeScaleAction(
 }
 
 /**
- * Analyze 액션 실행
- * ai-analyzer.ts의 analyzeLogChunk()를 직접 호출
+ * Execute analyze action
+ * Calls analyzeLogChunk() from ai-analyzer.ts directly
  */
 async function executeAnalyzeAction(mode: AnalyzeMode): Promise<ActionExecutionResult> {
   let logs: Record<string, string>;
@@ -340,7 +340,7 @@ async function executeAnalyzeAction(mode: AnalyzeMode): Promise<ActionExecutionR
   try {
     logs = await getAllLiveLogs();
   } catch {
-    // K8s 미연결 시 mock 로그 사용
+    // Use mock logs when K8s is not connected
     logs = generateMockLogs(mode === 'attack' ? 'attack' : 'normal');
   }
 
@@ -385,17 +385,17 @@ async function executeConfigAction(
 
 async function executeExplainAction(topic: string): Promise<ActionExecutionResult> {
   const explanations: Record<string, string> = {
-    cpu: 'CPU 사용률은 op-geth 실행 클라이언트의 처리 부하를 나타냅니다. 높은 CPU는 트랜잭션 처리량이 많거나 블록 동기화 중임을 의미합니다.',
-    vcpu: 'vCPU는 가상 CPU 코어 수입니다. SentinAI는 1, 2, 4 vCPU 사이에서 동적으로 스케일링하여 비용을 최적화합니다.',
-    txpool: 'TxPool은 처리 대기 중인 트랜잭션 풀입니다. TxPool이 지속적으로 증가하면 batcher 지연이나 네트워크 정체를 의심해볼 수 있습니다.',
-    autoscaling: '자동 스케일링은 CPU, Gas 사용률, TxPool, AI 분석 결과를 종합하여 자동으로 vCPU를 조절하는 기능입니다.',
-    cooldown: '쿨다운은 연속적인 스케일링을 방지하기 위한 대기 시간입니다. 기본값은 5분(300초)입니다.',
-    fargate: 'AWS Fargate는 서버리스 컨테이너 실행 환경입니다. SentinAI는 Fargate에서 op-geth를 실행하며 vCPU/메모리 기반으로 과금됩니다.',
-    optimism: 'Optimism은 이더리움 L2 롤업 솔루션입니다. op-geth(실행), op-node(합의), op-batcher(배치 제출), op-proposer(상태 제안) 컴포넌트로 구성됩니다.',
-    scaling: '스케일링 점수는 CPU(30%), Gas(30%), TxPool(20%), AI(20%) 가중치로 계산됩니다. 30 미만이면 1 vCPU, 70 미만이면 2 vCPU, 70 이상이면 4 vCPU로 조정됩니다.',
-    rca: '근본 원인 분석(RCA)은 이상 탐지 시 AI가 op-geth, op-node, op-batcher, op-proposer, L1 간의 의존 관계를 분석하여 문제의 원인을 추적합니다.',
-    anomaly: '이상 탐지는 Z-Score 기반 통계적 방법과 규칙 기반(블록 plateau, TxPool monotonic increase) 방법을 함께 사용합니다.',
-    zerodowntime: '무중단 스케일링은 Blue-Green 전략으로 새 인스턴스를 먼저 준비한 후 트래픽을 전환하여 다운타임 없이 스케일링합니다.',
+    cpu: 'CPU usage indicates the processing load of the op-geth execution client. High CPU means either high transaction throughput or block synchronization in progress.',
+    vcpu: 'vCPU is the number of virtual CPU cores. SentinAI dynamically scales between 1, 2, and 4 vCPU to optimize costs.',
+    txpool: 'TxPool is the pool of transactions waiting to be processed. A continuously growing TxPool may indicate batcher delays or network congestion.',
+    autoscaling: 'Auto-scaling automatically adjusts vCPU based on a hybrid score combining CPU (30%), Gas (30%), TxPool (20%), and AI severity (20%).',
+    cooldown: 'Cooldown is the waiting period to prevent consecutive scaling operations. The default is 5 minutes (300 seconds).',
+    fargate: 'AWS Fargate is a serverless container runtime. SentinAI runs op-geth on Fargate and is billed based on vCPU and memory usage.',
+    optimism: 'Optimism is an Ethereum L2 rollup solution consisting of op-geth (execution), op-node (consensus), op-batcher (batch submission), and op-proposer (state proposals).',
+    scaling: 'The scaling score is calculated with weights: CPU (30%), Gas (30%), TxPool (20%), AI (20%). Below 30 → 1 vCPU, below 70 → 2 vCPU, 70 or above → 4 vCPU.',
+    rca: 'Root Cause Analysis (RCA) uses AI to trace fault propagation across op-geth, op-node, op-batcher, op-proposer, and L1 dependency relationships when anomalies are detected.',
+    anomaly: 'Anomaly detection combines Z-Score statistical methods with rule-based detection (block plateau, TxPool monotonic increase).',
+    zerodowntime: 'Zero-downtime scaling uses a Blue-Green strategy: prepares a new instance first, then switches traffic to achieve scaling without downtime.',
   };
 
   const topicLower = topic.toLowerCase();
@@ -412,7 +412,7 @@ async function executeExplainAction(topic: string): Promise<ActionExecutionResul
     executed: true,
     result: {
       topic,
-      explanation: explanation || `"${topic}"에 대한 설명을 찾을 수 없습니다. cpu, vcpu, txpool, autoscaling, cooldown, fargate, optimism, rca, anomaly 등의 키워드를 시도해보세요.`,
+      explanation: explanation || `No explanation found for "${topic}". Try keywords like cpu, vcpu, txpool, autoscaling, cooldown, fargate, optimism, rca, anomaly.`,
     },
   };
 }
@@ -424,7 +424,7 @@ async function executeRcaAction(baseUrl: string): Promise<ActionExecutionResult>
     body: JSON.stringify({ autoTriggered: false }),
   });
 
-  if (!response.ok) throw new Error(`RCA 분석 실패: ${response.status}`);
+  if (!response.ok) throw new Error(`RCA analysis failed: ${response.status}`);
 
   return { executed: true, result: await response.json() };
 }
@@ -462,7 +462,7 @@ async function fetchCurrentState(baseUrl: string): Promise<CurrentSystemState> {
 }
 
 /**
- * NLOps 메인 명령 처리 함수
+ * NLOps main command processor
  */
 export async function processCommand(
   userInput: string,
@@ -473,14 +473,14 @@ export async function processCommand(
     return {
       intent: { type: 'unknown', originalInput: userInput },
       executed: false,
-      response: 'NLOps 기능이 비활성화되어 있습니다.',
+      response: 'NLOps is currently disabled.',
     };
   }
 
   const currentState = await fetchCurrentState(baseUrl);
   const { intent, requireConfirmation, clarification } = await classifyIntent(userInput, currentState);
 
-  // 확인이 필요하고 아직 확인되지 않은 경우
+  // Requires confirmation but not yet confirmed
   if (requireConfirmation && !confirmAction) {
     const confirmMessage = generateConfirmationMessage(intent);
     const response = await generateResponse(intent, null, false);
@@ -491,21 +491,21 @@ export async function processCommand(
       response,
       needsConfirmation: true,
       confirmationMessage: confirmMessage,
-      suggestedFollowUp: ['취소', '확인'],
+      suggestedFollowUp: ['Cancel', 'Confirm'],
     };
   }
 
-  // 액션 실행
+  // Execute action
   const actionResult = await executeAction(intent, baseUrl, confirmAction);
 
-  // 응답 생성
+  // Generate response
   const response = await generateResponse(intent, actionResult.result, actionResult.executed);
   const suggestedFollowUp = getSuggestedFollowUps(intent);
 
   return {
     intent,
     executed: actionResult.executed,
-    response: clarification ? `${response}\n\n(참고: ${clarification})` : response,
+    response: clarification ? `${response}\n\n(Note: ${clarification})` : response,
     data: actionResult.result || undefined,
     suggestedFollowUp,
   };
@@ -514,18 +514,18 @@ export async function processCommand(
 function generateConfirmationMessage(intent: NLOpsIntent): string {
   switch (intent.type) {
     case 'scale':
-      return `${intent.targetVcpu} vCPU로 스케일링을 실행하시겠습니까?`;
+      return `Scale to ${intent.targetVcpu} vCPU?`;
     case 'config': {
       const settingNames: Record<ConfigSetting, string> = {
-        autoScaling: '자동 스케일링',
-        simulationMode: '시뮬레이션 모드',
-        zeroDowntimeEnabled: '무중단 스케일링',
+        autoScaling: 'Auto-scaling',
+        simulationMode: 'Simulation mode',
+        zeroDowntimeEnabled: 'Zero-downtime scaling',
       };
-      const action = intent.value ? '활성화' : '비활성화';
-      return `${settingNames[intent.setting]}을(를) ${action}하시겠습니까?`;
+      const action = intent.value ? 'enable' : 'disable';
+      return `${action.charAt(0).toUpperCase() + action.slice(1)} ${settingNames[intent.setting]}?`;
     }
     default:
-      return '이 작업을 실행하시겠습니까?';
+      return 'Proceed with this action?';
   }
 }
 

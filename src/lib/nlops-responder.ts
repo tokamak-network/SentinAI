@@ -55,7 +55,8 @@ Executed: ${executed}
 Result data: ${JSON.stringify(result, null, 2)}
 
 If executed is false and result is null, it means the action needs user confirmation.
-If there's an error, explain it kindly and suggest what to do.`,
+If there's an error, explain it kindly and suggest what to do.
+Format the response as plain readable text. For cost data, include dollar amounts. For metrics, include key values. For RCA, include the root cause component and severity.`,
       modelTier: 'fast',
       temperature: 0.3,
     });
@@ -115,29 +116,100 @@ function getFallbackResponse(
   if (!executed) return 'Failed to execute action. Please try again in a moment.';
 
   switch (intent.type) {
-    case 'query': {
-      if (intent.target === 'status' && result) {
-        const metricsObj = (result as Record<string, unknown>)?.metrics;
-        const inner = (metricsObj as Record<string, unknown>)?.metrics as Record<string, unknown> | undefined;
-        if (inner) {
-          return `Current status: ${inner.gethVcpu || 1} vCPU, CPU ${(inner.cpuUsage as number)?.toFixed(1) || 0}%, ${inner.txPoolCount || 0} pending transactions`;
-        }
-      }
-      return 'Data retrieved successfully.';
-    }
+    case 'query':
+      return formatQueryFallback(intent.target, result);
     case 'scale':
       return `Scaling completed: ${(result as Record<string, unknown>)?.previousVcpu || '?'} → ${(result as Record<string, unknown>)?.currentVcpu || intent.targetVcpu} vCPU`;
     case 'analyze':
-      return (result as Record<string, Record<string, unknown>>)?.analysis?.summary
-        ? String((result as Record<string, Record<string, unknown>>).analysis.summary)
-        : 'Log analysis completed.';
+      return formatAnalyzeFallback(result);
     case 'config':
       return 'Configuration updated successfully.';
     case 'rca':
-      return 'Root cause analysis completed.';
+      return formatRcaFallback(result);
     default:
       return 'Action completed successfully.';
   }
+}
+
+// ============================================================
+// Fallback Formatters
+// ============================================================
+
+function formatQueryFallback(target: string, result: Record<string, unknown> | null): string {
+  if (!result) return 'Data retrieved successfully.';
+
+  switch (target) {
+    case 'status': {
+      const metricsObj = result.metrics as Record<string, unknown> | undefined;
+      const inner = (metricsObj as Record<string, unknown>)?.metrics as Record<string, unknown> | undefined;
+      if (inner) {
+        return `Current status: ${inner.gethVcpu || 1} vCPU, CPU ${(inner.cpuUsage as number)?.toFixed(1) || 0}%, ${inner.txPoolCount || 0} pending transactions`;
+      }
+      return 'Data retrieved successfully.';
+    }
+    case 'cost': {
+      const monthly = result.currentMonthly as number | undefined;
+      const recs = result.recommendations as unknown[] | undefined;
+      if (monthly !== undefined) {
+        const parts = [`Monthly cost: $${monthly.toFixed(2)}`];
+        if (recs && recs.length > 0) parts.push(`${recs.length} optimization recommendation(s) available`);
+        return parts.join('. ') + '.';
+      }
+      return 'Cost data retrieved successfully.';
+    }
+    case 'anomalies': {
+      const events = result.events as unknown[] | undefined;
+      const total = result.total as number | undefined;
+      const count = total ?? events?.length ?? 0;
+      return count > 0
+        ? `${count} anomaly event(s) detected.`
+        : 'No anomalies detected.';
+    }
+    case 'metrics': {
+      const m = result.metrics as Record<string, unknown> | undefined;
+      if (m) {
+        const parts: string[] = [];
+        if (m.cpuUsage !== undefined) parts.push(`CPU: ${(m.cpuUsage as number).toFixed(1)}%`);
+        if (m.gethVcpu !== undefined) parts.push(`vCPU: ${m.gethVcpu}`);
+        if (m.txPoolCount !== undefined) parts.push(`TxPool: ${m.txPoolCount}`);
+        if (m.l2BlockNumber !== undefined) parts.push(`L2 Block: ${m.l2BlockNumber}`);
+        if (parts.length > 0) return `Current metrics: ${parts.join(', ')}`;
+      }
+      return 'Metrics data retrieved successfully.';
+    }
+    case 'history': {
+      const vcpu = result.currentVcpu as number | undefined;
+      const autoScaling = result.autoScalingEnabled as boolean | undefined;
+      if (vcpu !== undefined) {
+        const parts = [`Current: ${vcpu} vCPU`];
+        if (autoScaling !== undefined) parts.push(`auto-scaling: ${autoScaling ? 'enabled' : 'disabled'}`);
+        return parts.join(', ') + '.';
+      }
+      return 'Scaling history retrieved successfully.';
+    }
+    default:
+      return 'Data retrieved successfully.';
+  }
+}
+
+function formatAnalyzeFallback(result: Record<string, unknown> | null): string {
+  const analysis = result?.analysis as Record<string, unknown> | undefined;
+  if (!analysis) return 'Log analysis completed.';
+  const parts: string[] = [];
+  if (analysis.summary) parts.push(String(analysis.summary));
+  if (analysis.severity) parts.push(`Severity: ${analysis.severity}`);
+  if (analysis.action_item) parts.push(`Action: ${analysis.action_item}`);
+  return parts.length > 0 ? parts.join('. ') + '.' : 'Log analysis completed.';
+}
+
+function formatRcaFallback(result: Record<string, unknown> | null): string {
+  const rootCause = result?.rootCause as Record<string, unknown> | undefined;
+  if (!rootCause) return 'Root cause analysis completed.';
+  const parts: string[] = [];
+  if (rootCause.component) parts.push(`Root cause: ${rootCause.component}`);
+  if (rootCause.severity) parts.push(`Severity: ${rootCause.severity}`);
+  if (rootCause.summary) parts.push(String(rootCause.summary));
+  return parts.length > 0 ? parts.join('. ') + '.' : 'Root cause analysis completed.';
 }
 
 // ============================================================
