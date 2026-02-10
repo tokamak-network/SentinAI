@@ -3,11 +3,10 @@
 import { useEffect, useState, useRef } from 'react';
 import {
   Activity, Server, Zap, ShieldAlert, Cpu, ArrowUpRight,
-  TrendingDown, CheckCircle2, XCircle, Shield, Database,
-  AlertTriangle, ChevronDown, ChevronRight, BarChart3, Calendar, Lightbulb,
+  TrendingDown, CheckCircle2, Shield, Database,
+  ChevronDown, ChevronRight, BarChart3, Calendar, Lightbulb,
   MessageSquare, Send, Bot, User
 } from 'lucide-react';
-import type { RCAResult, RCAComponent } from '@/types/rca';
 import type { ChatMessage, NLOpsResponse, NLOpsIntent } from '@/types/nlops';
 
 // --- Interfaces ---
@@ -137,11 +136,6 @@ export default function Dashboard() {
   const [stressMode, setStressMode] = useState(false);
   const [activeAnomalies, setActiveAnomalies] = useState<AnomalyResultData[]>([]);
 
-  // RCA State
-  const [rcaResult, setRcaResult] = useState<RCAResult | null>(null);
-  const [isRunningRCA, setIsRunningRCA] = useState(false);
-  const [rcaError, setRcaError] = useState<string | null>(null);
-
   const [prediction, setPrediction] = useState<PredictionInfo | null>(null);
   const [predictionMeta, setPredictionMeta] = useState<PredictionMeta | null>(null);
   const [seedScenario, setSeedScenario] = useState<'stable' | 'rising' | 'spike' | 'falling' | 'live'>('rising');
@@ -182,31 +176,6 @@ export default function Dashboard() {
       console.error('Seed failed:', e);
     } finally {
       setIsSeeding(false);
-    }
-  };
-
-  // RCA Logic
-  const runRCA = async () => {
-    setRcaResult(null);
-    setRcaError(null);
-    setIsRunningRCA(true);
-    try {
-      const res = await fetch('/api/rca', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ autoTriggered: false }),
-      });
-      const data = await res.json();
-      if (data.success && data.result) {
-        setRcaResult(data.result);
-      } else {
-        setRcaError(data.error || 'RCA analysis failed');
-      }
-    } catch (e) {
-      console.error(e);
-      setRcaError('Failed to connect to RCA API');
-    } finally {
-      setIsRunningRCA(false);
     }
   };
 
@@ -509,12 +478,9 @@ export default function Dashboard() {
                 {activeAnomalies.map(a => a.description).join(' | ')}
               </p>
             </div>
-            <button
-              onClick={runRCA}
-              className="bg-red-500 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-600 transition"
-            >
-              Analyze Now
-            </button>
+            <span className="text-xs text-red-400 font-mono">
+              채팅에서 &quot;근본 원인 분석&quot; 요청 가능
+            </span>
           </div>
         </div>
       )}
@@ -533,17 +499,10 @@ export default function Dashboard() {
             </p>
           </div>
 
-          {/* Scaling Forecast Card */}
+          {/* Scaling Forecast Card (Compact) */}
           <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mb-4">
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <h3 className="font-bold text-gray-900">Scaling Forecast</h3>
-                {prediction && (
-                  <p className="text-[10px] text-gray-400 mt-0.5">
-                    AI Confidence: {(prediction.confidence * 100).toFixed(0)}%
-                  </p>
-                )}
-              </div>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-gray-900">Scaling Forecast</h3>
               <span className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
                 prediction?.recommendedAction === 'scale_up'
                   ? 'bg-indigo-500'
@@ -556,118 +515,66 @@ export default function Dashboard() {
               </span>
             </div>
 
-            {/* Prediction Visualization */}
-            {prediction && (
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-xs text-gray-500">Current</span>
-                  <span className="text-xs text-gray-500">Predicted ({prediction.predictionWindow})</span>
+            {/* vCPU Summary Row */}
+            {prediction ? (
+              <div className="flex items-center gap-3 mb-3" data-testid="current-vcpu">
+                <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                  <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
                 </div>
-                <div className="space-y-2">
-                  {/* vCPU Row */}
-                  <div className="flex items-center gap-3" data-testid="current-vcpu">
-                    <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                      <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
-                    </div>
-                    <ArrowUpRight size={20} className={`shrink-0 ${
-                      prediction.trend === 'rising' ? 'text-indigo-500' :
-                      prediction.trend === 'falling' ? 'text-green-500 rotate-180' :
-                      'text-gray-400 rotate-45'
-                    }`} />
-                    <div className={`flex-1 h-8 rounded-lg flex items-center justify-center ${
-                      prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
-                        ? 'bg-indigo-100 border border-indigo-200'
-                        : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
-                        ? 'bg-green-100 border border-green-200'
-                        : 'bg-blue-100 border border-blue-200'
-                    }`}>
-                      <span className={`text-lg font-bold ${
-                        prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
-                          ? 'text-indigo-600'
-                          : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
-                          ? 'text-green-600'
-                          : 'text-blue-600'
-                      }`}>{prediction.predictedVcpu} vCPU</span>
-                    </div>
-                  </div>
-                  {/* MEM Row */}
-                  <div className="flex items-center gap-3">
-                    <div className="flex-1 h-7 bg-gray-100 rounded-lg flex items-center justify-center">
-                      <span className="text-sm font-bold text-gray-500">{(current?.metrics.gethVcpu || 1) * 2} GiB</span>
-                    </div>
-                    <div className="w-5 shrink-0" />
-                    <div className={`flex-1 h-7 rounded-lg flex items-center justify-center ${
-                      prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
-                        ? 'bg-indigo-50 border border-indigo-100'
-                        : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
-                        ? 'bg-green-50 border border-green-100'
-                        : 'bg-blue-50 border border-blue-100'
-                    }`}>
-                      <span className={`text-sm font-bold ${
-                        prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
-                          ? 'text-indigo-500'
-                          : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
-                          ? 'text-green-500'
-                          : 'text-blue-500'
-                      }`}>{prediction.predictedVcpu * 2} GiB</span>
-                    </div>
-                  </div>
+                <ArrowUpRight size={20} className={`shrink-0 ${
+                  prediction.trend === 'rising' ? 'text-indigo-500' :
+                  prediction.trend === 'falling' ? 'text-green-500 rotate-180' :
+                  'text-gray-400 rotate-45'
+                }`} />
+                <div className={`flex-1 h-8 rounded-lg flex items-center justify-center ${
+                  prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
+                    ? 'bg-indigo-100 border border-indigo-200'
+                    : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
+                    ? 'bg-green-100 border border-green-200'
+                    : 'bg-blue-100 border border-blue-200'
+                }`}>
+                  <span className={`text-lg font-bold ${
+                    prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
+                      ? 'text-indigo-600'
+                      : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
+                      ? 'text-green-600'
+                      : 'text-blue-600'
+                  }`}>{prediction.predictedVcpu} vCPU</span>
                 </div>
+                <span className="text-[10px] text-gray-400 shrink-0">
+                  {(prediction.confidence * 100).toFixed(0)}%
+                </span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 mb-3" data-testid="current-vcpu">
+                <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
+                <span className="text-xs text-gray-400">/ {(current?.metrics.gethVcpu || 1) * 2} GiB</span>
               </div>
             )}
 
-            {/* Data Collection Progress (when not enough data) */}
-            {predictionMeta && !predictionMeta.isReady && (
-              <div className="mb-4 p-3 bg-yellow-50 rounded-xl border border-yellow-100">
-                <div className="flex items-center gap-2 mb-2">
-                  <Activity size={14} className="text-yellow-600" />
-                  <span className="text-xs font-medium text-yellow-800">Collecting Data...</span>
-                </div>
-                <div className="w-full h-2 bg-yellow-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-yellow-500 rounded-full transition-all duration-500"
-                    style={{ width: `${(predictionMeta.metricsCount / predictionMeta.minRequired) * 100}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-yellow-600 mt-1">
-                  {predictionMeta.metricsCount}/{predictionMeta.minRequired} data points
-                </p>
-              </div>
-            )}
-
-            {/* Seed Prediction Data (Debug - Development Only) */}
+            {/* Seed Test Data (Dev Only) */}
             {process.env.NODE_ENV !== 'production' && <div className="mb-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
-              <div className="flex items-center gap-2 mb-2">
-                <Database size={14} className="text-indigo-600" />
-                <span className="text-xs font-medium text-indigo-800">Seed Test Data</span>
-              </div>
               <div className="flex items-center gap-2">
+                <Database size={14} className="text-indigo-600 shrink-0" />
                 <select
                   value={seedScenario}
                   onChange={(e) => setSeedScenario(e.target.value as typeof seedScenario)}
                   className="flex-1 text-xs bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
                 >
-                  <option value="stable">Stable (15~25% CPU)</option>
-                  <option value="rising">Rising (20% → 70%)</option>
-                  <option value="spike">Spike (30% → 95%)</option>
-                  <option value="falling">Falling (80% → 20%)</option>
-                  <option value="live">Live (Current Data)</option>
+                  <option value="stable">Stable</option>
+                  <option value="rising">Rising</option>
+                  <option value="spike">Spike</option>
+                  <option value="falling">Falling</option>
+                  <option value="live">Live</option>
                 </select>
-                <button
-                  onClick={seedPredictionData}
-                  disabled={isSeeding}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    isSeeding
-                      ? 'bg-indigo-300 text-white cursor-not-allowed'
-                      : 'bg-indigo-600 text-white hover:bg-indigo-500'
-                  }`}
-                >
-                  {isSeeding ? 'Seeding...' : 'Seed'}
+                <button onClick={seedPredictionData} disabled={isSeeding}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isSeeding ? 'bg-indigo-300 text-white cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}>
+                  {isSeeding ? '...' : 'Seed'}
                 </button>
               </div>
             </div>}
 
-            {/* AI Insight Box */}
+            {/* AI Insight */}
             <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
               <div className="flex items-start gap-2">
                 <Zap size={14} className="text-blue-500 mt-0.5 shrink-0" />
@@ -682,27 +589,6 @@ export default function Dashboard() {
                 </p>
               </div>
             </div>
-
-            {/* Prediction Factors */}
-            {prediction && prediction.factors.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-gray-100">
-                <p className="text-[10px] text-gray-400 font-semibold uppercase mb-2">Key Factors</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {prediction.factors.slice(0, 3).map((factor, i) => (
-                    <div key={i} className={`inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full border ${
-                      factor.impact > 0.3
-                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700'
-                        : factor.impact < -0.3
-                        ? 'bg-green-50 border-green-200 text-green-700'
-                        : 'bg-gray-50 border-gray-200 text-gray-600'
-                    }`}>
-                      <span className="font-medium">{factor.name}</span>
-                      <span className="opacity-60">{factor.impact > 0 ? '+' : ''}{factor.impact.toFixed(1)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
 
           {/* System Health */}
@@ -831,131 +717,78 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Right: AI Monitor */}
+        {/* Right: Anomaly Monitor */}
         <div className="bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col min-h-[520px]">
 
           {/* Terminal Header */}
           <div className="bg-[#25282D] px-6 py-4 flex items-center justify-between shrink-0">
             <div className="flex items-center gap-3">
-              <ShieldAlert className={`${rcaResult && rcaResult.rootCause.confidence >= 0.5 ? 'text-red-500 animate-pulse' : 'text-blue-400'}`} size={20} />
-              <span className="text-gray-200 font-bold text-sm tracking-wide">ONE-CLICK CHECKUP MONITOR</span>
+              <ShieldAlert className={`${activeAnomalies.length > 0 ? 'text-red-500 animate-pulse' : 'text-blue-400'}`} size={20} />
+              <span className="text-gray-200 font-bold text-sm tracking-wide">ANOMALY MONITOR</span>
             </div>
-            <span className="text-xs text-gray-500 font-mono">Real-time Analysis</span>
+            <span className="text-xs text-gray-500 font-mono">Real-time Detection</span>
           </div>
 
-          <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+          <div className="flex-1 bg-[#0D1117] p-6 overflow-y-auto font-mono text-sm custom-scrollbar relative">
+            <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-[#0D1117] to-transparent pointer-events-none"></div>
 
-            {/* 1. Log Stream (Left) */}
-            <div className="flex-1 bg-[#0D1117] p-6 overflow-y-auto font-mono text-sm custom-scrollbar relative">
-              <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-[#0D1117] to-transparent pointer-events-none"></div>
-
-              <div className="space-y-4">
-
-                {/* Real-time Anomaly Feed */}
-                {activeAnomalies.length > 0 && (
-                  <div data-testid="anomaly-feed" className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-                    <div className="flex items-center gap-2 mb-2">
-                      <ShieldAlert size={14} className="text-red-500" />
-                      <span className="text-red-400 font-bold text-xs uppercase">Real-time Anomalies</span>
+            <div className="space-y-4">
+              {/* Real-time Anomaly Feed */}
+              {activeAnomalies.length > 0 && (
+                <div data-testid="anomaly-feed" className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ShieldAlert size={14} className="text-red-500" />
+                    <span className="text-red-400 font-bold text-xs uppercase">Real-time Anomalies</span>
+                  </div>
+                  {activeAnomalies.map((anomaly, idx) => (
+                    <div key={idx} data-testid={`anomaly-feed-item-${idx}`} className="flex items-start gap-2 text-xs mb-2 last:mb-0">
+                      <span data-testid={`anomaly-severity-${idx}`} className={`shrink-0 font-bold ${
+                        anomaly.direction === 'spike' ? 'text-red-500' :
+                        anomaly.direction === 'drop' ? 'text-yellow-500' :
+                        'text-orange-500'
+                      }`}>
+                        {anomaly.direction.toUpperCase()}
+                      </span>
+                      <span className="text-gray-400">[{anomaly.metric}]</span>
+                      <span data-testid={`anomaly-message-${idx}`} className="text-gray-300 break-words">{anomaly.description}</span>
                     </div>
-                    {activeAnomalies.map((anomaly, idx) => (
-                      <div key={idx} data-testid={`anomaly-feed-item-${idx}`} className="flex items-start gap-2 text-xs mb-2 last:mb-0">
-                        <span data-testid={`anomaly-severity-${idx}`} className={`shrink-0 font-bold ${
-                          anomaly.direction === 'spike' ? 'text-red-500' :
-                          anomaly.direction === 'drop' ? 'text-yellow-500' :
-                          'text-orange-500'
-                        }`}>
-                          {anomaly.direction.toUpperCase()}
-                        </span>
-                        <span className="text-gray-400">[{anomaly.metric}]</span>
-                        <span data-testid={`anomaly-message-${idx}`} className="text-gray-300 break-words">{anomaly.description}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Simulated Stress Logs (Only show when stress mode is active) */}
-                {stressMode && (
-                  <LogBlock time={new Date().toLocaleTimeString()} source="op-geth" level="WARN" msg="TxPool overflow: 5021 pending txs. Re-prioritizing gas..." highlight={true} color="text-yellow-400" />
-                )}
-
-                {!rcaResult && !isRunningRCA && !rcaError && (
-                  <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 mt-10">
-                    <Activity size={32} className="mb-2" />
-                    <p>System Ready... Waiting for checkup.</p>
-                  </div>
-                )}
-
-                {/* RCA Result Display */}
-                {rcaResult && !isRunningRCA && (
-                  <RCAResultDisplay result={rcaResult} />
-                )}
-
-                {/* RCA Error Display */}
-                {rcaError && !isRunningRCA && (
-                  <div className="my-6 p-4 rounded-lg bg-red-900/30 border-l-4 border-red-500">
-                    <div className="flex items-center gap-2 mb-2">
-                      <XCircle size={16} className="text-red-400" />
-                      <span className="text-red-400 font-bold text-xs uppercase">RCA Failed</span>
-                    </div>
-                    <p className="text-gray-300 text-sm">{rcaError}</p>
-                  </div>
-                )}
-
-                {/* RCA Loading State */}
-                {isRunningRCA && (
-                  <div className="flex flex-col items-center justify-center py-10 animate-pulse">
-                    <div className="w-full max-w-xs bg-gray-800 rounded-full h-1.5 mb-4 overflow-hidden">
-                      <div className="bg-orange-500 h-1.5 rounded-full animate-loading-bar"></div>
-                    </div>
-                    <p className="text-orange-400 font-mono text-xs animate-pulse">Performing Root Cause Analysis...</p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* 2. Controls & Status (Right) */}
-            <div className="w-full lg:w-80 bg-[#1A1D21] p-6 border-l border-gray-800 flex flex-col justify-between shrink-0">
-              <div>
-                <h4 className="text-gray-400 text-xs font-bold uppercase mb-4">Diagnostics Controls</h4>
-
-                <button
-                  onClick={runRCA}
-                  disabled={isRunningRCA}
-                  className={`w-full font-bold py-4 rounded-xl shadow-lg transition-all flex items-center justify-center gap-3 mb-4 group ${isRunningRCA
-                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-900/40'
-                    }`}
-                >
-                  {isRunningRCA ? (
-                    <Activity className="animate-spin" size={18} />
-                  ) : (
-                    <Activity className="group-hover:animate-spin" size={18} />
-                  )}
-                  {isRunningRCA ? 'ANALYZING...' : 'CHECK HEALTH'}
-                </button>
-              </div>
-
-              <div className="mt-8">
-                <p className="text-gray-500 text-xs text-center mb-2">System Status</p>
-                <div className={`text-center py-2 rounded-lg font-bold text-sm border ${rcaResult && rcaResult.rootCause.confidence >= 0.5
-                  ? 'bg-red-500/10 text-red-500 border-red-500/30'
-                  : 'bg-green-500/10 text-green-500 border-green-500/30'
-                  }`}>
-                  {isRunningRCA
-                    ? 'RUNNING CHECKS...'
-                    : rcaResult && rcaResult.rootCause.confidence >= 0.5
-                      ? rcaResult.rootCause.component.toUpperCase() + ' ISSUE DETECTED'
-                      : 'MONITORING ACTIVE'}
+                  ))}
                 </div>
-              </div>
+              )}
+
+              {/* Simulated Stress Logs */}
+              {stressMode && (
+                <LogBlock time={new Date().toLocaleTimeString()} source="op-geth" level="WARN" msg="TxPool overflow: 5021 pending txs. Re-prioritizing gas..." highlight={true} color="text-yellow-400" />
+              )}
+
+              {/* Healthy State */}
+              {activeAnomalies.length === 0 && (
+                <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 mt-16">
+                  <CheckCircle2 size={40} className="mb-3 text-green-500/50" />
+                  <p className="text-green-400/60 font-semibold text-sm">All systems operational</p>
+                  <p className="text-gray-600 text-xs mt-1">이상 탐지 시 자동으로 표시됩니다</p>
+                </div>
+              )}
             </div>
+          </div>
+
+          {/* Status Bar */}
+          <div className="bg-[#25282D] px-6 py-3 border-t border-gray-800 flex items-center justify-between shrink-0">
+            <div className={`flex items-center gap-2 text-xs font-bold ${
+              activeAnomalies.length > 0 ? 'text-red-400' : 'text-green-400'
+            }`}>
+              <div className={`w-2 h-2 rounded-full ${activeAnomalies.length > 0 ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`} />
+              {activeAnomalies.length > 0
+                ? `${activeAnomalies.length} ANOMALIES DETECTED`
+                : 'MONITORING ACTIVE'}
+            </div>
+            <span className="text-[10px] text-gray-500">채팅에서 상세 분석 가능</span>
           </div>
         </div>
       </div>
 
-      {/* 3. Bottom Section: Info Modules (3 Cols) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+      {/* 3. Bottom Section: Components + Documentation (2 Cols) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
 
         {/* Component Status */}
         <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-200/60 h-full">
@@ -968,8 +801,7 @@ export default function Dashboard() {
               <div key={i}>
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-3">
-                    {/* On/Off Icon */}
-                    <div className={`relative flex items-center justify-center w-4 h-4`}>
+                    <div className="relative flex items-center justify-center w-4 h-4">
                       <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${comp.status.includes('Stopped') ? 'bg-gray-400 hidden' : 'bg-green-400'}`}></span>
                       <span className={`relative inline-flex rounded-full h-3 w-3 ${comp.status.includes('Stopped') ? 'bg-gray-400' : 'bg-green-500'}`}></span>
                     </div>
@@ -982,7 +814,6 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                {/* Resource Bar for L2 Client */}
                 {comp.name === 'L2 Client' && (
                   <div className="pl-7">
                     <div className="flex justify-between text-[10px] text-gray-500 mb-1">
@@ -992,18 +823,12 @@ export default function Dashboard() {
                       </span>
                     </div>
                     <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500 transition-all duration-1000"
-                        style={{ width: `${current.metrics.cpuUsage}%` }}
-                      ></div>
+                      <div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${current.metrics.cpuUsage}%` }}></div>
                     </div>
-                    <p className="text-[10px] text-gray-400 mt-1 pl-1">
-                      Instance: {comp.current}
-                    </p>
+                    <p className="text-[10px] text-gray-400 mt-1 pl-1">Instance: {comp.current}</p>
                   </div>
                 )}
 
-                {/* Generic Status for others */}
                 {comp.name !== 'L2 Client' && (
                   <p className="text-xs text-gray-400 pl-7">{comp.current} • {comp.status}</p>
                 )}
@@ -1012,23 +837,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Quick Stats Grid - Vertical Stack */}
-        <div className="flex flex-col gap-4 h-full">
-          <div className="bg-white p-6 rounded-3xl border border-gray-200/60 shadow-sm flex flex-col items-center justify-center h-full">
-            <Activity className="text-blue-500 mb-2" size={24} />
-            <p className="text-xs text-gray-400 font-bold uppercase">Network Latency</p>
-            <p className="text-3xl font-black text-gray-800 mt-1">24ms</p>
-            <p className="text-[10px] text-green-500 mt-1 bg-green-50 px-2 rounded">Optimal</p>
-          </div>
-          <div className="bg-white p-6 rounded-3xl border border-gray-200/60 shadow-sm flex flex-col items-center justify-center h-full">
-            <CheckCircle2 className="text-green-500 mb-2" size={24} />
-            <p className="text-xs text-gray-400 font-bold uppercase">System Uptime</p>
-            <p className="text-3xl font-black text-green-600 mt-1">99.99%</p>
-            <p className="text-[10px] text-gray-400 mt-1">Last 30 days</p>
-          </div>
-        </div>
-
-        {/* Resources / Docs */}
+        {/* Documentation */}
         <div className="bg-gradient-to-br from-[#2D33EB] to-[#1E23A0] rounded-3xl p-8 text-white shadow-lg shadow-blue-900/20 relative overflow-hidden group h-full flex flex-col justify-between">
           <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all"></div>
 
@@ -1189,147 +998,6 @@ function LogBlock({ time, source, level, msg, highlight, color }: { time: string
       <span className={`break-all ${color || 'text-gray-300'}`}>{msg}</span>
     </div>
   )
-}
-
-// RCA Result Display Component
-function RCAResultDisplay({ result }: { result: RCAResult }) {
-  const [showDetails, setShowDetails] = useState(false);
-
-  const isHealthy = result.rootCause.confidence >= 0.9
-    && result.rootCause.description.toLowerCase().includes('no incident');
-
-  const componentColors: Record<RCAComponent, string> = {
-    'op-geth': 'bg-blue-500',
-    'op-node': 'bg-green-500',
-    'op-batcher': 'bg-yellow-500',
-    'op-proposer': 'bg-purple-500',
-    'l1': 'bg-red-500',
-    'system': 'bg-gray-500',
-  };
-
-  // Healthy state — compact green card
-  if (isHealthy) {
-    return (
-      <div className="my-6 animate-slideIn">
-        <div className="p-4 rounded-lg bg-green-900/20 border-l-4 border-green-500">
-          <div className="flex items-center justify-between">
-            <span className="text-green-400 font-bold text-xs uppercase flex items-center gap-2">
-              <CheckCircle2 size={14} />
-              System Healthy
-            </span>
-            <span className="text-gray-500 text-[10px]">
-              {new Date(result.generatedAt).toLocaleTimeString()}
-            </span>
-          </div>
-          <p className="text-gray-300 text-sm mt-2">All components operating normally.</p>
-          {result.remediation.preventive.length > 0 && (
-            <p className="text-gray-500 text-xs mt-2">
-              Tip: {result.remediation.preventive[0]}
-            </p>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Issue detected — summary + action-first layout
-  return (
-    <div className="my-6 space-y-3 animate-slideIn">
-      {/* Summary: What + Where + Confidence */}
-      <div className="p-4 rounded-lg bg-red-900/20 border-l-4 border-red-500">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-red-400 font-bold text-xs uppercase flex items-center gap-2">
-            <AlertTriangle size={14} />
-            Issue Detected
-          </span>
-          <span className="text-gray-500 text-[10px]">
-            {new Date(result.generatedAt).toLocaleTimeString()}
-          </span>
-        </div>
-        <div className="flex items-center gap-2 mb-2">
-          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase text-white ${componentColors[result.rootCause.component]}`}>
-            {result.rootCause.component}
-          </span>
-          {result.affectedComponents.length > 0 && (
-            <span className="text-gray-500 text-[10px]">
-              +{result.affectedComponents.length} affected
-            </span>
-          )}
-          <span className="text-gray-600 text-[10px] ml-auto">
-            {(result.rootCause.confidence * 100).toFixed(0)}% confidence
-          </span>
-        </div>
-        <p className="text-gray-200 text-sm leading-relaxed">
-          {result.rootCause.description}
-        </p>
-      </div>
-
-      {/* Action Required — highlighted */}
-      {result.remediation.immediate.length > 0 && (
-        <div className="p-4 rounded-lg bg-blue-900/20 border-l-4 border-blue-500">
-          <span className="text-blue-400 font-bold text-xs uppercase flex items-center gap-2 mb-2">
-            <Shield size={14} />
-            Action Required
-          </span>
-          <ul className="space-y-1.5">
-            {result.remediation.immediate.map((step, i) => (
-              <li key={i} className="text-gray-200 text-sm flex items-start gap-2">
-                <span className="text-blue-400 font-bold shrink-0">{i + 1}.</span>
-                {step}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Expandable Details */}
-      {(result.causalChain.length > 0 || result.remediation.preventive.length > 0) && (
-        <button
-          onClick={() => setShowDetails(!showDetails)}
-          className="w-full flex items-center justify-center gap-1 text-gray-500 text-[10px] uppercase hover:text-gray-300 transition-colors py-1"
-        >
-          {showDetails ? 'Hide' : 'Show'} Details
-          {showDetails ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        </button>
-      )}
-
-      {showDetails && (
-        <div className="space-y-3">
-          {/* Causal Chain */}
-          {result.causalChain.length > 0 && (
-            <div className="p-3 rounded-lg bg-gray-800/40 border border-gray-700/30">
-              <span className="text-gray-500 font-bold text-[10px] uppercase block mb-2">Causal Chain</span>
-              <div className="space-y-1.5">
-                {result.causalChain.map((event, i) => (
-                  <div key={i} className="flex items-start gap-2 text-xs">
-                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase text-white shrink-0 ${componentColors[event.component]}`}>
-                      {event.component}
-                    </span>
-                    <span className="text-gray-400">{event.description}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Preventive Measures */}
-          {result.remediation.preventive.length > 0 && (
-            <div className="p-3 rounded-lg bg-gray-800/40 border border-gray-700/30">
-              <span className="text-gray-500 font-bold text-[10px] uppercase block mb-2">Preventive Measures</span>
-              <ul className="space-y-1">
-                {result.remediation.preventive.map((step, i) => (
-                  <li key={i} className="text-gray-400 text-xs flex items-start gap-2">
-                    <span className="text-gray-500 shrink-0">{i + 1}.</span>
-                    {step}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
 }
 
 // === 추가: Usage Heatmap 컴포넌트 ===
