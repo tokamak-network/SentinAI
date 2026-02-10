@@ -5,9 +5,9 @@
  * Gateway 지원: AI_GATEWAY_URL 설정 시 프록시 경유
  */
 
-// ============================================================
+// =====================================================
 // Types
-// ============================================================
+// =====================================================
 
 export type ModelTier = 'fast' | 'best';
 export type AIProvider = 'anthropic' | 'openai' | 'gemini';
@@ -31,14 +31,16 @@ export interface ChatCompletionResult {
   model: string;
 }
 
-// ============================================================
+// =====================================================
 // Model Mapping
-// ============================================================
+// =====================================================
 
 const MODEL_MAP: Record<AIProvider, Record<ModelTier, string>> = {
   anthropic: {
-    fast: 'claude-haiku-4-5-20251001',
-    best: 'claude-sonnet-4-5-20250929',
+
+
+    fast: 'claude-haiku-4.5',
+    best: 'claude-sonnet-4.5',
   },
   openai: {
     fast: 'gpt-4.1-mini',
@@ -50,9 +52,9 @@ const MODEL_MAP: Record<AIProvider, Record<ModelTier, string>> = {
   },
 };
 
-// ============================================================
+// =====================================================
 // Provider Detection (Priority: Claude > GPT > Gemini)
-// ============================================================
+// =====================================================
 
 interface ProviderConfig {
   provider: AIProvider;
@@ -107,9 +109,9 @@ function detectProvider(modelTier: ModelTier): ProviderConfig {
   );
 }
 
-// ============================================================
+// =====================================================
 // API Callers
-// ============================================================
+// =====================================================
 
 async function callAnthropic(
   config: ProviderConfig,
@@ -248,9 +250,9 @@ async function callGemini(
   };
 }
 
-// ============================================================
+// =====================================================
 // Main Export
-// ============================================================
+// =====================================================
 
 export async function chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult> {
   const config = detectProvider(options.modelTier);
