@@ -25,6 +25,8 @@ describe('ai-client', () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.OPENAI_BASE_URL;
     delete process.env.OPENAI_MODEL;
+    delete process.env.OPENAI_MODEL_FAST;
+    delete process.env.OPENAI_MODEL_BEST;
     delete process.env.GEMINI_API_KEY;
     mockFetch.mockReset();
   });
@@ -276,6 +278,73 @@ describe('ai-client', () => {
       );
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.model).toBe('qwen/qwen-turbo-latest');
+    });
+
+    it('should use OPENAI_MODEL_FAST and OPENAI_MODEL_BEST for tier-specific models', async () => {
+      process.env.OPENAI_API_KEY = 'litellm-key';
+      process.env.OPENAI_BASE_URL = 'https://api.ai.tokamak.network';
+      process.env.OPENAI_MODEL_FAST = 'qwen3-coder-flash';
+      process.env.OPENAI_MODEL_BEST = 'qwen3-235b';
+
+      // Test fast tier
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'fast response' } }],
+        }),
+      });
+
+      const { chatCompletion } = await importAiClient();
+      const fastResult = await chatCompletion({
+        systemPrompt: 'sys',
+        userPrompt: 'user',
+        modelTier: 'fast',
+      });
+
+      expect(fastResult.model).toBe('qwen3-coder-flash');
+      const fastBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(fastBody.model).toBe('qwen3-coder-flash');
+
+      // Test best tier
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'best response' } }],
+        }),
+      });
+
+      const bestResult = await chatCompletion({
+        systemPrompt: 'sys',
+        userPrompt: 'user',
+        modelTier: 'best',
+      });
+
+      expect(bestResult.model).toBe('qwen3-235b');
+      const bestBody = JSON.parse(mockFetch.mock.calls[1][1].body);
+      expect(bestBody.model).toBe('qwen3-235b');
+    });
+
+    it('should prefer tier-specific model over generic OPENAI_MODEL', async () => {
+      process.env.OPENAI_API_KEY = 'litellm-key';
+      process.env.OPENAI_MODEL = 'generic-model';
+      process.env.OPENAI_MODEL_FAST = 'fast-specific';
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'ok' } }],
+        }),
+      });
+
+      const { chatCompletion } = await importAiClient();
+      const result = await chatCompletion({
+        systemPrompt: 'sys',
+        userPrompt: 'user',
+        modelTier: 'fast',
+      });
+
+      // OPENAI_MODEL_FAST takes priority over OPENAI_MODEL
+      expect(result.model).toBe('fast-specific');
     });
 
     it('should use Gemini when only GEMINI_API_KEY is set', async () => {

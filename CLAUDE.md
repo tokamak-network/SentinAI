@@ -188,7 +188,9 @@ cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 | `QWEN_BASE_URL` | DashScope | Qwen API endpoint (any OpenAI-compatible server) |
 | `QWEN_MODEL` | auto | Override Qwen model name (e.g., `qwen3-235b-a22b`) |
 | `OPENAI_BASE_URL` | api.openai.com | OpenAI-compatible endpoint (e.g., LiteLLM proxy) |
-| `OPENAI_MODEL` | auto | Override OpenAI model name (e.g., `qwen/qwen-turbo-latest` for LiteLLM) |
+| `OPENAI_MODEL` | auto | Override OpenAI model name for both tiers (e.g., `qwen/qwen-turbo-latest`) |
+| `OPENAI_MODEL_FAST` | — | Fast tier model override (takes priority over `OPENAI_MODEL`) |
+| `OPENAI_MODEL_BEST` | — | Best tier model override (takes priority over `OPENAI_MODEL`) |
 | `AI_GATEWAY_URL` | — | LiteLLM Gateway URL (overrides direct API when set) |
 | `AWS_PROFILE` | — | AWS CLI profile for multi-account setups |
 | `K8S_NAMESPACE` | `default` | Namespace where L2 pods are deployed |

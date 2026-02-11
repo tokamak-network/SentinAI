@@ -97,10 +97,13 @@ function detectProvider(modelTier: ModelTier): ProviderConfig {
   // Priority 3: OpenAI (GPT / LiteLLM compatible)
   const openaiKey = process.env.OPENAI_API_KEY;
   if (openaiKey) {
+    const tierModel = modelTier === 'fast'
+      ? process.env.OPENAI_MODEL_FAST
+      : process.env.OPENAI_MODEL_BEST;
     return {
       provider: 'openai',
       apiKey: openaiKey,
-      model: process.env.OPENAI_MODEL || MODEL_MAP.openai[modelTier],
+      model: tierModel || process.env.OPENAI_MODEL || MODEL_MAP.openai[modelTier],
       useGateway,
       gatewayUrl,
     };
