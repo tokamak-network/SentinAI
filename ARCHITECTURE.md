@@ -46,13 +46,26 @@ System architecture, design patterns, and technical decision rationale for Auton
 │           ▼                ▼                                  │
 │        RCA Engine    PredictiveScaler (AI)                  │
 │       (Dependency    (Time-Series)                          │
-│        Graph)                                               │
-│                                                              │
+│        Graph)           ▼                                    │
+│                    AlertDispatcher (L3)                     │
+│                         │                                   │
+│                         ▼ (if anomaly confirmed)            │
+│                   RemediationEngine (L4) ◄─────┐           │
+│                  (Circuit Breaker, Safety)    │            │
+│                                                │            │
 ├─────────────────────────────────────────────────────────────────┤
 │                    EXECUTION & FEEDBACK LAYER                    │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                   │
-│    K8sScaler ───► StatefulSet Patch (Real or Simulated)        │
+│                         ▲                                        │
+│         ┌───────────────┴─────────────────┐                     │
+│         │                                 │                      │
+│    ZeroDowntimeScaler            ActionExecutor                │
+│    (Pod Swap)                    (Playbook Actions)             │
+│         │                                 │                      │
+│    ┌────▼─────────────────────────────────▼────┐               │
+│    │                                            │               │
+│    ▼                                            ▼               │
+│  K8sScaler ───► StatefulSet Patch (Real or Simulated)         │
 │         │                                                        │
 │         └──► /api/metrics (next cycle)                          │
 │                                                                   │
@@ -177,7 +190,7 @@ MetricsStore (60 data points)
 │  ZERO-DOWNTIME SCALER               │
 │  (zero-downtime-scaler.ts)          │
 ├──────────────────────────────────────┤
-│  State Machine: 7 phases            │
+│  State Machine: 6 phases            │
 │  (see below)                        │
 └──────────────────────────────────────┘
        │
@@ -206,38 +219,45 @@ MetricsStore (60 data points)
            └────┬───────┘
                 │
                 ▼
-        ┌──────────────────┐
-        │ CREATING_STANDBY │ (Create new pod with target vCPU)
-        └────┬─────────────┘
+        ┌──────────────────────────────────┐
+        │ CREATING_STANDBY                 │
+        │ (Create new pod with target vCPU)│
+        └────┬─────────────────────────────┘
              │
              ▼
-        ┌──────────────────┐
-        │ WAITING_READY    │ (Poll readiness probe)
-        └────┬─────────────┘
+        ┌──────────────────────────────────┐
+        │ WAITING_READY                    │
+        │ (Poll readiness probe + RPC health)
+        └────┬─────────────────────────────┘
              │
              ▼
-        ┌──────────────────┐
-        │SWITCHING_TRAFFIC │ (Update service selector)
-        └────┬─────────────┘
+        ┌──────────────────────────────────┐
+        │ SWITCHING_TRAFFIC                │
+        │ (Update service selector)        │
+        └────┬─────────────────────────────┘
              │
              ▼
-        ┌──────────────────┐
-        │   CLEANUP        │ (Remove old pod)
-        └────┬─────────────┘
+        ┌──────────────────────────────────┐
+        │ CLEANUP                          │
+        │ (Remove old pod)                 │
+        └────┬─────────────────────────────┘
              │
              ▼
-    ┌──────────────────────────┐
-    │SYNCING_STATEFULSET       │ (Update StatefulSet definition)
-    └────┬─────────────────────┘
+    ┌──────────────────────────────────────────┐
+    │ SYNCING_STATEFULSET                      │
+    │ (Update StatefulSet spec to match target)│
+    └────┬───────────────────────────────────┘
          │
          ▼
     ┌──────────────────────────┐
     │    COMPLETED             │
     └──────────────────────────┘
 
-Error Recovery:
-Any phase failure → automatic rollback to previous state
-Watchdog timer: 10 minutes max per phase
+Safety Mechanisms:
+• Watchdog timer: 10 minutes max per phase
+• Automatic rollback on any phase failure
+• Prevents concurrent Pod Swap operations
+• Returns current phase + elapsed duration
 ```
 
 ---
@@ -291,6 +311,110 @@ Anomaly Event
        │
        ▼
 RCA Result (impact assessment)
+```
+
+---
+
+### 6. Layer 4: Auto-Remediation Engine (Proposal 8)
+
+```
+Anomaly Event (with RCA Result)
+       │
+       ▼
+┌──────────────────────────────────────────────┐
+│  PLAYBOOK MATCHER                            │
+│  (playbook-matcher.ts)                       │
+├──────────────────────────────────────────────┤
+│                                              │
+│  5 Predefined Playbooks:                     │
+│  1. op-geth Crash/High Load                  │
+│  2. op-node Derivation Lag                   │
+│  3. op-batcher Transaction Failure           │
+│  4. General Network/L1 Issues                │
+│  5. L1 Connection Problems                   │
+│                                              │
+│  Matching Strategy:                          │
+│  • Component + metric pattern                │
+│  • Log error pattern matching                │
+│  • Historical failure correlation            │
+│                                              │
+│  Output: Selected Playbook + match score     │
+└──────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────┐
+│  REMEDIATION ENGINE ORCHESTRATOR             │
+│  (remediation-engine.ts)                     │
+├──────────────────────────────────────────────┤
+│                                              │
+│  Safety Gates (Pre-Execution):               │
+│  ✓ Circuit Breaker check                     │
+│  ✓ Rate limiting (5min cooldown)             │
+│  ✓ Kill switch (AUTO_REMEDIATION_ENABLED)   │
+│                                              │
+│  Execution Flow:                             │
+│  Playbook.actions[] → for each action:       │
+│    1. Check safety level                     │
+│    2. Validate pre-conditions                │
+│    3. Execute action                         │
+│    4. Record result + metrics                │
+│    5. Decide next action                     │
+│                                              │
+│  Output: RemediationExecution[]              │
+└──────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────┐
+│  ACTION EXECUTOR                             │
+│  (action-executor.ts)                        │
+├──────────────────────────────────────────────┤
+│                                              │
+│  9 Actions (3-level Safety Classification):  │
+│                                              │
+│  Safe (Auto-Execute):                        │
+│  • Check L1 Connection → RPC ping/getBlock  │
+│  • Restart op-geth → kubectl delete pod     │
+│  • Sync DB → op-node --syncmode=full        │
+│                                              │
+│  Guarded (Conditional):                      │
+│  • Increase vCPU (with threshold check)      │
+│  • Update gas limit (with safety margin)     │
+│  • Restart op-node                          │
+│  • Clear cache                              │
+│                                              │
+│  Manual (Escalation):                        │
+│  • Failover to secondary sequencer           │
+│  • Disable L2 temporarily                    │
+│  • Emergency downscale                      │
+│                                              │
+│  Each action: status + output + error + metrics
+└──────────────────────────────────────────────┘
+       │
+       ▼
+┌──────────────────────────────────────────────┐
+│  REMEDIATION STORE (Circuit Breaker)         │
+│  (remediation-store.ts)                      │
+├──────────────────────────────────────────────┤
+│                                              │
+│  Tracks Per-Playbook:                        │
+│  • Execution history (max 100)               │
+│  • Success/failure rate                      │
+│  • Consecutive failures (→ circuit break)    │
+│  • Last execution time                       │
+│                                              │
+│  Circuit Breaker Logic:                      │
+│  • 3 consecutive failures → OPEN (24h)       │
+│  • Prevents infinite retry loops             │
+│  • Manual reset via /api/remediation         │
+│                                              │
+└──────────────────────────────────────────────┘
+       │
+       ▼
+Execution → Escalation Ladder (if fails):
+  Level 0: Safe + Guarded actions
+  Level 1: Fallback actions
+  Level 2: Await operator confirmation (30min)
+  Level 3: @channel emergency alert
 ```
 
 ---
@@ -421,7 +545,37 @@ RCA Result (impact assessment)
 
 ---
 
-### Tier 7: Logging & Analysis
+### Tier 7: Auto-Remediation (Proposal 8)
+
+**`remediation-engine.ts`** (335 lines)
+- Orchestrates playbook selection & execution
+- Safety gates (Circuit Breaker, rate limiting)
+- Escalation ladder (4 levels: Safe → Guarded → Confirmation → Emergency)
+- Execution tracking & metrics
+
+**`playbook-matcher.ts`** (304 lines)
+- 5 predefined Playbooks (op-geth, op-node, op-batcher, general, l1)
+- Pattern matching (component + metric + logs)
+- Confidence scoring
+
+**`action-executor.ts`** (389 lines)
+- 9 actions (Safe: 3, Guarded: 4, Manual: 3)
+- Safety-level classification
+- Pre-conditions & validation
+
+**`remediation-store.ts`** (223 lines)
+- Circuit Breaker state (consecutive failures → 24h open)
+- Execution history (max 100 records)
+- Configuration & overrides
+
+**REST API:** `/api/remediation` (GET/POST/PATCH)
+- Query state, execution history, circuit breaker status
+- Manually trigger playbooks, reset circuit breaker
+- Configure remediation settings
+
+---
+
+### Tier 8: Logging & Analysis
 
 **`log-ingester.ts`** (164 lines)
 - Mock log generation (normal/attack modes)
@@ -435,7 +589,7 @@ RCA Result (impact assessment)
 
 ---
 
-### Tier 8: Utilities
+### Tier 9: Utilities
 
 **`k8s-config.ts`** (159 lines)
 - kubectl API URL auto-detection
@@ -527,6 +681,65 @@ await store.pushAnomalyEvent(event)  // Works either way
 - Eviction: FIFO (oldest first)
 - Statistics: Real-time mean, stdDev, trend calculation
 
+### 6. Circuit Breaker (Proposal 8)
+
+**Pattern:** Prevent cascading failures from repeated remediation attempts
+
+**Implementation:** RemediationStore
+```typescript
+if (consecutiveFailures >= 3) {
+  circuitBreaker.state = 'OPEN';
+  circuitBreaker.resetAt = now + 24_hours;
+  // Block all remediation attempts until reset
+}
+```
+
+**Trigger Conditions:**
+- 3 consecutive failures of same Playbook
+- Automatic reset after 24 hours
+- Manual reset via `/api/remediation` PATCH
+
+**Benefit:** Avoids infinite retry loops that could worsen system state
+
+### 7. Escalation Ladder (Proposal 8)
+
+**Pattern:** Graceful failure with human intervention
+
+**Implementation:** RemediationEngine
+```
+Level 0: Safe actions (immediate execution)
+         └─ Check L1 Connection, Restart op-geth, Sync DB
+
+Level 1: Guarded actions (conditional execution)
+         └─ Increase vCPU, Update gas limits, Clear cache
+
+Level 2: Operator confirmation required (30-minute window)
+         └─ Await human approval in NLOps chat
+
+Level 3: Emergency escalation (@channel alert)
+         └─ Critical failure → notification to team
+```
+
+**Safety Benefit:** Prevents automated actions from making things worse
+
+### 8. Safety-Level Classification (Proposal 8)
+
+**Pattern:** Three-tier action safety framework
+
+**Implementation:** ActionExecutor
+```typescript
+switch (action.safetyLevel) {
+  case 'safe':     // Always execute
+  case 'guarded':  // Check pre-conditions, then execute
+  case 'manual':   // Skip, escalate to human
+}
+```
+
+**Examples:**
+- Safe: `checkL1Connection()` (read-only, no side effects)
+- Guarded: `increaseVcpu(newSize)` (check resource limits first)
+- Manual: `disableL2Temporarily()` (requires operator approval)
+
 ---
 
 ## Data Flow Examples
@@ -560,6 +773,29 @@ await store.pushAnomalyEvent(event)  // Works either way
 10. usage-tracker.ts records scaling event
 ```
 
+### Scenario 3: Anomaly Detection + Auto-Remediation (Proposal 8)
+
+```
+1. anomaly-detector.ts detects op-geth CPU drop (Layer 1)
+2. anomaly-ai-analyzer.ts analyzes: severity=critical (Layer 2)
+3. alert-dispatcher.ts formats Slack alert (Layer 3)
+4. Trigger: remediationEngine receives alert (Layer 4)
+5. playbook-matcher matches: "op-geth Crash" pattern
+6. remediation-engine checks safety gates:
+   ✓ Circuit Breaker: CLOSED (not in open state)
+   ✓ Rate limit: >5 minutes since last execution
+   ✓ Kill switch: AUTO_REMEDIATION_ENABLED=true
+7. Execute Playbook actions (sequentially):
+   - Action 1 (Safe): Check L1 Connection → Success
+   - Action 2 (Guarded): Restart op-geth → Check conditions → Execute
+   - Action 3 (Safe): Sync DB → Initiated
+8. Monitor: Track all action results in RemediationStore
+9. If any action fails: Escalate to Level 1 → Try Fallback actions
+10. Record execution: Add to history (max 100 records)
+11. Return to idle state
+12. Next cycle: Monitor op-geth recovery
+```
+
 ---
 
 ## Performance Characteristics
@@ -587,6 +823,14 @@ await store.pushAnomalyEvent(event)  // Works either way
 - **Calculation:** <100ms
 - **AI Recommendations:** <2s (best tier)
 - **Report Generation:** <5s (with AI)
+
+### Auto-Remediation (Proposal 8)
+
+- **Playbook Matching:** <50ms
+- **Safety Gate Checking:** <10ms
+- **Action Execution:** Varies by action (10ms read-only to 30s pod restart)
+- **Execution History:** <5ms per lookup
+- **Circuit Breaker Reset:** <1ms
 
 ---
 
@@ -643,14 +887,36 @@ await store.pushAnomalyEvent(event)  // Works either way
 
 ---
 
+## State Persistence Notes
+
+### Redis (Optional but Recommended)
+
+**Required for:**
+- Daily reports (24-hour metric accumulation)
+- 7-day cost analysis (vCPU usage patterns)
+
+**Not required for:**
+- Real-time metrics collection
+- Anomaly detection (per-cycle stateless)
+- Scaling decisions (uses in-memory ring buffer)
+- Auto-remediation (action history ephemeral)
+
+**Configuration:**
+- Set `REDIS_URL=redis://host:6379` to enable
+- Falls back to InMemory if unset (data lost on restart)
+- See `docs/guide/redis-setup.md` for complete guide
+
+---
+
 ## Summary
 
 SentinAI architecture emphasizes:
-- **Reliability:** Multi-layer fallbacks, graceful degradation
-- **Intelligence:** AI-powered decision making with statistical backup
-- **Safety:** Zero-downtime scaling with state machine orchestration
-- **Observability:** Comprehensive logging and anomaly tracking
+- **Reliability:** Multi-layer fallbacks, graceful degradation (AI, State, Remediation)
+- **Intelligence:** AI-powered decision making (anomaly analysis, scaling, remediation)
+- **Safety:** Zero-downtime scaling + Circuit Breaker + Escalation Ladder
+- **Automation:** Layer 4 Auto-Remediation with 3-tier safety classification (Proposal 8)
+- **Observability:** Comprehensive logging, RCA, daily reports, execution tracking
 - **Flexibility:** Multi-provider AI with module-level overrides
-- **Scalability:** Redis-backed state for horizontal expansion
+- **Scalability:** Optional Redis for horizontal expansion & state persistence
 
-The system prioritizes **user experience continuity** — all features degrade gracefully, never failing with errors.
+The system prioritizes **operational continuity** — all critical features degrade gracefully with automatic fallbacks, and dangerous remediation actions require safety gates (Circuit Breaker, confirmation, escalation).
