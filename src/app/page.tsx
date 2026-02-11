@@ -3,8 +3,8 @@
 import { useEffect, useState, useRef } from 'react';
 import {
   Activity, Server, Zap, Cpu, ArrowUpRight,
-  TrendingDown, CheckCircle2, Shield, Database,
-  ChevronDown, ChevronRight, BarChart3, Calendar, Lightbulb,
+  CheckCircle2, Shield, Database,
+  ChevronDown,
   Send, Bot, User, RefreshCw, Pause
 } from 'lucide-react';
 import type { ChatMessage, NLOpsResponse, NLOpsIntent } from '@/types/nlops';
@@ -36,35 +36,6 @@ interface MetricData {
   };
 }
 
-// === Added: Cost Report type ===
-interface CostReportData {
-  id: string;
-  generatedAt: string;
-  currentMonthly: number;
-  optimizedMonthly: number;
-  totalSavingsPercent: number;
-  recommendations: Array<{
-    type: 'downscale' | 'schedule' | 'reserved' | 'right-size';
-    title: string;
-    description: string;
-    currentCost: number;
-    projectedCost: number;
-    savingsPercent: number;
-    confidence: number;
-    implementation: string;
-    risk: 'low' | 'medium' | 'high';
-  }>;
-  usagePatterns: Array<{
-    dayOfWeek: number;
-    hourOfDay: number;
-    avgVcpu: number;
-    peakVcpu: number;
-    avgUtilization: number;
-    sampleCount: number;
-  }>;
-  aiInsight: string;
-  periodDays: number;
-}
 
 interface ComponentData {
   name: string;
@@ -165,10 +136,6 @@ export default function Dashboard() {
   const [seedScenario, setSeedScenario] = useState<'stable' | 'rising' | 'spike' | 'falling' | 'live'>('rising');
   const [isSeeding, setIsSeeding] = useState(false);
 
-  // === Cost Report state ===
-  const [costReport, setCostReport] = useState<CostReportData | null>(null);
-  const [isLoadingCostReport, setIsLoadingCostReport] = useState(false);
-
   // --- NLOps Chat State ---
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -203,22 +170,6 @@ export default function Dashboard() {
       console.error('Seed failed:', e);
     } finally {
       setIsSeeding(false);
-    }
-  };
-
-  // === Cost report analysis function ===
-  const fetchCostReport = async () => {
-    setIsLoadingCostReport(true);
-    setCostReport(null);
-    try {
-      const res = await fetch('/api/cost-report?days=7');
-      if (!res.ok) throw new Error('Failed to fetch cost report');
-      const data = await res.json();
-      setCostReport(data);
-    } catch (e) {
-      console.error('Cost report error:', e);
-    } finally {
-      setIsLoadingCostReport(false);
     }
   };
 
@@ -669,70 +620,38 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Card 3: Cost Summary */}
+        {/* Card 3: Monthly Cost */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
-          <div className="flex justify-between items-start mb-3">
-            <div data-testid="monthly-cost">
-              <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
-                {current?.cost.isPeakMode ? 'Cost Increase (Peak)' : 'Total Saved (MTD)'}
+          <div data-testid="monthly-cost">
+            <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Monthly Cost</span>
+            <div className="flex items-baseline gap-2 mt-1">
+              <span className="text-3xl font-black text-gray-900">
+                ${(current?.cost.opGethMonthlyCost || current?.cost.monthlyEstimated || 42).toFixed(0)}
               </span>
-              <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-3xl font-black text-gray-900">
-                  ${Math.abs(current?.cost.monthlySaving || 124).toFixed(0)}
-                </span>
-                <span className={`text-sm font-bold ${current?.cost.isPeakMode ? 'text-red-500' : 'text-green-600'}`}>
-                  {current?.cost.isPeakMode ? '+' : '-'}{Math.abs((current?.cost.monthlySaving || 0) / (current?.cost.fixedCost || 166) * 100).toFixed(0)}%
-                </span>
-              </div>
-              <p className="text-gray-400 text-[10px] mt-1">
-                vs Fixed 4 vCPU baseline (${current?.cost.fixedCost?.toFixed(0) || '166'}/mo)
-              </p>
+              <span className="text-sm font-bold text-gray-400">/mo</span>
             </div>
-            <button
-              onClick={fetchCostReport}
-              disabled={isLoadingCostReport}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                isLoadingCostReport
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-gray-900 hover:bg-gray-800 text-white'
-              }`}
-            >
-              {isLoadingCostReport ? (
-                <Activity className="animate-spin" size={12} />
-              ) : (
-                <BarChart3 size={12} />
-              )}
-              {isLoadingCostReport ? 'Analyzing...' : 'ANALYZE'}
-            </button>
+            <p className="text-gray-400 text-[10px] mt-1">
+              {current?.metrics.gethVcpu || 1} vCPU · {current?.metrics.gethMemGiB || 2} GiB
+            </p>
           </div>
-
-          {/* Inline Cost Analysis Results */}
-          {costReport && (
-            <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
-              {/* AI Insight */}
-              <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-100">
-                <div className="flex items-start gap-2">
-                  <Lightbulb size={12} className="text-blue-500 mt-0.5 shrink-0" />
-                  <p className="text-[11px] text-blue-700 leading-relaxed">{truncateAtSentence(costReport.aiInsight, 150)}</p>
-                </div>
-              </div>
-
-              {/* Recommendations */}
-              {costReport.recommendations.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] text-gray-400 font-semibold uppercase">Recommendations</span>
-                    <span className="text-[10px] text-green-600 font-bold">Up to {costReport.totalSavingsPercent}% savings</span>
-                  </div>
-                  <div className="space-y-1.5">
-                    {costReport.recommendations.slice(0, 2).map((rec, idx) => (
-                      <RecommendationCard key={idx} recommendation={rec} />
-                    ))}
-                  </div>
-                </div>
-              )}
+          <div className="mt-3 pt-3 border-t border-gray-100">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-gray-400">vs Fixed 4 vCPU (${current?.cost.fixedCost?.toFixed(0) || '166'}/mo)</span>
+              <span className={`text-xs font-bold ${current?.cost.isPeakMode ? 'text-red-500' : 'text-green-600'}`}>
+                {current?.cost.isPeakMode ? '+' : ''}{((current?.cost.monthlySaving || 0) / (current?.cost.fixedCost || 166) * -100).toFixed(0)}%
+              </span>
             </div>
-          )}
+            <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${current?.cost.isPeakMode ? 'bg-red-400' : 'bg-green-400'}`}
+                style={{ width: `${Math.min(Math.max(((current?.cost.opGethMonthlyCost || 42) / (current?.cost.fixedCost || 166)) * 100, 5), 100)}%` }}
+              />
+            </div>
+            <div className="flex justify-between mt-1">
+              <span className="text-[9px] text-gray-400">$0</span>
+              <span className="text-[9px] text-gray-400">${current?.cost.fixedCost?.toFixed(0) || '166'}</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1239,24 +1158,6 @@ export default function Dashboard() {
 
 // --- Sub Components ---
 
-/**
- * Truncate text at the last complete sentence boundary within maxLen.
- * Never appends "..." - returns a complete sentence.
- */
-function truncateAtSentence(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  const trimmed = text.slice(0, maxLen);
-  // Check if trimmed ends exactly at a sentence boundary
-  if (/[.!?]$/.test(trimmed)) return trimmed;
-  const lastEnd = Math.max(
-    trimmed.lastIndexOf('. '),
-    trimmed.lastIndexOf('! '),
-    trimmed.lastIndexOf('? ')
-  );
-  if (lastEnd > 0) return trimmed.slice(0, lastEnd + 1);
-  const lastSpace = trimmed.lastIndexOf(' ');
-  return lastSpace > 0 ? trimmed.slice(0, lastSpace) : trimmed;
-}
 
 function LogBlock({ time, source, level, msg, highlight, color }: { time: string; source: string; level: string; msg: string; highlight?: boolean; color?: string }) {
   return (
@@ -1269,80 +1170,3 @@ function LogBlock({ time, source, level, msg, highlight, color }: { time: string
   )
 }
 
-// === Recommendation Card component ===
-function RecommendationCard({ recommendation }: { recommendation: CostReportData['recommendations'][0] }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const riskStyles = {
-    low: { bg: 'bg-green-100', text: 'text-green-700', label: 'Low' },
-    medium: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Medium' },
-    high: { bg: 'bg-red-100', text: 'text-red-700', label: 'High' },
-  };
-
-  const typeIcons = {
-    downscale: TrendingDown,
-    schedule: Calendar,
-    reserved: Shield,
-    'right-size': BarChart3,
-  };
-
-  const Icon = typeIcons[recommendation.type] || BarChart3;
-  const risk = riskStyles[recommendation.risk];
-
-  return (
-    <div
-      className={`p-3 rounded-xl border border-gray-200 bg-gray-50 cursor-pointer transition-all hover:bg-gray-100`}
-      onClick={() => setExpanded(!expanded)}
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-2">
-          <Icon size={14} className="text-blue-600 mt-0.5 shrink-0" />
-          <div>
-            <p className="text-xs font-bold text-gray-900">{recommendation.title}</p>
-            <p className="text-[10px] text-gray-500 mt-0.5">{recommendation.description}</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-bold text-green-600">-${(recommendation.currentCost - recommendation.projectedCost).toFixed(0)}/mo</span>
-          <ChevronRight size={14} className={`text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`} />
-        </div>
-      </div>
-
-      {expanded && (
-        <div className="mt-3 pt-3 border-t border-gray-200">
-          {/* Stats */}
-          <div className="grid grid-cols-3 gap-2 mb-3">
-            <div className="text-center">
-              <p className="text-[9px] text-gray-500 uppercase">Current Cost</p>
-              <p className="text-xs font-bold text-gray-900">${recommendation.currentCost.toFixed(0)}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-[9px] text-gray-500 uppercase">Estimated Cost</p>
-              <p className="text-xs font-bold text-green-600">${recommendation.projectedCost.toFixed(0)}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-[9px] text-gray-500 uppercase">Savings Rate</p>
-              <p className="text-xs font-bold text-green-600">{recommendation.savingsPercent}%</p>
-            </div>
-          </div>
-
-          {/* Risk & Confidence */}
-          <div className="flex items-center gap-3 mb-3">
-            <div className={`px-2 py-0.5 rounded text-[9px] font-bold ${risk.bg} ${risk.text}`}>
-              Risk: {risk.label}
-            </div>
-            <div className="text-[9px] text-gray-400">
-              Confidence: {(recommendation.confidence * 100).toFixed(0)}%
-            </div>
-          </div>
-
-          {/* Implementation */}
-          <div className="p-2 bg-gray-100 rounded-lg">
-            <p className="text-[9px] text-gray-400 uppercase mb-1">Implementation Method</p>
-            <p className="text-[10px] text-gray-600 leading-relaxed">{recommendation.implementation}</p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
