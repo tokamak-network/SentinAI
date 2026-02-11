@@ -94,13 +94,13 @@ function detectProvider(modelTier: ModelTier): ProviderConfig {
     };
   }
 
-  // Priority 3: OpenAI (GPT)
+  // Priority 3: OpenAI (GPT / LiteLLM compatible)
   const openaiKey = process.env.OPENAI_API_KEY;
   if (openaiKey) {
     return {
       provider: 'openai',
       apiKey: openaiKey,
-      model: MODEL_MAP.openai[modelTier],
+      model: process.env.OPENAI_MODEL || MODEL_MAP.openai[modelTier],
       useGateway,
       gatewayUrl,
     };
@@ -224,7 +224,7 @@ async function callOpenAI(
 ): Promise<ChatCompletionResult> {
   const baseUrl = config.useGateway && config.gatewayUrl
     ? config.gatewayUrl
-    : 'https://api.openai.com';
+    : process.env.OPENAI_BASE_URL || 'https://api.openai.com';
 
   const response = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: 'POST',

@@ -23,6 +23,8 @@ describe('ai-client', () => {
     delete process.env.QWEN_MODEL;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENAI_BASE_URL;
+    delete process.env.OPENAI_MODEL;
     delete process.env.GEMINI_API_KEY;
     mockFetch.mockReset();
   });
@@ -245,6 +247,35 @@ describe('ai-client', () => {
           }),
         }),
       );
+    });
+
+    it('should use OPENAI_BASE_URL and OPENAI_MODEL for LiteLLM', async () => {
+      process.env.OPENAI_API_KEY = 'litellm-key';
+      process.env.OPENAI_BASE_URL = 'http://localhost:4000';
+      process.env.OPENAI_MODEL = 'qwen/qwen-turbo-latest';
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'litellm response' } }],
+        }),
+      });
+
+      const { chatCompletion } = await importAiClient();
+      const result = await chatCompletion({
+        systemPrompt: 'sys',
+        userPrompt: 'user',
+        modelTier: 'fast',
+      });
+
+      expect(result.provider).toBe('openai');
+      expect(result.model).toBe('qwen/qwen-turbo-latest');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:4000/v1/chat/completions',
+        expect.anything(),
+      );
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.model).toBe('qwen/qwen-turbo-latest');
     });
 
     it('should use Gemini when only GEMINI_API_KEY is set', async () => {
