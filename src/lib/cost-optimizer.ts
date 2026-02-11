@@ -159,7 +159,7 @@ For each recommendation, include:
 8. implementation: Implementation steps (English, detailed)
 9. risk: 'low' | 'medium' | 'high'
 
-Also provide an overall insight summary in English.
+Also provide an overall insight summary in English (maximum 200 characters, must be a complete sentence).
 
 Respond in this exact JSON format:
 {
@@ -176,7 +176,7 @@ Respond in this exact JSON format:
       "risk": "low"
     }
   ],
-  "insight": "Overall insight summary (English)"
+  "insight": "Overall insight summary (English, max 200 chars)"
 }`;
 }
 
