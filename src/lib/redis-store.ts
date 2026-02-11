@@ -1038,39 +1038,40 @@ export class InMemoryStateStore implements IStateStore {
 
 // ============================================================
 // Factory: Store Singleton
+// Use globalThis to survive Next.js dev mode module re-evaluation (Turbopack)
 // ============================================================
 
-let storeInstance: IStateStore | null = null;
+const globalForStore = globalThis as unknown as { __sentinai_store?: IStateStore };
 
 /**
  * Get the state store singleton
  * Uses Redis if REDIS_URL is set, otherwise falls back to InMemory
  */
 export function getStore(): IStateStore {
-  if (storeInstance) return storeInstance;
+  if (globalForStore.__sentinai_store) return globalForStore.__sentinai_store;
 
   const redisUrl = process.env.REDIS_URL;
 
   if (redisUrl) {
     console.log('[State Store] Using Redis:', redisUrl.replace(/\/\/.*@/, '//<credentials>@'));
-    storeInstance = new RedisStateStore({
+    globalForStore.__sentinai_store = new RedisStateStore({
       url: redisUrl,
       ...DEFAULT_REDIS_CONFIG,
     });
   } else {
     console.log('[State Store] Using InMemory (set REDIS_URL for persistence)');
-    storeInstance = new InMemoryStateStore();
+    globalForStore.__sentinai_store = new InMemoryStateStore();
   }
 
-  return storeInstance;
+  return globalForStore.__sentinai_store;
 }
 
 /**
  * Reset store singleton (for testing)
  */
 export async function resetStore(): Promise<void> {
-  if (storeInstance) {
-    await storeInstance.disconnect();
-    storeInstance = null;
+  if (globalForStore.__sentinai_store) {
+    await globalForStore.__sentinai_store.disconnect();
+    globalForStore.__sentinai_store = undefined;
   }
 }
