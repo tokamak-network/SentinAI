@@ -208,6 +208,7 @@ Full env guide: `ENV_GUIDE.md`
 
 ## Documentation
 
+- `docs/redis-setup.md`: **Redis 선택사항 가이드** — InMemory vs Redis 비교, 설정/제거 방법
 - `docs/done/`: Completed proposals (1–7, implementation details)
 - `docs/spec/`: Implementation specs for AI agent consumption
 - `docs/todo/`: Unimplemented proposals (8: Auto-Remediation, 9: Universal Blockchain Platform)

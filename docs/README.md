@@ -49,10 +49,11 @@ AI 모델을 활용한 모니터링, 스케일링, 보안, 예측, 운영 자동
 
 ---
 
-## Deployment
+## Configuration & Deployment
 
 | 가이드 | 대상 | 문서 |
 |--------|------|------|
+| **Redis 설정** | InMemory vs Redis 선택, 설정/제거 방법 | [상세](redis-setup.md) |
 | EC2 설치 가이드 (비개발자용) | AWS EC2 + Docker Compose + Cloudflare Tunnel | [상세](ec2-setup-guide.md) |
 
 ---
