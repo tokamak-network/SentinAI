@@ -180,17 +180,35 @@ export async function GET(request: Request) {
         const maxMonthlySaving = fixedCost - dynamicMonthlyCost;
         const currentHourlyCost = opGethMonthlyCost / HOURS_PER_MONTH;
 
-        // Simulated Block Data (Auto-increment based on time to look alive)
-        const now = Date.now();
-        const simL1Block = 12500000 + Math.floor(now / 12000) % 10000;
-        const simL2Block = 6200000 + Math.floor(now / 2000) % 10000;
+        // Fetch real L1/L2 block heights even in stress mode
+        let realL1Block = 0;
+        let realL2Block = 0;
+        try {
+            const rpcUrl = process.env.L2_RPC_URL;
+            const l1RpcUrl = process.env.L1_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
+            if (rpcUrl) {
+                const l2Client = createPublicClient({ chain: mainnet, transport: http(rpcUrl) });
+                const l1Client = createPublicClient({ chain: sepolia, transport: http(l1RpcUrl) });
+                const [l2Block, l1Block] = await Promise.all([
+                    l2Client.getBlockNumber(),
+                    l1Client.getBlockNumber(),
+                ]);
+                realL2Block = Number(l2Block);
+                realL1Block = Number(l1Block);
+            }
+        } catch {
+            // Fallback to time-based simulation if RPC fails
+            const now = Date.now();
+            realL1Block = 12500000 + Math.floor(now / 12000) % 10000;
+            realL2Block = 6200000 + Math.floor(now / 2000) % 10000;
+        }
 
         return NextResponse.json({
             timestamp: new Date().toISOString(),
             stressMode: true,
             metrics: {
-                l1BlockHeight: simL1Block,
-                blockHeight: simL2Block,
+                l1BlockHeight: realL1Block,
+                blockHeight: realL2Block,
                 txPoolCount: 5021 + Math.floor(Math.random() * 50), // Jitter
                 cpuUsage: 96.5 + (Math.random() * 2), // High CPU jitter
                 memoryUsage: memoryGiB * 1024,
