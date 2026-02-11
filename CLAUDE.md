@@ -166,7 +166,7 @@ cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 | Variable | Description |
 |----------|-------------|
 | `L2_RPC_URL` | L2 Chain RPC endpoint |
-| AI API Key (one of) | `DASHSCOPE_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` |
+| AI API Key (one of) | `QWEN_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` |
 | `AWS_CLUSTER_NAME` | EKS cluster name (auto-detects K8S_API_URL & region) |
 
 ### AI Provider Priority
@@ -176,7 +176,7 @@ cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 | Priority | Env Var | Provider | fast model | best model |
 |----------|---------|----------|------------|------------|
 | 0 | `AI_GATEWAY_URL` + Key | LiteLLM Gateway | (uses detected provider's model) | (uses detected provider's model) |
-| 1 | `DASHSCOPE_API_KEY` | Qwen (DashScope) | `qwen-turbo-latest` | `qwen-max-latest` |
+| 1 | `QWEN_API_KEY` | Qwen (OpenAI compatible) | `qwen-turbo-latest` | `qwen-max-latest` |
 | 2 | `ANTHROPIC_API_KEY` | Anthropic Direct | `claude-haiku-4-5-20251001` | `claude-sonnet-4-5-20250929` |
 | 3 | `OPENAI_API_KEY` | OpenAI Direct | `gpt-4.1-mini` | `gpt-4.1` |
 | 4 | `GEMINI_API_KEY` | Gemini Direct | `gemini-2.5-flash-lite` | `gemini-2.5-pro` |
@@ -185,6 +185,8 @@ cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `QWEN_BASE_URL` | DashScope | Qwen API endpoint (any OpenAI-compatible server) |
+| `QWEN_MODEL` | auto | Override Qwen model name (e.g., `qwen3-235b-a22b`) |
 | `AI_GATEWAY_URL` | — | LiteLLM Gateway URL (overrides direct API when set) |
 | `AWS_PROFILE` | — | AWS CLI profile for multi-account setups |
 | `K8S_NAMESPACE` | `default` | Namespace where L2 pods are deployed |

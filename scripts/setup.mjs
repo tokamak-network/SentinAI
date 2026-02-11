@@ -81,7 +81,7 @@ async function selectSetupMode() {
 
 async function testAIConnection(apiKey, provider, gatewayUrl = null) {
   const baseUrl = gatewayUrl || (
-    provider === 'qwen' ? 'https://dashscope.aliyuncs.com/compatible-mode' :
+    provider === 'qwen' ? (process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode') :
     provider === 'anthropic' ? 'https://api.anthropic.com' :
     provider === 'openai' ? 'https://api.openai.com' :
     'https://generativelanguage.googleapis.com'
@@ -304,20 +304,20 @@ async function quickSetup() {
   console.log("");
 
   // Qwen (primary)
-  const qwenKey = await askOptional("▸ DashScope API Key (Qwen)");
+  const qwenKey = await askOptional("▸ Qwen API Key");
   if (qwenKey) {
     process.stdout.write("  Testing connection...");
     const ok = await testAIConnection(qwenKey, 'qwen', env.AI_GATEWAY_URL);
     if (ok) {
       console.log(" OK");
-      env.DASHSCOPE_API_KEY = qwenKey;
+      env.QWEN_API_KEY = qwenKey;
     } else {
       console.log(" Failed - check your key.");
     }
   }
 
   // Claude (secondary)
-  if (!env.DASHSCOPE_API_KEY) {
+  if (!env.QWEN_API_KEY) {
     const anthropicKey = await askOptional("▸ Anthropic API Key (Claude)");
     if (anthropicKey) {
       process.stdout.write("  Testing connection...");
@@ -332,7 +332,7 @@ async function quickSetup() {
   }
 
   // GPT (tertiary)
-  if (!env.DASHSCOPE_API_KEY && !env.ANTHROPIC_API_KEY) {
+  if (!env.QWEN_API_KEY && !env.ANTHROPIC_API_KEY) {
     const openaiKey = await askOptional("▸ OpenAI API Key (GPT)");
     if (openaiKey) {
       process.stdout.write("  Testing connection...");
@@ -347,7 +347,7 @@ async function quickSetup() {
   }
 
   // Gemini (quaternary)
-  if (!env.DASHSCOPE_API_KEY && !env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY) {
+  if (!env.QWEN_API_KEY && !env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY) {
     const geminiKey = await askOptional("▸ Gemini API Key");
     if (geminiKey) {
       process.stdout.write("  Testing connection...");
@@ -362,7 +362,7 @@ async function quickSetup() {
   }
 
   // At least one valid API key required
-  if (!env.DASHSCOPE_API_KEY && !env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY && !env.GEMINI_API_KEY) {
+  if (!env.QWEN_API_KEY && !env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY && !env.GEMINI_API_KEY) {
     console.log("");
     console.log("  At least one valid API Key is required.");
     console.log("  Please try again.");
@@ -425,7 +425,7 @@ async function advancedSetup() {
   const primary = primaryChoice.toLowerCase().trim();
 
   if (primary === "qwen" || primary === "dashscope") {
-    env.DASHSCOPE_API_KEY = await askRequired("▸ DashScope API Key (Qwen): ");
+    env.QWEN_API_KEY = await askRequired("▸ Qwen API Key: ");
   } else if (primary === "anthropic" || primary === "claude") {
     env.ANTHROPIC_API_KEY = await askRequired("▸ Anthropic API Key: ");
   } else if (primary === "openai" || primary === "gpt") {
@@ -433,7 +433,7 @@ async function advancedSetup() {
   } else if (primary === "gemini") {
     env.GEMINI_API_KEY = await askRequired("▸ Gemini API Key: ");
   } else {
-    env.DASHSCOPE_API_KEY = await askRequired("▸ DashScope API Key (Qwen): ");
+    env.QWEN_API_KEY = await askRequired("▸ Qwen API Key: ");
   }
 
   // 2.2 Additional providers (optional)
@@ -441,9 +441,9 @@ async function advancedSetup() {
   const wantMultiple = await askYesNo("▸ Add multiple providers for fallback?", true);
   if (wantMultiple) {
     const providers = [];
-    if (!env.DASHSCOPE_API_KEY) {
-      const add = await askYesNo("  Add Qwen (DashScope)?", false);
-      if (add) providers.push("dashscope");
+    if (!env.QWEN_API_KEY) {
+      const add = await askYesNo("  Add Qwen?", false);
+      if (add) providers.push("qwen");
     }
     if (!env.ANTHROPIC_API_KEY) {
       const add = await askYesNo("  Add Anthropic?", false);
@@ -459,7 +459,7 @@ async function advancedSetup() {
     }
 
     for (const p of providers) {
-      const displayName = p === 'dashscope' ? 'DashScope (Qwen)' : p.charAt(0).toUpperCase() + p.slice(1);
+      const displayName = p === 'qwen' ? 'Qwen' : p.charAt(0).toUpperCase() + p.slice(1);
       const key = await askRequired(`▸ ${displayName} API Key: `);
       env[`${p.toUpperCase()}_API_KEY`] = key;
     }
@@ -549,8 +549,8 @@ function writeEnvFile(env, isQuickMode) {
   if (env.AI_GATEWAY_URL) {
     lines.push(`AI_GATEWAY_URL=${env.AI_GATEWAY_URL}`);
   }
-  if (env.DASHSCOPE_API_KEY) {
-    lines.push(`DASHSCOPE_API_KEY=${env.DASHSCOPE_API_KEY}`);
+  if (env.QWEN_API_KEY) {
+    lines.push(`QWEN_API_KEY=${env.QWEN_API_KEY}`);
   }
   if (env.ANTHROPIC_API_KEY) {
     lines.push(`ANTHROPIC_API_KEY=${env.ANTHROPIC_API_KEY}`);

@@ -70,13 +70,13 @@ function detectProvider(modelTier: ModelTier): ProviderConfig {
   const gatewayUrl = process.env.AI_GATEWAY_URL;
   const useGateway = !!gatewayUrl;
 
-  // Priority 1: Qwen (DashScope)
-  const qwenKey = process.env.DASHSCOPE_API_KEY;
+  // Priority 1: Qwen (DashScope or any OpenAI-compatible endpoint)
+  const qwenKey = process.env.QWEN_API_KEY;
   if (qwenKey) {
     return {
       provider: 'qwen',
       apiKey: qwenKey,
-      model: MODEL_MAP.qwen[modelTier],
+      model: process.env.QWEN_MODEL || MODEL_MAP.qwen[modelTier],
       useGateway,
       gatewayUrl,
     };
@@ -119,7 +119,7 @@ function detectProvider(modelTier: ModelTier): ProviderConfig {
   }
 
   throw new Error(
-    'No AI API key configured. Set DASHSCOPE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY.'
+    'No AI API key configured. Set QWEN_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY.'
   );
 }
 
@@ -133,7 +133,7 @@ async function callQwen(
 ): Promise<ChatCompletionResult> {
   const baseUrl = config.useGateway && config.gatewayUrl
     ? config.gatewayUrl
-    : 'https://dashscope.aliyuncs.com/compatible-mode';
+    : process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode';
 
   const response = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: 'POST',

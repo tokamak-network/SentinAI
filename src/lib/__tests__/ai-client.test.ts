@@ -18,7 +18,9 @@ describe('ai-client', () => {
   beforeEach(() => {
     // Clear all env vars
     delete process.env.AI_GATEWAY_URL;
-    delete process.env.DASHSCOPE_API_KEY;
+    delete process.env.QWEN_API_KEY;
+    delete process.env.QWEN_BASE_URL;
+    delete process.env.QWEN_MODEL;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.GEMINI_API_KEY;
@@ -45,8 +47,8 @@ describe('ai-client', () => {
       })).rejects.toThrow('No AI API key configured');
     });
 
-    it('should use Qwen when DASHSCOPE_API_KEY is set (priority 1)', async () => {
-      process.env.DASHSCOPE_API_KEY = 'sk-qwen-test';
+    it('should use Qwen when QWEN_API_KEY is set (priority 1)', async () => {
+      process.env.QWEN_API_KEY = 'sk-qwen-test';
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -77,8 +79,55 @@ describe('ai-client', () => {
       );
     });
 
+    it('should use custom QWEN_BASE_URL when set', async () => {
+      process.env.QWEN_API_KEY = 'sk-qwen-test';
+      process.env.QWEN_BASE_URL = 'http://localhost:8080';
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'local qwen' } }],
+        }),
+      });
+
+      const { chatCompletion } = await importAiClient();
+      await chatCompletion({
+        systemPrompt: 'sys',
+        userPrompt: 'user',
+        modelTier: 'fast',
+      });
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://localhost:8080/v1/chat/completions',
+        expect.anything(),
+      );
+    });
+
+    it('should use QWEN_MODEL override when set', async () => {
+      process.env.QWEN_API_KEY = 'sk-qwen-test';
+      process.env.QWEN_MODEL = 'qwen3-235b-a22b';
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'custom model' } }],
+        }),
+      });
+
+      const { chatCompletion } = await importAiClient();
+      const result = await chatCompletion({
+        systemPrompt: 'sys',
+        userPrompt: 'user',
+        modelTier: 'fast',
+      });
+
+      expect(result.model).toBe('qwen3-235b-a22b');
+      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(body.model).toBe('qwen3-235b-a22b');
+    });
+
     it('should prefer Qwen over Anthropic when both keys are set', async () => {
-      process.env.DASHSCOPE_API_KEY = 'sk-qwen-test';
+      process.env.QWEN_API_KEY = 'sk-qwen-test';
       process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
 
       mockFetch.mockResolvedValueOnce({
@@ -260,7 +309,7 @@ describe('ai-client', () => {
     });
 
     it('should map Qwen best tier to qwen-max-latest', async () => {
-      process.env.DASHSCOPE_API_KEY = 'test';
+      process.env.QWEN_API_KEY = 'test';
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
