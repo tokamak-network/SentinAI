@@ -1,70 +1,70 @@
-# Production Load Testing & Scaling Verification Guide
+# 프로덕션 부하 테스트 & 스케일링 검증 가이드
 
-Real load injection guide for verifying SentinAI's autonomous scaling on a live K8s cluster.
-
----
-
-## Why Not Seed API?
-
-The seed API (`POST /api/metrics/seed`) cannot be used on production clusters:
-
-1. **Blocked in production** — Returns `405` when `NODE_ENV=production`
-2. **Agent loop overwrites** — Every 30 seconds, the agent loop collects real RPC metrics, replacing any injected data
-3. **Scaling uses live data** — The decision engine evaluates real-time metrics, not stored seed data
-
-**Solution**: Generate real L2 load to naturally increase CPU, gas, and txPool metrics.
+라이브 K8s 클러스터에서 SentinAI의 자율 스케일링을 검증하기 위한 실제 부하 주입 가이드.
 
 ---
 
-## Prerequisites
+## 왜 Seed API를 쓸 수 없나?
 
-### Cluster Access
+seed API (`POST /api/metrics/seed`)는 프로덕션 클러스터에서 사용할 수 없습니다:
+
+1. **프로덕션에서 차단됨** — `NODE_ENV=production`일 때 `405` 반환
+2. **에이전트 루프가 덮어씀** — 30초마다 에이전트 루프가 실제 RPC 메트릭을 수집하여 주입된 데이터 대체
+3. **스케일링이 실시간 데이터 사용** — 결정 엔진이 저장된 seed 데이터가 아닌 실시간 메트릭을 평가
+
+**해결책**: 실제 L2 부하를 생성하여 CPU, 가스 및 txPool 메트릭을 자연스럽게 증가시킵니다.
+
+---
+
+## 사전 조건
+
+### 클러스터 접근
 
 ```bash
-# Verify kubectl context
+# kubectl 컨텍스트 검증
 kubectl config current-context
 kubectl get statefulset sepolia-thanos-stack-op-geth -n thanos-sepolia
 
-# Verify SentinAI is running
+# SentinAI 실행 확인
 curl -s http://<SENTINAI_HOST>:3002/api/health
 ```
 
-### Wallet Setup
+### 지갑 설정
 
-You need an L2 wallet with testnet ETH for sending transactions.
+트랜잭션 전송을 위해 테스트넷 ETH가 있는 L2 지갑이 필요합니다.
 
 ```bash
-# Install foundry (if not installed)
+# Foundry 설치 (설치되지 않은 경우)
 curl -L https://foundry.paradigm.xyz | bash
 foundryup
 
-# Check balance on L2
+# L2에서 잔액 확인
 cast balance <YOUR_WALLET_ADDRESS> --rpc-url $L2_RPC_URL
 ```
 
-### Environment Configuration
+### 환경 설정
 
-Ensure your `.env.local` has:
+`.env.local`에 다음 항목이 있어야 합니다:
 
 ```bash
 L2_RPC_URL=https://your-l2-rpc-endpoint.com
 ANTHROPIC_API_KEY=sk-ant-...
 
-# CRITICAL: These must be set for real scaling
-SCALING_SIMULATION_MODE=false    # Allow real K8s patches
-AGENT_LOOP_ENABLED=true          # Server-side autonomous loop
+# 중요: 실제 스케일링을 위해 이것들을 설정해야 함
+SCALING_SIMULATION_MODE=false    # 실제 K8s 패치 허용
+AGENT_LOOP_ENABLED=true          # 서버 측 자율 루프
 ```
 
 ---
 
-## Step 0: Pre-Flight Check
+## 단계 0: 사전 점검
 
-Verify current state before injecting load.
+부하 주입 전 현재 상태를 검증합니다.
 
 ```bash
 BASE=http://localhost:3002
 
-# 1. Current scaling state
+# 1. 현재 스케일링 상태
 curl -s $BASE/api/scaler | jq '{
   currentVcpu: .currentVcpu,
   autoScaling: .autoScalingEnabled,
@@ -72,18 +72,18 @@ curl -s $BASE/api/scaler | jq '{
   cooldown: .cooldownRemaining
 }'
 
-# 2. Agent loop status
+# 2. 에이전트 루프 상태
 curl -s $BASE/api/health
 
-# 3. Verify pod resource state
+# 3. Pod 리소스 상태 검증
 kubectl get statefulset sepolia-thanos-stack-op-geth -n thanos-sepolia \
   -o jsonpath='{.spec.template.spec.containers[0].resources.requests.cpu}'
 echo ""
 ```
 
-**Expected**: `currentVcpu: 1`, `autoScaling: true`, `simulationMode: false`
+**예상 결과**: `currentVcpu: 1`, `autoScaling: true`, `simulationMode: false`
 
-### Enable Auto-Scaling (if disabled)
+### 자동 스케일링 활성화 (비활성화된 경우)
 
 ```bash
 curl -sX PATCH $BASE/api/scaler \
@@ -93,54 +93,54 @@ curl -sX PATCH $BASE/api/scaler \
 
 ---
 
-## Step 1: Understand Scaling Triggers
+## 단계 1: 스케일링 트리거 이해
 
-The agent loop evaluates a **hybrid score (0–100)** every 30 seconds:
+에이전트 루프는 30초마다 **하이브리드 스코어(0–100)**를 평가합니다:
 
-| Factor | Weight | Score Calculation | Max |
-|--------|--------|-------------------|-----|
-| CPU Usage | 30% | `cpuUsage` (0–100%) | 100 |
-| Gas Ratio | 30% | `gasUsedRatio` × 100 | 100 |
-| TxPool Pending | 20% | `txPoolPending / 200` × 100 | 100 |
-| AI Severity | 20% | severity mapping | 100 |
+| 요소 | 가중치 | 스코어 계산 | 최대값 |
+|------|--------|-----------|--------|
+| CPU 사용률 | 30% | `cpuUsage` (0–100%) | 100 |
+| 가스 비율 | 30% | `gasUsedRatio` × 100 | 100 |
+| TxPool 대기 중 | 20% | `txPoolPending / 200` × 100 | 100 |
+| AI 심각도 | 20% | 심각도 매핑 | 100 |
 
-**Scaling thresholds:**
+**스케일링 임계값:**
 
-| Score Range | Target vCPU | Label |
-|-------------|-------------|-------|
+| 스코어 범위 | 대상 vCPU | 레이블 |
+|-----------|---------|--------|
 | 0 – 29 | 1 vCPU | Idle |
 | 30 – 69 | 2 vCPU | Normal |
 | 70 – 100 | 4 vCPU | High |
 
-**Key insight**: To trigger a scale-up from 1 → 2 vCPU, you need a hybrid score ≥ 30. To reach 4 vCPU, you need ≥ 70.
+**핵심 인사이트**: 1 → 2 vCPU로 확장하려면 하이브리드 스코어 ≥ 30이 필요합니다. 4 vCPU에 도달하려면 ≥ 70이 필요합니다.
 
-### Score Examples
+### 스코어 예제
 
-| Scenario | CPU | Gas | TxPool | AI | Score | Target |
-|----------|-----|-----|--------|----|----|--------|
+| 시나리오 | CPU | 가스 | TxPool | AI | 스코어 | 대상 |
+|---------|-----|------|--------|---|--------|------|
 | Idle | 10% | 0.1 | 5 | — | 10×0.3 + 10×0.3 + 2.5×0.2 = 6.5 | 1 vCPU |
 | Moderate | 50% | 0.5 | 100 | — | 50×0.3 + 50×0.3 + 50×0.2 = 40 | 2 vCPU |
 | Heavy | 80% | 0.8 | 200 | high | 80×0.3 + 80×0.3 + 100×0.2 + 66×0.2 = 81.2 | 4 vCPU |
 
 ---
 
-## Step 2: Inject Real Load
+## 단계 2: 실제 부하 주입
 
-### Method A: Burst Transactions with `cast` (Simplest)
+### 방법 A: `cast`로 버스트 트랜잭션 (가장 간단함)
 
-Send many transactions rapidly to fill the txPool and increase gas usage.
+txPool을 채우고 가스 사용량을 증가시키기 위해 많은 트랜잭션을 빠르게 전송합니다.
 
 ```bash
 #!/bin/bash
-# load-burst.sh — Send burst transactions to L2
+# load-burst.sh — L2에 버스트 트랜잭션 전송
 RPC_URL="${L2_RPC_URL}"
 PRIVATE_KEY="${LOAD_TEST_PRIVATE_KEY}"
 TO_ADDRESS="0x000000000000000000000000000000000000dead"
 
-echo "=== Starting burst load test ==="
+echo "=== 버스트 부하 테스트 시작 ==="
 echo "Target: $RPC_URL"
 
-# Send 200 transactions (fills txPool to trigger scaling)
+# 200개 트랜잭션 전송 (스케일링 트리거를 위해 txPool 채우기)
 for i in $(seq 1 200); do
   cast send $TO_ADDRESS \
     --value 0.00001ether \
@@ -149,35 +149,35 @@ for i in $(seq 1 200); do
     --async \
     2>/dev/null &
 
-  # Batch 20 at a time
+  # 20개씩 배치
   if (( i % 20 == 0 )); then
     wait
-    echo "Sent $i / 200 transactions"
+    echo "전송: $i / 200 트랜잭션"
   fi
 done
 wait
-echo "=== Burst complete ==="
+echo "=== 버스트 완료 ==="
 ```
 
-**Why this works**: 200+ pending transactions → txPoolScore = 100 → contributes 20 points. Combined with gas usage from processing → triggers scale-up.
+**작동 원리**: 200+ 대기 중인 트랜잭션 → txPoolScore = 100 → 20포인트 기여. 처리에서 나온 가스 사용량과 함께 → 확장 업 트리거.
 
-### Method B: Sustained Load with `viem` Script
+### 방법 B: `viem` 스크립트로 지속적 부하
 
-Create a Node.js script for sustained, configurable load.
+지속적이고 구성 가능한 부하를 위한 Node.js 스크립트를 작성합니다.
 
 ```typescript
 // scripts/load-test.ts
 import { createWalletClient, createPublicClient, http, parseEther } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { optimismSepolia } from 'viem/chains'; // or your L2 chain
+import { optimismSepolia } from 'viem/chains'; // 또는 L2 체인
 
 const RPC_URL = process.env.L2_RPC_URL!;
 const PRIVATE_KEY = process.env.LOAD_TEST_PRIVATE_KEY as `0x${string}`;
 const TARGET = '0x000000000000000000000000000000000000dead' as const;
 
-// Configuration
-const TPS = 10;          // Transactions per second
-const DURATION_SEC = 120; // 2 minutes of sustained load
+// 설정
+const TPS = 10;          // 초당 트랜잭션 수
+const DURATION_SEC = 120; // 지속적 부하 2분
 const VALUE = parseEther('0.00001');
 
 async function main() {
@@ -196,17 +196,17 @@ async function main() {
   let sent = 0;
   const startTime = Date.now();
 
-  console.log(`Starting sustained load: ${TPS} TPS for ${DURATION_SEC}s`);
+  console.log(`지속적 부하 시작: ${TPS} TPS for ${DURATION_SEC}s`);
 
   const interval = setInterval(async () => {
     const elapsed = (Date.now() - startTime) / 1000;
     if (elapsed >= DURATION_SEC) {
       clearInterval(interval);
-      console.log(`\nComplete: ${sent} transactions in ${elapsed.toFixed(0)}s`);
+      console.log(`\n완료: ${sent} 트랜잭션 in ${elapsed.toFixed(0)}s`);
       return;
     }
 
-    // Send batch
+    // 배치 전송
     const promises = [];
     for (let i = 0; i < TPS; i++) {
       promises.push(
@@ -214,12 +214,12 @@ async function main() {
           to: TARGET,
           value: VALUE,
           nonce: nonce++,
-        }).catch(() => {}) // Ignore individual failures
+        }).catch(() => {}) // 개별 실패 무시
       );
     }
     await Promise.allSettled(promises);
     sent += TPS;
-    process.stdout.write(`\r  Sent: ${sent} txs | Elapsed: ${elapsed.toFixed(0)}s`);
+    process.stdout.write(`\r  전송: ${sent} txs | 경과: ${elapsed.toFixed(0)}s`);
   }, 1000);
 }
 
@@ -227,13 +227,13 @@ main().catch(console.error);
 ```
 
 ```bash
-# Run with ts-node or tsx
+# ts-node 또는 tsx로 실행
 npx tsx scripts/load-test.ts
 ```
 
-### Method C: Heavy Computation (Maximize Gas)
+### 방법 C: 무거운 계산 (가스 최대화)
 
-Deploy a contract that performs heavy computation to maximize `gasUsedRatio`.
+`gasUsedRatio`를 최대화하기 위해 무거운 계산을 수행하는 컨트랙트를 배포합니다.
 
 ```solidity
 // SPDX-License-Identifier: MIT
@@ -242,7 +242,7 @@ pragma solidity ^0.8.0;
 contract GasBurner {
     uint256 public counter;
 
-    // Burns approximately `iterations * 20000` gas
+    // 약 `iterations * 20000` 가스를 소모
     function burn(uint256 iterations) external {
         for (uint256 i = 0; i < iterations; i++) {
             counter = uint256(keccak256(abi.encodePacked(counter, i, block.timestamp)));
@@ -252,10 +252,10 @@ contract GasBurner {
 ```
 
 ```bash
-# Deploy
+# 배포
 forge create GasBurner --rpc-url $L2_RPC_URL --private-key $LOAD_TEST_PRIVATE_KEY
 
-# Call burn() repeatedly (high gas consumption)
+# burn() 반복 호출 (높은 가스 소비)
 CONTRACT=<deployed_address>
 for i in $(seq 1 50); do
   cast send $CONTRACT "burn(uint256)" 500 \
@@ -268,26 +268,26 @@ wait
 
 ---
 
-## Step 3: Monitor Agent Loop Response
+## 단계 3: 에이전트 루프 응답 모니터링
 
-Once load is injected, the agent loop should detect the change within 30–60 seconds.
+부하가 주입되면 에이전트 루프는 30~60초 내에 변화를 감지해야 합니다.
 
-### Watch Server Logs
+### 서버 로그 감시
 
 ```bash
-# If running locally
+# 로컬에서 실행 중인 경우
 npm run dev 2>&1 | grep -E '\[AgentLoop\]|\[Detection\]'
 
-# Expected log progression:
+# 예상 로그 진행:
 # [AgentLoop] Cycle complete — score: 45.2, target: 2 vCPU
 # [AgentLoop] Predictive override: 1 → 2 vCPU
 # [AgentLoop] Scaling executed: 1 → 2 vCPU
 ```
 
-### Poll Scaler API
+### Scaler API 폴링
 
 ```bash
-# Run in a loop every 10 seconds
+# 10초마다 루프로 실행
 while true; do
   echo "--- $(date +%H:%M:%S) ---"
   curl -s $BASE/api/scaler | jq '{
@@ -306,7 +306,7 @@ while true; do
 done
 ```
 
-### Poll Metrics + Anomalies
+### 메트릭 + 이상 폴링
 
 ```bash
 curl -s $BASE/api/metrics | jq '{
@@ -320,29 +320,29 @@ curl -s $BASE/api/metrics | jq '{
 
 ---
 
-## Step 4: Verify Actual K8s Scaling
+## 단계 4: 실제 K8s 스케일링 검증
 
-After the agent loop triggers scaling, verify the StatefulSet was patched.
+에이전트 루프가 스케일링을 트리거한 후 StatefulSet이 패치되었는지 검증합니다.
 
 ```bash
-# Check StatefulSet resources
+# StatefulSet 리소스 확인
 kubectl get statefulset sepolia-thanos-stack-op-geth -n thanos-sepolia \
   -o jsonpath='{.spec.template.spec.containers[0].resources}' | jq .
 
-# Expected after scale-up:
+# 확장 업 후 예상:
 # {
 #   "limits": { "cpu": "2", "memory": "4Gi" },
 #   "requests": { "cpu": "2", "memory": "4Gi" }
 # }
 
-# Watch pod rollout
+# Pod 롤아웃 감시
 kubectl rollout status statefulset/sepolia-thanos-stack-op-geth -n thanos-sepolia
 
-# Check pod status
+# Pod 상태 확인
 kubectl get pods -n thanos-sepolia -l app=op-geth -o wide
 ```
 
-### Verify via SentinAI API
+### SentinAI API를 통해 검증
 
 ```bash
 curl -s $BASE/api/scaler | jq '{
@@ -354,35 +354,35 @@ curl -s $BASE/api/scaler | jq '{
 
 ---
 
-## Step 5: Verify Scale-Down (Recovery)
+## 단계 5: 확장 다운 검증 (복구)
 
-After load stops, the system should scale down after the cooldown period (300 seconds).
+부하가 중단된 후 시스템은 쿨다운 기간(300초) 이후에 축소되어야 합니다.
 
 ```bash
-# 1. Stop load injection (kill the script)
+# 1. 부하 주입 중지 (스크립트 종료)
 
-# 2. Wait for cooldown (5 minutes)
-echo "Waiting 5 minutes for cooldown..."
+# 2. 쿨다운 대기 (5분)
+echo "쿨다운 5분 대기 중..."
 sleep 300
 
-# 3. Check — agent loop should detect low load and scale down
+# 3. 확인 — 에이전트 루프가 낮은 부하를 감지하고 축소해야 함
 curl -s $BASE/api/scaler | jq '{
   currentVcpu: .currentVcpu,
   lastDecision: .lastDecision | {score, reason, targetVcpu}
 }'
 
-# 4. Verify K8s state
+# 4. K8s 상태 검증
 kubectl get statefulset sepolia-thanos-stack-op-geth -n thanos-sepolia \
   -o jsonpath='{.spec.template.spec.containers[0].resources.requests.cpu}'
 echo ""
-# Expected: "1" (scaled back down)
+# 예상: "1" (축소됨)
 ```
 
 ---
 
-## Step 6: Full E2E Verification Script
+## 단계 6: 전체 E2E 검증 스크립트
 
-Automated script that runs the entire flow:
+전체 흐름을 실행하는 자동화 스크립트:
 
 ```bash
 #!/bin/bash
@@ -398,53 +398,53 @@ echo "========================================="
 echo " SentinAI Scaling E2E Verification"
 echo "========================================="
 
-# Phase 0: Pre-flight
+# Phase 0: 사전 점검
 echo ""
-echo "=== Phase 0: Pre-flight ==="
+echo "=== Phase 0: 사전 점검 ==="
 STATE=$(curl -s $BASE/api/scaler)
 VCPU=$(echo $STATE | jq -r '.currentVcpu')
 SIM=$(echo $STATE | jq -r '.simulationMode')
 AUTO=$(echo $STATE | jq -r '.autoScalingEnabled')
 
-echo "  Current vCPU: $VCPU"
-echo "  Simulation:   $SIM"
-echo "  Auto-scaling: $AUTO"
+echo "  현재 vCPU: $VCPU"
+echo "  시뮬레이션:   $SIM"
+echo "  자동 스케일링: $AUTO"
 
 if [ "$SIM" = "true" ]; then
-  echo "  [!] Simulation mode is ON. Enabling real mode..."
+  echo "  [!] 시뮬레이션 모드가 켜짐. 실제 모드 활성화 중..."
   curl -sX PATCH $BASE/api/scaler \
     -H "Content-Type: application/json" \
     -d '{"simulationMode": false, "autoScalingEnabled": true}' > /dev/null
-  echo "  [OK] Real mode enabled"
+  echo "  [OK] 실제 모드 활성화됨"
 fi
 
 if [ "$AUTO" = "false" ]; then
-  echo "  [!] Auto-scaling disabled. Enabling..."
+  echo "  [!] 자동 스케일링 비활성화됨. 활성화 중..."
   curl -sX PATCH $BASE/api/scaler \
     -H "Content-Type: application/json" \
     -d '{"autoScalingEnabled": true}' > /dev/null
-  echo "  [OK] Auto-scaling enabled"
+  echo "  [OK] 자동 스케일링 활성화됨"
 fi
 
 INITIAL_VCPU=$(curl -s $BASE/api/scaler | jq -r '.currentVcpu')
-echo "  Initial vCPU: $INITIAL_VCPU"
+echo "  초기 vCPU: $INITIAL_VCPU"
 
-# Phase 1: Inject load
+# Phase 1: 부하 주입
 echo ""
-echo "=== Phase 1: Injecting load (200 transactions) ==="
+echo "=== Phase 1: 부하 주입 (200개 트랜잭션) ==="
 for i in $(seq 1 200); do
   cast send $TO --value 0.00001ether --private-key $PRIVATE_KEY --rpc-url $RPC_URL --async 2>/dev/null &
   if (( i % 50 == 0 )); then
     wait
-    echo "  Sent $i / 200"
+    echo "  전송: $i / 200"
   fi
 done
 wait
-echo "  [OK] Load injection complete"
+echo "  [OK] 부하 주입 완료"
 
-# Phase 2: Wait for agent loop detection
+# Phase 2: 에이전트 루프 대기
 echo ""
-echo "=== Phase 2: Waiting for agent loop (max 120s) ==="
+echo "=== Phase 2: 에이전트 루프 대기 (최대 120초) ==="
 TIMEOUT=120
 ELAPSED=0
 SCALED=false
@@ -456,49 +456,49 @@ while [ $ELAPSED -lt $TIMEOUT ]; do
   echo "  [$ELAPSED s] vCPU: $CURRENT"
 
   if [ "$CURRENT" != "$INITIAL_VCPU" ]; then
-    echo "  [OK] Scale-up detected: $INITIAL_VCPU → $CURRENT vCPU"
+    echo "  [OK] 확장 업 감지됨: $INITIAL_VCPU → $CURRENT vCPU"
     SCALED=true
     break
   fi
 done
 
 if [ "$SCALED" = "false" ]; then
-  echo "  [FAIL] No scaling occurred within ${TIMEOUT}s"
-  echo "  Check server logs: grep '[AgentLoop]' in console output"
+  echo "  [FAIL] ${TIMEOUT}초 내에 스케일링 없음"
+  echo "  서버 로그 확인: 콘솔 출력에서 '[AgentLoop]' grep"
   exit 1
 fi
 
-# Phase 3: Verify K8s patch
+# Phase 3: K8s 패치 검증
 echo ""
-echo "=== Phase 3: Verifying K8s StatefulSet ==="
+echo "=== Phase 3: K8s StatefulSet 검증 ==="
 K8S_CPU=$(kubectl get statefulset sepolia-thanos-stack-op-geth -n thanos-sepolia \
   -o jsonpath='{.spec.template.spec.containers[0].resources.requests.cpu}' 2>/dev/null || echo "unknown")
-echo "  K8s CPU request: $K8S_CPU"
+echo "  K8s CPU 요청: $K8S_CPU"
 
 ROLLOUT=$(kubectl rollout status statefulset/sepolia-thanos-stack-op-geth \
   -n thanos-sepolia --timeout=120s 2>&1 || echo "timeout")
-echo "  Rollout: $ROLLOUT"
+echo "  롤아웃: $ROLLOUT"
 
-# Phase 4: Check anomaly detection
+# Phase 4: 이상 탐지 확인
 echo ""
-echo "=== Phase 4: Anomaly Detection Status ==="
+echo "=== Phase 4: 이상 탐지 상태 ==="
 curl -s $BASE/api/metrics | jq '{
   anomalyCount: (.anomalies | length),
   anomalies: [.anomalies[]? | {metric, zScore: (.zScore * 100 | round / 100)}]
 }'
 
-# Phase 5: Summary
+# Phase 5: 요약
 echo ""
 echo "========================================="
-echo " Results"
+echo " 결과"
 echo "========================================="
 FINAL_STATE=$(curl -s $BASE/api/scaler)
-echo "  Initial vCPU:  $INITIAL_VCPU"
-echo "  Final vCPU:    $(echo $FINAL_STATE | jq -r '.currentVcpu')"
-echo "  Last scaling:  $(echo $FINAL_STATE | jq -r '.lastScalingTime')"
-echo "  Simulation:    $(echo $FINAL_STATE | jq -r '.simulationMode')"
+echo "  초기 vCPU:  $INITIAL_VCPU"
+echo "  최종 vCPU:    $(echo $FINAL_STATE | jq -r '.currentVcpu')"
+echo "  마지막 스케일링:  $(echo $FINAL_STATE | jq -r '.lastScalingTime')"
+echo "  시뮬레이션:    $(echo $FINAL_STATE | jq -r '.simulationMode')"
 echo ""
-echo "  To verify scale-down: wait 5 min, then re-check vCPU"
+echo "  확장 다운 검증하려면: 5분 대기 후 vCPU 재확인"
 echo "========================================="
 ```
 
@@ -512,22 +512,22 @@ SENTINAI_URL=http://localhost:3002 \
 
 ---
 
-## Safety & Rollback
+## 안전성 & 롤백
 
-### Emergency Rollback
+### 긴급 롤백
 
 ```bash
-# 1. Disable auto-scaling immediately
+# 1. 즉시 자동 스케일링 비활성화
 curl -sX PATCH $BASE/api/scaler \
   -H "Content-Type: application/json" \
   -d '{"autoScalingEnabled": false}'
 
-# 2. Re-enable simulation mode
+# 2. 시뮬레이션 모드 재활성화
 curl -sX PATCH $BASE/api/scaler \
   -H "Content-Type: application/json" \
   -d '{"simulationMode": true}'
 
-# 3. Manual K8s rollback (if needed)
+# 3. 수동 K8s 롤백 (필요시)
 kubectl patch statefulset sepolia-thanos-stack-op-geth -n thanos-sepolia \
   --type='json' -p='[
     {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/cpu","value":"1"},
@@ -537,69 +537,69 @@ kubectl patch statefulset sepolia-thanos-stack-op-geth -n thanos-sepolia \
   ]'
 ```
 
-### Safety Checklist
+### 안전 체크리스트
 
-| Item | Check |
-|------|-------|
-| Load test wallet has limited funds | Prevents accidental cost overrun |
-| `maxVcpu: 4` in scaling config | Prevents unbounded scale-up |
-| Cooldown: 300 seconds | Prevents rapid oscillation |
-| K8s resource quotas set | Cluster-level protection |
-| Monitoring active | Watch `kubectl top pods` during test |
+| 항목 | 확인 |
+|------|------|
+| 부하 테스트 지갑이 제한된 자금을 가짐 | 실수로 인한 비용 초과 방지 |
+| `maxVcpu: 4` 스케일링 설정 | 무제한 확장 업 방지 |
+| 쿨다운: 300초 | 급속 진동 방지 |
+| K8s 리소스 쿼터 설정됨 | 클러스터 수준 보호 |
+| 모니터링 활성화됨 | 테스트 중 `kubectl top pods` 감시 |
 
-### Cost Awareness
+### 비용 인식
 
-| vCPU | Memory | Fargate Cost (Seoul) |
+| vCPU | 메모리 | Fargate 비용 (Seoul) |
 |------|--------|---------------------|
-| 1 | 2 GiB | $0.057/hour |
-| 2 | 4 GiB | $0.114/hour |
-| 4 | 8 GiB | $0.227/hour |
+| 1 | 2 GiB | $0.057/시간 |
+| 2 | 4 GiB | $0.114/시간 |
+| 4 | 8 GiB | $0.227/시간 |
 
-Scale-up from 1 → 4 vCPU increases hourly cost by ~4×. Ensure scale-down is verified.
+1 → 4 vCPU로 확장하면 시간당 비용이 ~4배 증가합니다. 확장 다운이 검증되었는지 확인하세요.
 
 ---
 
-## Troubleshooting
+## 문제 해결
 
-### Scaling not triggered
+### 스케일링이 트리거되지 않음
 
 ```bash
-# Check hybrid score calculation
+# 하이브리드 스코어 계산 확인
 curl -s $BASE/api/scaler | jq '.lastDecision | {score, reason, breakdown}'
 ```
 
-- **Score < 30**: Load not high enough. Increase transaction volume.
-- **Score ≥ 30 but no scaling**: Check `autoScalingEnabled`, `simulationMode`, and cooldown.
+- **Score < 30**: 부하가 충분하지 않습니다. 트랜잭션 볼륨을 증가시키세요.
+- **Score ≥ 30이지만 스케일링 없음**: `autoScalingEnabled`, `simulationMode` 및 쿨다운을 확인하세요.
 
-### Agent loop not running
+### 에이전트 루프가 실행되지 않음
 
 ```bash
-# Check server logs for cron initialization
-# Look for: [Scheduler] Agent loop started (every 30s)
+# 서버 로그에서 cron 초기화 확인
+# 찾기: [Scheduler] Agent loop started (every 30s)
 
-# Verify env
-echo $AGENT_LOOP_ENABLED  # Should be "true" or L2_RPC_URL must be set
+# 환경 검증
+echo $AGENT_LOOP_ENABLED  # "true"이거나 L2_RPC_URL이 설정되어야 함
 ```
 
-### K8s patch failed
+### K8s 패치 실패
 
 ```bash
-# Test kubectl access manually
+# kubectl 접근 수동으로 테스트
 kubectl auth can-i patch statefulsets -n thanos-sepolia
 
-# Check RBAC
+# RBAC 확인
 kubectl get clusterrolebinding | grep sentinai
 ```
 
-### Transactions failing
+### 트랜잭션 실패
 
 ```bash
-# Check wallet balance
+# 지갑 잔액 확인
 cast balance $WALLET_ADDRESS --rpc-url $L2_RPC_URL
 
-# Check nonce
+# Nonce 확인
 cast nonce $WALLET_ADDRESS --rpc-url $L2_RPC_URL
 
-# Check chain ID
+# 체인 ID 확인
 cast chain-id --rpc-url $L2_RPC_URL
 ```
