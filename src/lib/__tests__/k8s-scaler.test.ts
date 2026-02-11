@@ -78,6 +78,7 @@ import {
   setZeroDowntimeEnabled,
   setSimulationMode,
   getScalingState,
+  getContainerCpuUsage,
 } from '../k8s-scaler';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 import { INITIAL_SWAP_STATE } from '@/types/zero-downtime';
@@ -255,6 +256,83 @@ describe('k8s-scaler', () => {
       const result = await scaleOpGeth(1, 2, DEFAULT_SCALING_CONFIG);
       expect(result.success).toBe(true);
       expect(result.message).toContain('No scaling needed');
+    });
+  });
+
+  // ----------------------------------------------------------
+  // getContainerCpuUsage
+  // ----------------------------------------------------------
+
+  describe('getContainerCpuUsage', () => {
+    it('should return null in simulation mode', async () => {
+      await setSimulationMode(true);
+      const result = await getContainerCpuUsage();
+      expect(result).toBeNull();
+      // kubectl should not be called
+      expect(mockRunK8sCommand).not.toHaveBeenCalled();
+    });
+
+    it('should parse millicores CPU and MiB memory', async () => {
+      await setSimulationMode(false);
+      mockRunK8sCommand.mockResolvedValue({
+        stdout: 'op-geth-0   250m   1024Mi',
+        stderr: '',
+      });
+
+      const result = await getContainerCpuUsage();
+      expect(result).toEqual({ cpuMillicores: 250, memoryMiB: 1024 });
+    });
+
+    it('should parse whole-core CPU values', async () => {
+      await setSimulationMode(false);
+      mockRunK8sCommand.mockResolvedValue({
+        stdout: 'op-geth-0   2   4096Mi',
+        stderr: '',
+      });
+
+      const result = await getContainerCpuUsage();
+      expect(result).toEqual({ cpuMillicores: 2000, memoryMiB: 4096 });
+    });
+
+    it('should parse nanocores CPU values', async () => {
+      await setSimulationMode(false);
+      mockRunK8sCommand.mockResolvedValue({
+        stdout: 'op-geth-0   500000000n   2048Mi',
+        stderr: '',
+      });
+
+      const result = await getContainerCpuUsage();
+      expect(result).toEqual({ cpuMillicores: 500, memoryMiB: 2048 });
+    });
+
+    it('should parse GiB memory values', async () => {
+      await setSimulationMode(false);
+      mockRunK8sCommand.mockResolvedValue({
+        stdout: 'op-geth-0   100m   2Gi',
+        stderr: '',
+      });
+
+      const result = await getContainerCpuUsage();
+      expect(result).toEqual({ cpuMillicores: 100, memoryMiB: 2048 });
+    });
+
+    it('should return null when kubectl fails', async () => {
+      await setSimulationMode(false);
+      mockRunK8sCommand.mockRejectedValue(new Error('metrics-server not available'));
+
+      const result = await getContainerCpuUsage();
+      expect(result).toBeNull();
+    });
+
+    it('should return null on invalid output', async () => {
+      await setSimulationMode(false);
+      mockRunK8sCommand.mockResolvedValue({
+        stdout: 'error: metrics not available',
+        stderr: '',
+      });
+
+      const result = await getContainerCpuUsage();
+      expect(result).toBeNull();
     });
   });
 });

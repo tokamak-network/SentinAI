@@ -11,6 +11,7 @@ import { MetricDataPoint } from '@/types/prediction';
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import { getStore } from '@/lib/redis-store';
 import { runDetectionPipeline } from '@/lib/detection-pipeline';
+import { getContainerCpuUsage } from '@/lib/k8s-scaler';
 import type { AnomalyResult } from '@/types/anomaly';
 
 // Whether anomaly detection is enabled (default: enabled)
@@ -265,11 +266,12 @@ export async function GET(request: Request) {
         const appPrefix = getAppPrefix();
 
         const startK8s = performance.now();
-        const [l2Client, consensus, batcher, proposer] = await Promise.all([
+        const [l2Client, consensus, batcher, proposer, containerUsage] = await Promise.all([
             getComponentDetails(`app=${appPrefix}-geth`, "L2 Client", "cpu", ""),
             getComponentDetails(`app=${appPrefix}-node`, "Consensus Node", "globe", ""),
             getComponentDetails(`app=${appPrefix}-batcher`, "Batcher", "shuffle", ""),
-            getComponentDetails(`app=${appPrefix}-proposer`, "Proposer", "shield", "")
+            getComponentDetails(`app=${appPrefix}-proposer`, "Proposer", "shield", ""),
+            getContainerCpuUsage(),
         ]);
         console.log(`[Timer] K8s Fetch: ${(performance.now() - startK8s).toFixed(2)}ms`);
 
@@ -324,11 +326,20 @@ export async function GET(request: Request) {
         const gasLimit = Number(block.gasLimit);
         const evmLoad = (gasUsed / gasLimit) * 100;
 
+        // Use real container CPU if available, otherwise fallback to EVM load
+        let cpuSource: 'container' | 'evm_load' = 'evm_load';
+        let realCpu = evmLoad;
+        if (containerUsage) {
+            const requestMillicores = (l2Client?.rawCpu || 1) * 1000;
+            realCpu = (containerUsage.cpuMillicores / requestMillicores) * 100;
+            cpuSource = 'container';
+        }
+
         // 4. Simulation & Stress Mode
         const url = new URL(request.url);
         const isStressTest = url.searchParams.get('stress') === 'true';
 
-        let effectiveCpu = evmLoad;
+        let effectiveCpu = realCpu;
         const effectiveTx = txPoolPending;
         let currentVcpu: number = l2Client ? (l2Client.rawCpu || 1) : 1;
 
@@ -440,10 +451,11 @@ export async function GET(request: Request) {
                 blockHeight: Number(blockNumber),
                 txPoolCount: effectiveTx,
                 cpuUsage: Number(effectiveCpu.toFixed(2)),
-                memoryUsage: currentVcpu * 2 * 1024,
+                memoryUsage: containerUsage ? Math.round(containerUsage.memoryMiB) : currentVcpu * 2 * 1024,
                 gethVcpu: currentVcpu,
                 gethMemGiB: currentVcpu * 2,
                 syncLag: 0,
+                cpuSource,
                 source: "REAL_K8S_CONFIG"
             },
             components,

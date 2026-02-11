@@ -17,6 +17,62 @@ import { runK8sCommand } from '@/lib/k8s-config';
 import { zeroDowntimeScale } from '@/lib/zero-downtime-scaler';
 import { getStore } from '@/lib/redis-store';
 
+export interface ContainerResourceUsage {
+  cpuMillicores: number;
+  memoryMiB: number;
+}
+
+/**
+ * Get real container CPU/memory usage via kubectl top
+ * Requires metrics-server installed in the cluster.
+ * Returns null in simulation mode or if metrics are unavailable.
+ */
+export async function getContainerCpuUsage(
+  config: ScalingConfig = DEFAULT_SCALING_CONFIG
+): Promise<ContainerResourceUsage | null> {
+  const simConfig = await getStore().getSimulationConfig();
+  if (simConfig.enabled) return null;
+
+  try {
+    const { namespace, statefulSetName } = config;
+    const podName = `${statefulSetName}-0`;
+    const cmd = `top pod ${podName} -n ${namespace} --no-headers`;
+    const { stdout } = await runK8sCommand(cmd, { timeout: 5000 });
+
+    // Output format: "op-geth-0   250m   1024Mi"
+    const parts = stdout.trim().split(/\s+/);
+    if (parts.length < 3) return null;
+
+    const cpuStr = parts[1];
+    let cpuMillicores: number;
+    if (cpuStr.endsWith('m')) {
+      cpuMillicores = parseFloat(cpuStr);
+    } else if (cpuStr.endsWith('n')) {
+      cpuMillicores = parseFloat(cpuStr) / 1_000_000;
+    } else {
+      // Whole cores (e.g., "2" = 2000m)
+      cpuMillicores = parseFloat(cpuStr) * 1000;
+    }
+
+    const memStr = parts[2];
+    let memoryMiB: number;
+    if (memStr.endsWith('Gi')) {
+      memoryMiB = parseFloat(memStr) * 1024;
+    } else if (memStr.endsWith('Mi')) {
+      memoryMiB = parseFloat(memStr);
+    } else if (memStr.endsWith('Ki')) {
+      memoryMiB = parseFloat(memStr) / 1024;
+    } else {
+      memoryMiB = parseFloat(memStr);
+    }
+
+    if (isNaN(cpuMillicores) || isNaN(memoryMiB)) return null;
+    return { cpuMillicores, memoryMiB };
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Check simulation mode status
  */

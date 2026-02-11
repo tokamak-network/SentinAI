@@ -157,6 +157,7 @@ export default function Dashboard() {
     intent: NLOpsIntent;
   } | null>(null);
   const chatMessagesEndRef = useRef<HTMLDivElement>(null);
+  const preStressVcpuRef = useRef(1);
 
   // Seed prediction data for testing
   const seedPredictionData = async () => {
@@ -472,7 +473,12 @@ export default function Dashboard() {
           {/* Stress Mode Toggle */}
           <div className="mb-3">
             <button
-              onClick={() => setStressMode(!stressMode)}
+              onClick={() => {
+                if (!stressMode) {
+                  preStressVcpuRef.current = current?.metrics.gethVcpu || 1;
+                }
+                setStressMode(!stressMode);
+              }}
               className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${stressMode
                 ? 'bg-red-500 text-white ring-2 ring-red-500/20 hover:bg-red-600'
                 : 'bg-gray-100 text-gray-600 border border-gray-200 hover:border-red-300 hover:text-red-500'
@@ -484,7 +490,18 @@ export default function Dashboard() {
           </div>
 
           {/* vCPU Summary Row */}
-          {prediction ? (
+          {stressMode ? (
+            <div className="flex items-center gap-3 mb-3" data-testid="current-vcpu">
+              <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                <span className="text-lg font-bold text-gray-900">{preStressVcpuRef.current} vCPU</span>
+              </div>
+              <ArrowUpRight size={20} className="shrink-0 text-red-500" />
+              <div className="flex-1 h-8 rounded-lg flex items-center justify-center bg-red-100 border border-red-200">
+                <span className="text-lg font-bold text-red-600">8 vCPU</span>
+              </div>
+              <span className="text-[10px] text-red-400 shrink-0 font-semibold">STRESS</span>
+            </div>
+          ) : prediction ? (
             <div className="flex items-center gap-3 mb-3" data-testid="current-vcpu">
               <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
                 <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
