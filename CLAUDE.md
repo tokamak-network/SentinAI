@@ -45,17 +45,32 @@ bash scripts/verify-e2e.sh --phase 2 # Run specific phase only
 ### Data Flow
 
 ```
-L1/L2 RPC (viem) ──→ /api/metrics ──→ MetricsStore (ring buffer, 60 capacity)
-                          │                    │
-                          ▼                    ▼
-                    page.tsx (UI)      /api/scaler → PredictiveScaler (AI)
-                          │                    │
-                          ▼                    ▼
-                  AnomalyDetector ──→   ScalingDecision ──→ K8sScaler
-                       │                                        │
-                       ▼                                        ▼
-                  RCA Engine                         StatefulSet patch / simulate
+                    ┌─────── Agent Loop (30s cron) ───────┐
+                    │                                     │
+L1/L2 RPC (viem) ──┼──→ /api/metrics ──→ MetricsStore    │
+                    │        │              (ring buffer)  │
+                    │        ▼                    │        │
+                    │  page.tsx (UI)      /api/scaler      │
+                    │        │              │              │
+                    │        ▼              ▼              │
+                    │  DetectionPipeline  ScalingDecision  │
+                    │   (L1→L2→L3→L4)     │              │
+                    │        │              ▼              │
+                    │        ▼         K8sScaler ←────────┘
+                    │   RCA Engine       (auto-execute)
+                    │        │
+                    │        ▼
+                    │  RemediationEngine
+                    └─────────────────────────────────────┘
 ```
+
+**Agent Loop** (`agent-loop.ts`) — Server-side autonomous cycle every 30 seconds:
+1. **Observe**: Collect L1/L2 metrics directly from RPC (no browser needed)
+2. **Detect**: Run 4-layer anomaly detection pipeline (`detection-pipeline.ts`)
+3. **Decide**: Calculate scaling score + predictive override
+4. **Act**: Auto-execute scaling if conditions met (auto-scaling enabled, not in cooldown)
+
+Enabled automatically when `L2_RPC_URL` is set. Override with `AGENT_LOOP_ENABLED=true|false`.
 
 ### Core Subsystems
 
@@ -179,6 +194,8 @@ cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 | `ALERT_WEBHOOK_URL` | — | Slack/Webhook URL for anomaly alerts |
 | `COST_TRACKING_ENABLED` | `true` | vCPU usage pattern tracking |
 | `SCALING_SIMULATION_MODE` | `true` | Simulate K8s changes without real patches |
+| `AGENT_LOOP_ENABLED` | auto | Server-side autonomous loop (auto-enabled if L2_RPC_URL set) |
+| `AUTO_REMEDIATION_ENABLED` | `false` | Layer 4 auto-remediation trigger |
 
 Full env guide: `ENV_GUIDE.md`
 

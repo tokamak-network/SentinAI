@@ -6,21 +6,11 @@ import { recordUsage } from '@/lib/usage-tracker';
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-import { pushMetric, getRecentMetrics } from '@/lib/metrics-store';
+import { pushMetric } from '@/lib/metrics-store';
 import { MetricDataPoint } from '@/types/prediction';
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import { getStore } from '@/lib/redis-store';
-import { detectAnomalies } from '@/lib/anomaly-detector';
-import { analyzeAnomalies } from '@/lib/anomaly-ai-analyzer';
-import { dispatchAlert } from '@/lib/alert-dispatcher';
-import {
-  createOrUpdateEvent,
-  addDeepAnalysis,
-  addAlertRecord,
-  resolveActiveEventIfExists,
-  getActiveEventId
-} from '@/lib/anomaly-event-store';
-import { getAllLiveLogs } from '@/lib/log-ingester';
+import { runDetectionPipeline } from '@/lib/detection-pipeline';
 import type { AnomalyResult } from '@/types/anomaly';
 
 // Whether anomaly detection is enabled (default: enabled)
@@ -409,72 +399,17 @@ export async function GET(request: Request) {
         }
 
         // ================================================================
-        // Anomaly Detection Pipeline (Layer 1 → Layer 2 → Layer 3)
+        // Anomaly Detection Pipeline (Layer 1 → Layer 2 → Layer 3 → Layer 4)
+        // Delegated to detection-pipeline.ts for reuse by agent-loop
         // ================================================================
         let detectedAnomalies: AnomalyResult[] = [];
         let activeAnomalyEventId: string | undefined;
 
         if (ANOMALY_DETECTION_ENABLED && !isStressTest && dataPoint) {
           try {
-            // Layer 1: Statistical anomaly detection
-            const history = await getRecentMetrics();
-            detectedAnomalies = detectAnomalies(dataPoint, history);
-
-            if (detectedAnomalies.length > 0) {
-              console.log(`[Anomaly] Detected ${detectedAnomalies.length} anomalies`);
-
-              // Record in event store
-              const event = await createOrUpdateEvent(detectedAnomalies);
-              activeAnomalyEventId = event.id;
-
-              // Layer 2: AI deep analysis (async, non-blocking)
-              if (!event.deepAnalysis) {
-                const analyzeInBackground = async () => {
-                  try {
-                    const logs = await getAllLiveLogs();
-                    const analysis = await analyzeAnomalies(detectedAnomalies, dataPoint!, logs);
-                    await addDeepAnalysis(event.id, analysis);
-
-                    // Layer 3: Alert dispatch
-                    const alertRecord = await dispatchAlert(analysis, dataPoint!, detectedAnomalies);
-                    if (alertRecord) {
-                      await addAlertRecord(event.id, alertRecord);
-                    }
-
-                    // Layer 4: Auto-Remediation trigger (non-blocking, async)
-                    if (process.env.AUTO_REMEDIATION_ENABLED === 'true') {
-                      import('@/lib/remediation-engine')
-                        .then(({ executeRemediation }) => {
-                          executeRemediation(event, analysis).catch(err =>
-                            console.error('[Layer4] Remediation failed:', err)
-                          );
-                        })
-                        .catch(err => {
-                          console.error('[Layer4] Failed to load remediation engine:', err);
-                        });
-                    }
-                  } catch (aiError) {
-                    const errorMsg = aiError instanceof Error ? aiError.message : 'Unknown error';
-                    console.error('[Anomaly] AI analysis failed:', errorMsg);
-                    // Record failure state so it's visible to the UI
-                    await addDeepAnalysis(event.id, {
-                      severity: 'medium',
-                      anomalyType: 'performance',
-                      correlations: [],
-                      predictedImpact: `AI analysis failed: ${errorMsg}`,
-                      suggestedActions: ['Manual inspection required'],
-                      relatedComponents: [],
-                      timestamp: new Date().toISOString(),
-                    }).catch(() => {}); // Ignore nested errors
-                  }
-                };
-                analyzeInBackground().catch(() => {}); // Prevent unhandled promise rejection
-              }
-            } else {
-              // Resolve active event if no anomalies detected
-              await resolveActiveEventIfExists();
-              activeAnomalyEventId = (await getActiveEventId()) || undefined;
-            }
+            const detection = await runDetectionPipeline(dataPoint);
+            detectedAnomalies = detection.anomalies;
+            activeAnomalyEventId = detection.activeEventId;
           } catch (anomalyError) {
             console.error('[Anomaly] Detection pipeline error:', anomalyError);
           }

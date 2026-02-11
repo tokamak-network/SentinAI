@@ -1,18 +1,32 @@
 /**
  * Scheduler Module
- * Manages cron jobs for 5-minute metric snapshots and daily report generation.
+ * Manages cron jobs for:
+ *   - Agent loop (30s): autonomous observe-detect-decide-act cycle
+ *   - Metric snapshots (5min): daily accumulator for reports
+ *   - Daily report (23:55 KST): AI-powered daily summary
  * Initialized from Next.js instrumentation hook on server start.
  */
 
 import cron, { type ScheduledTask } from 'node-cron';
 import { takeSnapshot, getAccumulatedData, initializeAccumulator } from '@/lib/daily-accumulator';
 import { generateDailyReport } from '@/lib/daily-report-generator';
+import { runAgentCycle } from '@/lib/agent-loop';
 
 let initialized = false;
+let agentTask: ScheduledTask | null = null;
 let snapshotTask: ScheduledTask | null = null;
 let reportTask: ScheduledTask | null = null;
+let agentTaskRunning = false;
 let snapshotTaskRunning = false;
 let reportTaskRunning = false;
+
+// Agent loop enable check — defaults to true if L2_RPC_URL is set
+function isAgentLoopEnabled(): boolean {
+  if (process.env.AGENT_LOOP_ENABLED === 'false') return false;
+  if (process.env.AGENT_LOOP_ENABLED === 'true') return true;
+  // Auto-enable if L2_RPC_URL is configured
+  return !!process.env.L2_RPC_URL;
+}
 
 /**
  * Initialize cron jobs. Idempotent — safe to call multiple times.
@@ -25,6 +39,30 @@ export async function initializeScheduler(): Promise<void> {
 
   // Initialize accumulator for today
   await initializeAccumulator();
+
+  // Agent loop: every 30 seconds — autonomous observe-detect-decide-act
+  if (isAgentLoopEnabled()) {
+    agentTask = cron.schedule('*/30 * * * * *', async () => {
+      if (agentTaskRunning) return;
+      agentTaskRunning = true;
+      try {
+        const result = await runAgentCycle();
+        if (result.phase === 'error') {
+          console.error('[AgentLoop] Cycle error:', result.error);
+        } else if (result.scaling?.executed) {
+          console.log(`[AgentLoop] Scaling executed: ${result.scaling.reason}`);
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        console.error('[Scheduler] Agent loop error:', msg);
+      } finally {
+        agentTaskRunning = false;
+      }
+    });
+    console.log('[Scheduler] Agent loop enabled (every 30s)');
+  } else {
+    console.log('[Scheduler] Agent loop disabled (set AGENT_LOOP_ENABLED=true or L2_RPC_URL to enable)');
+  }
 
   // 5-minute snapshot cron
   snapshotTask = cron.schedule('*/5 * * * *', async () => {
@@ -73,6 +111,10 @@ export async function initializeScheduler(): Promise<void> {
  * Stop all cron jobs (for testing).
  */
 export function stopScheduler(): void {
+  if (agentTask) {
+    agentTask.stop();
+    agentTask = null;
+  }
   if (snapshotTask) {
     snapshotTask.stop();
     snapshotTask = null;
@@ -90,11 +132,15 @@ export function stopScheduler(): void {
  */
 export function getSchedulerStatus(): {
   initialized: boolean;
+  agentLoopEnabled: boolean;
+  agentTaskRunning: boolean;
   snapshotTaskRunning: boolean;
   reportTaskRunning: boolean;
 } {
   return {
     initialized,
+    agentLoopEnabled: isAgentLoopEnabled(),
+    agentTaskRunning,
     snapshotTaskRunning,
     reportTaskRunning,
   };
