@@ -5,7 +5,7 @@ import {
   Activity, Server, Zap, ShieldAlert, Cpu, ArrowUpRight,
   TrendingDown, CheckCircle2, Shield, Database,
   ChevronDown, ChevronRight, BarChart3, Calendar, Lightbulb,
-  MessageSquare, Send, Bot, User
+  Send, Bot, User
 } from 'lucide-react';
 import type { ChatMessage, NLOpsResponse, NLOpsIntent } from '@/types/nlops';
 
@@ -398,36 +398,20 @@ export default function Dashboard() {
 
   // --- Render ---
   return (
-    <div className="min-h-screen bg-[#F8F9FA] text-gray-800 font-sans p-6 md:p-10 max-w-[1600px] mx-auto">
+    <div className="min-h-screen bg-[#F8F9FA] text-gray-800 font-sans p-6 md:p-10 pb-16 max-w-[1600px] mx-auto">
 
       {/* 1. Header (Clean & Functional) */}
-      <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
-        <div className="flex items-center gap-4">
-          <div className="bg-slate-900 p-3 rounded-2xl shadow-xl shadow-slate-200 text-white flex items-center justify-center">
-            <Shield size={32} strokeWidth={2.5} />
-          </div>
-          <div>
-            <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
-              SentinAI
-            </h1>
-            <p className="text-sm mt-1 font-medium text-gray-500">
-              Autonomous Node Guardian for Optimism L2
-            </p>
-          </div>
+      <header className="flex items-center gap-4 mb-8">
+        <div className="bg-slate-900 p-3 rounded-2xl shadow-xl shadow-slate-200 text-white flex items-center justify-center">
+          <Shield size={32} strokeWidth={2.5} />
         </div>
-
-        <div className="flex items-center gap-4">
-          {/* Stress Mode Toggle */}
-          <button
-            onClick={() => setStressMode(!stressMode)}
-            className={`flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-sm shadow-sm transition-all ${stressMode
-              ? 'bg-red-500 text-white ring-4 ring-red-500/20 hover:bg-red-600 scale-105'
-              : 'bg-white text-gray-600 border border-gray-200 hover:border-blue-300 hover:text-blue-600'
-              }`}
-          >
-            {stressMode ? <Zap size={18} fill="currentColor" className="animate-pulse" /> : <Zap size={18} />}
-            {stressMode ? 'Simulating High Traffic...' : 'Simulate Load'}
-          </button>
+        <div>
+          <h1 className="text-3xl font-extrabold text-gray-900 tracking-tight">
+            SentinAI
+          </h1>
+          <p className="text-sm mt-1 font-medium text-gray-500">
+            Autonomous Node Guardian for Optimism L2
+          </p>
         </div>
       </header>
 
@@ -465,271 +449,282 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Anomaly Alert Banner */}
-      {activeAnomalies.length > 0 && (
-        <div data-testid="anomaly-banner" className="bg-red-500/10 border border-red-500/30 rounded-2xl px-6 py-4 mb-6 animate-pulse">
-          <div className="flex items-center gap-3">
-            <ShieldAlert className="text-red-500" size={24} />
-            <div className="flex-1">
-              <h3 data-testid="anomaly-banner-title" className="font-bold text-red-600">
-                Anomaly Detected ({activeAnomalies.length})
-              </h3>
-              <p data-testid="anomaly-banner-message" className="text-sm text-red-500/80">
-                {activeAnomalies.map(a => a.description).join(' | ')}
+
+      {/* Row 1: At-a-Glance Status */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+
+        {/* Card 1: Scaling Forecast */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="font-bold text-gray-900">Simulation Zone</h3>
+            <span className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
+              prediction?.recommendedAction === 'scale_up'
+                ? 'bg-indigo-500'
+                : prediction?.recommendedAction === 'scale_down'
+                ? 'bg-green-500'
+                : 'bg-blue-500'
+            }`}>
+              {prediction?.recommendedAction === 'scale_up' ? 'Scale Up' :
+               prediction?.recommendedAction === 'scale_down' ? 'Scale Down' : 'Stable'}
+            </span>
+          </div>
+
+          {/* Stress Mode Toggle */}
+          <div className="mb-3">
+            <button
+              onClick={() => setStressMode(!stressMode)}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${stressMode
+                ? 'bg-red-500 text-white ring-2 ring-red-500/20 hover:bg-red-600'
+                : 'bg-gray-100 text-gray-600 border border-gray-200 hover:border-red-300 hover:text-red-500'
+              }`}
+            >
+              {stressMode ? <Zap size={16} fill="currentColor" className="animate-pulse" /> : <Zap size={16} />}
+              {stressMode ? 'Simulating High Traffic...' : 'Simulate Load'}
+            </button>
+          </div>
+
+          {/* vCPU Summary Row */}
+          {prediction ? (
+            <div className="flex items-center gap-3 mb-3" data-testid="current-vcpu">
+              <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
+              </div>
+              <ArrowUpRight size={20} className={`shrink-0 ${
+                prediction.trend === 'rising' ? 'text-indigo-500' :
+                prediction.trend === 'falling' ? 'text-green-500 rotate-180' :
+                'text-gray-400 rotate-45'
+              }`} />
+              <div className={`flex-1 h-8 rounded-lg flex items-center justify-center ${
+                prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
+                  ? 'bg-indigo-100 border border-indigo-200'
+                  : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
+                  ? 'bg-green-100 border border-green-200'
+                  : 'bg-blue-100 border border-blue-200'
+              }`}>
+                <span className={`text-lg font-bold ${
+                  prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
+                    ? 'text-indigo-600'
+                    : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
+                    ? 'text-green-600'
+                    : 'text-blue-600'
+                }`}>{prediction.predictedVcpu} vCPU</span>
+              </div>
+              <span className="text-[10px] text-gray-400 shrink-0">
+                {(prediction.confidence * 100).toFixed(0)}%
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 mb-3" data-testid="current-vcpu">
+              <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
+              <span className="text-xs text-gray-400">/ {(current?.metrics.gethVcpu || 1) * 2} GiB</span>
+            </div>
+          )}
+
+          {/* Seed Test Data (Dev Only) */}
+          {process.env.NODE_ENV !== 'production' && <div className="mb-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+            <div className="flex items-center gap-2">
+              <Database size={14} className="text-indigo-600 shrink-0" />
+              <select
+                value={seedScenario}
+                onChange={(e) => setSeedScenario(e.target.value as typeof seedScenario)}
+                className="flex-1 text-xs bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              >
+                <option value="stable">Stable</option>
+                <option value="rising">Rising</option>
+                <option value="spike">Spike</option>
+                <option value="falling">Falling</option>
+                <option value="live">Live</option>
+              </select>
+              <button onClick={seedPredictionData} disabled={isSeeding}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isSeeding ? 'bg-indigo-300 text-white cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}>
+                {isSeeding ? '...' : 'Seed'}
+              </button>
+            </div>
+          </div>}
+
+          {/* AI Insight */}
+          <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+            <div className="flex items-start gap-2">
+              <Zap size={14} className="text-blue-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-gray-600 leading-relaxed">
+                {prediction ? (
+                  prediction.reasoning.includes('AI unavailable')
+                    ? prediction.reasoning.replace(/\s*\(AI unavailable\)/, '').replace('Fallback prediction based on simple', 'Prediction based on')
+                    : prediction.reasoning
+                ) : current?.cost.isPeakMode ? (
+                  `Scaling up to handle traffic spike, current cost: $${current?.cost.opGethMonthlyCost?.toFixed(0) || '166'}/mo.`
+                ) : (
+                  <>Running at {current?.metrics.gethVcpu || 1} vCPU, estimated savings: <span className="text-green-600 font-bold">${current?.cost.monthlySaving?.toFixed(0) || '124'}/mo</span></>
+                )}
               </p>
             </div>
-            <span className="text-xs text-red-400 font-mono">
-              Ask RCA in chat
-            </span>
+          </div>
+        </div>
+
+        {/* Card 2: System Health */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
+          <div className="flex items-center gap-2 mb-4">
+            <h3 className="font-bold text-gray-900">System Health</h3>
+            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
+          </div>
+          <div className="space-y-3">
+            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] text-gray-400 font-semibold uppercase">vCPU</span>
+                <Cpu size={12} className="text-gray-300" />
+              </div>
+              <p className="text-xl font-bold text-gray-900">{current?.metrics.gethVcpu || '1'}<span className="text-xs text-gray-400 font-normal ml-1">/ 8</span></p>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="flex-1 h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all duration-500 ${
+                    ((current?.metrics.gethVcpu || 1) / 8) * 100 > 75 ? 'bg-red-500' : ((current?.metrics.gethVcpu || 1) / 8) * 100 > 50 ? 'bg-amber-500' : 'bg-blue-500'
+                  }`} style={{ width: `${((current?.metrics.gethVcpu || 1) / 8) * 100}%` }}></div>
+                </div>
+                <span className="text-[10px] text-gray-400 font-mono w-8 text-right">{(((current?.metrics.gethVcpu || 1) / 8) * 100).toFixed(0)}%</span>
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] text-gray-400 font-semibold uppercase">Memory</span>
+                <Server size={12} className="text-gray-300" />
+              </div>
+              <p className="text-xl font-bold text-gray-900">{current?.metrics.gethMemGiB || '2'}<span className="text-xs text-gray-400 font-normal ml-1">GB</span></p>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="flex-1 h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all duration-500 ${
+                    ((current?.metrics.gethMemGiB || 2) / 16) * 100 > 75 ? 'bg-red-500' : ((current?.metrics.gethMemGiB || 2) / 16) * 100 > 50 ? 'bg-amber-500' : 'bg-blue-500'
+                  }`} style={{ width: `${((current?.metrics.gethMemGiB || 2) / 16) * 100}%` }}></div>
+                </div>
+                <span className="text-[10px] text-gray-400 font-mono w-8 text-right">{(((current?.metrics.gethMemGiB || 2) / 16) * 100).toFixed(0)}%</span>
+              </div>
+            </div>
+            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-[10px] text-gray-400 font-semibold uppercase">CPU Load</span>
+                <Activity size={12} className="text-gray-300" />
+              </div>
+              <p className="text-xl font-bold text-gray-900">{current?.metrics.cpuUsage?.toFixed(0) || '0'}<span className="text-xs text-gray-400 font-normal ml-1">%</span></p>
+              <div className="flex items-center gap-2 mt-2">
+                <div className="flex-1 h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                  <div className={`h-full rounded-full transition-all duration-500 ${
+                    Math.min(current?.metrics.cpuUsage || 0, 100) > 75 ? 'bg-red-500' : Math.min(current?.metrics.cpuUsage || 0, 100) > 50 ? 'bg-amber-500' : 'bg-blue-500'
+                  }`} style={{ width: `${Math.min(current?.metrics.cpuUsage || 0, 100)}%` }}></div>
+                </div>
+                <span className="text-[10px] text-gray-400 font-mono w-8 text-right">{Math.min(current?.metrics.cpuUsage || 0, 100).toFixed(0)}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Cost Summary */}
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
+          <div className="flex justify-between items-start mb-3">
+            <div data-testid="monthly-cost">
+              <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
+                {current?.cost.isPeakMode ? 'Cost Increase (Peak)' : 'Total Saved (MTD)'}
+              </span>
+              <div className="flex items-baseline gap-2 mt-1">
+                <span className="text-3xl font-black text-gray-900">
+                  ${Math.abs(current?.cost.monthlySaving || 124).toFixed(0)}
+                </span>
+                <span className={`text-sm font-bold ${current?.cost.isPeakMode ? 'text-red-500' : 'text-green-600'}`}>
+                  {current?.cost.isPeakMode ? '+' : '-'}{Math.abs((current?.cost.monthlySaving || 0) / (current?.cost.fixedCost || 166) * 100).toFixed(0)}%
+                </span>
+              </div>
+              {prediction && prediction.predictedVcpu !== (current?.metrics.gethVcpu || 1) && (() => {
+                const pVcpu = prediction.predictedVcpu;
+                const pMem = pVcpu * 2;
+                const pCost = (pVcpu * 0.04656 + pMem * 0.00511) * 730;
+                const pSaving = (current?.cost.fixedCost || 165.67) - pCost;
+                return (
+                  <p className="text-[10px] text-gray-400 mt-1">
+                    Projected: <span className={pSaving > 0 ? 'text-green-600' : 'text-red-500'}>${Math.abs(pSaving).toFixed(0)}/mo</span> {pSaving > 0 ? 'saved' : 'increase'} if scaled to {pVcpu} vCPU
+                  </p>
+                );
+              })()}
+            </div>
+            <button
+              onClick={fetchCostReport}
+              disabled={isLoadingCostReport}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                isLoadingCostReport
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  : 'bg-gray-900 hover:bg-gray-800 text-white'
+              }`}
+            >
+              {isLoadingCostReport ? (
+                <Activity className="animate-spin" size={12} />
+              ) : (
+                <BarChart3 size={12} />
+              )}
+              {isLoadingCostReport ? 'Analyzing...' : 'COST ANALYSIS'}
+            </button>
+          </div>
+
+          <p className="text-gray-400 text-[10px]">
+            vs Fixed 4 vCPU baseline (${current?.cost.fixedCost?.toFixed(0) || '166'}/mo)
+          </p>
+
+        </div>
+      </div>
+
+      {/* Cost Analysis Panel (Full-width, below Row 1) */}
+      {showCostAnalysis && costReport && (
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60 mb-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <BarChart3 size={16} className="text-gray-400" />
+              <h3 className="font-bold text-gray-900 text-sm">Cost Analysis</h3>
+            </div>
+            <button
+              onClick={() => setShowCostAnalysis(false)}
+              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              Close
+            </button>
+          </div>
+
+          {/* AI Insight */}
+          <div className="mb-4 p-3 bg-blue-50 rounded-xl border border-blue-200">
+            <div className="flex items-start gap-2">
+              <Lightbulb size={14} className="text-blue-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-blue-700 leading-relaxed">{truncateAtSentence(costReport.aiInsight, 200)}</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Usage Heatmap */}
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Calendar size={12} className="text-gray-400" />
+                <span className="text-[10px] text-gray-400 font-semibold uppercase">Usage Pattern (Last {costReport.periodDays} days)</span>
+              </div>
+              <UsageHeatmap patterns={costReport.usagePatterns} />
+            </div>
+
+            {/* Recommendations */}
+            {costReport.recommendations.length > 0 && (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] text-gray-400 font-semibold uppercase">Optimization Recommendations</span>
+                  <span className="text-[10px] text-green-600 font-bold">Up to {costReport.totalSavingsPercent}% savings</span>
+                </div>
+                <div className="space-y-2">
+                  {costReport.recommendations.slice(0, 3).map((rec, idx) => (
+                    <RecommendationCard key={idx} recommendation={rec} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* 2. Top Section: Core Metrics & AI Monitor (5:5 Split) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+      {/* Row 2: Operations */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-4">
 
-        {/* Left: Resource Center */}
-        <div className="bg-[#F8F9FA] rounded-3xl p-6 shadow-sm border border-gray-200/60 relative overflow-hidden min-h-[520px] flex flex-col">
-
-          {/* Header */}
-          <div className="mb-5">
-            <h2 className="text-2xl font-bold text-gray-900">Resource Center</h2>
-            <p className="text-gray-400 text-xs font-semibold uppercase tracking-wider mt-1">
-              Optimization Active
-            </p>
-          </div>
-
-          {/* Scaling Forecast Card (Compact) */}
-          <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 mb-4">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-gray-900">Scaling Forecast</h3>
-              <span className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
-                prediction?.recommendedAction === 'scale_up'
-                  ? 'bg-indigo-500'
-                  : prediction?.recommendedAction === 'scale_down'
-                  ? 'bg-green-500'
-                  : 'bg-blue-500'
-              }`}>
-                {prediction?.recommendedAction === 'scale_up' ? 'Scale Up' :
-                 prediction?.recommendedAction === 'scale_down' ? 'Scale Down' : 'Stable'}
-              </span>
-            </div>
-
-            {/* vCPU Summary Row */}
-            {prediction ? (
-              <div className="flex items-center gap-3 mb-3" data-testid="current-vcpu">
-                <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                  <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
-                </div>
-                <ArrowUpRight size={20} className={`shrink-0 ${
-                  prediction.trend === 'rising' ? 'text-indigo-500' :
-                  prediction.trend === 'falling' ? 'text-green-500 rotate-180' :
-                  'text-gray-400 rotate-45'
-                }`} />
-                <div className={`flex-1 h-8 rounded-lg flex items-center justify-center ${
-                  prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
-                    ? 'bg-indigo-100 border border-indigo-200'
-                    : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
-                    ? 'bg-green-100 border border-green-200'
-                    : 'bg-blue-100 border border-blue-200'
-                }`}>
-                  <span className={`text-lg font-bold ${
-                    prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
-                      ? 'text-indigo-600'
-                      : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
-                      ? 'text-green-600'
-                      : 'text-blue-600'
-                  }`}>{prediction.predictedVcpu} vCPU</span>
-                </div>
-                <span className="text-[10px] text-gray-400 shrink-0">
-                  {(prediction.confidence * 100).toFixed(0)}%
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 mb-3" data-testid="current-vcpu">
-                <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
-                <span className="text-xs text-gray-400">/ {(current?.metrics.gethVcpu || 1) * 2} GiB</span>
-              </div>
-            )}
-
-            {/* Seed Test Data (Dev Only) */}
-            {process.env.NODE_ENV !== 'production' && <div className="mb-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
-              <div className="flex items-center gap-2">
-                <Database size={14} className="text-indigo-600 shrink-0" />
-                <select
-                  value={seedScenario}
-                  onChange={(e) => setSeedScenario(e.target.value as typeof seedScenario)}
-                  className="flex-1 text-xs bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-                >
-                  <option value="stable">Stable</option>
-                  <option value="rising">Rising</option>
-                  <option value="spike">Spike</option>
-                  <option value="falling">Falling</option>
-                  <option value="live">Live</option>
-                </select>
-                <button onClick={seedPredictionData} disabled={isSeeding}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isSeeding ? 'bg-indigo-300 text-white cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}>
-                  {isSeeding ? '...' : 'Seed'}
-                </button>
-              </div>
-            </div>}
-
-            {/* AI Insight */}
-            <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-              <div className="flex items-start gap-2">
-                <Zap size={14} className="text-blue-500 mt-0.5 shrink-0" />
-                <p className="text-xs text-gray-600 leading-relaxed">
-                  {prediction ? (
-                    prediction.reasoning
-                  ) : current?.cost.isPeakMode ? (
-                    `Scaling up to handle traffic spike, current cost: $${current?.cost.opGethMonthlyCost?.toFixed(0) || '166'}/mo.`
-                  ) : (
-                    <>Running at {current?.metrics.gethVcpu || 1} vCPU, estimated savings: <span className="text-green-600 font-bold">${current?.cost.monthlySaving?.toFixed(0) || '124'}/mo</span></>
-                  )}
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* System Health */}
-          <div className="mb-4">
-            <div className="flex items-center gap-2 mb-3">
-              <h4 className="font-semibold text-gray-900 text-sm">System Health</h4>
-              <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <div className="bg-white rounded-xl p-3 border border-gray-100">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[10px] text-gray-400 font-semibold uppercase">vCPU</span>
-                  <Cpu size={12} className="text-gray-300" />
-                </div>
-                <p className="text-xl font-bold text-gray-900">{current?.metrics.gethVcpu || '1'}<span className="text-xs text-gray-400 font-normal ml-1">/ 8</span></p>
-                <div className="w-full h-1 bg-gray-100 rounded-full mt-1.5 overflow-hidden">
-                  <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${((current?.metrics.gethVcpu || 1) / 8) * 100}%` }}></div>
-                </div>
-              </div>
-              <div className="bg-white rounded-xl p-3 border border-gray-100">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[10px] text-gray-400 font-semibold uppercase">Memory</span>
-                  <Server size={12} className="text-gray-300" />
-                </div>
-                <p className="text-xl font-bold text-gray-900">{current?.metrics.gethMemGiB || '2'}<span className="text-xs text-gray-400 font-normal ml-1">GB</span></p>
-                <div className="w-full h-1 bg-gray-100 rounded-full mt-1.5 overflow-hidden">
-                  <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${((current?.metrics.gethMemGiB || 2) / 16) * 100}%` }}></div>
-                </div>
-              </div>
-              <div className="bg-white rounded-xl p-3 border border-gray-100">
-                <div className="flex justify-between items-center mb-1">
-                  <span className="text-[10px] text-gray-400 font-semibold uppercase">CPU Load</span>
-                  <Activity size={12} className="text-gray-300" />
-                </div>
-                <p className="text-xl font-bold text-gray-900">{current?.metrics.cpuUsage?.toFixed(0) || '0'}<span className="text-xs text-gray-400 font-normal ml-1">%</span></p>
-                <div className="w-full h-1 bg-gray-100 rounded-full mt-1.5 overflow-hidden">
-                  <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${Math.min(current?.metrics.cpuUsage || 0, 100)}%` }}></div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Cost Dashboard (Dark) - Expanded */}
-          <div className="mt-auto bg-[#1A1D21] rounded-2xl p-5 text-white">
-            {/* Header with Cost Analysis Button */}
-            <div className="flex justify-between items-start mb-3">
-              <div data-testid="monthly-cost">
-                <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
-                  {current?.cost.isPeakMode ? 'Cost Increase (Peak)' : 'Total Saved (MTD)'}
-                </span>
-                <div className="flex items-baseline gap-2 mt-1">
-                  <span className="text-3xl font-black">
-                    ${Math.abs(current?.cost.monthlySaving || 124).toFixed(0)}
-                  </span>
-                  <span className={`text-sm font-bold ${current?.cost.isPeakMode ? 'text-red-400' : 'text-green-400'}`}>
-                    {current?.cost.isPeakMode ? '+' : '-'}{Math.abs((current?.cost.monthlySaving || 0) / (current?.cost.fixedCost || 166) * 100).toFixed(0)}%
-                  </span>
-                </div>
-                {prediction && prediction.predictedVcpu !== (current?.metrics.gethVcpu || 1) && (() => {
-                  const pVcpu = prediction.predictedVcpu;
-                  const pMem = pVcpu * 2;
-                  const pCost = (pVcpu * 0.04656 + pMem * 0.00511) * 730;
-                  const pSaving = (current?.cost.fixedCost || 165.67) - pCost;
-                  return (
-                    <p className="text-[10px] text-gray-400 mt-1">
-                      Projected: <span className={pSaving > 0 ? 'text-green-400' : 'text-red-400'}>${Math.abs(pSaving).toFixed(0)}/mo</span> {pSaving > 0 ? 'saved' : 'increase'} if scaled to {pVcpu} vCPU
-                    </p>
-                  );
-                })()}
-              </div>
-              <button
-                onClick={fetchCostReport}
-                disabled={isLoadingCostReport}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                  isLoadingCostReport
-                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-500 text-white'
-                }`}
-              >
-                {isLoadingCostReport ? (
-                  <Activity className="animate-spin" size={12} />
-                ) : (
-                  <BarChart3 size={12} />
-                )}
-                {isLoadingCostReport ? 'Analyzing...' : 'COST ANALYSIS'}
-              </button>
-            </div>
-
-            <p className="text-gray-500 text-[10px]">
-              vs Fixed 4 vCPU baseline (${current?.cost.fixedCost?.toFixed(0) || '166'}/mo)
-            </p>
-
-            {/* Cost Analysis Panel (Expandable) */}
-            {showCostAnalysis && costReport && (
-              <div className="mt-4 pt-4 border-t border-gray-700">
-                {/* AI Insight */}
-                <div className="mb-4 p-3 bg-blue-900/30 rounded-xl border border-blue-800/50">
-                  <div className="flex items-start gap-2">
-                    <Lightbulb size={14} className="text-blue-400 mt-0.5 shrink-0" />
-                    <p className="text-xs text-blue-200 leading-relaxed">{costReport.aiInsight}</p>
-                  </div>
-                </div>
-
-                {/* Usage Heatmap */}
-                <div className="mb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Calendar size={12} className="text-gray-400" />
-                    <span className="text-[10px] text-gray-400 font-semibold uppercase">Usage Pattern (Last {costReport.periodDays} days)</span>
-                  </div>
-                  <UsageHeatmap patterns={costReport.usagePatterns} />
-                </div>
-
-                {/* Recommendations */}
-                {costReport.recommendations.length > 0 && (
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] text-gray-400 font-semibold uppercase">Optimization Recommendations</span>
-                      <span className="text-[10px] text-green-400 font-bold">Up to {costReport.totalSavingsPercent}% savings possible</span>
-                    </div>
-                    <div className="space-y-2">
-                      {costReport.recommendations.slice(0, 3).map((rec, idx) => (
-                        <RecommendationCard key={idx} recommendation={rec} />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Close Button */}
-                <button
-                  onClick={() => setShowCostAnalysis(false)}
-                  className="w-full mt-3 py-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
-                >
-                  Close
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Right: Anomaly Monitor */}
-        <div className="bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col min-h-[520px]">
+        {/* Anomaly Monitor */}
+        <div className="lg:col-span-7 bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col min-h-[200px]">
 
           {/* Terminal Header */}
           <div className="bg-[#25282D] px-6 py-4 flex items-center justify-between shrink-0">
@@ -737,25 +732,7 @@ export default function Dashboard() {
               <ShieldAlert className={`${activeAnomalies.length > 0 ? 'text-red-500 animate-pulse' : 'text-blue-400'}`} size={20} />
               <span className="text-gray-200 font-bold text-sm tracking-wide">ANOMALY MONITOR</span>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-500 font-mono">Real-time</span>
-              <button
-                onClick={async () => {
-                  try {
-                    const res = await fetch(`/api/metrics?t=${Date.now()}`, { cache: 'no-store' });
-                    const data = await res.json();
-                    if (data.anomalies && data.anomalies.length > 0) {
-                      setActiveAnomalies(data.anomalies);
-                    } else {
-                      setActiveAnomalies([]);
-                    }
-                  } catch { /* ignore */ }
-                }}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-blue-600 text-white hover:bg-blue-500 transition-colors"
-              >
-                <Activity size={10} /> RUN CHECK
-              </button>
-            </div>
+            <span className="text-xs text-gray-500 font-mono">Real-time</span>
           </div>
 
           <div className="flex-1 bg-[#0D1117] p-6 overflow-y-auto font-mono text-sm custom-scrollbar relative">
@@ -792,10 +769,12 @@ export default function Dashboard() {
 
               {/* Healthy State */}
               {activeAnomalies.length === 0 && (
-                <div className="h-full flex flex-col items-center justify-center text-gray-600 opacity-50 mt-16">
-                  <CheckCircle2 size={40} className="mb-3 text-green-500/50" />
-                  <p className="text-green-400/60 font-semibold text-sm">All systems operational</p>
-                  <p className="text-gray-600 text-xs mt-1">Anomalies will appear here when detected</p>
+                <div className="flex items-center justify-center gap-3 py-6 text-gray-500">
+                  <CheckCircle2 size={24} className="text-green-500/40" />
+                  <div>
+                    <p className="text-green-400/70 font-semibold text-sm">All systems operational</p>
+                    <p className="text-gray-600 text-xs mt-0.5">Anomalies will appear here when detected</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -814,18 +793,14 @@ export default function Dashboard() {
             <span className="text-[10px] text-gray-500">Use chat for analysis</span>
           </div>
         </div>
-      </div>
 
-      {/* 3. Bottom Section: Components + Documentation (2 Cols) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-
-        {/* Component Status */}
-        <div className="bg-white rounded-3xl p-6 shadow-sm border border-gray-200/60 h-full">
-          <h3 className="font-bold text-gray-900 mb-6 flex items-center gap-2">
+        {/* Components + Documentation */}
+        <div className="lg:col-span-5 bg-white rounded-3xl p-6 shadow-sm border border-gray-200/60">
+          <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
             <Server size={18} className="text-gray-400" /> Components
           </h3>
 
-          <div className="space-y-6">
+          <div className="space-y-4">
             {current?.components?.map((comp, i) => (
               <div key={i}>
                 <div className="flex items-center justify-between mb-2">
@@ -864,72 +839,56 @@ export default function Dashboard() {
               </div>
             ))}
           </div>
+
         </div>
-
-        {/* Documentation */}
-        <div className="bg-gradient-to-br from-[#2D33EB] to-[#1E23A0] rounded-3xl p-8 text-white shadow-lg shadow-blue-900/20 relative overflow-hidden group h-full flex flex-col justify-between">
-          <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-3xl group-hover:bg-white/20 transition-all"></div>
-
-          <div>
-            <h3 className="text-xl font-bold mb-3 relative z-10">Documentation</h3>
-            <p className="text-blue-200 text-sm mb-6 relative z-10">
-              Tokamak Network L2 technical documentation
-            </p>
-          </div>
-
-          <a
-            href="https://docs.tokamak.network/home"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block w-full bg-white text-blue-800 font-bold py-3.5 rounded-xl hover:bg-blue-50 transition-all text-sm text-center shadow-lg relative z-10"
-          >
-            View Documentation
-          </a>
-        </div>
-
       </div>
+
 
       {/* ============================================================ */}
       {/* NLOps Chat Interface                                         */}
       {/* ============================================================ */}
 
-      {/* Chat Toggle Button */}
-      {!chatOpen && (
-        <button
-          data-testid="chat-toggle"
-          onClick={() => setChatOpen(true)}
-          className="fixed bottom-6 right-6 bg-slate-900 text-white rounded-full p-4 shadow-xl hover:bg-slate-800 transition-all hover:scale-105 z-50 flex items-center gap-2"
-        >
-          <MessageSquare size={24} />
-          <span className="text-sm font-semibold pr-1">SentinAI Assistant</span>
-        </button>
-      )}
+      {/* Persistent Chat Bottom Bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-40">
+        <div className="max-w-[1600px] mx-auto px-6 md:px-10">
+          <div
+            data-testid="chat-toggle"
+            onClick={() => setChatOpen(!chatOpen)}
+            className={`flex items-center justify-between px-5 py-3 bg-slate-900 text-white cursor-pointer transition-all ${chatOpen ? 'rounded-none' : 'rounded-t-2xl shadow-lg'}`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-500 p-1.5 rounded-lg">
+                <Bot size={16} className="text-white" />
+              </div>
+              <span className="font-semibold text-sm">SentinAI Ops Assistant</span>
+              <span className="text-xs text-gray-400 hidden md:inline">
+                — type commands like &quot;show status&quot;, &quot;analyze logs&quot;, &quot;check cost&quot;
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {chatMessages.length > 0 && (
+                <span className="bg-blue-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                  {chatMessages.length}
+                </span>
+              )}
+              <button data-testid="chat-close" onClick={(e) => { e.stopPropagation(); setChatOpen(false); }} className="text-gray-400 hover:text-white transition-colors p-1">
+                <ChevronDown size={18} className={`transition-transform ${chatOpen ? '' : 'rotate-180'}`} />
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Chat Panel */}
       {chatOpen && (
-        <div data-testid="chat-panel" className="fixed bottom-0 right-6 w-96 bg-white rounded-t-2xl shadow-2xl border border-gray-200 z-50 flex flex-col max-h-[600px]">
-          {/* Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-slate-900 rounded-t-2xl">
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-500 p-2 rounded-xl">
-                <Bot size={18} className="text-white" />
-              </div>
-              <div>
-                <h3 className="font-bold text-white text-sm">SentinAI Ops Assistant</h3>
-                <p className="text-[10px] text-gray-400">Control the system with natural language</p>
-              </div>
-            </div>
-            <button data-testid="chat-close" onClick={() => setChatOpen(false)} className="text-gray-400 hover:text-white transition-colors p-1">
-              <ChevronDown size={20} />
-            </button>
-          </div>
+        <div data-testid="chat-panel" className="fixed bottom-[52px] right-6 w-[480px] bg-white rounded-t-2xl shadow-2xl border border-gray-200 z-50 flex flex-col max-h-[500px]">
 
           {/* Messages */}
           <div data-testid="chat-messages" className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px] max-h-[400px] bg-gray-50">
             {chatMessages.length === 0 && (
               <div data-testid="chat-welcome" className="text-center text-gray-400 mt-8">
                 <Bot size={40} className="mx-auto mb-3 opacity-50" />
-                <p className="text-sm">Hello! I'm SentinAI Assistant.</p>
+                <p className="text-sm">Hello! I&apos;m SentinAI Assistant.</p>
                 <p className="text-xs mt-1">Click examples below or type your command.</p>
                 <div className="flex flex-wrap gap-2 justify-center mt-4">
                   {['Show current status', 'Analyze logs', 'Check cost'].map((example) => (
@@ -1018,6 +977,25 @@ export default function Dashboard() {
 
 // --- Sub Components ---
 
+/**
+ * Truncate text at the last complete sentence boundary within maxLen.
+ * Never appends "..." - returns a complete sentence.
+ */
+function truncateAtSentence(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  const trimmed = text.slice(0, maxLen);
+  // Check if trimmed ends exactly at a sentence boundary
+  if (/[.!?]$/.test(trimmed)) return trimmed;
+  const lastEnd = Math.max(
+    trimmed.lastIndexOf('. '),
+    trimmed.lastIndexOf('! '),
+    trimmed.lastIndexOf('? ')
+  );
+  if (lastEnd > 0) return trimmed.slice(0, lastEnd + 1);
+  const lastSpace = trimmed.lastIndexOf(' ');
+  return lastSpace > 0 ? trimmed.slice(0, lastSpace) : trimmed;
+}
+
 function LogBlock({ time, source, level, msg, highlight, color }: { time: string; source: string; level: string; msg: string; highlight?: boolean; color?: string }) {
   return (
     <div className={`flex items-start gap-3 font-mono text-xs ${highlight ? 'bg-white/5 -mx-2 px-2 py-1 rounded' : ''}`}>
@@ -1045,12 +1023,12 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
 
   // Determine color based on utilization
   const getColor = (utilization: number): string => {
-    if (utilization === 0) return 'bg-gray-800';
-    if (utilization < 20) return 'bg-green-900/60';
-    if (utilization < 40) return 'bg-green-700/60';
-    if (utilization < 60) return 'bg-yellow-700/60';
-    if (utilization < 80) return 'bg-orange-700/60';
-    return 'bg-red-700/60';
+    if (utilization === 0) return 'bg-gray-200';
+    if (utilization < 20) return 'bg-emerald-300';
+    if (utilization < 40) return 'bg-emerald-500';
+    if (utilization < 60) return 'bg-yellow-400';
+    if (utilization < 80) return 'bg-orange-400';
+    return 'bg-red-400';
   };
 
   return (
@@ -1079,7 +1057,7 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
                   return (
                     <div
                       key={hour}
-                      className={`flex-1 h-3 rounded-sm ${getColor(utilization)} transition-colors hover:ring-1 hover:ring-white/30`}
+                      className={`flex-1 h-3 rounded-sm ${getColor(utilization)} transition-colors hover:ring-1 hover:ring-gray-400/50`}
                       title={`${days[dayIdx]} ${hour}:00 - Avg ${vcpu.toFixed(1)} vCPU, ${utilization.toFixed(0)}% utilization`}
                       data-testid={`heatmap-cell-${dayIdx}-${hour}`}
                     />
@@ -1094,11 +1072,11 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
         <div className="flex items-center justify-end gap-2 mt-2">
           <span className="text-[8px] text-gray-500">Low</span>
           <div className="flex gap-px">
-            <div className="w-3 h-2 rounded-sm bg-green-900/60" />
-            <div className="w-3 h-2 rounded-sm bg-green-700/60" />
-            <div className="w-3 h-2 rounded-sm bg-yellow-700/60" />
-            <div className="w-3 h-2 rounded-sm bg-orange-700/60" />
-            <div className="w-3 h-2 rounded-sm bg-red-700/60" />
+            <div className="w-3 h-2 rounded-sm bg-emerald-300" />
+            <div className="w-3 h-2 rounded-sm bg-emerald-500" />
+            <div className="w-3 h-2 rounded-sm bg-yellow-400" />
+            <div className="w-3 h-2 rounded-sm bg-orange-400" />
+            <div className="w-3 h-2 rounded-sm bg-red-400" />
           </div>
           <span className="text-[8px] text-gray-500">High</span>
         </div>
@@ -1112,9 +1090,9 @@ function RecommendationCard({ recommendation }: { recommendation: CostReportData
   const [expanded, setExpanded] = useState(false);
 
   const riskStyles = {
-    low: { bg: 'bg-green-900/30', text: 'text-green-400', label: 'Low' },
-    medium: { bg: 'bg-yellow-900/30', text: 'text-yellow-400', label: 'Medium' },
-    high: { bg: 'bg-red-900/30', text: 'text-red-400', label: 'High' },
+    low: { bg: 'bg-green-100', text: 'text-green-700', label: 'Low' },
+    medium: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: 'Medium' },
+    high: { bg: 'bg-red-100', text: 'text-red-700', label: 'High' },
   };
 
   const typeIcons = {
@@ -1129,38 +1107,38 @@ function RecommendationCard({ recommendation }: { recommendation: CostReportData
 
   return (
     <div
-      className={`p-3 rounded-xl border border-gray-700/50 bg-gray-800/30 cursor-pointer transition-all hover:bg-gray-800/50`}
+      className={`p-3 rounded-xl border border-gray-200 bg-gray-50 cursor-pointer transition-all hover:bg-gray-100`}
       onClick={() => setExpanded(!expanded)}
     >
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-2">
-          <Icon size={14} className="text-blue-400 mt-0.5 shrink-0" />
+          <Icon size={14} className="text-blue-600 mt-0.5 shrink-0" />
           <div>
-            <p className="text-xs font-bold text-white">{recommendation.title}</p>
-            <p className="text-[10px] text-gray-400 mt-0.5">{recommendation.description}</p>
+            <p className="text-xs font-bold text-gray-900">{recommendation.title}</p>
+            <p className="text-[10px] text-gray-500 mt-0.5">{recommendation.description}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-bold text-green-400">-${(recommendation.currentCost - recommendation.projectedCost).toFixed(0)}/mo</span>
+          <span className="text-xs font-bold text-green-600">-${(recommendation.currentCost - recommendation.projectedCost).toFixed(0)}/mo</span>
           <ChevronRight size={14} className={`text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`} />
         </div>
       </div>
 
       {expanded && (
-        <div className="mt-3 pt-3 border-t border-gray-700/50">
+        <div className="mt-3 pt-3 border-t border-gray-200">
           {/* Stats */}
           <div className="grid grid-cols-3 gap-2 mb-3">
             <div className="text-center">
               <p className="text-[9px] text-gray-500 uppercase">Current Cost</p>
-              <p className="text-xs font-bold text-white">${recommendation.currentCost.toFixed(0)}</p>
+              <p className="text-xs font-bold text-gray-900">${recommendation.currentCost.toFixed(0)}</p>
             </div>
             <div className="text-center">
               <p className="text-[9px] text-gray-500 uppercase">Estimated Cost</p>
-              <p className="text-xs font-bold text-green-400">${recommendation.projectedCost.toFixed(0)}</p>
+              <p className="text-xs font-bold text-green-600">${recommendation.projectedCost.toFixed(0)}</p>
             </div>
             <div className="text-center">
               <p className="text-[9px] text-gray-500 uppercase">Savings Rate</p>
-              <p className="text-xs font-bold text-green-400">{recommendation.savingsPercent}%</p>
+              <p className="text-xs font-bold text-green-600">{recommendation.savingsPercent}%</p>
             </div>
           </div>
 
@@ -1175,9 +1153,9 @@ function RecommendationCard({ recommendation }: { recommendation: CostReportData
           </div>
 
           {/* Implementation */}
-          <div className="p-2 bg-gray-900/50 rounded-lg">
+          <div className="p-2 bg-gray-100 rounded-lg">
             <p className="text-[9px] text-gray-400 uppercase mb-1">Implementation Method</p>
-            <p className="text-[10px] text-gray-300 leading-relaxed">{recommendation.implementation}</p>
+            <p className="text-[10px] text-gray-600 leading-relaxed">{recommendation.implementation}</p>
           </div>
         </div>
       )}
