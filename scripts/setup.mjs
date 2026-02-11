@@ -79,7 +79,7 @@ async function selectSetupMode() {
 // AI Connection Test
 // ============================================================
 
-async function testAIConnection(apiKey, provider, gatewayUrl = null) {
+async function testAIConnection(apiKey, provider, gatewayUrl = null, modelOverride = null) {
   const baseUrl = gatewayUrl || (
     provider === 'qwen' ? (process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode') :
     provider === 'anthropic' ? 'https://api.anthropic.com' :
@@ -96,7 +96,7 @@ async function testAIConnection(apiKey, provider, gatewayUrl = null) {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'qwen-turbo-latest',
+          model: modelOverride || 'qwen-turbo-latest',
           max_tokens: 10,
           messages: [{ role: 'user', content: 'Hi' }],
         }),
@@ -295,6 +295,7 @@ async function quickSetup() {
       return true;
     });
     console.log("  Note: API Key is still required when using Gateway.");
+    env.QWEN_MODEL = await askOptional("▸ Gateway model name", "qwen3-coder-flash");
   }
 
   // 3. API Keys (try in priority order)
@@ -307,7 +308,7 @@ async function quickSetup() {
   const qwenKey = await askOptional("▸ Qwen API Key");
   if (qwenKey) {
     process.stdout.write("  Testing connection...");
-    const ok = await testAIConnection(qwenKey, 'qwen', env.AI_GATEWAY_URL);
+    const ok = await testAIConnection(qwenKey, 'qwen', env.AI_GATEWAY_URL, env.QWEN_MODEL);
     if (ok) {
       console.log(" OK");
       env.QWEN_API_KEY = qwenKey;
@@ -551,6 +552,9 @@ function writeEnvFile(env, isQuickMode) {
   }
   if (env.QWEN_API_KEY) {
     lines.push(`QWEN_API_KEY=${env.QWEN_API_KEY}`);
+  }
+  if (env.QWEN_MODEL) {
+    lines.push(`QWEN_MODEL=${env.QWEN_MODEL}`);
   }
   if (env.ANTHROPIC_API_KEY) {
     lines.push(`ANTHROPIC_API_KEY=${env.ANTHROPIC_API_KEY}`);
