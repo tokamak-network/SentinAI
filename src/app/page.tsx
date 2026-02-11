@@ -2,24 +2,14 @@
 
 import { useEffect, useState, useRef } from 'react';
 import {
-  Activity, Server, Zap, ShieldAlert, Cpu, ArrowUpRight,
+  Activity, Server, Zap, Cpu, ArrowUpRight,
   TrendingDown, CheckCircle2, Shield, Database,
   ChevronDown, ChevronRight, BarChart3, Calendar, Lightbulb,
-  Send, Bot, User
+  Send, Bot, User, RefreshCw, Pause
 } from 'lucide-react';
 import type { ChatMessage, NLOpsResponse, NLOpsIntent } from '@/types/nlops';
 
 // --- Interfaces ---
-interface AnomalyResultData {
-  isAnomaly: boolean;
-  metric: string;
-  value: number;
-  zScore: number;
-  direction: 'spike' | 'drop' | 'plateau';
-  description: string;
-  rule: string;
-}
-
 interface MetricData {
   timestamp: string;
   metrics: {
@@ -44,8 +34,6 @@ interface MetricData {
     monthlySaving: number;
     isPeakMode: boolean;
   };
-  anomalies?: AnomalyResultData[];
-  activeAnomalyEventId?: string;
 }
 
 // === Added: Cost Report type ===
@@ -127,6 +115,43 @@ interface ScalerState {
   predictionMeta: PredictionMeta;
 }
 
+interface AgentCycleData {
+  timestamp: string;
+  phase: 'observe' | 'detect' | 'decide' | 'act' | 'complete' | 'error';
+  metrics: {
+    l1BlockHeight: number;
+    l2BlockHeight: number;
+    cpuUsage: number;
+    txPoolPending: number;
+    gasUsedRatio: number;
+  } | null;
+  detection: unknown;
+  scaling: {
+    score: number;
+    currentVcpu: number;
+    targetVcpu: number;
+    executed: boolean;
+    reason: string;
+  } | null;
+  error?: string;
+}
+
+interface AgentLoopStatus {
+  scheduler: {
+    initialized: boolean;
+    agentLoopEnabled: boolean;
+    agentTaskRunning: boolean;
+  };
+  lastCycle: AgentCycleData | null;
+  recentCycles: AgentCycleData[];
+  config: {
+    intervalSeconds: number;
+    autoScalingEnabled: boolean;
+    simulationMode: boolean;
+    cooldownRemaining: number;
+  };
+}
+
 // --- Main Dashboard Component ---
 export default function Dashboard() {
   // State
@@ -134,17 +159,15 @@ export default function Dashboard() {
   const [current, setCurrent] = useState<MetricData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [stressMode, setStressMode] = useState(false);
-  const [activeAnomalies, setActiveAnomalies] = useState<AnomalyResultData[]>([]);
 
   const [prediction, setPrediction] = useState<PredictionInfo | null>(null);
   const [predictionMeta, setPredictionMeta] = useState<PredictionMeta | null>(null);
   const [seedScenario, setSeedScenario] = useState<'stable' | 'rising' | 'spike' | 'falling' | 'live'>('rising');
   const [isSeeding, setIsSeeding] = useState(false);
 
-  // === Added: Cost Report state ===
+  // === Cost Report state ===
   const [costReport, setCostReport] = useState<CostReportData | null>(null);
   const [isLoadingCostReport, setIsLoadingCostReport] = useState(false);
-  const [showCostAnalysis, setShowCostAnalysis] = useState(false);
 
   // --- NLOps Chat State ---
   const [chatOpen, setChatOpen] = useState(false);
@@ -158,6 +181,9 @@ export default function Dashboard() {
   } | null>(null);
   const chatMessagesEndRef = useRef<HTMLDivElement>(null);
   const preStressVcpuRef = useRef(1);
+
+  // --- Agent Loop State ---
+  const [agentLoop, setAgentLoop] = useState<AgentLoopStatus | null>(null);
 
   // Seed prediction data for testing
   const seedPredictionData = async () => {
@@ -189,7 +215,6 @@ export default function Dashboard() {
       if (!res.ok) throw new Error('Failed to fetch cost report');
       const data = await res.json();
       setCostReport(data);
-      setShowCostAnalysis(true);
     } catch (e) {
       console.error('Cost report error:', e);
     } finally {
@@ -333,13 +358,6 @@ export default function Dashboard() {
 
         setCurrent(data);
 
-        // Track anomalies from metrics API
-        if (data.anomalies && data.anomalies.length > 0) {
-          setActiveAnomalies(data.anomalies);
-        } else {
-          setActiveAnomalies([]);
-        }
-
         const point = {
           name: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
           cpu: data.metrics.cpuUsage,
@@ -386,6 +404,24 @@ export default function Dashboard() {
       }
     };
   }, [stressMode]);
+
+  // --- Agent Loop polling (every 5s) ---
+  useEffect(() => {
+    const fetchAgentLoop = async () => {
+      try {
+        const res = await fetch('/api/agent-loop', { cache: 'no-store' });
+        if (res.ok) {
+          setAgentLoop(await res.json());
+        }
+      } catch {
+        // Silently ignore — agent loop panel will show stale data
+      }
+    };
+    fetchAgentLoop();
+    const interval = setInterval(fetchAgentLoop, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
 
 
   if (isLoading) return (
@@ -648,17 +684,9 @@ export default function Dashboard() {
                   {current?.cost.isPeakMode ? '+' : '-'}{Math.abs((current?.cost.monthlySaving || 0) / (current?.cost.fixedCost || 166) * 100).toFixed(0)}%
                 </span>
               </div>
-              {prediction && prediction.predictedVcpu !== (current?.metrics.gethVcpu || 1) && (() => {
-                const pVcpu = prediction.predictedVcpu;
-                const pMem = pVcpu * 2;
-                const pCost = (pVcpu * 0.04656 + pMem * 0.00511) * 730;
-                const pSaving = (current?.cost.fixedCost || 165.67) - pCost;
-                return (
-                  <p className="text-[10px] text-gray-400 mt-1">
-                    Projected: <span className={pSaving > 0 ? 'text-green-600' : 'text-red-500'}>${Math.abs(pSaving).toFixed(0)}/mo</span> {pSaving > 0 ? 'saved' : 'increase'} if scaled to {pVcpu} vCPU
-                  </p>
-                );
-              })()}
+              <p className="text-gray-400 text-[10px] mt-1">
+                vs Fixed 4 vCPU baseline (${current?.cost.fixedCost?.toFixed(0) || '166'}/mo)
+              </p>
             </div>
             <button
               onClick={fetchCostReport}
@@ -674,142 +702,359 @@ export default function Dashboard() {
               ) : (
                 <BarChart3 size={12} />
               )}
-              {isLoadingCostReport ? 'Analyzing...' : 'COST ANALYSIS'}
+              {isLoadingCostReport ? 'Analyzing...' : 'ANALYZE'}
             </button>
           </div>
 
-          <p className="text-gray-400 text-[10px]">
-            vs Fixed 4 vCPU baseline (${current?.cost.fixedCost?.toFixed(0) || '166'}/mo)
-          </p>
+          {/* Inline Cost Analysis Results */}
+          {costReport && (
+            <div className="mt-3 pt-3 border-t border-gray-100 space-y-3">
+              {/* AI Insight */}
+              <div className="p-2.5 bg-blue-50 rounded-xl border border-blue-100">
+                <div className="flex items-start gap-2">
+                  <Lightbulb size={12} className="text-blue-500 mt-0.5 shrink-0" />
+                  <p className="text-[11px] text-blue-700 leading-relaxed">{truncateAtSentence(costReport.aiInsight, 150)}</p>
+                </div>
+              </div>
 
+              {/* Recommendations */}
+              {costReport.recommendations.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] text-gray-400 font-semibold uppercase">Recommendations</span>
+                    <span className="text-[10px] text-green-600 font-bold">Up to {costReport.totalSavingsPercent}% savings</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    {costReport.recommendations.slice(0, 2).map((rec, idx) => (
+                      <RecommendationCard key={idx} recommendation={rec} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Cost Analysis Panel (Full-width, below Row 1) */}
-      {showCostAnalysis && costReport && (
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <BarChart3 size={16} className="text-gray-400" />
-              <h3 className="font-bold text-gray-900 text-sm">Cost Analysis</h3>
-            </div>
-            <button
-              onClick={() => setShowCostAnalysis(false)}
-              className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              Close
-            </button>
+      {/* Agent Loop Status Panel */}
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60 mb-6" data-testid="agent-loop-panel">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <RefreshCw size={16} className={`text-gray-400 ${agentLoop?.scheduler.agentTaskRunning ? 'animate-spin' : ''}`} />
+            <h3 className="font-bold text-gray-900 text-sm">Agent Loop</h3>
           </div>
-
-          {/* AI Insight */}
-          <div className="mb-4 p-3 bg-blue-50 rounded-xl border border-blue-200">
-            <div className="flex items-start gap-2">
-              <Lightbulb size={14} className="text-blue-500 mt-0.5 shrink-0" />
-              <p className="text-xs text-blue-700 leading-relaxed">{truncateAtSentence(costReport.aiInsight, 200)}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Usage Heatmap */}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <Calendar size={12} className="text-gray-400" />
-                <span className="text-[10px] text-gray-400 font-semibold uppercase">Usage Pattern (Last {costReport.periodDays} days)</span>
+          <div className="flex items-center gap-3">
+            {agentLoop?.scheduler.agentLoopEnabled ? (
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                <span className="text-xs font-semibold text-green-600">Running</span>
               </div>
-              <UsageHeatmap patterns={costReport.usagePatterns} />
-            </div>
-
-            {/* Recommendations */}
-            {costReport.recommendations.length > 0 && (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] text-gray-400 font-semibold uppercase">Optimization Recommendations</span>
-                  <span className="text-[10px] text-green-600 font-bold">Up to {costReport.totalSavingsPercent}% savings</span>
-                </div>
-                <div className="space-y-2">
-                  {costReport.recommendations.slice(0, 3).map((rec, idx) => (
-                    <RecommendationCard key={idx} recommendation={rec} />
-                  ))}
-                </div>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <div className="w-2 h-2 bg-gray-400 rounded-full" />
+                <span className="text-xs font-semibold text-gray-400">Disabled</span>
               </div>
             )}
+            <span className="text-[10px] text-gray-400 font-mono">{agentLoop?.config.intervalSeconds || 30}s cycle</span>
           </div>
         </div>
-      )}
+
+        {!agentLoop?.scheduler.agentLoopEnabled ? (
+          <div className="flex items-center justify-center gap-3 py-6 text-gray-400">
+            <Pause size={20} />
+            <div>
+              <p className="text-sm font-medium">Agent Loop Disabled</p>
+              <p className="text-xs text-gray-400 mt-0.5">Set L2_RPC_URL or AGENT_LOOP_ENABLED=true to enable</p>
+            </div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Section 1: Last Cycle */}
+            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+              <span className="text-[10px] text-gray-400 font-semibold uppercase">Last Cycle</span>
+              {agentLoop?.lastCycle ? (
+                <div className="mt-2 space-y-1.5">
+                  <p className="text-lg font-bold text-gray-900 font-mono">
+                    {new Date(agentLoop.lastCycle.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400">Phase:</span>
+                    <span className={`text-xs font-bold ${
+                      agentLoop.lastCycle.phase === 'complete' ? 'text-green-600' :
+                      agentLoop.lastCycle.phase === 'error' ? 'text-red-500' :
+                      'text-blue-500'
+                    }`}>
+                      {agentLoop.lastCycle.phase}
+                    </span>
+                  </div>
+                  {agentLoop.lastCycle.error && (
+                    <p className="text-[10px] text-red-400 truncate" title={agentLoop.lastCycle.error}>
+                      {agentLoop.lastCycle.error}
+                    </p>
+                  )}
+                  <div className="flex items-center gap-2 mt-1">
+                    {agentLoop.config.autoScalingEnabled ? (
+                      <span className="text-[9px] bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold">AUTO</span>
+                    ) : (
+                      <span className="text-[9px] bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded font-bold">MANUAL</span>
+                    )}
+                    {agentLoop.config.simulationMode && (
+                      <span className="text-[9px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-bold">SIM</span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 mt-2">Waiting for first cycle...</p>
+              )}
+            </div>
+
+            {/* Section 2: Metrics */}
+            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+              <span className="text-[10px] text-gray-400 font-semibold uppercase">Metrics</span>
+              {agentLoop?.lastCycle?.metrics ? (
+                <div className="mt-2 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-500">L2 Block</span>
+                    <span className="text-xs font-bold text-gray-900 font-mono">
+                      {agentLoop.lastCycle.metrics.l2BlockHeight.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-500">TxPool</span>
+                    <span className="text-xs font-bold text-gray-900 font-mono">
+                      {agentLoop.lastCycle.metrics.txPoolPending}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-500">Gas Used</span>
+                    <span className="text-xs font-bold text-gray-900 font-mono">
+                      {(agentLoop.lastCycle.metrics.gasUsedRatio * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-500">CPU</span>
+                    <span className="text-xs font-bold text-gray-900 font-mono">
+                      {agentLoop.lastCycle.metrics.cpuUsage.toFixed(1)}%
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 mt-2">No data yet</p>
+              )}
+            </div>
+
+            {/* Section 3: Scaling */}
+            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+              <span className="text-[10px] text-gray-400 font-semibold uppercase">Scaling</span>
+              {agentLoop?.lastCycle?.scaling ? (
+                <div className="mt-2 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-500">Score</span>
+                    <span className={`text-lg font-bold font-mono ${
+                      agentLoop.lastCycle.scaling.score >= 70 ? 'text-red-500' :
+                      agentLoop.lastCycle.scaling.score >= 30 ? 'text-amber-500' :
+                      'text-green-600'
+                    }`}>
+                      {agentLoop.lastCycle.scaling.score}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-500">vCPU</span>
+                    <span className="text-xs font-bold text-gray-900 font-mono">
+                      {agentLoop.lastCycle.scaling.currentVcpu} → {agentLoop.lastCycle.scaling.targetVcpu}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-500">Executed</span>
+                    {agentLoop.lastCycle.scaling.executed ? (
+                      <CheckCircle2 size={14} className="text-green-500" />
+                    ) : (
+                      <span className="text-[10px] text-gray-400">—</span>
+                    )}
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-gray-500">Cooldown</span>
+                    <span className="text-xs font-mono text-gray-700">
+                      {agentLoop.config.cooldownRemaining}s
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-xs text-gray-400 mt-2">No decision yet</p>
+              )}
+            </div>
+
+            {/* Section 4: Recent History */}
+            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+              <span className="text-[10px] text-gray-400 font-semibold uppercase">Recent History</span>
+              <div className="mt-2 space-y-1 max-h-[140px] overflow-y-auto">
+                {agentLoop?.recentCycles && agentLoop.recentCycles.length > 0 ? (
+                  [...agentLoop.recentCycles].reverse().slice(0, 8).map((cycle, idx) => (
+                    <div key={idx} className="flex items-center gap-1.5 text-[10px]">
+                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                        cycle.phase === 'complete' ? 'bg-green-500' :
+                        cycle.phase === 'error' ? 'bg-red-500' :
+                        'bg-blue-500'
+                      }`} />
+                      <span className="text-gray-500 font-mono">
+                        {new Date(cycle.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      {cycle.scaling ? (
+                        <span className={`font-bold ${
+                          cycle.scaling.score >= 70 ? 'text-red-500' :
+                          cycle.scaling.score >= 30 ? 'text-amber-500' :
+                          'text-green-600'
+                        }`}>
+                          score={cycle.scaling.score}
+                        </span>
+                      ) : cycle.error ? (
+                        <span className="text-red-400 truncate">{cycle.error.slice(0, 30)}</span>
+                      ) : (
+                        <span className="text-gray-400">—</span>
+                      )}
+                      {cycle.scaling?.executed && (
+                        <Zap size={10} className="text-amber-500 shrink-0" />
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-gray-400">No cycles yet</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Row 2: Operations */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-4">
 
-        {/* Anomaly Monitor */}
-        <div className="lg:col-span-7 bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col min-h-[200px]">
+        {/* Activity Log */}
+        {(() => {
+          const cycles = agentLoop?.recentCycles ? [...agentLoop.recentCycles].reverse() : [];
+          const hasScalingAction = cycles.some(c => c.scaling?.executed);
 
-          {/* Terminal Header */}
-          <div className="bg-[#25282D] px-6 py-4 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-3">
-              <ShieldAlert className={`${activeAnomalies.length > 0 ? 'text-red-500 animate-pulse' : 'text-blue-400'}`} size={20} />
-              <span className="text-gray-200 font-bold text-sm tracking-wide">ANOMALY MONITOR</span>
+          return (
+          <div className="lg:col-span-7 bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col min-h-[200px]">
+
+            {/* Terminal Header */}
+            <div className="bg-[#25282D] px-6 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <Activity className={`${hasScalingAction ? 'text-amber-400' : 'text-blue-400'}`} size={20} />
+                <span className="text-gray-200 font-bold text-sm tracking-wide">ACTIVITY LOG</span>
+              </div>
+              <div className="flex items-center gap-3">
+                {cycles.length > 0 && (
+                  <span className="text-[10px] text-gray-500 font-mono">{cycles.length} cycles</span>
+                )}
+                <span className="text-xs text-gray-500 font-mono">30s interval</span>
+              </div>
             </div>
-            <span className="text-xs text-gray-500 font-mono">Real-time</span>
-          </div>
 
-          <div className="flex-1 bg-[#0D1117] p-6 overflow-y-auto font-mono text-sm custom-scrollbar relative">
-            <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-[#0D1117] to-transparent pointer-events-none"></div>
+            <div className="flex-1 bg-[#0D1117] p-6 overflow-y-auto font-mono text-xs custom-scrollbar relative">
+              <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-[#0D1117] to-transparent pointer-events-none z-10"></div>
 
-            <div className="space-y-4">
-              {/* Real-time Anomaly Feed */}
-              {activeAnomalies.length > 0 && (
-                <div data-testid="anomaly-feed" className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-                  <div className="flex items-center gap-2 mb-2">
-                    <ShieldAlert size={14} className="text-red-500" />
-                    <span className="text-red-400 font-bold text-xs uppercase">Real-time Anomalies</span>
-                  </div>
-                  {activeAnomalies.map((anomaly, idx) => (
-                    <div key={idx} data-testid={`anomaly-feed-item-${idx}`} className="flex items-start gap-2 text-xs mb-2 last:mb-0">
-                      <span data-testid={`anomaly-severity-${idx}`} className={`shrink-0 font-bold ${
-                        anomaly.direction === 'spike' ? 'text-red-500' :
-                        anomaly.direction === 'drop' ? 'text-yellow-500' :
-                        'text-orange-500'
-                      }`}>
-                        {anomaly.direction.toUpperCase()}
+              <div className="space-y-1">
+                {cycles.length > 0 ? cycles.map((cycle, idx) => {
+                  const time = new Date(cycle.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                  const isError = cycle.phase === 'error';
+                  const scaling = cycle.scaling;
+                  const metrics = cycle.metrics;
+
+                  // Determine what happened
+                  let event = '';
+                  let detail = '';
+                  let color = 'text-gray-400';
+
+                  if (isError) {
+                    event = 'ERROR';
+                    detail = cycle.error || 'Unknown error';
+                    color = 'text-red-400';
+                  } else if (scaling?.executed) {
+                    event = 'SCALED';
+                    detail = `${scaling.currentVcpu}→${scaling.targetVcpu} vCPU (score: ${scaling.score})`;
+                    color = 'text-amber-400';
+                  } else if (scaling && scaling.score >= 70) {
+                    event = 'HIGH';
+                    detail = `score: ${scaling.score}`;
+                    // Extract skip reason
+                    if (scaling.reason.includes('Cooldown')) detail += ' — cooldown active';
+                    else if (scaling.reason.includes('Already at')) detail += ` — already at ${scaling.currentVcpu} vCPU`;
+                    color = 'text-red-400';
+                  } else if (scaling && scaling.score >= 30) {
+                    event = 'NORMAL';
+                    detail = `score: ${scaling.score}`;
+                    if (scaling.reason.includes('Cooldown')) detail += ' — cooldown active';
+                    else if (scaling.reason.includes('Already at')) detail += ` — at ${scaling.currentVcpu} vCPU`;
+                    color = 'text-blue-400';
+                  } else {
+                    event = 'IDLE';
+                    detail = `score: ${scaling?.score ?? '—'}`;
+                    color = 'text-green-500/70';
+                  }
+
+                  return (
+                    <div key={idx} className="flex items-start gap-0 leading-relaxed">
+                      <span className="text-gray-600 shrink-0 w-[70px]" suppressHydrationWarning>[{time}]</span>
+                      <span className={`shrink-0 w-[60px] font-bold ${color}`}>{event}</span>
+                      <span className="text-gray-400 flex-1">
+                        {detail}
+                        {metrics && event !== 'ERROR' && (
+                          <span className="text-gray-600">
+                            {' '}— cpu:{metrics.cpuUsage.toFixed(0)}% gas:{(metrics.gasUsedRatio * 100).toFixed(0)}% tx:{metrics.txPoolPending}
+                          </span>
+                        )}
                       </span>
-                      <span className="text-gray-400">[{anomaly.metric}]</span>
-                      <span data-testid={`anomaly-message-${idx}`} className="text-gray-300 break-words">{anomaly.description}</span>
+                      {scaling?.executed && <Zap size={12} className="text-amber-500 shrink-0 mt-0.5 ml-1" />}
                     </div>
-                  ))}
-                </div>
-              )}
-
-              {/* Simulated Stress Logs */}
-              {stressMode && (
-                <LogBlock time={new Date().toLocaleTimeString()} source="op-geth" level="WARN" msg="TxPool overflow: 5021 pending txs. Re-prioritizing gas..." highlight={true} color="text-yellow-400" />
-              )}
-
-              {/* Healthy State */}
-              {activeAnomalies.length === 0 && (
-                <div className="flex items-center justify-center gap-3 py-6 text-gray-500">
-                  <CheckCircle2 size={24} className="text-green-500/40" />
-                  <div>
-                    <p className="text-green-400/70 font-semibold text-sm">All systems operational</p>
-                    <p className="text-gray-600 text-xs mt-0.5">Anomalies will appear here when detected</p>
+                  );
+                }) : (
+                  <div className="flex items-center justify-center gap-3 py-8 text-gray-500">
+                    {agentLoop?.scheduler.agentLoopEnabled ? (
+                      <>
+                        <RefreshCw size={20} className="text-blue-400/40" />
+                        <div>
+                          <p className="text-blue-400/70 font-semibold text-sm font-sans">Waiting for first cycle...</p>
+                          <p className="text-gray-600 text-xs mt-0.5 font-sans">Agent loop runs every 30 seconds</p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Pause size={20} className="text-gray-500/40" />
+                        <div>
+                          <p className="text-gray-400/70 font-semibold text-sm font-sans">Agent Loop Disabled</p>
+                          <p className="text-gray-600 text-xs mt-0.5 font-sans">Set L2_RPC_URL to enable autonomous monitoring</p>
+                        </div>
+                      </>
+                    )}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
-          </div>
 
-          {/* Status Bar */}
-          <div className="bg-[#25282D] px-6 py-3 border-t border-gray-800 flex items-center justify-between shrink-0">
-            <div className={`flex items-center gap-2 text-xs font-bold ${
-              activeAnomalies.length > 0 ? 'text-red-400' : 'text-green-400'
-            }`}>
-              <div className={`w-2 h-2 rounded-full ${activeAnomalies.length > 0 ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`} />
-              {activeAnomalies.length > 0
-                ? `${activeAnomalies.length} ANOMALIES DETECTED`
-                : 'MONITORING ACTIVE'}
+            {/* Status Bar */}
+            <div className="bg-[#25282D] px-6 py-3 border-t border-gray-800 flex items-center justify-between shrink-0">
+              <div className={`flex items-center gap-2 text-xs font-bold ${
+                hasScalingAction ? 'text-amber-400' : 'text-green-400'
+              }`}>
+                <div className={`w-2 h-2 rounded-full ${
+                  hasScalingAction ? 'bg-amber-500' :
+                  agentLoop?.scheduler.agentLoopEnabled ? 'bg-green-500' : 'bg-gray-500'
+                }`} />
+                {hasScalingAction
+                  ? `SCALING EXECUTED`
+                  : agentLoop?.scheduler.agentLoopEnabled
+                  ? 'MONITORING ACTIVE'
+                  : 'DISABLED'}
+              </div>
+              <span className="text-[10px] text-gray-500">
+                {cycles.length > 0 ? `${cycles.filter(c => c.scaling?.score && c.scaling.score >= 30).length}/${cycles.length} elevated` : 'Use chat for analysis'}
+              </span>
             </div>
-            <span className="text-[10px] text-gray-500">Use chat for analysis</span>
           </div>
-        </div>
+          );
+        })()}
 
         {/* Components + Documentation */}
         <div className="lg:col-span-5 bg-white rounded-3xl p-6 shadow-sm border border-gray-200/60">
@@ -1024,85 +1269,7 @@ function LogBlock({ time, source, level, msg, highlight, color }: { time: string
   )
 }
 
-// === Added: Usage Heatmap component ===
-function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] }) {
-  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const hours = Array.from({ length: 24 }, (_, i) => i);
-
-  // Convert pattern data to 2D map
-  const patternMap = new Map<string, { avgVcpu: number; avgUtilization: number }>();
-  patterns.forEach(p => {
-    patternMap.set(`${p.dayOfWeek}-${p.hourOfDay}`, {
-      avgVcpu: p.avgVcpu,
-      avgUtilization: p.avgUtilization,
-    });
-  });
-
-  // Determine color based on utilization
-  const getColor = (utilization: number): string => {
-    if (utilization === 0) return 'bg-gray-200';
-    if (utilization < 20) return 'bg-emerald-300';
-    if (utilization < 40) return 'bg-emerald-500';
-    if (utilization < 60) return 'bg-yellow-400';
-    if (utilization < 80) return 'bg-orange-400';
-    return 'bg-red-400';
-  };
-
-  return (
-    <div className="overflow-x-auto" data-testid="usage-heatmap">
-      <div className="min-w-[400px]">
-        {/* Hour labels */}
-        <div className="flex ml-6 mb-1">
-          {[0, 4, 8, 12, 16, 20].map(h => (
-            <div key={h} className="text-[8px] text-gray-500 font-mono" style={{ marginLeft: h === 0 ? 0 : 'calc((100% - 48px) / 6 - 8px)', width: '16px' }}>
-              {h}h
-            </div>
-          ))}
-        </div>
-
-        {/* Grid */}
-        <div className="space-y-0.5">
-          {days.map((day, dayIdx) => (
-            <div key={day} className="flex items-center gap-1" data-testid={`heatmap-day-${dayIdx}`}>
-              <span className="w-5 text-[9px] text-gray-500 font-medium">{day}</span>
-              <div className="flex-1 flex gap-px">
-                {hours.map(hour => {
-                  const data = patternMap.get(`${dayIdx}-${hour}`);
-                  const utilization = data?.avgUtilization || 0;
-                  const vcpu = data?.avgVcpu || 0;
-
-                  return (
-                    <div
-                      key={hour}
-                      className={`flex-1 h-3 rounded-sm ${getColor(utilization)} transition-colors hover:ring-1 hover:ring-gray-400/50`}
-                      title={`${days[dayIdx]} ${hour}:00 - Avg ${vcpu.toFixed(1)} vCPU, ${utilization.toFixed(0)}% utilization`}
-                      data-testid={`heatmap-cell-${dayIdx}-${hour}`}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {/* Legend */}
-        <div className="flex items-center justify-end gap-2 mt-2">
-          <span className="text-[8px] text-gray-500">Low</span>
-          <div className="flex gap-px">
-            <div className="w-3 h-2 rounded-sm bg-emerald-300" />
-            <div className="w-3 h-2 rounded-sm bg-emerald-500" />
-            <div className="w-3 h-2 rounded-sm bg-yellow-400" />
-            <div className="w-3 h-2 rounded-sm bg-orange-400" />
-            <div className="w-3 h-2 rounded-sm bg-red-400" />
-          </div>
-          <span className="text-[8px] text-gray-500">High</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// === Added: Recommendation Card component ===
+// === Recommendation Card component ===
 function RecommendationCard({ recommendation }: { recommendation: CostReportData['recommendations'][0] }) {
   const [expanded, setExpanded] = useState(false);
 

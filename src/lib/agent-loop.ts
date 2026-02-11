@@ -68,6 +68,10 @@ export interface AgentCycleResult {
 
 let running = false;
 
+/** Ring buffer for recent cycle results (max 20) */
+const cycleHistory: AgentCycleResult[] = [];
+const MAX_CYCLE_HISTORY = 20;
+
 // ============================================================
 // Metrics Collection (Server-side, no HTTP overhead)
 // ============================================================
@@ -330,17 +334,19 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
     // Phase 3+4: Decide & Act — evaluate scaling and auto-execute
     const scaling = await evaluateAndExecuteScaling(dataPoint);
 
-    return {
+    const result: AgentCycleResult = {
       timestamp,
       phase: 'complete',
       metrics: metricsResult,
       detection,
       scaling,
     };
+    pushCycleResult(result);
+    return result;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
     console.error('[AgentLoop] Cycle failed:', errorMsg);
-    return {
+    const result: AgentCycleResult = {
       timestamp,
       phase: 'error',
       metrics: null,
@@ -348,6 +354,8 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       scaling: null,
       error: errorMsg,
     };
+    pushCycleResult(result);
+    return result;
   } finally {
     running = false;
   }
@@ -365,4 +373,30 @@ export function isAgentRunning(): boolean {
  */
 export function resetAgentState(): void {
   running = false;
+  cycleHistory.length = 0;
+}
+
+// ============================================================
+// Cycle History
+// ============================================================
+
+function pushCycleResult(result: AgentCycleResult): void {
+  cycleHistory.push(result);
+  if (cycleHistory.length > MAX_CYCLE_HISTORY) {
+    cycleHistory.shift();
+  }
+}
+
+/**
+ * Get recent cycle results (newest last)
+ */
+export function getAgentCycleHistory(): AgentCycleResult[] {
+  return [...cycleHistory];
+}
+
+/**
+ * Get the most recent cycle result
+ */
+export function getLastCycleResult(): AgentCycleResult | null {
+  return cycleHistory.length > 0 ? cycleHistory[cycleHistory.length - 1] : null;
 }
