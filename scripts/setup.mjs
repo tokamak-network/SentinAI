@@ -81,13 +81,28 @@ async function selectSetupMode() {
 
 async function testAIConnection(apiKey, provider, gatewayUrl = null) {
   const baseUrl = gatewayUrl || (
+    provider === 'qwen' ? 'https://dashscope.aliyuncs.com/compatible-mode' :
     provider === 'anthropic' ? 'https://api.anthropic.com' :
     provider === 'openai' ? 'https://api.openai.com' :
     'https://generativelanguage.googleapis.com'
   );
 
   try {
-    if (provider === 'anthropic') {
+    if (provider === 'qwen') {
+      const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'qwen-turbo-latest',
+          max_tokens: 10,
+          messages: [{ role: 'user', content: 'Hi' }],
+        }),
+      });
+      return response.ok;
+    } else if (provider === 'anthropic') {
       const response = await fetch(`${baseUrl}/v1/messages`, {
         method: 'POST',
         headers: {
@@ -267,7 +282,7 @@ async function quickSetup() {
   // 2. AI Gateway
   console.log("");
   console.log("  === AI Configuration ===");
-  console.log("  Priority: Claude > GPT > Gemini");
+  console.log("  Priority: Qwen > Claude > GPT > Gemini");
   console.log("");
   const useGateway = await askYesNo("▸ Use AI Gateway server?", true);
 
@@ -284,25 +299,40 @@ async function quickSetup() {
 
   // 3. API Keys (try in priority order)
   console.log("");
-  console.log("  Enter API Key (priority: Claude > GPT > Gemini)");
+  console.log("  Enter API Key (priority: Qwen > Claude > GPT > Gemini)");
   console.log("  At least one is required.");
   console.log("");
 
-  // Claude (primary)
-  const anthropicKey = await askOptional("▸ Anthropic API Key (Claude)");
-  if (anthropicKey) {
+  // Qwen (primary)
+  const qwenKey = await askOptional("▸ DashScope API Key (Qwen)");
+  if (qwenKey) {
     process.stdout.write("  Testing connection...");
-    const ok = await testAIConnection(anthropicKey, 'anthropic', env.AI_GATEWAY_URL);
+    const ok = await testAIConnection(qwenKey, 'qwen', env.AI_GATEWAY_URL);
     if (ok) {
       console.log(" OK");
-      env.ANTHROPIC_API_KEY = anthropicKey;
+      env.DASHSCOPE_API_KEY = qwenKey;
     } else {
       console.log(" Failed - check your key.");
     }
   }
 
-  // GPT (secondary)
-  if (!env.ANTHROPIC_API_KEY) {
+  // Claude (secondary)
+  if (!env.DASHSCOPE_API_KEY) {
+    const anthropicKey = await askOptional("▸ Anthropic API Key (Claude)");
+    if (anthropicKey) {
+      process.stdout.write("  Testing connection...");
+      const ok = await testAIConnection(anthropicKey, 'anthropic', env.AI_GATEWAY_URL);
+      if (ok) {
+        console.log(" OK");
+        env.ANTHROPIC_API_KEY = anthropicKey;
+      } else {
+        console.log(" Failed - check your key.");
+      }
+    }
+  }
+
+  // GPT (tertiary)
+  if (!env.DASHSCOPE_API_KEY && !env.ANTHROPIC_API_KEY) {
     const openaiKey = await askOptional("▸ OpenAI API Key (GPT)");
     if (openaiKey) {
       process.stdout.write("  Testing connection...");
@@ -316,8 +346,8 @@ async function quickSetup() {
     }
   }
 
-  // Gemini (tertiary)
-  if (!env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY) {
+  // Gemini (quaternary)
+  if (!env.DASHSCOPE_API_KEY && !env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY) {
     const geminiKey = await askOptional("▸ Gemini API Key");
     if (geminiKey) {
       process.stdout.write("  Testing connection...");
@@ -332,7 +362,7 @@ async function quickSetup() {
   }
 
   // At least one valid API key required
-  if (!env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY && !env.GEMINI_API_KEY) {
+  if (!env.DASHSCOPE_API_KEY && !env.ANTHROPIC_API_KEY && !env.OPENAI_API_KEY && !env.GEMINI_API_KEY) {
     console.log("");
     console.log("  At least one valid API Key is required.");
     console.log("  Please try again.");
@@ -389,19 +419,21 @@ async function advancedSetup() {
   console.log("");
 
   // 2.1 Primary provider (required)
-  console.log("  Priority: Module Override > Gateway > Anthropic > OpenAI > Gemini");
+  console.log("  Priority: Module Override > Gateway > Qwen > Anthropic > OpenAI > Gemini");
   console.log("");
-  const primaryChoice = await askOptional("▸ Primary AI Provider (anthropic/openai/gemini)", "anthropic");
+  const primaryChoice = await askOptional("▸ Primary AI Provider (qwen/anthropic/openai/gemini)", "qwen");
   const primary = primaryChoice.toLowerCase().trim();
 
-  if (primary === "anthropic" || primary === "claude") {
+  if (primary === "qwen" || primary === "dashscope") {
+    env.DASHSCOPE_API_KEY = await askRequired("▸ DashScope API Key (Qwen): ");
+  } else if (primary === "anthropic" || primary === "claude") {
     env.ANTHROPIC_API_KEY = await askRequired("▸ Anthropic API Key: ");
   } else if (primary === "openai" || primary === "gpt") {
     env.OPENAI_API_KEY = await askRequired("▸ OpenAI API Key: ");
   } else if (primary === "gemini") {
     env.GEMINI_API_KEY = await askRequired("▸ Gemini API Key: ");
   } else {
-    env.ANTHROPIC_API_KEY = await askRequired("▸ Anthropic API Key: ");
+    env.DASHSCOPE_API_KEY = await askRequired("▸ DashScope API Key (Qwen): ");
   }
 
   // 2.2 Additional providers (optional)
@@ -409,6 +441,10 @@ async function advancedSetup() {
   const wantMultiple = await askYesNo("▸ Add multiple providers for fallback?", true);
   if (wantMultiple) {
     const providers = [];
+    if (!env.DASHSCOPE_API_KEY) {
+      const add = await askYesNo("  Add Qwen (DashScope)?", false);
+      if (add) providers.push("dashscope");
+    }
     if (!env.ANTHROPIC_API_KEY) {
       const add = await askYesNo("  Add Anthropic?", false);
       if (add) providers.push("anthropic");
@@ -423,7 +459,8 @@ async function advancedSetup() {
     }
 
     for (const p of providers) {
-      const key = await askRequired(`▸ ${p.charAt(0).toUpperCase() + p.slice(1)} API Key: `);
+      const displayName = p === 'dashscope' ? 'DashScope (Qwen)' : p.charAt(0).toUpperCase() + p.slice(1);
+      const key = await askRequired(`▸ ${displayName} API Key: `);
       env[`${p.toUpperCase()}_API_KEY`] = key;
     }
   }
@@ -447,7 +484,7 @@ async function advancedSetup() {
       { name: "PREDICTOR", desc: "Predictive Scaler" },
     ];
     for (const m of modules) {
-      const override = await askOptional(`  ▸ ${m.desc} provider (anthropic/openai/gemini/litellm)`);
+      const override = await askOptional(`  ▸ ${m.desc} provider (qwen/anthropic/openai/gemini/litellm)`);
       if (override && override.trim()) {
         env[`${m.name}_PROVIDER`] = override.toLowerCase().trim();
       }
@@ -504,13 +541,16 @@ function writeEnvFile(env, isQuickMode) {
   ];
 
   if (isQuickMode) {
-    lines.push("# (Fallback: Anthropic > OpenAI > Gemini)");
+    lines.push("# (Fallback: Qwen > Anthropic > OpenAI > Gemini)");
   } else {
-    lines.push("# (Priority: Module Override > Gateway > Anthropic > OpenAI > Gemini)");
+    lines.push("# (Priority: Module Override > Gateway > Qwen > Anthropic > OpenAI > Gemini)");
   }
 
   if (env.AI_GATEWAY_URL) {
     lines.push(`AI_GATEWAY_URL=${env.AI_GATEWAY_URL}`);
+  }
+  if (env.DASHSCOPE_API_KEY) {
+    lines.push(`DASHSCOPE_API_KEY=${env.DASHSCOPE_API_KEY}`);
   }
   if (env.ANTHROPIC_API_KEY) {
     lines.push(`ANTHROPIC_API_KEY=${env.ANTHROPIC_API_KEY}`);

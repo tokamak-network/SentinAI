@@ -1,7 +1,7 @@
 /**
  * Unified AI Client (Simplified)
  *
- * Use Claude first, fallback chain: Claude > GPT > Gemini
+ * Fallback chain: Qwen > Claude > GPT > Gemini
  * Gateway support: Route through proxy when AI_GATEWAY_URL is set
  */
 
@@ -10,7 +10,7 @@
 // =====================================================
 
 export type ModelTier = 'fast' | 'best';
-export type AIProvider = 'anthropic' | 'openai' | 'gemini';
+export type AIProvider = 'qwen' | 'anthropic' | 'openai' | 'gemini';
 
 export interface ChatCompletionOptions {
   systemPrompt: string;
@@ -36,6 +36,10 @@ export interface ChatCompletionResult {
 // =====================================================
 
 const MODEL_MAP: Record<AIProvider, Record<ModelTier, string>> = {
+  qwen: {
+    fast: 'qwen-turbo-latest',
+    best: 'qwen-max-latest',
+  },
   anthropic: {
     fast: 'claude-haiku-4-5-20251001',
     best: 'claude-sonnet-4-5-20250929',
@@ -51,7 +55,7 @@ const MODEL_MAP: Record<AIProvider, Record<ModelTier, string>> = {
 };
 
 // =====================================================
-// Provider Detection (Priority: Claude > GPT > Gemini)
+// Provider Detection (Priority: Qwen > Claude > GPT > Gemini)
 // =====================================================
 
 interface ProviderConfig {
@@ -66,7 +70,19 @@ function detectProvider(modelTier: ModelTier): ProviderConfig {
   const gatewayUrl = process.env.AI_GATEWAY_URL;
   const useGateway = !!gatewayUrl;
 
-  // Priority 1: Anthropic (Claude)
+  // Priority 1: Qwen (DashScope)
+  const qwenKey = process.env.DASHSCOPE_API_KEY;
+  if (qwenKey) {
+    return {
+      provider: 'qwen',
+      apiKey: qwenKey,
+      model: MODEL_MAP.qwen[modelTier],
+      useGateway,
+      gatewayUrl,
+    };
+  }
+
+  // Priority 2: Anthropic (Claude)
   const anthropicKey = process.env.ANTHROPIC_API_KEY;
   if (anthropicKey) {
     return {
@@ -78,7 +94,7 @@ function detectProvider(modelTier: ModelTier): ProviderConfig {
     };
   }
 
-  // Priority 2: OpenAI (GPT)
+  // Priority 3: OpenAI (GPT)
   const openaiKey = process.env.OPENAI_API_KEY;
   if (openaiKey) {
     return {
@@ -90,7 +106,7 @@ function detectProvider(modelTier: ModelTier): ProviderConfig {
     };
   }
 
-  // Priority 3: Gemini
+  // Priority 4: Gemini
   const geminiKey = process.env.GEMINI_API_KEY;
   if (geminiKey) {
     return {
@@ -103,13 +119,59 @@ function detectProvider(modelTier: ModelTier): ProviderConfig {
   }
 
   throw new Error(
-    'No AI API key configured. Set ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY.'
+    'No AI API key configured. Set DASHSCOPE_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY.'
   );
 }
 
 // =====================================================
 // API Callers
 // =====================================================
+
+async function callQwen(
+  config: ProviderConfig,
+  options: ChatCompletionOptions
+): Promise<ChatCompletionResult> {
+  const baseUrl = config.useGateway && config.gatewayUrl
+    ? config.gatewayUrl
+    : 'https://dashscope.aliyuncs.com/compatible-mode';
+
+  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${config.apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        { role: 'system', content: options.systemPrompt },
+        { role: 'user', content: options.userPrompt },
+      ],
+      max_tokens: options.maxTokens || 4096,
+      temperature: options.temperature ?? 0.2,
+    }),
+    signal: options.signal,
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text().catch(() => '');
+    throw new Error(`Qwen API error ${response.status}: ${errorBody}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices?.[0]?.message?.content || '';
+  const usage = data.usage;
+
+  return {
+    content,
+    usage: usage ? {
+      promptTokens: usage.prompt_tokens || 0,
+      completionTokens: usage.completion_tokens || 0,
+    } : undefined,
+    provider: 'qwen',
+    model: config.model,
+  };
+}
 
 async function callAnthropic(
   config: ProviderConfig,
@@ -256,6 +318,8 @@ export async function chatCompletion(options: ChatCompletionOptions): Promise<Ch
   const config = detectProvider(options.modelTier);
 
   switch (config.provider) {
+    case 'qwen':
+      return callQwen(config, options);
     case 'anthropic':
       return callAnthropic(config, options);
     case 'openai':

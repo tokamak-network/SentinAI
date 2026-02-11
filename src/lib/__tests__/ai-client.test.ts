@@ -18,6 +18,7 @@ describe('ai-client', () => {
   beforeEach(() => {
     // Clear all env vars
     delete process.env.AI_GATEWAY_URL;
+    delete process.env.DASHSCOPE_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.GEMINI_API_KEY;
@@ -42,6 +43,59 @@ describe('ai-client', () => {
         userPrompt: 'test',
         modelTier: 'fast',
       })).rejects.toThrow('No AI API key configured');
+    });
+
+    it('should use Qwen when DASHSCOPE_API_KEY is set (priority 1)', async () => {
+      process.env.DASHSCOPE_API_KEY = 'sk-qwen-test';
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'qwen response' } }],
+          usage: { prompt_tokens: 10, completion_tokens: 20 },
+        }),
+      });
+
+      const { chatCompletion } = await importAiClient();
+      const result = await chatCompletion({
+        systemPrompt: 'sys',
+        userPrompt: 'user',
+        modelTier: 'fast',
+      });
+
+      expect(result.provider).toBe('qwen');
+      expect(result.model).toBe('qwen-turbo-latest');
+      expect(result.content).toBe('qwen response');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Authorization': 'Bearer sk-qwen-test',
+          }),
+        }),
+      );
+    });
+
+    it('should prefer Qwen over Anthropic when both keys are set', async () => {
+      process.env.DASHSCOPE_API_KEY = 'sk-qwen-test';
+      process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'qwen wins' } }],
+        }),
+      });
+
+      const { chatCompletion } = await importAiClient();
+      const result = await chatCompletion({
+        systemPrompt: 'sys',
+        userPrompt: 'user',
+        modelTier: 'fast',
+      });
+
+      expect(result.provider).toBe('qwen');
     });
 
     it('should route through gateway when AI_GATEWAY_URL is set', async () => {
@@ -203,6 +257,26 @@ describe('ai-client', () => {
       // Verify model in request body
       const fetchBody = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(fetchBody.model).toBe('claude-sonnet-4-5-20250929');
+    });
+
+    it('should map Qwen best tier to qwen-max-latest', async () => {
+      process.env.DASHSCOPE_API_KEY = 'test';
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [{ message: { content: 'ok' } }],
+        }),
+      });
+
+      const { chatCompletion } = await importAiClient();
+      const result = await chatCompletion({
+        systemPrompt: 'sys',
+        userPrompt: 'user',
+        modelTier: 'best',
+      });
+
+      expect(result.model).toBe('qwen-max-latest');
     });
 
     it('should map OpenAI best tier to gpt-4.1', async () => {
