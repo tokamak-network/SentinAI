@@ -208,7 +208,12 @@ Full env guide: `ENV_GUIDE.md`
 
 ## Documentation
 
-- `docs/redis-setup.md`: **Redis 선택사항 가이드** — InMemory vs Redis 비교, 설정/제거 방법
+- `docs/README.md`: Documentation index with all guides and proposals
+- **`docs/guide/`**: Practical guides (Redis setup, EC2 deployment, demo scenarios, load testing)
+  - `redis-setup.md`: Redis optional configuration (InMemory vs Redis)
+  - `ec2-setup-guide.md`: AWS EC2 deployment with Cloudflare Tunnel
+  - `demo-scenarios.md`: Simulation scenarios for testing
+  - `production-load-testing-guide.md`: EKS cluster verification
 - `docs/done/`: Completed proposals (1–7, implementation details)
 - `docs/spec/`: Implementation specs for AI agent consumption
 - `docs/todo/`: Unimplemented proposals (8: Auto-Remediation, 9: Universal Blockchain Platform)

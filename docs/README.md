@@ -49,12 +49,16 @@ AI 모델을 활용한 모니터링, 스케일링, 보안, 예측, 운영 자동
 
 ---
 
-## Configuration & Deployment
+## Guides
 
-| 가이드 | 대상 | 문서 |
+실무 가이드 및 배포, 테스트 방법.
+
+| 가이드 | 대상 | 설명 |
 |--------|------|------|
-| **Redis 설정** | InMemory vs Redis 선택, 설정/제거 방법 | [상세](redis-setup.md) |
-| EC2 설치 가이드 (비개발자용) | AWS EC2 + Docker Compose + Cloudflare Tunnel | [상세](ec2-setup-guide.md) |
+| [Redis 설정](guide/redis-setup.md) | 개발자 | InMemory vs Redis 선택, 설정/제거 방법 |
+| [EC2 설치 가이드](guide/ec2-setup-guide.md) | 비개발자/운영자 | AWS EC2 + Docker Compose + Cloudflare Tunnel 배포 |
+| [데모 시나리오](guide/demo-scenarios.md) | 테스트/데모 | 다양한 시나리오별 L2 메트릭 시뮬레이션 |
+| [프로덕션 로드 테스트](guide/production-load-testing-guide.md) | QA/운영 | 실제 EKS 환경에서의 부하 테스트 및 검증 |
 
 ---
 
