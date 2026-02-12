@@ -8,6 +8,7 @@ import type { ScalingConfig } from '@/types/scaling';
 import { scaleOpGeth } from '@/lib/k8s-scaler';
 import { zeroDowntimeScale } from '@/lib/zero-downtime-scaler';
 import { runK8sCommand } from '@/lib/k8s-config';
+import { getActiveL1RpcUrl, healthCheckEndpoint, getL1FailoverState, maskUrl } from '@/lib/l1-rpc-failover';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 
 // ============================================================
@@ -112,9 +113,14 @@ async function executeHealthCheck(
  * Check L1 RPC connection
  */
 async function executeCheckL1Connection(): Promise<string> {
-  // TODO: Integrate with L1 RPC client when available
-  // For now, return a placeholder message
-  return 'L1 connection check: Not implemented (requires L1 RPC client)';
+  const activeUrl = getActiveL1RpcUrl();
+  const state = getL1FailoverState();
+  const isHealthy = await healthCheckEndpoint(activeUrl);
+
+  if (isHealthy) {
+    return `L1 connection check: OK (${maskUrl(activeUrl)}, ${state.endpoints.length} endpoints configured)`;
+  }
+  return `L1 connection check: FAILED (${maskUrl(activeUrl)} unreachable, ${state.endpoints.length} endpoints total)`;
 }
 
 /**

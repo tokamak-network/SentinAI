@@ -10,6 +10,7 @@ import { pushMetric, getRecentMetrics } from '@/lib/metrics-store';
 import { getStore } from '@/lib/redis-store';
 import { recordUsage } from '@/lib/usage-tracker';
 import { runDetectionPipeline, type DetectionResult } from '@/lib/detection-pipeline';
+import { getActiveL1RpcUrl, reportL1Success, reportL1Failure } from '@/lib/l1-rpc-failover';
 import {
   makeScalingDecision,
   mapAIResultToSeverity,
@@ -59,6 +60,12 @@ export interface AgentCycleResult {
     executed: boolean;
     reason: string;
   } | null;
+  failover?: {
+    triggered: boolean;
+    fromUrl: string;
+    toUrl: string;
+    k8sUpdated: boolean;
+  };
   error?: string;
 }
 
@@ -79,6 +86,7 @@ const MAX_CYCLE_HISTORY = 20;
 interface CollectedMetrics {
   dataPoint: MetricDataPoint;
   l1BlockHeight: number;
+  failover?: AgentCycleResult['failover'];
 }
 
 async function collectMetrics(): Promise<CollectedMetrics | null> {
@@ -88,18 +96,62 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     return null;
   }
 
-  const l1RpcUrl = process.env.L1_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
-
   const l2Client = createPublicClient({ chain: mainnet, transport: http(rpcUrl, { timeout: RPC_TIMEOUT_MS }) });
+
+  // L2 block fetch
+  const block = await l2Client.getBlock({ blockTag: 'latest' });
+  const blockNumber = block.number;
+
+  // L1 block fetch with failover support
+  let l1BlockNumber: bigint;
+  let failoverInfo: AgentCycleResult['failover'] | undefined;
+
+  const l1RpcUrl = getActiveL1RpcUrl();
   const l1Client = createPublicClient({ chain: sepolia, transport: http(l1RpcUrl, { timeout: RPC_TIMEOUT_MS }) });
 
-  // Parallel RPC fetch
-  const [block, l1BlockNumber] = await Promise.all([
-    l2Client.getBlock({ blockTag: 'latest' }),
-    l1Client.getBlockNumber(),
-  ]);
+  try {
+    l1BlockNumber = await l1Client.getBlockNumber();
+    reportL1Success();
+  } catch (l1Error) {
+    console.warn('[AgentLoop] L1 RPC failed, attempting failover...');
 
-  const blockNumber = block.number;
+    const newUrl = await reportL1Failure(
+      l1Error instanceof Error ? l1Error : new Error(String(l1Error))
+    );
+
+    if (newUrl) {
+      // Failover occurred — retry with new endpoint
+      const retryClient = createPublicClient({
+        chain: sepolia,
+        transport: http(newUrl, { timeout: RPC_TIMEOUT_MS }),
+      });
+      try {
+        l1BlockNumber = await retryClient.getBlockNumber();
+        reportL1Success();
+        failoverInfo = {
+          triggered: true,
+          fromUrl: l1RpcUrl,
+          toUrl: newUrl,
+          k8sUpdated: true,
+        };
+        console.log(`[AgentLoop] L1 RPC failover success: ${newUrl}`);
+      } catch {
+        // Retry also failed — continue without L1
+        console.error('[AgentLoop] L1 RPC retry after failover also failed');
+        l1BlockNumber = BigInt(0);
+        failoverInfo = {
+          triggered: true,
+          fromUrl: l1RpcUrl,
+          toUrl: newUrl,
+          k8sUpdated: true,
+        };
+      }
+    } else {
+      // No failover available — continue without L1
+      console.warn('[AgentLoop] No failover available, continuing without L1');
+      l1BlockNumber = BigInt(0);
+    }
+  }
 
   // TxPool pending count (with timeout)
   let txPoolPending = 0;
@@ -164,7 +216,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
   await pushMetric(dataPoint);
   recordUsage(currentVcpu, cpuUsage);
 
-  return { dataPoint, l1BlockHeight: Number(l1BlockNumber) };
+  return { dataPoint, l1BlockHeight: Number(l1BlockNumber), failover: failoverInfo };
 }
 
 // ============================================================
@@ -318,7 +370,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       };
     }
 
-    const { dataPoint, l1BlockHeight } = collected;
+    const { dataPoint, l1BlockHeight, failover } = collected;
 
     const metricsResult = {
       l1BlockHeight,
@@ -340,6 +392,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       metrics: metricsResult,
       detection,
       scaling,
+      failover,
     };
     pushCycleResult(result);
     return result;

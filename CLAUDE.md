@@ -72,6 +72,12 @@ L1/L2 RPC (viem) ──┼──→ /api/metrics ──→ MetricsStore    │
 
 Enabled automatically when `L2_RPC_URL` is set. Override with `AGENT_LOOP_ENABLED=true|false`.
 
+**L1 RPC Failover** (`l1-rpc-failover.ts`) — Automatic endpoint switching when L1 RPC quota is exhausted:
+- Detects consecutive failures (≥3) in agent loop L1 calls
+- Switches to next healthy endpoint from `L1_RPC_URLS` list
+- Updates K8s components via `kubectl set env` (op-node, op-batcher, op-proposer)
+- 5-minute cooldown between failovers, URL masking in logs
+
 ### Core Subsystems
 
 **Scaling Engine** — Hybrid scoring (0–100) = CPU 30% + Gas 30% + TxPool 20% + AI Severity 20%. Three tiers: Idle (<30, 1 vCPU), Normal (30–70, 2 vCPU), High (≥70, 4 vCPU). 5-minute cooldown. Stress mode simulates 8 vCPU.
@@ -138,6 +144,7 @@ idle → creating_standby → waiting_ready → switching_traffic → cleanup �
 - `cost.ts`: Cost optimization types
 - `daily-report.ts`: Daily report types
 - `redis.ts`: Redis state store types
+- `l1-failover.ts`: L1 RPC failover types (endpoint, event, state)
 
 ### UI
 
@@ -203,6 +210,14 @@ cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 | `SCALING_SIMULATION_MODE` | `true` | Simulate K8s changes without real patches |
 | `AGENT_LOOP_ENABLED` | auto | Server-side autonomous loop (auto-enabled if L2_RPC_URL set) |
 | `AUTO_REMEDIATION_ENABLED` | `false` | Layer 4 auto-remediation trigger |
+| `L1_RPC_URLS` | — | Comma-separated L1 RPC endpoints (priority order, auto-failover) |
+| `L1_RPC_URL` | publicnode.com | Single L1 RPC endpoint (fallback if `L1_RPC_URLS` not set) |
+| `K8S_STATEFULSET_PREFIX` | `sepolia-thanos-stack` | StatefulSet name prefix for L1 failover kubectl updates |
+| `L1_PROXYD_ENABLED` | `false` | Enable Proxyd ConfigMap update for L1 failover |
+| `L1_PROXYD_CONFIGMAP_NAME` | `proxyd-config` | ConfigMap name containing Proxyd config |
+| `L1_PROXYD_DATA_KEY` | `proxyd.toml` | Data key in ConfigMap holding TOML config |
+| `L1_PROXYD_UPSTREAM_GROUP` | `main` | Upstream group name to update in TOML |
+| `L1_PROXYD_UPDATE_MODE` | `replace` | Update strategy: `replace` (update URL) or `append` (add new upstream) |
 
 Full env guide: `ENV_GUIDE.md`
 

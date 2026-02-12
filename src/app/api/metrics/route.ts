@@ -12,6 +12,7 @@ import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import { getStore } from '@/lib/redis-store';
 import { runDetectionPipeline } from '@/lib/detection-pipeline';
 import { getContainerCpuUsage } from '@/lib/k8s-scaler';
+import { getActiveL1RpcUrl } from '@/lib/l1-rpc-failover';
 import type { AnomalyResult } from '@/types/anomaly';
 
 // Whether anomaly detection is enabled (default: enabled)
@@ -186,7 +187,7 @@ export async function GET(request: Request) {
         let realL2Block = 0;
         try {
             const rpcUrl = process.env.L2_RPC_URL;
-            const l1RpcUrl = process.env.L1_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
+            const l1RpcUrl = getActiveL1RpcUrl();
             if (rpcUrl) {
                 const l2Client = createPublicClient({ chain: mainnet, transport: http(rpcUrl) });
                 const l1Client = createPublicClient({ chain: sepolia, transport: http(l1RpcUrl) });
@@ -286,7 +287,7 @@ export async function GET(request: Request) {
                 { status: 500 }
             );
         }
-        const l1RpcUrl = process.env.L1_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
+        const l1RpcUrl = getActiveL1RpcUrl();
 
         const l2RpcClient = createPublicClient({ chain: mainnet, transport: http(rpcUrl) });
         const l1RpcClient = createPublicClient({ chain: sepolia, transport: http(l1RpcUrl) });

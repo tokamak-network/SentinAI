@@ -14,6 +14,7 @@
     "verify": "bash scripts/verify-e2e.sh"
   },
   "dependencies": {
+    "@iarna/toml": "^3.0.0",
     "@kubernetes/client-node": "^1.4.0",
     "clsx": "^2.1.1",
     "ioredis": "^5.9.2",
@@ -28,6 +29,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/iarna__toml": "^2.0.5",
     "@types/node": "^20",
     "@types/node-cron": "^3.0.11",
     "@types/react": "^19",

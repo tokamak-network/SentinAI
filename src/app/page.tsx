@@ -104,6 +104,12 @@ interface AgentCycleData {
     executed: boolean;
     reason: string;
   } | null;
+  failover?: {
+    triggered: boolean;
+    fromUrl: string;
+    toUrl: string;
+    k8sUpdated: boolean;
+  };
   error?: string;
 }
 
@@ -886,7 +892,12 @@ export default function Dashboard() {
                   let detail = '';
                   let color = 'text-gray-400';
 
-                  if (isError) {
+                  if (cycle.failover?.triggered) {
+                    event = 'FAILOVER';
+                    detail = `L1 RPC: ${cycle.failover.fromUrl} → ${cycle.failover.toUrl}`;
+                    if (cycle.failover.k8sUpdated) detail += ' (K8s updated)';
+                    color = 'text-purple-400';
+                  } else if (isError) {
                     event = 'ERROR';
                     detail = cycle.error || 'Unknown error';
                     color = 'text-red-400';
