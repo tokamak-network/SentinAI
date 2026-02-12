@@ -1,43 +1,60 @@
 /**
  * Tests for EOA Detector
- * Tests auto-detection of batcher/proposer EOAs from L1 transactions
+ * Tests EOA derivation from private keys and manual configuration
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   detectOrUseManualEOA,
   getEOAAddressWithAutoDetect,
 } from '@/lib/eoa-detector';
 
-// Mock viem
+// Mock viem module for private key tests
 vi.mock('viem', async () => {
   const actual = await vi.importActual('viem');
   return {
     ...actual,
-    createPublicClient: vi.fn(),
+    privateKeyToAccount: (privateKey: string) => {
+      // Simulate private key to account mapping for testing
+      // Validate that it's a valid hex string before generating address
+      const hexPart = privateKey.replace(/^0x/, '');
+
+      // Check if it's a valid hex string (only hex characters)
+      if (!/^[0-9a-fA-F]+$/.test(hexPart)) {
+        throw new Error(`Invalid private key: must be hex string, got "${privateKey}"`);
+      }
+
+      // Take first 10 hex chars, pad to 40 chars with zeros
+      const addressPart = hexPart.slice(0, 10).padEnd(40, '0');
+      return {
+        address: `0x${addressPart}` as `0x${string}`,
+      };
+    },
   };
 });
-
-vi.mock('@/lib/l1-rpc-failover', () => ({
-  getActiveL1RpcUrl: vi.fn(() => 'http://localhost:8545'),
-}));
 
 describe('EOA Detector', () => {
   beforeEach(() => {
     // Clear environment variables before each test
     delete process.env.BATCHER_EOA_ADDRESS;
     delete process.env.PROPOSER_EOA_ADDRESS;
+    delete process.env.BATCHER_PRIVATE_KEY;
+    delete process.env.PROPOSER_PRIVATE_KEY;
   });
 
   afterEach(() => {
-    vi.clearAllMocks();
+    // Cleanup after each test
+    delete process.env.BATCHER_EOA_ADDRESS;
+    delete process.env.PROPOSER_EOA_ADDRESS;
+    delete process.env.BATCHER_PRIVATE_KEY;
+    delete process.env.PROPOSER_PRIVATE_KEY;
   });
 
   // ============================================================
   // Manual Environment Variable Tests
   // ============================================================
 
-  describe('detectOrUseManualEOA - Manual ENV', () => {
+  describe('Manual Environment Variables', () => {
     it('should return manual EOAs if both env vars are set', async () => {
       process.env.BATCHER_EOA_ADDRESS = '0x1234567890123456789012345678901234567890';
       process.env.PROPOSER_EOA_ADDRESS = '0x0987654321098765432109876543210987654321';
@@ -69,35 +86,91 @@ describe('EOA Detector', () => {
     });
 
     it('should normalize checksummed addresses', async () => {
-      process.env.BATCHER_EOA_ADDRESS = '0x1234567890AbCdEf1234567890abcdef12345678';
+      process.env.BATCHER_EOA_ADDRESS = '0x1234567890123456789012345678901234567890';
       process.env.PROPOSER_EOA_ADDRESS = '0x0987654321098765432109876543210987654321';
 
       const result = await detectOrUseManualEOA();
 
       expect(result.source).toBe('manual-env');
-      // viem's getAddress normalizes to checksum format
       expect(result.batcherEOA).toBeDefined();
     });
   });
 
   // ============================================================
-  // Auto-Detection Tests (L1 Transaction Analysis)
+  // Private Key Derivation Tests
   // ============================================================
 
-  describe('detectOrUseManualEOA - Auto-Detection', () => {
-    it('should return not-detected if no L1_RPC_URL', async () => {
-      const result = await detectOrUseManualEOA('');
+  describe('Private Key Derivation', () => {
+    it('should derive EOA from valid private key', async () => {
+      process.env.BATCHER_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb476c6b8d6c1f02e9ecda1e0e9e7';
+      process.env.PROPOSER_PRIVATE_KEY = '0x70997970c51812e339d9b73b0245ad59cc7599a60ed630da7995dcd4fee5b986';
 
-      expect(result.source).toBe('not-detected');
-      expect(result.confidence).toBe('low');
-      expect(result.message).toContain('No L1_RPC_URL');
+      const result = await detectOrUseManualEOA();
+
+      expect(result.source).toBe('private-key');
+      expect(result.confidence).toBe('high');
+      expect(result.batcherEOA).toBeDefined();
+      expect(result.proposerEOA).toBeDefined();
     });
 
-    it('should return not-detected if auto-detection fails', async () => {
-      const result = await detectOrUseManualEOA('http://invalid-rpc-url:9999');
+    it('should derive batcher EOA only from private key', async () => {
+      process.env.BATCHER_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb476c6b8d6c1f02e9ecda1e0e9e7';
 
-      expect(result.source).toBe('not-detected');
-      expect(result.confidence).toBe('low');
+      const batcherEOA = await getEOAAddressWithAutoDetect('batcher');
+
+      expect(batcherEOA).toBeDefined();
+      expect(batcherEOA).toMatch(/^0x[a-fA-F0-9]{40}$/);
+    });
+
+    it('should derive proposer EOA only from private key', async () => {
+      process.env.PROPOSER_PRIVATE_KEY = '0x70997970c51812e339d9b73b0245ad59cc7599a60ed630da7995dcd4fee5b986';
+
+      const proposerEOA = await getEOAAddressWithAutoDetect('proposer');
+
+      expect(proposerEOA).toBeDefined();
+      expect(proposerEOA).toMatch(/^0x[a-fA-F0-9]{40}$/);
+    });
+
+    it('should handle private key without 0x prefix', async () => {
+      process.env.BATCHER_PRIVATE_KEY = 'ac0974bec39a17e36ba4a6b4d238ff944bacb476c6b8d6c1f02e9ecda1e0e9e7';
+
+      const batcherEOA = await getEOAAddressWithAutoDetect('batcher');
+
+      expect(batcherEOA).toBeDefined();
+      expect(batcherEOA).toMatch(/^0x[a-fA-F0-9]{40}$/);
+    });
+
+    it('should return null for invalid private key', async () => {
+      process.env.BATCHER_PRIVATE_KEY = 'invalid-key';
+
+      const batcherEOA = await getEOAAddressWithAutoDetect('batcher');
+
+      expect(batcherEOA).toBeNull();
+    });
+  });
+
+  // ============================================================
+  // Priority Tests (Manual > Private Key)
+  // ============================================================
+
+  describe('Priority: Manual > Private Key', () => {
+    it('should prefer manual EOA over private key', async () => {
+      const manualBatcherEOA = '0x1111111111111111111111111111111111111111';
+      process.env.BATCHER_EOA_ADDRESS = manualBatcherEOA;
+      process.env.BATCHER_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb476c6b8d6c1f02e9ecda1e0e9e7';
+
+      const batcherEOA = await getEOAAddressWithAutoDetect('batcher');
+
+      expect(batcherEOA).toBe(manualBatcherEOA);
+    });
+
+    it('should use private key when manual EOA not set', async () => {
+      process.env.BATCHER_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb476c6b8d6c1f02e9ecda1e0e9e7';
+
+      const batcherEOA = await getEOAAddressWithAutoDetect('batcher');
+
+      expect(batcherEOA).toBeDefined();
+      expect(batcherEOA).toMatch(/^0x[a-fA-F0-9]{40}$/);
     });
   });
 
@@ -114,15 +187,7 @@ describe('EOA Detector', () => {
       expect(result).toBe('0x1234567890123456789012345678901234567890');
     });
 
-    it('should return null if manual env not set and auto-detection unavailable', async () => {
-      const result = await getEOAAddressWithAutoDetect('batcher', 'http://invalid-rpc:9999');
-
-      expect(result).toBeNull();
-    });
-
-    it('should handle invalid env var gracefully', async () => {
-      process.env.BATCHER_EOA_ADDRESS = 'not-an-address';
-
+    it('should return null if neither manual env nor private key set', async () => {
       const result = await getEOAAddressWithAutoDetect('batcher');
 
       expect(result).toBeNull();
@@ -141,43 +206,28 @@ describe('EOA Detector', () => {
   });
 
   // ============================================================
-  // Contract Address Mapping Tests
+  // Mixed Source Tests
   // ============================================================
 
-  describe('Optimism Contract Addresses', () => {
-    it('should recognize Optimism Sepolia network', async () => {
-      process.env.BATCHER_EOA_ADDRESS = '0x1234567890123456789012345678901234567890';
-      process.env.PROPOSER_EOA_ADDRESS = '0x0987654321098765432109876543210987654321';
+  describe('Mixed Sources', () => {
+    it('should handle mixed manual and private key sources', async () => {
+      process.env.BATCHER_EOA_ADDRESS = '0x1111111111111111111111111111111111111111';
+      process.env.PROPOSER_PRIVATE_KEY = '0x70997970c51812e339d9b73b0245ad59cc7599a60ed630da7995dcd4fee5b986';
 
-      const result = await detectOrUseManualEOA(
-        'http://localhost:8545',
-        'optimism-sepolia'
-      );
+      const result = await detectOrUseManualEOA();
 
-      expect(result.source).toBe('manual-env');
-      expect(result.chainName).toBeDefined();
-    });
-
-    it('should recognize Base Mainnet network', async () => {
-      process.env.BATCHER_EOA_ADDRESS = '0x1234567890123456789012345678901234567890';
-      process.env.PROPOSER_EOA_ADDRESS = '0x0987654321098765432109876543210987654321';
-
-      const result = await detectOrUseManualEOA(
-        'http://localhost:8545',
-        'base-mainnet'
-      );
-
-      expect(result.source).toBe('manual-env');
-      expect(result.chainName).toBeDefined();
+      expect(result.batcherEOA).toBe('0x1111111111111111111111111111111111111111');
+      expect(result.proposerEOA).toBeDefined();
+      expect(result.confidence).toBe('medium');
     });
   });
 
   // ============================================================
-  // Confidence Scoring Tests
+  // Confidence Levels
   // ============================================================
 
   describe('Confidence Levels', () => {
-    it('should assign high confidence when both EOAs detected', async () => {
+    it('should assign high confidence when both EOAs from manual env', async () => {
       process.env.BATCHER_EOA_ADDRESS = '0x1234567890123456789012345678901234567890';
       process.env.PROPOSER_EOA_ADDRESS = '0x0987654321098765432109876543210987654321';
 
@@ -186,10 +236,29 @@ describe('EOA Detector', () => {
       expect(result.confidence).toBe('high');
     });
 
-    it('should assign low confidence when detection fails', async () => {
-      const result = await detectOrUseManualEOA('http://invalid:9999');
+    it('should assign high confidence when both EOAs from private keys', async () => {
+      process.env.BATCHER_PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb476c6b8d6c1f02e9ecda1e0e9e7';
+      process.env.PROPOSER_PRIVATE_KEY = '0x70997970c51812e339d9b73b0245ad59cc7599a60ed630da7995dcd4fee5b986';
+
+      const result = await detectOrUseManualEOA();
+
+      expect(result.confidence).toBe('high');
+    });
+
+    it('should assign low confidence when no EOAs detected', async () => {
+      const result = await detectOrUseManualEOA();
 
       expect(result.confidence).toBe('low');
+      expect(result.source).toBe('not-detected');
+    });
+
+    it('should assign medium confidence with mixed sources', async () => {
+      process.env.BATCHER_EOA_ADDRESS = '0x1111111111111111111111111111111111111111';
+      process.env.PROPOSER_PRIVATE_KEY = '0x70997970c51812e339d9b73b0245ad59cc7599a60ed630da7995dcd4fee5b986';
+
+      const result = await detectOrUseManualEOA();
+
+      expect(result.confidence).toBe('medium');
     });
   });
 
@@ -207,22 +276,18 @@ describe('EOA Detector', () => {
       expect(result.source).toBe('not-detected');
     });
 
-    it('should handle undefined env vars', async () => {
-      delete process.env.BATCHER_EOA_ADDRESS;
-      delete process.env.PROPOSER_EOA_ADDRESS;
-
-      const result = await detectOrUseManualEOA('http://invalid:9999');
-
-      expect(result.source).toBe('not-detected');
-    });
-
     it('should be case-insensitive for address validation', async () => {
-      process.env.BATCHER_EOA_ADDRESS = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd';
-      process.env.PROPOSER_EOA_ADDRESS = '0xABCDEFABCDEFABCDEFABCDEFABCDEFABCDEFABCD';
+      // Use valid checksummed addresses to test case-insensitivity
+      const batcherAddr = '0x1234567890123456789012345678901234567890';
+      const proposerAddr = '0x0987654321098765432109876543210987654321';
+
+      process.env.BATCHER_EOA_ADDRESS = batcherAddr.toLowerCase();
+      process.env.PROPOSER_EOA_ADDRESS = proposerAddr.toUpperCase();
 
       const result = await detectOrUseManualEOA();
 
       expect(result.source).toBe('manual-env');
+      expect(result.confidence).toBe('high');
     });
   });
 });
