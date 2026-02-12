@@ -271,6 +271,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
 // ============================================================
 
 function clampToValidVcpu(vcpu: number): TargetVcpu {
+  if (vcpu >= 8) return 8;
   if (vcpu >= 4) return 4;
   if (vcpu >= 2) return 2;
   return 1;
@@ -280,7 +281,8 @@ async function evaluateAndExecuteScaling(
   dataPoint: MetricDataPoint
 ): Promise<AgentCycleResult['scaling']> {
   const autoScaling = await isAutoScalingEnabled();
-  const currentVcpu = await getCurrentVcpu();
+  // Use vCPU from dataPoint (already set to seed vCPU if seed is active)
+  const currentVcpu = dataPoint.currentVcpu || await getCurrentVcpu();
   const cooldown = await checkCooldown();
 
   // AI analysis for severity (best-effort)
