@@ -155,38 +155,6 @@ const METRICS_REFRESH_INTERVAL_MS = 60_000;
 /** Agent Loop status polling interval (ms) */
 const AGENT_LOOP_REFRESH_INTERVAL_MS = 30_000;
 
-// --- Helper Functions ---
-/**
- * Compress scaling reason into key decision factors
- * E.g.: "[Skip] Cooldown 36s. System Idle, CPU 0.2% Low" → "Cooldown 36s | Idle"
- */
-function compressReason(reason: string): string {
-  const parts: string[] = [];
-
-  // Extract cooldown time
-  const cooldownMatch = reason.match(/Cooldown (\d+s)/);
-  if (cooldownMatch) {
-    parts.push(cooldownMatch[1]);
-  }
-
-  // Extract decision status
-  if (reason.includes('Predictive')) {
-    parts.push('Predict');
-  } else if (reason.includes('System Idle')) {
-    parts.push('Idle');
-  } else if (reason.includes('High Load') || reason.includes('CPU.*High')) {
-    parts.push('High');
-  } else if (reason.includes('spiked') || reason.includes('spike')) {
-    parts.push('Spike');
-  } else if (reason.includes('Scale Up')) {
-    parts.push('ScaleUp');
-  } else if (reason.includes('Scale Down')) {
-    parts.push('ScaleDown');
-  }
-
-  return parts.length > 0 ? parts.join(' | ') : 'Running';
-}
-
 // --- Main Dashboard Component ---
 export default function Dashboard() {
   // State
@@ -923,7 +891,7 @@ export default function Dashboard() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             {/* Section 1: Last Cycle */}
             <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
               <span className="text-[10px] text-gray-400 font-semibold uppercase">Last Cycle</span>
@@ -1039,51 +1007,6 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* Section 4: Recent History */}
-            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-              <span className="text-[10px] text-gray-400 font-semibold uppercase">Recent History</span>
-              <div className="mt-2 space-y-1 max-h-[140px] overflow-y-auto">
-                {agentLoop?.recentCycles && agentLoop.recentCycles.length > 0 ? (
-                  [...agentLoop.recentCycles].reverse().slice(0, 8).map((cycle, idx) => (
-                    <div key={idx} className="flex items-center gap-1.5 text-[10px]">
-                      <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                        cycle.phase === 'complete' ? 'bg-green-500' :
-                        cycle.phase === 'error' ? 'bg-red-500' :
-                        'bg-blue-500'
-                      }`} />
-                      <span className="text-gray-500 font-mono">
-                        {new Date(cycle.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                      {cycle.scaling ? (
-                        <div className="flex items-center gap-1 truncate">
-                          {/* vCPU Change */}
-                          <span className="font-bold text-gray-700 shrink-0">
-                            {cycle.scaling.currentVcpu}→{cycle.scaling.targetVcpu}
-                          </span>
-                          {/* CPU Metric */}
-                          <span className="text-gray-600 shrink-0">
-                            {Math.round(cycle.metrics?.cpuUsage || 0)}%
-                          </span>
-                          {/* Action Reason */}
-                          <span className="text-gray-500 truncate text-[9px]">
-                            {compressReason(cycle.scaling.reason)}
-                          </span>
-                        </div>
-                      ) : cycle.error ? (
-                        <span className="text-red-400 truncate text-[9px]">{cycle.error.slice(0, 25)}</span>
-                      ) : (
-                        <span className="text-gray-400">—</span>
-                      )}
-                      {cycle.scaling?.executed && (
-                        <Zap size={10} className="text-amber-500 shrink-0" />
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-gray-400">No cycles yet</p>
-                )}
-              </div>
-            </div>
           </div>
         )}
       </div>
