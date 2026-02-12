@@ -17,7 +17,7 @@ type Scenario = 'stable' | 'rising' | 'spike' | 'falling' | 'live';
 
 const VALID_SCENARIOS: Scenario[] = ['stable', 'rising', 'spike', 'falling', 'live'];
 const LIVE_MIN_DATA_POINTS = 20;
-const SEED_TTL_SECONDS = 40; // Seed data expires after 40 seconds
+const SEED_TTL_SECONDS = 80; // Seed data expires after 80 seconds (covers all demo scenarios)
 
 let seedTimeoutHandle: NodeJS.Timeout | null = null;
 
