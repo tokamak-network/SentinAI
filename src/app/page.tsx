@@ -419,14 +419,16 @@ export default function Dashboard() {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, METRICS_REFRESH_INTERVAL_MS);
+    // Use faster refresh interval when seed scenario is active for better vCPU/MEM visualization
+    const refreshInterval = seedScenario !== 'live' ? 5_000 : METRICS_REFRESH_INTERVAL_MS;
+    const interval = setInterval(fetchData, refreshInterval);
     return () => {
       clearInterval(interval);
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, [stressMode]);
+  }, [stressMode, seedScenario]);
 
   // --- Agent Loop polling (every 5s) ---
   useEffect(() => {

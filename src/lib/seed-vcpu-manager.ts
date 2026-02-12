@@ -58,19 +58,38 @@ export function initVcpuProfile(scenario: Scenario): void {
 
 /**
  * Get current vCPU value for the scenario
- * Advances through the vCPU progression with each call
+ * Uses time-based interpolation for smoother progression
+ * Each data point represents ~5-10 seconds of real time
  */
 export function getCurrentVcpu(): number {
   if (!profile || profile.scenario === 'live' || profile.scenario === null) {
     return 1;
   }
 
-  const vcpu = profile.vcpuValues[profile.currentIndex];
-  const prevIndex = profile.currentIndex;
-  // Advance to next index on next call (cycle through)
-  profile.currentIndex = (profile.currentIndex + 1) % profile.vcpuValues.length;
-  console.log(`[Seed vCPU] ${profile.scenario} scenario: index ${prevIndex} → ${profile.currentIndex}, vCPU = ${vcpu}`);
-  return vcpu;
+  // Calculate elapsed time since profile was initialized
+  const elapsedMs = Date.now() - profile.startTime;
+  const intervalMs = 5_000; // Each vCPU value is for ~5 seconds
+
+  // Calculate which index we should be at based on elapsed time
+  const calculatedIndex = Math.floor(elapsedMs / intervalMs);
+  const newIndex = calculatedIndex % profile.vcpuValues.length;
+
+  // Interpolate between current and next value for smooth progression
+  const nextIndex = (newIndex + 1) % profile.vcpuValues.length;
+  const currentValue = profile.vcpuValues[newIndex];
+  const nextValue = profile.vcpuValues[nextIndex];
+
+  // Blend factor: how far into the interval we are (0-1)
+  const blendFactor = (elapsedMs % intervalMs) / intervalMs;
+  const interpolated = currentValue + (nextValue - currentValue) * blendFactor;
+
+  if (calculatedIndex !== profile.currentIndex) {
+    const prevIndex = profile.currentIndex;
+    profile.currentIndex = newIndex;
+    console.log(`[Seed vCPU] ${profile.scenario} scenario: elapsed ${(elapsedMs / 1000).toFixed(1)}s, index ${prevIndex} → ${newIndex}, vCPU = ${interpolated.toFixed(2)}`);
+  }
+
+  return interpolated;
 }
 
 /**
