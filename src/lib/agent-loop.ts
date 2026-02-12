@@ -387,6 +387,8 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
   running = true;
   const timestamp = new Date().toISOString();
 
+  console.log('[Agent Loop] Starting cycle...');
+
   try {
     // Phase 1: Observe — collect metrics from RPC
     const collected = await collectMetrics();
@@ -438,6 +440,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       failover,
     };
     pushCycleResult(result);
+    console.log(`[Agent Loop] Cycle complete: score=${scaling?.score}, L2=${metricsResult.l2BlockHeight}`);
     return result;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
