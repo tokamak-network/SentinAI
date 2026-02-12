@@ -26,6 +26,27 @@ export interface FailoverEvent {
   simulated: boolean;
 }
 
+/** Proxyd backend health tracking */
+export interface ProxydBackendHealth {
+  name: string;
+  rpcUrl: string;
+  consecutive429: number;
+  healthy: boolean;
+  replaced: boolean;
+  replacedWith?: string;
+  lastChecked?: number;
+}
+
+/** Backend replacement event */
+export interface BackendReplacementEvent {
+  timestamp: string;
+  backendName: string;
+  oldUrl: string;
+  newUrl: string;
+  reason: string;
+  simulated: boolean;
+}
+
 /** L1 failover module state */
 export interface L1FailoverState {
   activeUrl: string;
@@ -34,6 +55,12 @@ export interface L1FailoverState {
   lastFailoverTime: number | null;
   /** Recent failover events (ring buffer) */
   events: FailoverEvent[];
+  /** Proxyd backend health tracking */
+  proxydHealth: ProxydBackendHealth[];
+  /** Backend replacement events */
+  backendReplacements: BackendReplacementEvent[];
+  /** Spare RPC URLs for backend replacement */
+  spareUrls: string[];
 }
 
 /** Proxyd ConfigMap configuration */
@@ -42,13 +69,6 @@ export interface ProxydConfig {
   dataKey: string;
   upstreamGroup: string;
   updateMode: 'replace' | 'append';
-}
-
-/** TOML upstream entry */
-export interface TomlUpstream {
-  name: string;
-  rpc_url: string;
-  ws_url?: string;
 }
 
 /** ConfigMap update result */

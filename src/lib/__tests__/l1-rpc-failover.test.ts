@@ -38,6 +38,9 @@ import {
   resetL1FailoverState,
   maskUrl,
   getL1Components,
+  replaceBackendInToml,
+  checkProxydBackends,
+  probeBackend,
 } from '../l1-rpc-failover';
 
 describe('l1-rpc-failover', () => {
@@ -53,6 +56,11 @@ describe('l1-rpc-failover', () => {
     delete process.env.SCALING_SIMULATION_MODE;
     delete process.env.AWS_CLUSTER_NAME;
     delete process.env.K8S_API_URL;
+    delete process.env.L1_PROXYD_ENABLED;
+    delete process.env.L1_PROXYD_SPARE_URLS;
+    delete process.env.L1_PROXYD_CONFIGMAP_NAME;
+    delete process.env.L1_PROXYD_DATA_KEY;
+    delete process.env.L1_PROXYD_UPSTREAM_GROUP;
     // Default: health check succeeds
     mockGetBlockNumber.mockResolvedValue(BigInt(1000));
   });
@@ -499,130 +507,196 @@ describe('l1-rpc-failover', () => {
   // ----------------------------------------------------------
 
   describe('Proxyd ConfigMap Integration', () => {
-    describe('getL1Components (Proxyd mode)', () => {
-      it('should return Proxyd config when L1_PROXYD_ENABLED=true', () => {
-        process.env.L1_PROXYD_ENABLED = 'true';
+    describe('getL1Components', () => {
+      it('should return StatefulSets only', () => {
         process.env.K8S_STATEFULSET_PREFIX = 'test-stack';
-        resetL1FailoverState();
-
-        const components = getL1Components();
-
-        expect(components).toHaveLength(4); // 1 proxyd + 3 statefulsets
-        expect(components[0].type).toBe('proxyd');
-        expect(components[0].proxydConfig?.configMapName).toBe('proxyd-config');
-        expect(components[0].proxydConfig?.upstreamGroup).toBe('main');
-        expect(components[1].type).toBe('statefulset');
-        expect(components[1].statefulSetName).toBe('test-stack-op-node');
-      });
-
-      it('should use custom Proxyd env vars', () => {
-        process.env.L1_PROXYD_ENABLED = 'true';
-        process.env.L1_PROXYD_CONFIGMAP_NAME = 'custom-cm';
-        process.env.L1_PROXYD_DATA_KEY = 'config.toml';
-        process.env.L1_PROXYD_UPSTREAM_GROUP = 'primary';
-        process.env.L1_PROXYD_UPDATE_MODE = 'append';
-        resetL1FailoverState();
-
-        const components = getL1Components();
-        const proxyd = components[0].proxydConfig!;
-
-        expect(proxyd.configMapName).toBe('custom-cm');
-        expect(proxyd.dataKey).toBe('config.toml');
-        expect(proxyd.upstreamGroup).toBe('primary');
-        expect(proxyd.updateMode).toBe('append');
-      });
-
-      it('should return StatefulSets only when Proxyd disabled', () => {
-        delete process.env.L1_PROXYD_ENABLED;
         resetL1FailoverState();
 
         const components = getL1Components();
 
         expect(components).toHaveLength(3);
         expect(components.every((c) => c.type === 'statefulset')).toBe(true);
+        expect(components[0].statefulSetName).toBe('test-stack-op-node');
       });
     });
 
-    describe('updateK8sL1Rpc (Proxyd mode)', () => {
-      it('should update ConfigMap before StatefulSets', async () => {
-        process.env.L1_PROXYD_ENABLED = 'true';
-        process.env.SCALING_SIMULATION_MODE = 'false';
-        process.env.AWS_CLUSTER_NAME = 'test-cluster';
-        resetL1FailoverState();
+    describe('replaceBackendInToml', () => {
+      const MOCK_TOML = `[backends]
+[backends.infura_theo1]
+rpc_url = "https://old-rpc.io/v3/KEY1"
+ws_url = "wss://old-rpc.io/v3/KEY1"
+max_rps = 1000
 
-        mockRunK8sCommand.mockImplementation(async (cmd: string) => {
-          if (cmd.includes('get configmap')) {
-            return {
-              stdout: '[[upstreams]]\nname = "main"\nrpc_url = "https://old.io"',
-              stderr: ''
-            };
-          }
-          return { stdout: 'patched', stderr: '' };
-        });
+[backends.infura_theo2]
+rpc_url = "https://rpc2.io/v3/KEY2"
 
-        const result = await updateK8sL1Rpc('https://new.io');
+[backend_groups]
+[backend_groups.main]
+backends = ["infura_theo1", "infura_theo2"]
+`;
 
-        expect(result.updated).toContain('configmap/proxyd-config');
-        expect(result.updated.length).toBeGreaterThan(1); // CM + StatefulSets
-        expect(result.configMapResult?.success).toBe(true);
+      it('should replace backend rpc_url and ws_url', () => {
+        const { updatedToml, previousUrl } = replaceBackendInToml(
+          MOCK_TOML,
+          'infura_theo1',
+          'https://new-rpc.io/v3/NEWKEY'
+        );
 
-        // Verify order: ConfigMap patch before StatefulSet set env
-        const calls = mockRunK8sCommand.mock.calls.map((c) => c[0]);
-        const patchIndex = calls.findIndex((c) => c.includes('patch configmap'));
-        const setEnvIndex = calls.findIndex((c) => c.includes('set env'));
-        expect(patchIndex).toBeLessThan(setEnvIndex);
+        expect(previousUrl).toBe('https://old-rpc.io/v3/KEY1');
+        expect(updatedToml).toContain('https://new-rpc.io/v3/NEWKEY');
+        expect(updatedToml).toContain('wss://new-rpc.io/v3/NEWKEY');
+        expect(updatedToml).not.toContain('https://old-rpc.io/v3/KEY1');
+        // Other backend unchanged
+        expect(updatedToml).toContain('https://rpc2.io/v3/KEY2');
       });
 
-      it('should continue to StatefulSets even if ConfigMap fails', async () => {
-        process.env.L1_PROXYD_ENABLED = 'true';
-        process.env.SCALING_SIMULATION_MODE = 'false';
-        process.env.AWS_CLUSTER_NAME = 'test-cluster';
-        resetL1FailoverState();
-
-        mockRunK8sCommand
-          .mockRejectedValueOnce(new Error('ConfigMap not found')) // get configmap fails
-          .mockResolvedValue({ stdout: 'ok', stderr: '' }); // StatefulSets succeed
-
-        const result = await updateK8sL1Rpc('https://new.io');
-
-        expect(result.errors).toHaveLength(1);
-        expect(result.errors[0]).toContain('ConfigMap not found');
-        expect(result.updated.length).toBeGreaterThan(0); // StatefulSets still updated
+      it('should throw for missing backend', () => {
+        expect(() => replaceBackendInToml(MOCK_TOML, 'nonexistent', 'https://x.io')).toThrow(
+          'Backend "nonexistent" not found'
+        );
       });
 
-      it('should track ConfigMap result in K8sUpdateResult', async () => {
-        process.env.L1_PROXYD_ENABLED = 'true';
-        process.env.SCALING_SIMULATION_MODE = 'false';
-        process.env.AWS_CLUSTER_NAME = 'test-cluster';
+      it('should throw for missing [backends] section', () => {
+        expect(() => replaceBackendInToml('[server]\nhost = "0.0.0.0"', 'x', 'https://x.io')).toThrow(
+          'TOML missing [backends] section'
+        );
+      });
+    });
+
+    describe('checkProxydBackends', () => {
+      const MOCK_PROXYD_TOML = `[backends]
+[backends.backend1]
+rpc_url = "https://rpc1.io"
+[backends.backend2]
+rpc_url = "https://rpc2.io"
+
+[backend_groups]
+[backend_groups.main]
+backends = ["backend1", "backend2"]
+`;
+
+      it('should skip when L1_PROXYD_ENABLED is not true', async () => {
+        delete process.env.L1_PROXYD_ENABLED;
         resetL1FailoverState();
 
-        mockRunK8sCommand.mockImplementation(async (cmd: string) => {
-          if (cmd.includes('get configmap')) {
-            return {
-              stdout: '[[upstreams]]\nname = "main"\nrpc_url = "https://old-rpc.io"',
-              stderr: ''
-            };
-          }
-          return { stdout: 'ok', stderr: '' };
-        });
-
-        const result = await updateK8sL1Rpc('https://new-rpc.io');
-
-        expect(result.configMapResult).toBeDefined();
-        expect(result.configMapResult?.success).toBe(true);
-        expect(result.configMapResult?.previousUrl).toBe('https://old-rpc.io');
-        expect(result.configMapResult?.newUrl).toBe('https://new-rpc.io');
+        const result = await checkProxydBackends();
+        expect(result).toBeNull();
       });
 
-      it('should handle ConfigMap update in simulation mode', async () => {
+      it('should track 429 counts per backend', async () => {
         process.env.L1_PROXYD_ENABLED = 'true';
+        process.env.L1_PROXYD_SPARE_URLS = 'https://spare1.io';
+        resetL1FailoverState();
+
+        mockRunK8sCommand.mockResolvedValue({ stdout: MOCK_PROXYD_TOML, stderr: '' });
+
+        // Mock fetch to return 429 for backend1
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+          new Response('Too Many Requests', { status: 429 })
+        );
+
+        // Run 9 times — should not trigger replacement yet
+        for (let i = 0; i < 9; i++) {
+          await checkProxydBackends();
+        }
+
+        const state = getL1FailoverState();
+        const health = state.proxydHealth.find((h) => h.name === 'backend1');
+        expect(health?.consecutive429).toBe(9);
+        expect(health?.replaced).toBe(false);
+
+        fetchSpy.mockRestore();
+      });
+
+      it('should replace backend after 10 consecutive 429 errors (simulation)', async () => {
+        process.env.L1_PROXYD_ENABLED = 'true';
+        process.env.L1_PROXYD_SPARE_URLS = 'https://spare1.io';
         process.env.SCALING_SIMULATION_MODE = 'true';
         resetL1FailoverState();
 
-        const result = await updateK8sL1Rpc('https://new.io');
+        mockRunK8sCommand.mockResolvedValue({ stdout: MOCK_PROXYD_TOML, stderr: '' });
 
-        expect(result.updated).toHaveLength(0); // Simulation: no actual updates
-        expect(mockRunK8sCommand).not.toHaveBeenCalled();
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+          new Response('Too Many Requests', { status: 429 })
+        );
+
+        let replacement = null;
+        for (let i = 0; i < 10; i++) {
+          replacement = await checkProxydBackends();
+        }
+
+        expect(replacement).not.toBeNull();
+        expect(replacement!.backendName).toBe('backend1');
+        expect(replacement!.simulated).toBe(true);
+
+        const state = getL1FailoverState();
+        expect(state.backendReplacements).toHaveLength(1);
+        expect(state.spareUrls).toHaveLength(0); // consumed
+
+        fetchSpy.mockRestore();
+      });
+
+      it('should return null when no spare URLs available', async () => {
+        process.env.L1_PROXYD_ENABLED = 'true';
+        // No spare URLs set
+        delete process.env.L1_PROXYD_SPARE_URLS;
+        resetL1FailoverState();
+
+        mockRunK8sCommand.mockResolvedValue({ stdout: MOCK_PROXYD_TOML, stderr: '' });
+
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+          new Response('Too Many Requests', { status: 429 })
+        );
+
+        let replacement = null;
+        for (let i = 0; i < 10; i++) {
+          replacement = await checkProxydBackends();
+        }
+
+        expect(replacement).toBeNull();
+
+        fetchSpy.mockRestore();
+      });
+
+      it('should reset 429 counter on successful probe', async () => {
+        process.env.L1_PROXYD_ENABLED = 'true';
+        process.env.L1_PROXYD_SPARE_URLS = 'https://spare1.io';
+        resetL1FailoverState();
+
+        mockRunK8sCommand.mockResolvedValue({ stdout: MOCK_PROXYD_TOML, stderr: '' });
+
+        const fetchSpy = vi.spyOn(globalThis, 'fetch');
+
+        // 5 x 429
+        fetchSpy.mockResolvedValue(new Response('Too Many Requests', { status: 429 }));
+        for (let i = 0; i < 5; i++) {
+          await checkProxydBackends();
+        }
+
+        // 1 x success
+        fetchSpy.mockResolvedValue(new Response(JSON.stringify({ result: '0x1' }), { status: 200 }));
+        await checkProxydBackends();
+
+        const state = getL1FailoverState();
+        const health = state.proxydHealth.find((h) => h.name === 'backend1');
+        expect(health?.consecutive429).toBe(0);
+        expect(health?.healthy).toBe(true);
+
+        fetchSpy.mockRestore();
+      });
+    });
+
+    describe('spare URL initialization', () => {
+      it('should parse L1_PROXYD_SPARE_URLS into state', () => {
+        process.env.L1_PROXYD_SPARE_URLS = 'https://spare1.io,https://spare2.io,https://spare3.io';
+        resetL1FailoverState();
+
+        const state = getL1FailoverState();
+        expect(state.spareUrls).toEqual([
+          'https://spare1.io',
+          'https://spare2.io',
+          'https://spare3.io',
+        ]);
       });
     });
   });

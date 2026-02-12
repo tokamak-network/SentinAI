@@ -2,6 +2,7 @@
  * L1 RPC Auto-Failover Module
  * Manages multiple L1 RPC endpoints with automatic failover.
  * Detects failures, switches to healthy backup, and updates K8s components.
+ * Monitors Proxyd backends for 429 errors and auto-replaces with spare URLs.
  */
 
 import { createPublicClient, http } from 'viem';
@@ -14,9 +15,9 @@ import type {
   L1FailoverState,
   L1ComponentConfig,
   K8sUpdateResult,
-  ProxydConfig,
-  TomlUpstream,
   ConfigMapUpdateResult,
+  BackendReplacementEvent,
+  ProxydBackendHealth,
 } from '@/types/l1-failover';
 
 // ============================================================
@@ -38,6 +39,9 @@ const HEALTH_CHECK_TIMEOUT_MS = 10_000;
 /** Max failover events to keep */
 const MAX_FAILOVER_EVENTS = 20;
 
+/** Max backend replacement events to keep */
+const MAX_REPLACEMENT_EVENTS = 20;
+
 /** Default public fallback endpoint */
 const DEFAULT_PUBLIC_ENDPOINT = 'https://ethereum-sepolia-rpc.publicnode.com';
 
@@ -54,73 +58,42 @@ function getStatefulSetPrefix(): string {
 // ============================================================
 
 /**
- * Parse TOML content and update upstream URL + backends
- * Proxyd uses upstreams (named RPC endpoints) and backends (references to upstreams)
- * Both must be updated for the change to take effect.
+ * Replace a specific backend's URL in Proxyd TOML config.
+ * Works with actual Proxyd structure: [backends.NAME] nested tables.
  */
-function updateTomlUpstream(
+export function replaceBackendInToml(
   tomlContent: string,
-  upstreamGroup: string,
-  newUrl: string,
-  mode: 'replace' | 'append' = 'replace'
-): { updatedToml: string; previousUrl: string | null } {
-  let parsedToml: any;
+  backendName: string,
+  newRpcUrl: string
+): { updatedToml: string; previousUrl: string } {
+  let parsed: Record<string, unknown>;
 
   try {
-    parsedToml = TOML.parse(tomlContent);
+    parsed = TOML.parse(tomlContent) as Record<string, unknown>;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     throw new Error(`TOML parse failed: ${message}`);
   }
 
-  if (!parsedToml.upstreams || !Array.isArray(parsedToml.upstreams)) {
-    throw new Error('TOML missing [[upstreams]] section');
+  const backends = parsed.backends as Record<string, Record<string, unknown>> | undefined;
+  if (!backends || typeof backends !== 'object') {
+    throw new Error('TOML missing [backends] section');
   }
 
-  const upstreams = parsedToml.upstreams as TomlUpstream[];
-  const targetIndex = upstreams.findIndex((u) => u.name === upstreamGroup);
-
-  if (targetIndex === -1) {
-    throw new Error(`Upstream group "${upstreamGroup}" not found in TOML`);
+  const backend = backends[backendName];
+  if (!backend) {
+    throw new Error(`Backend "${backendName}" not found in TOML [backends]`);
   }
 
-  const previousUrl = upstreams[targetIndex].rpc_url;
+  const previousUrl = backend.rpc_url as string;
+  backend.rpc_url = newRpcUrl;
 
-  if (mode === 'replace') {
-    // Simple replace: Update the existing upstream URL + WS URL
-    upstreams[targetIndex].rpc_url = newUrl;
-    if (upstreams[targetIndex].ws_url) {
-      // Update WS URL similarly (convert https to wss)
-      upstreams[targetIndex].ws_url = newUrl.replace(/^https?:/, 'wss:').replace(/^http:/, 'ws:');
-    }
-  } else {
-    // Append mode: Add new upstream, rename old to fallback
-    const timestamp = Date.now();
-    upstreams[targetIndex].name = `${upstreamGroup}-backup-${timestamp}`;
-    upstreams.splice(targetIndex, 0, {
-      name: upstreamGroup,
-      rpc_url: newUrl,
-      ws_url: newUrl.replace(/^https?:/, 'wss:').replace(/^http:/, 'ws:'),
-    });
+  // Update ws_url if present (https→wss, http→ws)
+  if (backend.ws_url) {
+    backend.ws_url = newRpcUrl.replace(/^https:/, 'wss:').replace(/^http:/, 'ws:');
   }
 
-  parsedToml.upstreams = upstreams;
-
-  // Also update backends if they reference this upstream by name
-  // backends.[backend_name].rpc_url and ws_url should match upstream names
-  if (parsedToml.backends && Array.isArray(parsedToml.backends)) {
-    for (const backend of parsedToml.backends) {
-      if (backend.rpc_url === upstreamGroup || backend.rpc_url === (upstreams[targetIndex].name)) {
-        backend.rpc_url = upstreamGroup;
-      }
-      if (backend.ws_url === upstreamGroup || backend.ws_url === (upstreams[targetIndex].name)) {
-        backend.ws_url = upstreamGroup;
-      }
-    }
-  }
-
-  // Serialize back to TOML
-  const updatedToml = TOML.stringify(parsedToml);
+  const updatedToml = TOML.stringify(parsed as TOML.JsonMap);
   return { updatedToml, previousUrl };
 }
 
@@ -177,28 +150,22 @@ async function restartProxydPod(namespace: string): Promise<boolean> {
 }
 
 /**
- * Update Proxyd ConfigMap with new L1 RPC URL
- * IMPORTANT: Proxyd pod must restart to pick up ConfigMap changes
+ * Apply a backend URL replacement to Proxyd ConfigMap and restart pod.
  */
-async function updateProxydConfigMap(
-  configMapName: string,
-  dataKey: string,
-  upstreamGroup: string,
-  newUrl: string,
-  namespace: string,
-  mode: 'replace' | 'append' = 'replace'
+async function applyBackendReplacement(
+  backendName: string,
+  newUrl: string
 ): Promise<ConfigMapUpdateResult> {
+  const configMapName = process.env.L1_PROXYD_CONFIGMAP_NAME || 'proxyd-config';
+  const dataKey = process.env.L1_PROXYD_DATA_KEY || 'proxyd-config.toml';
+  const namespace = getNamespace();
+
   try {
     // 1. Read current TOML
     const currentToml = await getConfigMapToml(configMapName, dataKey, namespace);
 
-    // 2. Parse and update upstreams + backends
-    const { updatedToml, previousUrl } = updateTomlUpstream(
-      currentToml,
-      upstreamGroup,
-      newUrl,
-      mode
-    );
+    // 2. Replace backend URL
+    const { updatedToml, previousUrl } = replaceBackendInToml(currentToml, backendName, newUrl);
 
     // 3. Apply via kubectl patch (JSON patch)
     const patchJson = JSON.stringify([
@@ -213,21 +180,21 @@ async function updateProxydConfigMap(
     await runK8sCommand(cmd, { timeout: 15000 });
 
     console.log(
-      `[L1 Failover] Updated Proxyd ConfigMap ${configMapName}/${dataKey}: ${maskUrl(previousUrl || '')} → ${maskUrl(newUrl)}`
+      `[L1 Failover] Updated Proxyd backend ${backendName}: ${maskUrl(previousUrl)} → ${maskUrl(newUrl)}`
     );
 
     // 4. Restart Proxyd pod to apply ConfigMap changes
-    const podRestartSuccess = await restartProxydPod(namespace);
+    await restartProxydPod(namespace);
 
     return {
       success: true,
       configMapName,
-      previousUrl: previousUrl || undefined,
+      previousUrl,
       newUrl,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[L1 Failover] Failed to update Proxyd ConfigMap: ${errorMessage}`);
+    console.error(`[L1 Failover] Failed to replace backend ${backendName}: ${errorMessage}`);
     return {
       success: false,
       configMapName,
@@ -238,35 +205,14 @@ async function updateProxydConfigMap(
 
 /** Components that need L1 RPC env var updates */
 export function getL1Components(): L1ComponentConfig[] {
-  const proxydEnabled = process.env.L1_PROXYD_ENABLED === 'true';
   const prefix = getStatefulSetPrefix();
 
-  if (proxydEnabled) {
-    // Proxyd mode: ConfigMap first, then StatefulSets
-    return [
-      // Priority 1: Proxyd ConfigMap
-      {
-        type: 'proxyd',
-        proxydConfig: {
-          configMapName: process.env.L1_PROXYD_CONFIGMAP_NAME || 'proxyd-config',
-          dataKey: process.env.L1_PROXYD_DATA_KEY || 'proxyd.toml',
-          upstreamGroup: process.env.L1_PROXYD_UPSTREAM_GROUP || 'main',
-          updateMode: (process.env.L1_PROXYD_UPDATE_MODE as 'replace' | 'append') || 'replace',
-        },
-      },
-      // Priority 2-4: StatefulSets
-      { type: 'statefulset', statefulSetName: `${prefix}-op-node`, envVarName: 'OP_NODE_L1_ETH_RPC' },
-      { type: 'statefulset', statefulSetName: `${prefix}-op-batcher`, envVarName: 'OP_BATCHER_L1_ETH_RPC' },
-      { type: 'statefulset', statefulSetName: `${prefix}-op-proposer`, envVarName: 'OP_PROPOSER_L1_ETH_RPC' },
-    ];
-  } else {
-    // Legacy mode: StatefulSets only
-    return [
-      { type: 'statefulset', statefulSetName: `${prefix}-op-node`, envVarName: 'OP_NODE_L1_ETH_RPC' },
-      { type: 'statefulset', statefulSetName: `${prefix}-op-batcher`, envVarName: 'OP_BATCHER_L1_ETH_RPC' },
-      { type: 'statefulset', statefulSetName: `${prefix}-op-proposer`, envVarName: 'OP_PROPOSER_L1_ETH_RPC' },
-    ];
-  }
+  // StatefulSets only — Proxyd backend replacement is handled separately by checkProxydBackends()
+  return [
+    { type: 'statefulset', statefulSetName: `${prefix}-op-node`, envVarName: 'OP_NODE_L1_ETH_RPC' },
+    { type: 'statefulset', statefulSetName: `${prefix}-op-batcher`, envVarName: 'OP_BATCHER_L1_ETH_RPC' },
+    { type: 'statefulset', statefulSetName: `${prefix}-op-proposer`, envVarName: 'OP_PROPOSER_L1_ETH_RPC' },
+  ];
 }
 
 // ============================================================
@@ -310,12 +256,27 @@ function initFromEnv(): L1FailoverState {
     consecutiveFailures: 0,
   }));
 
+  // Parse spare URLs for Proxyd backend replacement
+  const spareUrls: string[] = [];
+  const spareUrlsList = process.env.L1_PROXYD_SPARE_URLS;
+  if (spareUrlsList) {
+    spareUrls.push(
+      ...spareUrlsList
+        .split(',')
+        .map((u) => u.trim())
+        .filter((u) => u.length > 0)
+    );
+  }
+
   return {
     activeUrl: endpoints[0].url,
     activeIndex: 0,
     endpoints,
     lastFailoverTime: null,
     events: [],
+    proxydHealth: [],
+    backendReplacements: [],
+    spareUrls,
   };
 }
 
@@ -506,8 +467,7 @@ export async function executeFailover(
 }
 
 /**
- * Update K8s components with new L1 RPC URL.
- * Supports both legacy (StatefulSet-only) and Proxyd (ConfigMap + StatefulSet) modes.
+ * Update K8s StatefulSet components with new L1 RPC URL.
  */
 export async function updateK8sL1Rpc(
   newUrl: string
@@ -534,30 +494,7 @@ export async function updateK8sL1Rpc(
 
   for (const comp of components) {
     try {
-      if (comp.type === 'proxyd' && comp.proxydConfig) {
-        // Update Proxyd ConfigMap
-        const cmResult = await updateProxydConfigMap(
-          comp.proxydConfig.configMapName,
-          comp.proxydConfig.dataKey,
-          comp.proxydConfig.upstreamGroup,
-          newUrl,
-          namespace,
-          comp.proxydConfig.updateMode
-        );
-
-        result.configMapResult = cmResult;
-
-        if (cmResult.success) {
-          result.updated.push(`configmap/${comp.proxydConfig.configMapName}`);
-        } else {
-          // Log error but CONTINUE to StatefulSets
-          result.errors.push(`configmap/${comp.proxydConfig.configMapName}: ${cmResult.error}`);
-          console.warn(
-            `[L1 Failover] Proxyd ConfigMap update failed, continuing with StatefulSets: ${cmResult.error}`
-          );
-        }
-      } else if (comp.type === 'statefulset' && comp.statefulSetName && comp.envVarName) {
-        // Update StatefulSet env var (legacy method)
+      if (comp.type === 'statefulset' && comp.statefulSetName && comp.envVarName) {
         const cmd = `set env statefulset/${comp.statefulSetName} -n ${namespace} ${comp.envVarName}=${newUrl}`;
         await runK8sCommand(cmd, { timeout: 15000 });
         result.updated.push(comp.statefulSetName);
@@ -567,18 +504,172 @@ export async function updateK8sL1Rpc(
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      const identifier = comp.type === 'proxyd'
-        ? `configmap/${comp.proxydConfig?.configMapName}`
-        : comp.statefulSetName;
-      result.errors.push(`${identifier}: ${msg}`);
+      result.errors.push(`${comp.statefulSetName}: ${msg}`);
       console.error(
-        `[L1 Failover] Failed to update ${identifier}: ${msg}`
+        `[L1 Failover] Failed to update ${comp.statefulSetName}: ${msg}`
       );
     }
   }
 
   return result;
 }
+
+// ============================================================
+// Proxyd Backend Health Monitoring
+// ============================================================
+
+/**
+ * Probe a single RPC endpoint with raw fetch to get HTTP status code.
+ * Returns { ok, status } where status is the HTTP status code (429 for quota).
+ */
+export async function probeBackend(url: string): Promise<{ ok: boolean; status?: number }> {
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 }),
+      signal: AbortSignal.timeout(HEALTH_CHECK_TIMEOUT_MS),
+    });
+    return { ok: res.ok, status: res.status };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/**
+ * Check all Proxyd backends in the target group for 429 errors.
+ * When a backend accumulates 10+ consecutive 429 responses, replace its URL
+ * with the next spare URL from L1_PROXYD_SPARE_URLS.
+ *
+ * Called from agent-loop every cycle (30s).
+ */
+export async function checkProxydBackends(): Promise<BackendReplacementEvent | null> {
+  if (process.env.L1_PROXYD_ENABLED !== 'true') return null;
+
+  const state = getState();
+  const configMapName = process.env.L1_PROXYD_CONFIGMAP_NAME || 'proxyd-config';
+  const dataKey = process.env.L1_PROXYD_DATA_KEY || 'proxyd-config.toml';
+  const targetGroup = process.env.L1_PROXYD_UPSTREAM_GROUP || 'main';
+  const namespace = getNamespace();
+
+  // 1. Read ConfigMap TOML
+  let tomlContent: string;
+  try {
+    tomlContent = await getConfigMapToml(configMapName, dataKey, namespace);
+  } catch (error) {
+    console.warn(`[L1 Failover] Cannot read Proxyd ConfigMap: ${error instanceof Error ? error.message : error}`);
+    return null;
+  }
+
+  // 2. Parse backends and backend_groups
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = TOML.parse(tomlContent) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  const backends = parsed.backends as Record<string, Record<string, unknown>> | undefined;
+  const backendGroups = parsed.backend_groups as Record<string, Record<string, unknown>> | undefined;
+  if (!backends || !backendGroups) return null;
+
+  const group = backendGroups[targetGroup] as { backends?: string[] } | undefined;
+  if (!group?.backends || !Array.isArray(group.backends)) return null;
+
+  // 3. Probe each backend in the target group
+  for (const backendName of group.backends) {
+    const backend = backends[backendName];
+    if (!backend?.rpc_url) continue;
+
+    const rpcUrl = backend.rpc_url as string;
+
+    // Find or create health tracking entry
+    let health = state.proxydHealth.find((h) => h.name === backendName);
+    if (!health) {
+      health = {
+        name: backendName,
+        rpcUrl,
+        consecutive429: 0,
+        healthy: true,
+        replaced: false,
+      };
+      state.proxydHealth.push(health);
+    }
+
+    // Skip already-replaced backends
+    if (health.replaced) continue;
+
+    // Sync URL (may have changed externally)
+    health.rpcUrl = rpcUrl;
+
+    const probe = await probeBackend(rpcUrl);
+    health.lastChecked = Date.now();
+
+    if (probe.status === 429) {
+      health.consecutive429++;
+      health.healthy = false;
+      console.warn(
+        `[L1 Failover] Backend ${backendName} returned 429 (${health.consecutive429}/${MAX_CONSECUTIVE_FAILURES_429})`
+      );
+
+      if (health.consecutive429 >= MAX_CONSECUTIVE_FAILURES_429) {
+        // Threshold reached — replace with spare URL
+        if (state.spareUrls.length === 0) {
+          console.error(
+            `[L1 Failover] Backend ${backendName} needs replacement but no spare URLs available (L1_PROXYD_SPARE_URLS)`
+          );
+          return null;
+        }
+
+        const spareUrl = state.spareUrls.shift()!;
+
+        if (isSimulationMode()) {
+          console.log(
+            `[L1 Failover] [SIMULATION] Would replace backend ${backendName}: ${maskUrl(rpcUrl)} → ${maskUrl(spareUrl)}`
+          );
+        } else {
+          const result = await applyBackendReplacement(backendName, spareUrl);
+          if (!result.success) {
+            // Put spare URL back on failure
+            state.spareUrls.unshift(spareUrl);
+            return null;
+          }
+        }
+
+        health.replaced = true;
+        health.replacedWith = spareUrl;
+        health.consecutive429 = 0;
+
+        const event: BackendReplacementEvent = {
+          timestamp: new Date().toISOString(),
+          backendName,
+          oldUrl: maskUrl(rpcUrl),
+          newUrl: maskUrl(spareUrl),
+          reason: `${MAX_CONSECUTIVE_FAILURES_429} consecutive 429 errors (quota exhausted)`,
+          simulated: isSimulationMode(),
+        };
+
+        state.backendReplacements.push(event);
+        if (state.backendReplacements.length > MAX_REPLACEMENT_EVENTS) {
+          state.backendReplacements.shift();
+        }
+
+        return event;
+      }
+    } else if (probe.ok) {
+      // Reset 429 counter on success
+      health.consecutive429 = 0;
+      health.healthy = true;
+    }
+    // Non-429 errors (timeout, connection refused) don't increment 429 counter
+  }
+
+  return null;
+}
+
+// ============================================================
+// State Accessors
+// ============================================================
 
 /**
  * Get current failover state (for API/dashboard).

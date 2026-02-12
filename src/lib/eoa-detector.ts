@@ -9,7 +9,8 @@
  * No L1 RPC calls required (rate limit friendly).
  */
 
-import { getAddress, isAddress, privateKeyToAccount } from 'viem';
+import { getAddress, isAddress } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
 import type { EOARole } from '@/types/eoa-balance';
 
 // ============================================================

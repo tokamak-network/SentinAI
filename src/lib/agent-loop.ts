@@ -10,7 +10,7 @@ import { pushMetric, getRecentMetrics } from '@/lib/metrics-store';
 import { getStore } from '@/lib/redis-store';
 import { recordUsage } from '@/lib/usage-tracker';
 import { runDetectionPipeline, type DetectionResult } from '@/lib/detection-pipeline';
-import { getActiveL1RpcUrl, reportL1Success, reportL1Failure } from '@/lib/l1-rpc-failover';
+import { getActiveL1RpcUrl, reportL1Success, reportL1Failure, checkProxydBackends } from '@/lib/l1-rpc-failover';
 import {
   makeScalingDecision,
   mapAIResultToSeverity,
@@ -412,6 +412,16 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       batcherBalanceEth,
       proposerBalanceEth,
     };
+
+    // Phase 1.5: Proxyd backend health check (non-blocking)
+    try {
+      const replacement = await checkProxydBackends();
+      if (replacement) {
+        console.log(`[AgentLoop] Proxyd backend replaced: ${replacement.backendName} → ${replacement.newUrl}`);
+      }
+    } catch {
+      // Non-blocking — continue cycle
+    }
 
     // Phase 2: Detect — run anomaly detection pipeline
     const detection = await runDetectionPipeline(dataPoint);

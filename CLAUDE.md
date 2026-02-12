@@ -226,6 +226,7 @@ cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 | `L1_PROXYD_DATA_KEY` | `proxyd.toml` | Data key in ConfigMap holding TOML config |
 | `L1_PROXYD_UPSTREAM_GROUP` | `main` | Upstream group name to update in TOML |
 | `L1_PROXYD_UPDATE_MODE` | `replace` | Update strategy: `replace` (update URL) or `append` (add new upstream) |
+| `L1_PROXYD_SPARE_URLS` | — | Comma-separated spare RPC URLs for 429 backend auto-replacement |
 | `K8S_STATEFULSET_PREFIX` | `sepolia-thanos-stack` | StatefulSet name prefix for L1 failover kubectl updates (for L2 nodes) |
 
 Full env guide: `ENV_GUIDE.md`
