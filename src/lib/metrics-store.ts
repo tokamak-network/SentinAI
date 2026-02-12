@@ -22,12 +22,23 @@ export async function pushMetric(dataPoint: MetricDataPoint): Promise<void> {
 
 /**
  * Get recent data points from the store
+ * Automatically filters out expired seed data based on TTL
  *
  * @param count - Number of recent points to retrieve (default: all)
  * @returns Array of data points, newest last
  */
 export async function getRecentMetrics(count?: number): Promise<MetricDataPoint[]> {
-  return getStore().getRecentMetrics(count);
+  const metrics = await getStore().getRecentMetrics(count);
+
+  // Filter out expired seed data based on seedTtlExpiry
+  const now = new Date().toISOString();
+  return metrics.filter(metric => {
+    if (!metric.seedTtlExpiry) {
+      return true; // Keep non-seed metrics
+    }
+    // Keep seed metric if TTL hasn't expired
+    return metric.seedTtlExpiry >= now;
+  });
 }
 
 /**

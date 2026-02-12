@@ -17,6 +17,9 @@ type Scenario = 'stable' | 'rising' | 'spike' | 'falling' | 'live';
 
 const VALID_SCENARIOS: Scenario[] = ['stable', 'rising', 'spike', 'falling', 'live'];
 const LIVE_MIN_DATA_POINTS = 20;
+const SEED_TTL_SECONDS = 40; // Seed data expires after 40 seconds
+
+let seedTimeoutHandle: NodeJS.Timeout | null = null;
 
 /**
  * Linear interpolation between two values
@@ -33,12 +36,15 @@ function jitter(value: number, range: number): number {
 }
 
 /**
- * Generate scenario-specific data points
+ * Generate scenario-specific data points with TTL metadata
  */
 function generateScenarioData(scenario: Scenario): MetricDataPoint[] {
   const points: MetricDataPoint[] = [];
   const count = 20;
   const now = Date.now();
+
+  // Calculate TTL expiry: now + 40 seconds
+  const ttlExpiry = new Date(now + SEED_TTL_SECONDS * 1000).toISOString();
 
   // Get vCPU progression for this scenario
   const vcpuProgression = getVcpuValuesForScenario(scenario);
@@ -113,6 +119,7 @@ function generateScenarioData(scenario: Scenario): MetricDataPoint[] {
       blockHeight: 12_500_000 + i * 30,
       blockInterval: Number(blockInterval.toFixed(2)),
       currentVcpu: Number(currentVcpu.toFixed(2)),
+      seedTtlExpiry: ttlExpiry, // Add TTL metadata
     });
   }
 
@@ -199,10 +206,31 @@ export async function POST(request: NextRequest) {
   console.log(`[Seed API] Injected ${dataPoints.length} data points for scenario: ${scenario}`);
   console.log(`[Seed API] Seed scenario persisted to state store`);
 
+  // Schedule automatic cleanup after TTL expires
+  if (seedTimeoutHandle) {
+    clearTimeout(seedTimeoutHandle);
+  }
+
+  seedTimeoutHandle = setTimeout(async () => {
+    try {
+      await clearMetrics();
+      await resetPredictionState();
+      await getStore().setSeedScenario(null);
+      clearVcpuProfile();
+      console.log(`[Seed API] TTL expired (${SEED_TTL_SECONDS}s): Cleared seed data, switched to live metrics`);
+    } catch (error) {
+      console.error('[Seed API] Error clearing seed data on TTL:', error);
+    }
+  }, SEED_TTL_SECONDS * 1000);
+
+  console.log(`[Seed API] Scheduled automatic cleanup in ${SEED_TTL_SECONDS}s`);
+
   return NextResponse.json({
     success: true,
     scenario,
     injectedCount: dataPoints.length,
+    ttlSeconds: SEED_TTL_SECONDS,
+    ttlExpiry: new Date(Date.now() + SEED_TTL_SECONDS * 1000).toISOString(),
     timeRange: {
       from: dataPoints[0].timestamp,
       to: dataPoints[dataPoints.length - 1].timestamp,

@@ -30,6 +30,9 @@ export interface MetricDataPoint {
 
   /** Current vCPU allocation */
   currentVcpu: number;
+
+  /** Optional: seed data TTL expiry timestamp (ISO 8601) */
+  seedTtlExpiry?: string;
 }
 
 /**

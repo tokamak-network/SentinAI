@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import {
-  Activity, Server, Zap, Cpu, ArrowUpRight,
+  Activity, Server, Zap, ArrowUpRight,
   CheckCircle2, Shield, Database,
   ChevronDown,
   Send, Bot, User, RefreshCw, Pause
@@ -775,62 +775,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Card 2: System Health */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
-          <div className="flex items-center gap-2 mb-4">
-            <h3 className="font-bold text-gray-900">System Health</h3>
-            <span className="w-2 h-2 bg-green-500 rounded-full"></span>
-          </div>
-          <div className="space-y-3">
-            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] text-gray-400 font-semibold uppercase">vCPU</span>
-                <Cpu size={12} className="text-gray-300" />
-              </div>
-              <p className="text-xl font-bold text-gray-900">{current?.metrics.gethVcpu || '1'}<span className="text-xs text-gray-400 font-normal ml-1">/ 8</span></p>
-              <div className="flex items-center gap-2 mt-2">
-                <div className="flex-1 h-2.5 bg-gray-200 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all duration-500 ${
-                    ((current?.metrics.gethVcpu || 1) / 8) * 100 > 75 ? 'bg-red-500' : ((current?.metrics.gethVcpu || 1) / 8) * 100 > 50 ? 'bg-amber-500' : 'bg-blue-500'
-                  }`} style={{ width: `${((current?.metrics.gethVcpu || 1) / 8) * 100}%` }}></div>
-                </div>
-                <span className="text-[10px] text-gray-400 font-mono w-8 text-right">{(((current?.metrics.gethVcpu || 1) / 8) * 100).toFixed(0)}%</span>
-              </div>
-            </div>
-            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] text-gray-400 font-semibold uppercase">Memory</span>
-                <Server size={12} className="text-gray-300" />
-              </div>
-              <p className="text-xl font-bold text-gray-900">{current?.metrics.gethMemGiB || '2'}<span className="text-xs text-gray-400 font-normal ml-1">GB</span></p>
-              <div className="flex items-center gap-2 mt-2">
-                <div className="flex-1 h-2.5 bg-gray-200 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all duration-500 ${
-                    ((current?.metrics.gethMemGiB || 2) / 16) * 100 > 75 ? 'bg-red-500' : ((current?.metrics.gethMemGiB || 2) / 16) * 100 > 50 ? 'bg-amber-500' : 'bg-blue-500'
-                  }`} style={{ width: `${((current?.metrics.gethMemGiB || 2) / 16) * 100}%` }}></div>
-                </div>
-                <span className="text-[10px] text-gray-400 font-mono w-8 text-right">{(((current?.metrics.gethMemGiB || 2) / 16) * 100).toFixed(0)}%</span>
-              </div>
-            </div>
-            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-              <div className="flex justify-between items-center mb-1">
-                <span className="text-[10px] text-gray-400 font-semibold uppercase">CPU Load</span>
-                <Activity size={12} className="text-gray-300" />
-              </div>
-              <p className="text-xl font-bold text-gray-900">{current?.metrics.cpuUsage?.toFixed(0) || '0'}<span className="text-xs text-gray-400 font-normal ml-1">%</span></p>
-              <div className="flex items-center gap-2 mt-2">
-                <div className="flex-1 h-2.5 bg-gray-200 rounded-full overflow-hidden">
-                  <div className={`h-full rounded-full transition-all duration-500 ${
-                    Math.min(current?.metrics.cpuUsage || 0, 100) > 75 ? 'bg-red-500' : Math.min(current?.metrics.cpuUsage || 0, 100) > 50 ? 'bg-amber-500' : 'bg-blue-500'
-                  }`} style={{ width: `${Math.min(current?.metrics.cpuUsage || 0, 100)}%` }}></div>
-                </div>
-                <span className="text-[10px] text-gray-400 font-mono w-8 text-right">{Math.min(current?.metrics.cpuUsage || 0, 100).toFixed(0)}%</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 3: Monthly Cost */}
+        {/* Card 2: Monthly Cost */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
           <div data-testid="monthly-cost">
             <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Monthly Cost</span>
