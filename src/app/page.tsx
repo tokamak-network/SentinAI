@@ -635,22 +635,20 @@ export default function Dashboard() {
             </span>
           </div>
 
-          {/* Stress Mode Toggle */}
+          {/* Stress Mode Toggle - Disabled */}
           <div className="mb-3">
             <button
+              disabled
               onClick={() => {
                 if (!stressMode) {
                   preStressVcpuRef.current = current?.metrics.gethVcpu || 1;
                 }
                 setStressMode(!stressMode);
               }}
-              className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${stressMode
-                ? 'bg-red-500 text-white ring-2 ring-red-500/20 hover:bg-red-600'
-                : 'bg-gray-100 text-gray-600 border border-gray-200 hover:border-red-300 hover:text-red-500'
-              }`}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all opacity-50 cursor-not-allowed bg-gray-100 text-gray-400 border border-gray-200`}
             >
               {stressMode ? <Zap size={16} fill="currentColor" className="animate-pulse" /> : <Zap size={16} />}
-              {stressMode ? 'Simulating High Traffic...' : 'Simulate Load'}
+              Stress Mode Disabled
             </button>
           </div>
 
