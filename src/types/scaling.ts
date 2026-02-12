@@ -15,12 +15,12 @@ export interface ScalingMetrics {
 }
 
 // Scaling Target vCPU Value
-export type TargetVcpu = 1 | 2 | 4;
+export type TargetVcpu = 1 | 2 | 4 | 8;
 
 // Scaling Decision Result
 export interface ScalingDecision {
   targetVcpu: TargetVcpu;
-  targetMemoryGiB: 2 | 4 | 8;  // vCPU * 2
+  targetMemoryGiB: 2 | 4 | 8 | 16;  // vCPU * 2
   reason: string;
   confidence: number;  // 0-1
   score: number;       // 0-100
@@ -112,8 +112,9 @@ export interface ScalingConfig {
     ai: number;
   };
   thresholds: {
-    idle: number;   // score < idle → 1 vCPU
-    normal: number; // score < normal → 2 vCPU, else 4 vCPU
+    idle: number;     // score < idle → 1 vCPU
+    normal: number;   // score < normal → 2 vCPU, else 4 vCPU
+    critical?: number; // score >= critical → 8 vCPU (emergency)
   };
   /** op-geth K8s Service name */
   serviceName: string;
@@ -122,7 +123,7 @@ export interface ScalingConfig {
 // Default Scaling Configuration
 export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
   minVcpu: 1,
-  maxVcpu: 4,
+  maxVcpu: 8,
   cooldownSeconds: process.env.NODE_ENV === 'development' ? 10 : 300,  // 10s (dev), 5 min (prod)
   namespace: 'thanos-sepolia',
   statefulSetName: 'sepolia-thanos-stack-op-geth',
@@ -136,6 +137,7 @@ export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
   thresholds: {
     idle: 30,
     normal: 70,
+    critical: 85,  // new threshold for 8 vCPU scaling
   },
   serviceName: 'sepolia-thanos-stack-op-geth',
 };

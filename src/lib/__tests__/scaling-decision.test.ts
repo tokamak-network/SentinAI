@@ -149,10 +149,16 @@ describe('scaling-decision', () => {
       expect(determineTargetVcpu(69)).toBe(2);
     });
 
-    it('should return 4 vCPU for high score (>= 70)', () => {
+    it('should return 4 vCPU for high score (70 <= score < 85)', () => {
       expect(determineTargetVcpu(70)).toBe(4);
-      expect(determineTargetVcpu(85)).toBe(4);
-      expect(determineTargetVcpu(100)).toBe(4);
+      expect(determineTargetVcpu(75)).toBe(4);
+      expect(determineTargetVcpu(84)).toBe(4);
+    });
+
+    it('should return 8 vCPU for critical score (>= 85)', () => {
+      expect(determineTargetVcpu(85)).toBe(8);
+      expect(determineTargetVcpu(90)).toBe(8);
+      expect(determineTargetVcpu(100)).toBe(8);
     });
 
     it('should handle boundary: score exactly 30 → 2 vCPU', () => {
@@ -161,6 +167,10 @@ describe('scaling-decision', () => {
 
     it('should handle boundary: score exactly 70 → 4 vCPU', () => {
       expect(determineTargetVcpu(70)).toBe(4);
+    });
+
+    it('should handle boundary: score exactly 85 → 8 vCPU', () => {
+      expect(determineTargetVcpu(85)).toBe(8);
     });
 
     it('should handle zero score → 1 vCPU', () => {

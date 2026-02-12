@@ -56,6 +56,11 @@ export function calculateScalingScore(
 
 /**
  * Determine target vCPU based on score
+ * Tiers:
+ *   score < idle (30)      → 1 vCPU (IDLE)
+ *   idle <= score < normal (70) → 2 vCPU (NORMAL)
+ *   normal <= score < critical (85) → 4 vCPU (HIGH)
+ *   score >= critical (85) → 8 vCPU (CRITICAL/EMERGENCY)
  */
 export function determineTargetVcpu(
   score: number,
@@ -67,8 +72,10 @@ export function determineTargetVcpu(
     return 1;
   } else if (score < thresholds.normal) {
     return 2;
-  } else {
+  } else if (score < (thresholds.critical ?? 85)) {
     return 4;
+  } else {
+    return 8; // Emergency scaling for critical situations
   }
 }
 
@@ -91,11 +98,16 @@ export function generateReason(
     parts.push('Normal Load Detected');
     if (breakdown.cpuScore >= 30) parts.push(`CPU ${metrics.cpuUsage.toFixed(1)}%`);
     if (breakdown.gasScore >= 30) parts.push(`Gas Usage ${(metrics.gasUsedRatio * 100).toFixed(1)}%`);
-  } else {
+  } else if (targetVcpu === 4) {
     parts.push('High Load Detected');
     if (breakdown.cpuScore >= 60) parts.push(`CPU ${metrics.cpuUsage.toFixed(1)}% High`);
     if (breakdown.txPoolScore >= 50) parts.push(`TxPool ${metrics.txPoolPending} Pending`);
     if (breakdown.aiScore >= 66) parts.push('AI Warning: High Severity');
+  } else if (targetVcpu === 8) {
+    parts.push('🚨 CRITICAL: Emergency Scaling');
+    if (breakdown.cpuScore >= 90) parts.push(`CPU ${metrics.cpuUsage.toFixed(1)}% Critical`);
+    if (breakdown.txPoolScore >= 80) parts.push(`TxPool ${metrics.txPoolPending} Saturated`);
+    if (breakdown.aiScore >= 90) parts.push('AI Alert: Critical Severity');
   }
 
   return parts.join(', ') + ` (Score: ${score.toFixed(1)})`;
