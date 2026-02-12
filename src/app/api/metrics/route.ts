@@ -344,11 +344,15 @@ export async function GET(request: Request) {
         let cpuSource: 'container' | 'evm_load' | 'seed' = 'evm_load';
         let realCpu = 0;
         let effectiveTx = txPoolPending;
+        let gasUsedRatio = 0;
+        let blockInterval = 2.0;
 
         if (usingSeedMetrics && seedMetricData) {
             // Use seed metrics
             realCpu = seedMetricData.cpuUsage;
             effectiveTx = seedMetricData.txPoolPending;
+            gasUsedRatio = seedMetricData.gasUsedRatio;
+            blockInterval = seedMetricData.blockInterval;
             cpuSource = 'seed';
             console.log(`[Metrics API] Using seed CPU=${realCpu.toFixed(1)}%, txPool=${effectiveTx}`);
         } else {
@@ -356,6 +360,7 @@ export async function GET(request: Request) {
             const gasUsed = Number(block.gasUsed);
             const gasLimit = Number(block.gasLimit);
             const evmLoad = (gasUsed / gasLimit) * 100;
+            gasUsedRatio = gasUsed / gasLimit;
 
             // Use real container CPU if available, otherwise fallback to EVM load
             realCpu = evmLoad;
@@ -435,7 +440,7 @@ export async function GET(request: Request) {
 
         // Calculate block interval and push to metrics store
         const now = Date.now();
-        let blockInterval = 2.0; // Default block interval (L2 typical)
+        blockInterval = 2.0; // Reset to default (will be updated if new block detected)
 
         const lastBlock = await getStore().getLastBlock();
         if (lastBlock.height !== null && lastBlock.time !== null) {
@@ -459,7 +464,7 @@ export async function GET(request: Request) {
             timestamp: new Date().toISOString(),
             cpuUsage: effectiveCpu,
             txPoolPending: effectiveTx,
-            gasUsedRatio: gasUsed / gasLimit,
+            gasUsedRatio,
             blockHeight: Number(blockNumber),
             blockInterval,
             currentVcpu,
