@@ -123,7 +123,7 @@ export interface ScalingConfig {
 export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
   minVcpu: 1,
   maxVcpu: 4,
-  cooldownSeconds: 300,  // 5 minutes
+  cooldownSeconds: process.env.NODE_ENV === 'development' ? 10 : 300,  // 10s (dev), 5 min (prod)
   namespace: 'thanos-sepolia',
   statefulSetName: 'sepolia-thanos-stack-op-geth',
   containerIndex: 0,
