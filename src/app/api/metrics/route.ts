@@ -12,7 +12,7 @@ import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import { getStore } from '@/lib/redis-store';
 import { runDetectionPipeline } from '@/lib/detection-pipeline';
 import { getContainerCpuUsage } from '@/lib/k8s-scaler';
-import { getActiveL1RpcUrl } from '@/lib/l1-rpc-failover';
+import { getActiveL1RpcUrl, getL1FailoverState, maskUrl } from '@/lib/l1-rpc-failover';
 import type { AnomalyResult } from '@/types/anomaly';
 
 // Whether anomaly detection is enabled (default: enabled)
@@ -473,6 +473,21 @@ export async function GET(request: Request) {
             },
             status: "healthy",
             stressMode: isStressTest,
+            // === L1 RPC Status ===
+            l1Rpc: (() => {
+                const state = getL1FailoverState();
+                const active = state.endpoints[state.activeIndex];
+                return {
+                    activeUrl: maskUrl(state.activeUrl),
+                    healthy: active?.healthy ?? true,
+                    endpointCount: state.endpoints.length,
+                    healthyCount: state.endpoints.filter(e => e.healthy).length,
+                    lastFailoverTime: state.lastFailoverTime
+                        ? new Date(state.lastFailoverTime).toISOString()
+                        : null,
+                    consecutiveFailures: active?.consecutiveFailures ?? 0,
+                };
+            })(),
             // === Anomaly Detection Fields ===
             anomalies: detectedAnomalies,
             activeAnomalyEventId,
