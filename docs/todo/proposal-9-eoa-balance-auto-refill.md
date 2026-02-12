@@ -226,10 +226,47 @@ export function resetDailyCounter(): void;
 12. Return {success: true, txHash, previousBalance, newBalance}
 ```
 
-### 4.2 `src/app/api/eoa-balance/route.ts` (~80 LOC)
+### 4.2 `src/lib/eoa-balance-monitor.ts` - Integration with Auto-Detection
+
+Update `getAllBalanceStatus()` to use auto-detection:
 
 ```typescript
-// GET: Return current balance status
+export async function getAllBalanceStatus(
+  l1RpcUrl?: string
+): Promise<EOABalanceStatus> {
+  // ... existing code ...
+
+  // If not in env, attempt auto-detection from L1 transactions
+  if (!batcherAddr || !proposerAddr) {
+    try {
+      const detectedBatcher = !batcherAddr
+        ? await getEOAAddressWithAutoDetect('batcher', rpcUrl)
+        : null;
+      const detectedProposer = !proposerAddr
+        ? await getEOAAddressWithAutoDetect('proposer', rpcUrl)
+        : null;
+
+      if (detectedBatcher) {
+        batcherAddr = detectedBatcher;
+        console.log(`[EOA Monitor] Auto-detected batcher: ${batcherAddr}`);
+      }
+      if (detectedProposer) {
+        proposerAddr = detectedProposer;
+        console.log(`[EOA Monitor] Auto-detected proposer: ${proposerAddr}`);
+      }
+    } catch (err) {
+      console.warn('[EOA Monitor] Auto-detection failed, continuing with available addresses');
+    }
+  }
+
+  // ... rest of implementation ...
+}
+```
+
+### 4.3 `src/app/api/eoa-balance/route.ts` (~80 LOC)
+
+```typescript
+// GET: Return current balance status (auto-detects EOAs if not set)
 // POST: Trigger manual refill (body: {target: 'batcher' | 'proposer'})
 ```
 
@@ -342,11 +379,24 @@ if (receipt.status === 'reverted') {
 
 ## 7. Environment Variables
 
+### 7.1 Required/Optional EOA Addresses
+
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `BATCHER_EOA_ADDRESS` | — | Batcher EOA address on L1 (required) |
-| `PROPOSER_EOA_ADDRESS` | — | Proposer EOA address on L1 (required) |
-| `TREASURY_PRIVATE_KEY` | — | Treasury wallet private key (optional, notification-only if unset) |
+| `BATCHER_EOA_ADDRESS` | auto-detect | Batcher EOA address on L1 (optional if auto-detect enabled) |
+| `PROPOSER_EOA_ADDRESS` | auto-detect | Proposer EOA address on L1 (optional if auto-detect enabled) |
+| `TREASURY_PRIVATE_KEY` | — | Treasury wallet private key (required for auto-refill, notification-only if unset) |
+
+**Note:** If `BATCHER_EOA_ADDRESS`/`PROPOSER_EOA_ADDRESS` not set, system automatically detects them by analyzing L1 transactions:
+- **Batcher**: Identified from transactions to `BatcherInbox` (0xFF00000000000000000000000000000000000054)
+- **Proposer**: Identified from transactions to `L2OutputOracle` (varies by network)
+- Detection scans recent 1000 blocks and requires live batcher/proposer activity
+- Confidence: high (both detected) → medium (one detected) → low (auto-detection failed)
+
+### 7.2 Balance Thresholds & Limits
+
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `EOA_BALANCE_WARNING_ETH` | `0.5` | Warning threshold in ETH |
 | `EOA_BALANCE_CRITICAL_ETH` | `0.1` | Critical threshold (triggers refill) |
 | `EOA_BALANCE_EMERGENCY_ETH` | `0.01` | Emergency threshold (immediate escalation) |
@@ -354,9 +404,10 @@ if (receipt.status === 'reverted') {
 | `EOA_REFILL_MAX_DAILY_ETH` | `5.0` | Maximum daily refill total |
 | `EOA_REFILL_COOLDOWN_MIN` | `10` | Cooldown between refills (minutes) |
 | `EOA_GAS_GUARD_GWEI` | `100` | Max L1 gas price for refill (gwei) |
+| `EOA_TREASURY_MIN_ETH` | `1.0` | Minimum Treasury balance before refill blocked |
 
 **Reuse Existing Environment Variables:**
-- `L1_RPC_URL` → L1 balance queries and tx broadcast
+- `L1_RPC_URL` → L1 balance queries, tx broadcast, and EOA auto-detection
 - `SCALING_SIMULATION_MODE` → Skip tx execution when true
 - `ALERT_WEBHOOK_URL` → Send balance alerts
 
@@ -416,6 +467,52 @@ export interface EOABalanceStatus {
 ---
 
 ## 9. Existing Module Modifications
+
+### 9.0 New Module: `src/lib/eoa-detector.ts` (~300 LOC)
+
+Auto-detect batcher/proposer EOAs from L1 transaction analysis:
+
+```typescript
+/**
+ * Detect EOA addresses from L1 transaction patterns
+ * - Batcher: identified from transactions to BatcherInbox (data availability)
+ * - Proposer: identified from transactions to L2OutputOracle (state roots)
+ */
+
+export async function detectOrUseManualEOA(
+  l1RpcUrl?: string,
+  networkKey?: string
+): Promise<DetectionResult>;
+
+export async function getEOAAddressWithAutoDetect(
+  role: EOARole,
+  l1RpcUrl?: string
+): Promise<`0x${string}` | null>;
+```
+
+**Implementation Details:**
+
+1. **Batcher Detection**:
+   - Scan L1 blocks for transactions to `BatcherInbox`
+   - Look for calldata starting with 0x00 (frame opcode) with significant data
+   - Extract sender address as batcher EOA
+
+2. **Proposer Detection**:
+   - Scan L1 blocks for transactions to `L2OutputOracle`
+   - Match function selector 0x9c6de194 (proposeL2Output)
+   - Extract sender address as proposer EOA
+
+3. **Network Support**:
+   - Optimism Mainnet (BatcherInbox: 0xFF00...0054, L2OutputOracle: 0xdfe9...)
+   - Optimism Sepolia (BatcherInbox: 0xFF00...0054, L2OutputOracle: 0x90e9...)
+   - Base Mainnet, Base Sepolia, and others via configuration
+   - Defaults to Sepolia if network cannot be detected
+
+4. **Priority & Fallback**:
+   - Priority 1: Manual env vars (BATCHER_EOA_ADDRESS, PROPOSER_EOA_ADDRESS)
+   - Priority 2: Auto-detect from recent L1 blocks (1000-block window)
+   - Priority 3: Not detected (warn user to set manually)
+   - Confidence scoring: high (both found) → medium (one) → low (none)
 
 ### 9.1 `src/lib/agent-loop.ts`
 
@@ -508,7 +605,22 @@ export type RemediationActionType =
 
 ## 10. Testing Plan
 
-### 10.1 Unit Tests (`eoa-balance-monitor.test.ts`)
+### 10.1 Unit Tests - EOA Detector (`eoa-detector.test.ts`, 20+ tests)
+
+| # | Test Category | Verification |
+|---|---|---|
+| 1 | Manual ENV - Both set | Return high-confidence results |
+| 2 | Manual ENV - Only one set | Return not-detected, low confidence |
+| 3 | Manual ENV - Invalid format | Reject and continue to auto-detection |
+| 4 | Manual ENV - Checksum normalization | Normalize addresses to checksum |
+| 5 | Auto-Detection - No RPC URL | Return not-detected with clear message |
+| 6 | Auto-Detection - RPC failure | Handle gracefully, log error |
+| 7 | Auto-Detection - L1 TX analysis | Scan for batcher/proposer transactions |
+| 8 | Network detection | Recognize Optimism/Base mainnet and testnet |
+| 9 | Confidence scoring | high (both) → medium (one) → low (none) |
+| 10 | Contract address mapping | Use correct BatcherInbox/L2OutputOracle per network |
+
+### 10.2 Unit Tests - EOA Balance Monitor (`eoa-balance-monitor.test.ts`)
 
 | # | Test | Verification |
 |---|------|--------------|
@@ -522,16 +634,27 @@ export type RemediationActionType =
 | 8 | Nonce management | Sequential nonce increment on consecutive refills |
 | 9 | Tx receipt verification | Handle reverted transactions |
 | 10 | Daily counter reset | Counter reset on date change |
+| 11 | EOA auto-detection | Fallback to auto-detection if env vars not set |
 
-### 10.2 Integration Test Scenarios
+### 10.3 Integration Test Scenarios
 
 ```
-Scenario 1: Batcher balance 0.08 ETH → auto-refill → verify 1.08 ETH
-Scenario 2: Proposer balance 0.005 ETH → EMERGENCY → operator alert (skip refill)
-Scenario 3: Treasury insufficient → deny refill → operator alert
-Scenario 4: L1 gas 150 gwei → hold refill → gas drops to 30 gwei → execute refill
-Scenario 5: Daily limit reached → deny additional refill → counter reset next day
+Scenario 1: No env vars → auto-detect batcher/proposer from L1 → monitor balances
+Scenario 2: Manual env vars set → use manual addresses (skip auto-detection)
+Scenario 3: Batcher 0.08 ETH (< CRITICAL) → auto-refill → verify 1.08 ETH
+Scenario 4: Proposer 0.005 ETH (< EMERGENCY) → EMERGENCY alert (no auto-refill)
+Scenario 5: Treasury insufficient → deny refill → operator alert
+Scenario 6: L1 gas 150 gwei → hold refill → gas drops → execute refill
+Scenario 7: Daily limit reached → deny additional refill → next day resets
 ```
+
+### 10.4 E2E Test Checklist
+
+- [ ] Dev environment with no env vars: auto-detect batcher/proposer
+- [ ] Dev environment with manual vars: use manual addresses
+- [ ] Sepolia testnet: detect from BatcherInbox/L2OutputOracle transactions
+- [ ] Mainnet simulation: verify contract addresses match docs.optimism.io
+- [ ] Confidence scoring: high (both detected) vs low (failed)
 
 ---
 
@@ -539,18 +662,37 @@ Scenario 5: Daily limit reached → deny additional refill → counter reset nex
 
 ```
 New Modules:
+  ├── src/lib/eoa-detector.ts              ← NEW: Auto-detect EOAs from L1
   ├── src/lib/eoa-balance-monitor.ts
   ├── src/types/eoa-balance.ts
   └── src/app/api/eoa-balance/route.ts
 
 Modified Modules:
-  ├── src/lib/agent-loop.ts          → Add getBalance to collectMetrics()
-  ├── src/lib/anomaly-detector.ts    → Add detectBalanceThreshold()
-  ├── src/lib/playbook-matcher.ts    → Add 2 playbooks
-  ├── src/lib/action-executor.ts     → Add 3 actions
-  ├── src/types/anomaly.ts           → Extend AnomalyMetric
-  └── src/types/remediation.ts       → Extend RemediationActionType
+  ├── src/lib/eoa-balance-monitor.ts     → Import & use getEOAAddressWithAutoDetect
+  ├── src/lib/agent-loop.ts              → Add getBalance to collectMetrics()
+  ├── src/lib/anomaly-detector.ts        → Add detectBalanceThreshold()
+  ├── src/lib/playbook-matcher.ts        → Add 2 playbooks
+  ├── src/lib/action-executor.ts         → Add 3 actions
+  ├── src/types/anomaly.ts               → Extend AnomalyMetric
+  └── src/types/remediation.ts           → Extend RemediationActionType
+
+New Tests:
+  ├── src/lib/__tests__/eoa-detector.test.ts    (~250 lines, 20+ tests)
+  └── src/lib/__tests__/eoa-balance-monitor.test.ts (existing)
 
 Dependent Libraries:
-  └── viem (already installed) → createWalletClient, privateKeyToAccount
+  ├── viem (already installed) → createWalletClient, privateKeyToAccount, createPublicClient
+  └── viem (already installed) → getAddress, isAddress for address validation
+```
+
+### Optimism Contract Addresses
+
+| Network | BatcherInbox | L2OutputOracle | Notes |
+|---------|--------------|----------------|-------|
+| **Optimism Mainnet** | 0xFF00000000000000000000000000000000000054 | 0xdfe97868233d1b6f5e00d8d181f0302b92b77018 | Production |
+| **Optimism Sepolia** | 0xFF00000000000000000000000000000000000054 | 0x90e9c4f8a994a250f6aefd61cafb4f2e895ea02b | Testnet (default) |
+| **Base Mainnet** | 0xFF00000000000000000000000000000000000054 | 0x56315b90c40730925ec5485cf004d835260518a7 | Superchain |
+| **Base Sepolia** | 0xFF00000000000000000000000000000000000054 | 0x84457ca8fc6b7ae495687e9ebfa0250990f50efa | Testnet |
+
+Source: https://docs.optimism.io/ (OP Stack specifications)
 ```
