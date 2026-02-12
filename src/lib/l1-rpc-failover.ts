@@ -101,7 +101,7 @@ export function replaceBackendInToml(
 /**
  * Get current ConfigMap TOML content
  */
-async function getConfigMapToml(
+export async function getConfigMapToml(
   configMapName: string,
   dataKey: string,
   namespace: string
