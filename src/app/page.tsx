@@ -923,7 +923,7 @@ export default function Dashboard() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Section 1: Last Cycle */}
             <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
               <span className="text-[10px] text-gray-400 font-semibold uppercase">Last Cycle</span>
@@ -1097,7 +1097,7 @@ export default function Dashboard() {
           const hasScalingAction = cycles.some(c => c.scaling?.executed);
 
           return (
-          <div className="lg:col-span-7 bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col min-h-[200px]">
+          <div className="lg:col-span-7 bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col max-h-[320px]">
 
             {/* Terminal Header */}
             <div className="bg-[#25282D] px-6 py-4 flex items-center justify-between shrink-0">
