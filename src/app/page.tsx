@@ -1231,7 +1231,7 @@ export default function Dashboard() {
                   : 'DISABLED'}
               </div>
               <span className="text-[10px] text-gray-500">
-                {cycles.length > 0 ? `${cycles.filter(c => c.scaling?.score && c.scaling.score >= 30).length}/${cycles.length} elevated` : 'Use chat for analysis'}
+                {cycles.length > 0 ? `${cycles.filter(c => c.scaling?.score && c.scaling.score >= 30).length}/${cycles.length} elevated` : ''}
               </span>
             </div>
           </div>
