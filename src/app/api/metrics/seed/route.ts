@@ -7,7 +7,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pushMetric, clearMetrics, getRecentMetrics, getMetricsCount } from '@/lib/metrics-store';
 import { resetPredictionState } from '@/lib/predictive-scaler';
-import { initVcpuProfile, clearVcpuProfile } from '@/lib/seed-vcpu-manager';
+import { initVcpuProfile, clearVcpuProfile, getVcpuValuesForScenario } from '@/lib/seed-vcpu-manager';
+import { getStore } from '@/lib/redis-store';
 import { MetricDataPoint } from '@/types/prediction';
 
 export const dynamic = 'force-dynamic';
@@ -38,6 +39,9 @@ function generateScenarioData(scenario: Scenario): MetricDataPoint[] {
   const points: MetricDataPoint[] = [];
   const count = 20;
   const now = Date.now();
+
+  // Get vCPU progression for this scenario
+  const vcpuProgression = getVcpuValuesForScenario(scenario);
 
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1); // 0 to 1
@@ -98,6 +102,9 @@ function generateScenarioData(scenario: Scenario): MetricDataPoint[] {
     gasUsedRatio = Math.max(0, Math.min(1, gasUsedRatio));
     blockInterval = Math.max(0.5, blockInterval);
 
+    // Use vCPU value from scenario progression
+    const currentVcpu = vcpuProgression[i] || 1;
+
     points.push({
       timestamp,
       cpuUsage: Number(cpuUsage.toFixed(2)),
@@ -105,7 +112,7 @@ function generateScenarioData(scenario: Scenario): MetricDataPoint[] {
       gasUsedRatio: Number(gasUsedRatio.toFixed(4)),
       blockHeight: 12_500_000 + i * 30,
       blockInterval: Number(blockInterval.toFixed(2)),
-      currentVcpu: 1,
+      currentVcpu: Number(currentVcpu.toFixed(2)),
     });
   }
 
@@ -156,6 +163,9 @@ export async function POST(request: NextRequest) {
     await resetPredictionState();
     clearVcpuProfile(); // Clear vCPU seed profile when switching to live
 
+    // Clear seed scenario flag in state store (cross-worker persistence)
+    await getStore().setSeedScenario(null);
+
     const liveData = await getRecentMetrics();
     return NextResponse.json({
       success: true,
@@ -177,10 +187,17 @@ export async function POST(request: NextRequest) {
   await resetPredictionState();
   initVcpuProfile(scenario); // Initialize vCPU progression for the scenario
 
+  // Store active seed scenario in state store (works across worker threads)
+  await getStore().setSeedScenario(scenario);
+  console.log(`[Seed API] Set active seed scenario in store: ${scenario}`);
+
   const dataPoints = generateScenarioData(scenario);
   for (const point of dataPoints) {
     await pushMetric(point);
   }
+
+  console.log(`[Seed API] Injected ${dataPoints.length} data points for scenario: ${scenario}`);
+  console.log(`[Seed API] Seed scenario persisted to state store`);
 
   return NextResponse.json({
     success: true,

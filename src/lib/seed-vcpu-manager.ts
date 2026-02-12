@@ -125,3 +125,11 @@ export function getProfileInfo() {
     uptime: Date.now() - profile.startTime,
   };
 }
+
+/**
+ * Get vCPU values for a scenario (for seed data generation)
+ * Returns all 20 vCPU progression values for the given scenario
+ */
+export function getVcpuValuesForScenario(scenario: Scenario): number[] {
+  return generateVcpuProgression(scenario);
+}

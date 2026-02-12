@@ -52,6 +52,10 @@ export interface IStateStore {
   getLastBlock(): Promise<{ height: string | null; time: string | null }>;
   setLastBlock(height: string, time: string): Promise<void>;
 
+  // --- Seed Scenario (Cross-Worker Persistence) ---
+  getSeedScenario(): Promise<string | null>;
+  setSeedScenario(scenario: string | null): Promise<void>;
+
   // --- Connection Management ---
   isConnected(): boolean;
   disconnect(): Promise<void>;

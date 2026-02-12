@@ -53,6 +53,8 @@ const KEYS = {
   predictionLatest: 'prediction:latest',
   predictionTime: 'prediction:time',
   lastBlock: 'metrics:lastblock',
+  // Seed Scenario (cross-worker persistence)
+  seedScenario: 'seed:scenario',
   // P1: Anomaly Event Store
   anomalyEvents: 'anomaly:events',
   anomalyActive: 'anomaly:active',
@@ -279,6 +281,21 @@ export class RedisStateStore implements IStateStore {
 
   async setLastBlock(height: string, time: string): Promise<void> {
     await this.client.hset(this.key(KEYS.lastBlock), { height, time });
+  }
+
+  // --- Seed Scenario (Cross-Worker Persistence) ---
+
+  async getSeedScenario(): Promise<string | null> {
+    const value = await this.client.get(this.key(KEYS.seedScenario));
+    return value || null;
+  }
+
+  async setSeedScenario(scenario: string | null): Promise<void> {
+    if (scenario) {
+      await this.client.set(this.key(KEYS.seedScenario), scenario);
+    } else {
+      await this.client.del(this.key(KEYS.seedScenario));
+    }
   }
 
   // === P1: Anomaly Event Store ===
@@ -692,6 +709,9 @@ export class InMemoryStateStore implements IStateStore {
   // P3: Prediction Tracker
   private predictionRecords: PredictionRecord[] = [];
 
+  // Seed Scenario (Cross-Worker Persistence)
+  private seedScenario: string | null = null;
+
   // --- Metrics Buffer ---
 
   async pushMetric(dataPoint: MetricDataPoint): Promise<void> {
@@ -790,6 +810,16 @@ export class InMemoryStateStore implements IStateStore {
 
   async setLastBlock(height: string, time: string): Promise<void> {
     this.lastBlock = { height, time };
+  }
+
+  // --- Seed Scenario (Cross-Worker Persistence) ---
+
+  async getSeedScenario(): Promise<string | null> {
+    return this.seedScenario;
+  }
+
+  async setSeedScenario(scenario: string | null): Promise<void> {
+    this.seedScenario = scenario;
   }
 
   // === P1: Anomaly Event Store ===

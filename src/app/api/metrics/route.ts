@@ -326,18 +326,27 @@ export async function GET(request: Request) {
         console.log(`[Timer] RPC Fetch: ${(performance.now() - startRpc).toFixed(2)}ms`);
 
         // 3. Check if seed scenario is active - use stored metrics if so
-        const activeScenario = getActiveScenario();
+        // Get seed scenario from state store (cross-worker persistence)
+        const activeScenario = await getStore().getSeedScenario();
         let usingSeedMetrics = false;
         let seedMetricData: Awaited<ReturnType<typeof getRecentMetrics>>[0] | null = null;
 
-        if (activeScenario && activeScenario !== 'live') {
-            // Seed scenario is active - use metrics from store
-            const recentMetrics = await getRecentMetrics();
-            if (recentMetrics && recentMetrics.length > 0) {
-                seedMetricData = recentMetrics[recentMetrics.length - 1]; // Get latest
+        // First, try getting metrics from store (works across worker threads)
+        let recentMetrics = await getRecentMetrics();
+
+        // Check if we have recent seed-injected metrics (different from live metrics)
+        if (recentMetrics && recentMetrics.length > 0) {
+            const latestMetric = recentMetrics[recentMetrics.length - 1];
+            // If we have injected seed data, use it (seed metrics differ from live K8s metrics)
+            if (latestMetric && latestMetric.cpuUsage !== undefined) {
+                seedMetricData = latestMetric;
                 usingSeedMetrics = true;
-                console.log(`[Metrics API] Using seed metrics from store (${activeScenario}):`, seedMetricData);
+                console.log(`[Metrics API] Using seed metrics from store (detected from metrics data)`);
             }
+        }
+
+        if (activeScenario && activeScenario !== 'live') {
+            console.log(`[Metrics API] activeScenario from state store: ${activeScenario}`);
         }
 
         // 4. Metrics (Host Resource - Best Effort) or Seed Data
