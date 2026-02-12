@@ -1012,7 +1012,7 @@ export default function Dashboard() {
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] text-gray-500">CPU</span>
                     <span className="text-xs font-bold text-gray-900 font-mono">
-                      {agentLoop.lastCycle.metrics.cpuUsage.toFixed(1)}%
+                      {agentLoop.lastCycle.metrics.cpuUsage.toFixed(0)}%
                     </span>
                   </div>
                 </div>
