@@ -81,6 +81,14 @@ ANTHROPIC_API_KEY=your-api-key-here             # AI features
 AWS_CLUSTER_NAME=my-cluster-name                # K8s (auto-detects K8S_API_URL & region)
 ```
 
+**L1 RPC Configuration (Important Architecture Note):**
+- **SentinAI monitoring**: Uses **public L1 RPC** (e.g., `publicnode.com`)
+  - Set via `L1_RPC_URL` or `L1_RPC_URLS` for automatic failover
+  - Rate limit optimized: 95% reduction via caching + polling adjustment
+- **L2 nodes** (op-node, op-batcher, op-proposer): Use **Proxyd with paid L1 RPC endpoints**
+  - Configured separately via Proxyd ConfigMap (not SentinAI env)
+  - See `docs/guide/proxyd-failover-setup.md` for details
+
 > `K8S_API_URL` and `AWS_REGION` are auto-detected at runtime from `AWS_CLUSTER_NAME`.
 > AWS credentials use the standard chain: env vars, `~/.aws/credentials`, or IAM Role.
 

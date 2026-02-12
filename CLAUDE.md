@@ -217,14 +217,16 @@ cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 | `TREASURY_PRIVATE_KEY` | — | Treasury wallet private key for auto-refill (omit for monitor-only) |
 | `EOA_BALANCE_CRITICAL_ETH` | `0.1` | Critical threshold — triggers auto-refill |
 | `EOA_REFILL_AMOUNT_ETH` | `0.5` | ETH amount per refill |
-| `L1_RPC_URLS` | — | Comma-separated L1 RPC endpoints (priority order, auto-failover) |
-| `L1_RPC_URL` | publicnode.com | Single L1 RPC endpoint (fallback if `L1_RPC_URLS` not set) |
-| `K8S_STATEFULSET_PREFIX` | `sepolia-thanos-stack` | StatefulSet name prefix for L1 failover kubectl updates |
-| `L1_PROXYD_ENABLED` | `false` | Enable Proxyd ConfigMap update for L1 failover |
-| `L1_PROXYD_CONFIGMAP_NAME` | `proxyd-config` | ConfigMap name containing Proxyd config |
+| **L1 RPC for SentinAI (Public)** | — | — |
+| `L1_RPC_URLS` | — | Comma-separated **public** L1 RPC endpoints for SentinAI (auto-failover, priority order) |
+| `L1_RPC_URL` | publicnode.com | Single **public** L1 RPC endpoint for SentinAI (fallback if `L1_RPC_URLS` not set) |
+| **L1 RPC for L2 Nodes (via Proxyd)** | — | — |
+| `L1_PROXYD_ENABLED` | `false` | Enable Proxyd ConfigMap update for L1 failover (L2 nodes: op-node, op-batcher, op-proposer) |
+| `L1_PROXYD_CONFIGMAP_NAME` | `proxyd-config` | ConfigMap name containing Proxyd config (for L2 nodes) |
 | `L1_PROXYD_DATA_KEY` | `proxyd.toml` | Data key in ConfigMap holding TOML config |
 | `L1_PROXYD_UPSTREAM_GROUP` | `main` | Upstream group name to update in TOML |
 | `L1_PROXYD_UPDATE_MODE` | `replace` | Update strategy: `replace` (update URL) or `append` (add new upstream) |
+| `K8S_STATEFULSET_PREFIX` | `sepolia-thanos-stack` | StatefulSet name prefix for L1 failover kubectl updates (for L2 nodes) |
 
 Full env guide: `ENV_GUIDE.md`
 
