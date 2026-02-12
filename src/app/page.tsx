@@ -198,6 +198,24 @@ export default function Dashboard() {
     try {
       const res = await fetch(`/api/metrics/seed?scenario=${seedScenario}`, { method: 'POST' });
       if (res.ok) {
+        // Immediately fetch updated metrics after seed injection
+        const metricsRes = await fetch('/api/metrics?t=' + Date.now(), { cache: 'no-store' });
+        if (metricsRes.ok) {
+          const metricsData = await metricsRes.json();
+          setCurrent(metricsData);
+
+          // Update data history
+          const point = {
+            name: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            cpu: metricsData.metrics.cpuUsage,
+            gethVcpu: metricsData.metrics.gethVcpu,
+            gethMemGiB: metricsData.metrics.gethMemGiB,
+            saving: metricsData.cost.monthlySaving,
+            cost: metricsData.cost.monthlyEstimated,
+          };
+          setDataHistory(prev => [...prev.slice(-20), point]);
+        }
+
         // Re-fetch scaler to get updated prediction
         const scalerRes = await fetch('/api/scaler', { cache: 'no-store' });
         if (scalerRes.ok) {
