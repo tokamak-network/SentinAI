@@ -13,7 +13,9 @@ import type {
   AccumulatorState,
   LogAnalysisEntry,
   ScalingEvent,
+  AWSDailyCost,
 } from '@/types/daily-report';
+import { calculateDailyAWSCost } from './aws-cost-tracker';
 
 const MAX_SNAPSHOTS_PER_DAY = 288; // 24 * 60 / 5
 const MIN_SNAPSHOT_GAP_MS = 4 * 60 * 1000; // 4 minutes (dedup guard)
@@ -265,6 +267,27 @@ export async function getAccumulatedData(date?: string): Promise<DailyAccumulate
 
   // Refresh completeness before returning
   updateDataCompleteness(state);
+
+  // Add AWS cost estimation if not already present
+  if (!state.data.awsCost) {
+    const { calculateDailyAWSCost } = await import('./aws-cost-tracker');
+
+    // Calculate estimated metrics from snapshots
+    const vcpuHours = state.data.snapshots.length > 0
+      ? state.data.snapshots.reduce((sum, s) => sum + s.currentVcpu, 0) / state.data.snapshots.length * 24
+      : 48;
+
+    state.data.awsCost = calculateDailyAWSCost(targetDate, {
+      vcpuHours,
+      memGbHours: vcpuHours * 2.5, // Estimated 2.5GB per vCPU
+      natDataTransferGb: 1.5,
+      cloudwatchLogsGb: 0.5,
+      vpcDataTransferGb: 30,
+      s3StorageGb: 5,
+      s3RequestsPerDay: 10000,
+    });
+  }
+
   await store.setDailyAccumulatorState(targetDate, state);
 
   return state.data;

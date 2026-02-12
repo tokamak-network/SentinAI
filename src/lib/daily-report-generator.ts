@@ -13,6 +13,7 @@ import type {
   MetricSnapshot,
 } from '@/types/daily-report';
 import { chatCompletion } from './ai-client';
+import { formatAWSCostForReport } from './aws-cost-tracker';
 
 const REPORTS_DIR = process.env.REPORTS_DIR || 'data/reports';
 
@@ -165,6 +166,16 @@ function buildUserPrompt(data: DailyAccumulatedData): string {
     ? data.metadata.dataGaps.map(g => `- ${g.start} ~ ${g.end}: ${g.reason}`).join('\n')
     : '없음';
 
+  const awsCostSection = data.awsCost
+    ? `## AWS 서비스 비용
+- 일일 총 비용: $${data.awsCost.dailyTotal.toFixed(2)}
+- 월간 예상: $${data.awsCost.monthlyProjected.toFixed(2)}
+
+### 서비스별 상세
+${data.awsCost.services.map(s => `- ${s.service}: $${s.dailyCost.toFixed(3)}/day (~$${s.monthlyCost.toFixed(2)}/month) - ${s.description}`).join('\n')}
+`
+    : '(AWS 비용 데이터 없음)';
+
   return `# ${data.date} 운영 데이터
 
 ## 메타데이터
@@ -187,6 +198,9 @@ ${scalingInfo}
 
 ## 로그 분석 결과 (${data.logAnalysisResults.length}건)
 ${logInfo}
+
+## AWS 비용 분석
+${awsCostSection}
 
 ## 데이터 갭
 ${dataGaps}
@@ -253,7 +267,13 @@ ${summarizeLogAnalysis(data)}
 
 ---
 
-## 6. 데이터 완성도
+## 6. AWS 서비스 비용
+
+${data.awsCost ? formatAWSCostForReport(data.awsCost) : '(AWS 비용 데이터 없음)'}
+
+---
+
+## 7. 데이터 완성도
 
 - 완성도: ${(data.metadata.dataCompleteness * 100).toFixed(1)}%
 - 수집된 스냅샷: ${data.snapshots.length}개

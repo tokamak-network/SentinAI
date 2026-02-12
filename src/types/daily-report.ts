@@ -66,6 +66,34 @@ export interface ScalingEvent {
 }
 
 // ============================================================
+// AWS Cost Tracking
+// ============================================================
+
+/** AWS 서비스별 비용 (일일 집계) */
+export interface AWSServiceCost {
+  service: 'EKS' | 'EC2' | 'NAT' | 'CloudWatch' | 'VPC' | 'RDS' | 'S3' | 'Other';
+  dailyCost: number;
+  monthlyCost: number;
+  unit: string; // e.g., "vCPU-hour", "GB", "requests"
+  usageAmount: number; // 당일 사용량
+  description: string;
+}
+
+/** AWS 일일 비용 요약 */
+export interface AWSDailyCost {
+  date: string;
+  dailyTotal: number;
+  monthlyProjected: number;
+  services: AWSServiceCost[];
+  metadata: {
+    currency: 'USD';
+    region: 'ap-northeast-2'; // Seoul
+    dataSource: 'CloudWatch' | 'Cost Explorer' | 'Manual Estimate';
+    lastUpdated: string; // ISO 8601
+  };
+}
+
+// ============================================================
 // Daily Accumulated Data
 // ============================================================
 
@@ -85,6 +113,8 @@ export interface DailyAccumulatedData {
   logAnalysisResults: LogAnalysisEntry[];
   /** 스케일링 이벤트 */
   scalingEvents: ScalingEvent[];
+  /** AWS 서비스 비용 */
+  awsCost?: AWSDailyCost;
   /** 데이터 품질 메타데이터 */
   metadata: {
     /** 예상 대비 실제 수집률 (0-1) */
