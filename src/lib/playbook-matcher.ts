@@ -164,6 +164,69 @@ export const PLAYBOOKS: Playbook[] = [
     ],
     maxAttempts: 0, // Immediate escalation — L1 issues cannot be auto-resolved
   },
+
+  // Playbook 6: EOA Balance Critical — Auto-refill
+  {
+    name: 'eoa-balance-critical',
+    description: 'Batcher or proposer EOA balance below critical threshold',
+    trigger: {
+      component: 'op-batcher',
+      indicators: [
+        { type: 'metric', condition: 'batcherBalance < critical' },
+        { type: 'metric', condition: 'proposerBalance < critical' },
+      ],
+    },
+    actions: [
+      {
+        type: 'check_treasury_balance',
+        safetyLevel: 'safe',
+      },
+      {
+        type: 'check_l1_gas_price',
+        safetyLevel: 'safe',
+      },
+      {
+        type: 'refill_eoa',
+        safetyLevel: 'guarded',
+        params: { role: 'batcher' },
+        waitAfterMs: 30000,
+      },
+      {
+        type: 'verify_balance_restored',
+        safetyLevel: 'safe',
+        params: { role: 'batcher' },
+      },
+    ],
+    fallback: [
+      {
+        type: 'escalate_operator',
+        safetyLevel: 'safe',
+        params: { message: 'EOA refill failed. Manual intervention required.' },
+      },
+    ],
+    maxAttempts: 1,
+  },
+
+  // Playbook 7: EOA Balance Emergency — Immediate Escalation
+  {
+    name: 'eoa-balance-emergency',
+    description: 'EOA balance critically low — immediate operator alert',
+    trigger: {
+      component: 'op-batcher',
+      indicators: [
+        { type: 'metric', condition: 'batcherBalance < emergency' },
+        { type: 'metric', condition: 'proposerBalance < emergency' },
+      ],
+    },
+    actions: [
+      {
+        type: 'escalate_operator',
+        safetyLevel: 'safe',
+        params: { urgency: 'critical', message: 'EOA balance near zero. Rollup submission will halt imminently.' },
+      },
+    ],
+    maxAttempts: 0, // Immediate escalation
+  },
 ];
 
 // ============================================================
@@ -198,6 +261,12 @@ function identifyComponent(
   }
   if (metrics.includes('txPoolPending')) {
     return 'op-batcher'; // TxPool = batcher
+  }
+  if (metrics.includes('batcherBalance')) {
+    return 'op-batcher';
+  }
+  if (metrics.includes('proposerBalance')) {
+    return 'op-proposer';
   }
 
   // Fallback
@@ -240,6 +309,16 @@ function matchesMetricCondition(
   if (condition.includes('hybridScore')) {
     // TODO: Calculate hybrid score from multiple anomalies
     return event.anomalies.length >= 2; // Heuristic: multiple anomalies = high score
+  }
+
+  // EOA balance conditions
+  if (condition.includes('batcherBalance')) {
+    const anomaly = event.anomalies.find(a => a.metric === 'batcherBalance');
+    return anomaly?.rule === 'threshold-breach';
+  }
+  if (condition.includes('proposerBalance')) {
+    const anomaly = event.anomalies.find(a => a.metric === 'proposerBalance');
+    return anomaly?.rule === 'threshold-breach';
   }
 
   return false;

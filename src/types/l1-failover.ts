@@ -48,6 +48,7 @@ export interface ProxydConfig {
 export interface TomlUpstream {
   name: string;
   rpc_url: string;
+  ws_url?: string;
 }
 
 /** ConfigMap update result */

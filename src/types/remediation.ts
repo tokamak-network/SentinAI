@@ -32,11 +32,16 @@ export type RemediationActionType =
   | 'health_check'
   | 'check_l1_connection'
   | 'describe_pod'
+  | 'check_treasury_balance'
+  | 'check_l1_gas_price'
+  | 'verify_balance_restored'
+  | 'escalate_operator'
   // Guarded
   | 'restart_pod'
   | 'scale_up'
   | 'scale_down'
   | 'zero_downtime_swap'
+  | 'refill_eoa'
   // Manual
   | 'config_change'
   | 'rollback_deployment'

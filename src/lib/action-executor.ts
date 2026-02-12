@@ -9,6 +9,8 @@ import { scaleOpGeth } from '@/lib/k8s-scaler';
 import { zeroDowntimeScale } from '@/lib/zero-downtime-scaler';
 import { runK8sCommand } from '@/lib/k8s-config';
 import { getActiveL1RpcUrl, healthCheckEndpoint, getL1FailoverState, maskUrl } from '@/lib/l1-rpc-failover';
+import { checkBalance, refillEOA, getAllBalanceStatus } from '@/lib/eoa-balance-monitor';
+import type { EOARole } from '@/types/eoa-balance';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 
 // ============================================================
@@ -317,6 +319,90 @@ async function getCurrentVcpu(config: ScalingConfig): Promise<number> {
 }
 
 // ============================================================
+// EOA Balance Actions
+// ============================================================
+
+/**
+ * Check treasury wallet balance
+ */
+async function executeCheckTreasuryBalance(): Promise<string> {
+  const status = await getAllBalanceStatus();
+  if (!status.signerAvailable) {
+    return 'Treasury check: No signer configured (notification-only mode)';
+  }
+  if (!status.treasury) {
+    return 'Treasury check: Unable to fetch treasury balance';
+  }
+  const { balanceEth, level } = status.treasury;
+  return `Treasury balance: ${balanceEth.toFixed(4)} ETH (${level}), daily remaining: ${status.dailyRefillRemainingEth.toFixed(2)} ETH`;
+}
+
+/**
+ * Check L1 gas price
+ */
+async function executeCheckL1GasPrice(): Promise<string> {
+  const { createPublicClient: createClient, http: httpTransport, formatGwei } = await import('viem');
+  const { sepolia: sepoliaChain } = await import('viem/chains');
+  const l1RpcUrl = getActiveL1RpcUrl();
+  const client = createClient({ chain: sepoliaChain, transport: httpTransport(l1RpcUrl, { timeout: 15000 }) });
+
+  try {
+    const gasPrice = await client.getGasPrice();
+    const gasPriceGwei = formatGwei(gasPrice);
+    const guardGwei = parseInt(process.env.EOA_GAS_GUARD_GWEI || '100', 10);
+    const isOk = parseFloat(gasPriceGwei) <= guardGwei;
+    return `L1 gas price: ${gasPriceGwei} gwei (guard: ${guardGwei} gwei) — ${isOk ? 'OK' : 'TOO HIGH'}`;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    throw new Error(`Gas price check failed: ${message}`);
+  }
+}
+
+/**
+ * Execute EOA refill transaction
+ */
+async function executeRefillEOA(action: RemediationAction): Promise<string> {
+  const role = (action.params?.role as EOARole) || 'batcher';
+  const targetAddr = role === 'batcher'
+    ? process.env.BATCHER_EOA_ADDRESS
+    : process.env.PROPOSER_EOA_ADDRESS;
+
+  if (!targetAddr) {
+    throw new Error(`${role} EOA address not configured`);
+  }
+
+  const l1RpcUrl = getActiveL1RpcUrl();
+  const result = await refillEOA(l1RpcUrl, targetAddr as `0x${string}`, role);
+
+  if (result.success) {
+    return `Refilled ${role} EOA: ${result.previousBalanceEth?.toFixed(4)} → ${result.newBalanceEth?.toFixed(4)} ETH (tx: ${result.txHash})`;
+  }
+  throw new Error(`EOA refill denied: ${result.reason}`);
+}
+
+/**
+ * Verify target EOA balance was restored above critical threshold
+ */
+async function executeVerifyBalanceRestored(action: RemediationAction): Promise<string> {
+  const role = (action.params?.role as EOARole) || 'batcher';
+  const targetAddr = role === 'batcher'
+    ? process.env.BATCHER_EOA_ADDRESS
+    : process.env.PROPOSER_EOA_ADDRESS;
+
+  if (!targetAddr) {
+    throw new Error(`${role} EOA address not configured`);
+  }
+
+  const l1RpcUrl = getActiveL1RpcUrl();
+  const result = await checkBalance(l1RpcUrl, targetAddr as `0x${string}`, role);
+
+  if (result.level === 'normal' || result.level === 'warning') {
+    return `Balance restored: ${role} EOA = ${result.balanceEth.toFixed(4)} ETH (${result.level})`;
+  }
+  throw new Error(`Balance still ${result.level}: ${role} EOA = ${result.balanceEth.toFixed(4)} ETH`);
+}
+
+// ============================================================
 // Main Executor
 // ============================================================
 
@@ -367,6 +453,26 @@ export async function executeAction(
 
       case 'zero_downtime_swap':
         output = await executeZeroDowntimeSwap(action, config);
+        break;
+
+      case 'check_treasury_balance':
+        output = await executeCheckTreasuryBalance();
+        break;
+
+      case 'check_l1_gas_price':
+        output = await executeCheckL1GasPrice();
+        break;
+
+      case 'refill_eoa':
+        output = await executeRefillEOA(action);
+        break;
+
+      case 'verify_balance_restored':
+        output = await executeVerifyBalanceRestored(action);
+        break;
+
+      case 'escalate_operator':
+        output = `Escalation required: ${action.params?.message || 'EOA balance critically low'}`;
         break;
 
       case 'config_change':

@@ -25,7 +25,9 @@ export type AnomalyMetric =
   | 'txPoolPending'
   | 'gasUsedRatio'
   | 'l2BlockHeight'
-  | 'l2BlockInterval';
+  | 'l2BlockInterval'
+  | 'batcherBalance'
+  | 'proposerBalance';
 
 /**
  * Layer 1 statistical anomaly detection result
@@ -44,7 +46,7 @@ export interface AnomalyResult {
   /** Human-readable description */
   description: string;
   /** Detection rule that triggered */
-  rule: 'z-score' | 'zero-drop' | 'plateau' | 'monotonic-increase';
+  rule: 'z-score' | 'zero-drop' | 'plateau' | 'monotonic-increase' | 'threshold-breach';
 }
 
 // ============================================================================

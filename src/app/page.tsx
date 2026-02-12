@@ -42,6 +42,11 @@ interface MetricData {
     lastFailoverTime: string | null;
     consecutiveFailures: number;
   };
+  eoaBalances?: {
+    batcher: { address: string; balanceEth: number; level: string } | null;
+    proposer: { address: string; balanceEth: number; level: string } | null;
+    signerAvailable: boolean;
+  };
 }
 
 
@@ -451,6 +456,46 @@ export default function Dashboard() {
             <p className="text-[10px] text-gray-400 font-semibold uppercase">TxPool Pending</p>
             <p className="text-lg font-bold text-gray-900 font-mono">{current?.metrics.txPoolCount || 0}</p>
           </div>
+          {current?.eoaBalances?.batcher && (
+            <>
+              <div className="h-8 w-px bg-gray-200"></div>
+              <div className="flex items-center gap-3">
+                <div className={`w-2 h-2 rounded-full ${
+                  current.eoaBalances.batcher.level === 'normal' ? 'bg-green-500' :
+                  current.eoaBalances.batcher.level === 'warning' ? 'bg-amber-500' :
+                  'bg-red-500 animate-pulse'
+                }`}></div>
+                <div>
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Batcher</p>
+                  <p className={`text-lg font-bold font-mono ${
+                    current.eoaBalances.batcher.level === 'normal' ? 'text-gray-900' :
+                    current.eoaBalances.batcher.level === 'warning' ? 'text-amber-600' :
+                    'text-red-600'
+                  }`}>{current.eoaBalances.batcher.balanceEth.toFixed(4)} ETH</p>
+                </div>
+              </div>
+            </>
+          )}
+          {current?.eoaBalances?.proposer && (
+            <>
+              <div className="h-8 w-px bg-gray-200"></div>
+              <div className="flex items-center gap-3">
+                <div className={`w-2 h-2 rounded-full ${
+                  current.eoaBalances.proposer.level === 'normal' ? 'bg-green-500' :
+                  current.eoaBalances.proposer.level === 'warning' ? 'bg-amber-500' :
+                  'bg-red-500 animate-pulse'
+                }`}></div>
+                <div>
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Proposer</p>
+                  <p className={`text-lg font-bold font-mono ${
+                    current.eoaBalances.proposer.level === 'normal' ? 'text-gray-900' :
+                    current.eoaBalances.proposer.level === 'warning' ? 'text-amber-600' :
+                    'text-red-600'
+                  }`}>{current.eoaBalances.proposer.balanceEth.toFixed(4)} ETH</p>
+                </div>
+              </div>
+            </>
+          )}
           <div className="h-8 w-px bg-gray-200"></div>
           <div>
             <p className="text-[10px] text-gray-400 font-semibold uppercase">Sync Status</p>

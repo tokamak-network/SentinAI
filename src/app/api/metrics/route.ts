@@ -13,6 +13,7 @@ import { getStore } from '@/lib/redis-store';
 import { runDetectionPipeline } from '@/lib/detection-pipeline';
 import { getContainerCpuUsage } from '@/lib/k8s-scaler';
 import { getActiveL1RpcUrl, getL1FailoverState, maskUrl } from '@/lib/l1-rpc-failover';
+import { getAllBalanceStatus } from '@/lib/eoa-balance-monitor';
 import type { AnomalyResult } from '@/types/anomaly';
 
 // Whether anomaly detection is enabled (default: enabled)
@@ -487,6 +488,19 @@ export async function GET(request: Request) {
                         : null,
                     consecutiveFailures: active?.consecutiveFailures ?? 0,
                 };
+            })(),
+            // === EOA Balance Status ===
+            eoaBalances: await (async () => {
+                try {
+                    const status = await getAllBalanceStatus();
+                    return {
+                        batcher: status.batcher ? { address: status.batcher.address, balanceEth: status.batcher.balanceEth, level: status.batcher.level } : null,
+                        proposer: status.proposer ? { address: status.proposer.address, balanceEth: status.proposer.balanceEth, level: status.proposer.level } : null,
+                        signerAvailable: status.signerAvailable,
+                    };
+                } catch {
+                    return { batcher: null, proposer: null, signerAvailable: false };
+                }
             })(),
             // === Anomaly Detection Fields ===
             anomalies: detectedAnomalies,

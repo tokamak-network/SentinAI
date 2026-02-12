@@ -131,6 +131,7 @@ idle → creating_standby → waiting_ready → switching_traffic → cleanup �
 | `rca/route.ts`              | POST           | Root cause analysis execution                          |
 | `cost-report/route.ts`      | GET            | Cost optimization report                               |
 | `reports/daily/route.ts`    | GET/POST       | Daily report generation and retrieval                  |
+| `eoa-balance/route.ts`      | GET/POST       | EOA balance status / manual refill trigger             |
 | `health/route.ts`           | GET            | Docker healthcheck                                     |
 
 ### Types (`src/types/`)
@@ -144,6 +145,7 @@ idle → creating_standby → waiting_ready → switching_traffic → cleanup �
 - `cost.ts`: Cost optimization types
 - `daily-report.ts`: Daily report types
 - `redis.ts`: Redis state store types
+- `eoa-balance.ts`: `EOARole`, `BalanceLevel`, `EOABalanceConfig`, `RefillResult`, `EOABalanceStatus`
 - `l1-failover.ts`: L1 RPC failover types (endpoint, event, state)
 
 ### UI
@@ -210,6 +212,11 @@ cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 | `SCALING_SIMULATION_MODE` | `true` | Simulate K8s changes without real patches |
 | `AGENT_LOOP_ENABLED` | auto | Server-side autonomous loop (auto-enabled if L2_RPC_URL set) |
 | `AUTO_REMEDIATION_ENABLED` | `false` | Layer 4 auto-remediation trigger |
+| `BATCHER_EOA_ADDRESS` | — | Batcher EOA address to monitor |
+| `PROPOSER_EOA_ADDRESS` | — | Proposer EOA address to monitor |
+| `TREASURY_PRIVATE_KEY` | — | Treasury wallet private key for auto-refill (omit for monitor-only) |
+| `EOA_BALANCE_CRITICAL_ETH` | `0.1` | Critical threshold — triggers auto-refill |
+| `EOA_REFILL_AMOUNT_ETH` | `0.5` | ETH amount per refill |
 | `L1_RPC_URLS` | — | Comma-separated L1 RPC endpoints (priority order, auto-failover) |
 | `L1_RPC_URL` | publicnode.com | Single L1 RPC endpoint (fallback if `L1_RPC_URLS` not set) |
 | `K8S_STATEFULSET_PREFIX` | `sepolia-thanos-stack` | StatefulSet name prefix for L1 failover kubectl updates |

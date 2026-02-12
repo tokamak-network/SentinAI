@@ -240,7 +240,8 @@ function detectTxPoolMonotonicIncrease(
  */
 export function detectAnomalies(
   current: MetricDataPoint,
-  history: MetricDataPoint[]
+  history: MetricDataPoint[],
+  balances?: { batcherBalanceEth?: number; proposerBalanceEth?: number }
 ): AnomalyResult[] {
   const anomalies: AnomalyResult[] = [];
 
@@ -306,7 +307,57 @@ export function detectAnomalies(
   );
   if (intervalAnomaly) anomalies.push(intervalAnomaly);
 
+  // 5. EOA Balance threshold detection (not Z-Score based)
+  if (balances) {
+    const batcherAnomaly = detectLowBalance(balances.batcherBalanceEth, 'batcherBalance');
+    if (batcherAnomaly) anomalies.push(batcherAnomaly);
+
+    const proposerAnomaly = detectLowBalance(balances.proposerBalanceEth, 'proposerBalance');
+    if (proposerAnomaly) anomalies.push(proposerAnomaly);
+  }
+
   return anomalies;
+}
+
+/**
+ * Detect low EOA balance using fixed thresholds (not statistical Z-Score).
+ * Triggers anomaly when balance falls below critical threshold.
+ */
+function detectLowBalance(
+  balanceEth: number | undefined,
+  metric: AnomalyMetric
+): AnomalyResult | null {
+  if (balanceEth === undefined) return null;
+
+  const criticalThreshold = parseFloat(process.env.EOA_BALANCE_CRITICAL_ETH || '0.1');
+  const emergencyThreshold = parseFloat(process.env.EOA_BALANCE_EMERGENCY_ETH || '0.01');
+  const role = metric === 'batcherBalance' ? 'Batcher' : 'Proposer';
+
+  if (balanceEth < emergencyThreshold) {
+    return {
+      isAnomaly: true,
+      metric,
+      value: balanceEth,
+      zScore: 0,
+      direction: 'drop',
+      description: `${role} EOA balance emergency: ${balanceEth.toFixed(4)} ETH (< ${emergencyThreshold} ETH)`,
+      rule: 'threshold-breach',
+    };
+  }
+
+  if (balanceEth < criticalThreshold) {
+    return {
+      isAnomaly: true,
+      metric,
+      value: balanceEth,
+      zScore: 0,
+      direction: 'drop',
+      description: `${role} EOA balance critical: ${balanceEth.toFixed(4)} ETH (< ${criticalThreshold} ETH)`,
+      rule: 'threshold-breach',
+    };
+  }
+
+  return null;
 }
 
 /**

@@ -4,7 +4,7 @@
  * Collects metrics → detects anomalies → evaluates scaling → auto-executes actions.
  */
 
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, http, formatEther } from 'viem';
 import { mainnet, sepolia } from 'viem/chains';
 import { pushMetric, getRecentMetrics } from '@/lib/metrics-store';
 import { getStore } from '@/lib/redis-store';
@@ -51,6 +51,8 @@ export interface AgentCycleResult {
     cpuUsage: number;
     txPoolPending: number;
     gasUsedRatio: number;
+    batcherBalanceEth?: number;
+    proposerBalanceEth?: number;
   } | null;
   detection: DetectionResult | null;
   scaling: {
@@ -87,6 +89,8 @@ interface CollectedMetrics {
   dataPoint: MetricDataPoint;
   l1BlockHeight: number;
   failover?: AgentCycleResult['failover'];
+  batcherBalanceEth?: number;
+  proposerBalanceEth?: number;
 }
 
 async function collectMetrics(): Promise<CollectedMetrics | null> {
@@ -153,6 +157,33 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     }
   }
 
+  // EOA balance queries (non-blocking)
+  let batcherBalanceEth: number | undefined;
+  let proposerBalanceEth: number | undefined;
+
+  const batcherAddr = process.env.BATCHER_EOA_ADDRESS as `0x${string}` | undefined;
+  const proposerAddr = process.env.PROPOSER_EOA_ADDRESS as `0x${string}` | undefined;
+
+  if (batcherAddr || proposerAddr) {
+    // Use whichever L1 client succeeded
+    const activeL1Client = failoverInfo?.triggered
+      ? createPublicClient({ chain: sepolia, transport: http(failoverInfo.toUrl, { timeout: RPC_TIMEOUT_MS }) })
+      : l1Client;
+
+    try {
+      const [batcherBal, proposerBal] = await Promise.all([
+        batcherAddr ? activeL1Client.getBalance({ address: batcherAddr }) : Promise.resolve(null),
+        proposerAddr ? activeL1Client.getBalance({ address: proposerAddr }) : Promise.resolve(null),
+      ]);
+
+      if (batcherBal !== null) batcherBalanceEth = parseFloat(formatEther(batcherBal));
+      if (proposerBal !== null) proposerBalanceEth = parseFloat(formatEther(proposerBal));
+    } catch {
+      // Non-blocking: balance fetch failure doesn't kill the cycle
+      console.warn('[AgentLoop] EOA balance fetch failed, continuing');
+    }
+  }
+
   // TxPool pending count (with timeout)
   let txPoolPending = 0;
   try {
@@ -216,7 +247,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
   await pushMetric(dataPoint);
   recordUsage(currentVcpu, cpuUsage);
 
-  return { dataPoint, l1BlockHeight: Number(l1BlockNumber), failover: failoverInfo };
+  return { dataPoint, l1BlockHeight: Number(l1BlockNumber), failover: failoverInfo, batcherBalanceEth, proposerBalanceEth };
 }
 
 // ============================================================
@@ -370,14 +401,16 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       };
     }
 
-    const { dataPoint, l1BlockHeight, failover } = collected;
+    const { dataPoint, l1BlockHeight, failover, batcherBalanceEth, proposerBalanceEth } = collected;
 
-    const metricsResult = {
+    const metricsResult: AgentCycleResult['metrics'] = {
       l1BlockHeight,
       l2BlockHeight: dataPoint.blockHeight,
       cpuUsage: dataPoint.cpuUsage,
       txPoolPending: dataPoint.txPoolPending,
       gasUsedRatio: dataPoint.gasUsedRatio,
+      batcherBalanceEth,
+      proposerBalanceEth,
     };
 
     // Phase 2: Detect — run anomaly detection pipeline
