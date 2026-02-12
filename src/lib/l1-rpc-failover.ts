@@ -783,10 +783,10 @@ async function resolveProxydBackend(
   try {
     // 1. Get Proxyd ConfigMap TOML content
     const proxydConfigMap = `${prefix}-l1-proxyd`;
-    const tomlKey = 'proxyd-config.toml';
-    const cmd = `get configmap ${proxydConfigMap} -n ${namespace} -o jsonpath='{.data.${tomlKey}}'`;
+    // Escape dots in key name for jsonpath (proxyd-config.toml -> proxyd-config\.toml)
+    const cmd = `get configmap ${proxydConfigMap} -n ${namespace} -o jsonpath='{.data.proxyd-config\\.toml}'`;
     const { stdout } = await runK8sCommand(cmd, { timeout: 10000 });
-    const tomlContent = stdout.replace(/^'|'$/g, '').trim();
+    const tomlContent = stdout.trim();
 
     if (!tomlContent) {
       throw new Error('Empty Proxyd ConfigMap TOML');
