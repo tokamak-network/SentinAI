@@ -56,6 +56,12 @@ export interface IStateStore {
   getSeedScenario(): Promise<string | null>;
   setSeedScenario(scenario: string | null): Promise<void>;
 
+  // --- Agent Cycle History (Cross-Worker Persistence) ---
+  pushAgentCycleResult(result: any): Promise<void>;
+  getAgentCycleHistory(limit?: number): Promise<any[]>;
+  getLastAgentCycleResult(): Promise<any | null>;
+  clearAgentCycleHistory(): Promise<void>;
+
   // --- Connection Management ---
   isConnected(): boolean;
   disconnect(): Promise<void>;

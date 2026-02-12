@@ -439,7 +439,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       scaling,
       failover,
     };
-    pushCycleResult(result);
+    await pushCycleResult(result);
     console.log(`[Agent Loop] Cycle complete: score=${scaling?.score}, L2=${metricsResult.l2BlockHeight}`);
     return result;
   } catch (error) {
@@ -453,7 +453,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       scaling: null,
       error: errorMsg,
     };
-    pushCycleResult(result);
+    await pushCycleResult(result);
     return result;
   } finally {
     running = false;
@@ -476,26 +476,26 @@ export function resetAgentState(): void {
 }
 
 // ============================================================
-// Cycle History
+// Cycle History (Redis-backed for cross-worker persistence)
 // ============================================================
 
-function pushCycleResult(result: AgentCycleResult): void {
-  cycleHistory.push(result);
-  if (cycleHistory.length > MAX_CYCLE_HISTORY) {
-    cycleHistory.shift();
-  }
+async function pushCycleResult(result: AgentCycleResult): Promise<void> {
+  const store = getStore();
+  await store.pushAgentCycleResult(result);
 }
 
 /**
  * Get recent cycle results (newest last)
  */
-export function getAgentCycleHistory(): AgentCycleResult[] {
-  return [...cycleHistory];
+export async function getAgentCycleHistory(): Promise<AgentCycleResult[]> {
+  const store = getStore();
+  return store.getAgentCycleHistory();
 }
 
 /**
  * Get the most recent cycle result
  */
-export function getLastCycleResult(): AgentCycleResult | null {
-  return cycleHistory.length > 0 ? cycleHistory[cycleHistory.length - 1] : null;
+export async function getLastCycleResult(): Promise<AgentCycleResult | null> {
+  const store = getStore();
+  return store.getLastAgentCycleResult();
 }

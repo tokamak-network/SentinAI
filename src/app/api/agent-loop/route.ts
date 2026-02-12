@@ -10,11 +10,13 @@ import { isAutoScalingEnabled, isSimulationMode, checkCooldown } from '@/lib/k8s
 
 export async function GET() {
   try {
-    const [scheduler, autoScaling, simulation, cooldown] = await Promise.all([
+    const [scheduler, autoScaling, simulation, cooldown, lastCycle, recentCycles] = await Promise.all([
       Promise.resolve(getSchedulerStatus()),
       isAutoScalingEnabled(),
       isSimulationMode(),
       checkCooldown(),
+      getLastCycleResult(),
+      getAgentCycleHistory(),
     ]);
 
     return NextResponse.json({
@@ -23,8 +25,8 @@ export async function GET() {
         agentLoopEnabled: scheduler.agentLoopEnabled,
         agentTaskRunning: scheduler.agentTaskRunning,
       },
-      lastCycle: getLastCycleResult(),
-      recentCycles: getAgentCycleHistory(),
+      lastCycle,
+      recentCycles,
       config: {
         intervalSeconds: 30,
         autoScalingEnabled: autoScaling,

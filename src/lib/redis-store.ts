@@ -55,6 +55,8 @@ const KEYS = {
   lastBlock: 'metrics:lastblock',
   // Seed Scenario (cross-worker persistence)
   seedScenario: 'seed:scenario',
+  // Agent Cycle History (cross-worker persistence)
+  agentCycleHistory: 'agent:cycle:history',
   // P1: Anomaly Event Store
   anomalyEvents: 'anomaly:events',
   anomalyActive: 'anomaly:active',
@@ -655,6 +657,36 @@ export class RedisStateStore implements IStateStore {
     await this.client.del(key);
   }
 
+  // --- Agent Cycle History (Cross-Worker Persistence) ---
+
+  async pushAgentCycleResult(result: any): Promise<void> {
+    const key = this.key(KEYS.agentCycleHistory);
+    const maxSize = 20;
+    await this.client.rpush(key, JSON.stringify(result));
+    // Keep only last 20 cycles
+    const len = await this.client.llen(key);
+    if (len > maxSize) {
+      await this.client.ltrim(key, len - maxSize, -1);
+    }
+  }
+
+  async getAgentCycleHistory(limit: number = 20): Promise<any[]> {
+    const key = this.key(KEYS.agentCycleHistory);
+    const records = await this.client.lrange(key, -limit, -1);
+    return records.map((r) => JSON.parse(r));
+  }
+
+  async getLastAgentCycleResult(): Promise<any | null> {
+    const key = this.key(KEYS.agentCycleHistory);
+    const record = await this.client.lindex(key, -1);
+    return record ? JSON.parse(record) : null;
+  }
+
+  async clearAgentCycleHistory(): Promise<void> {
+    const key = this.key(KEYS.agentCycleHistory);
+    await this.client.del(key);
+  }
+
   // --- Connection Management ---
 
   isConnected(): boolean {
@@ -711,6 +743,9 @@ export class InMemoryStateStore implements IStateStore {
 
   // Seed Scenario (Cross-Worker Persistence)
   private seedScenario: string | null = null;
+
+  // Agent Cycle History (Cross-Worker Persistence)
+  private agentCycleHistory: any[] = [];
 
   // --- Metrics Buffer ---
 
@@ -820,6 +855,29 @@ export class InMemoryStateStore implements IStateStore {
 
   async setSeedScenario(scenario: string | null): Promise<void> {
     this.seedScenario = scenario;
+  }
+
+  // --- Agent Cycle History (Cross-Worker Persistence) ---
+
+  async pushAgentCycleResult(result: any): Promise<void> {
+    this.agentCycleHistory.push(result);
+    if (this.agentCycleHistory.length > 20) {
+      this.agentCycleHistory = this.agentCycleHistory.slice(-20);
+    }
+  }
+
+  async getAgentCycleHistory(limit: number = 20): Promise<any[]> {
+    return [...this.agentCycleHistory.slice(-limit)];
+  }
+
+  async getLastAgentCycleResult(): Promise<any | null> {
+    return this.agentCycleHistory.length > 0
+      ? this.agentCycleHistory[this.agentCycleHistory.length - 1]
+      : null;
+  }
+
+  async clearAgentCycleHistory(): Promise<void> {
+    this.agentCycleHistory = [];
   }
 
   // === P1: Anomaly Event Store ===
