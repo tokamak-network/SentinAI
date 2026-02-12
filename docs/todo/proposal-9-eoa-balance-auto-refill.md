@@ -1,59 +1,59 @@
-# Proposal 9: EOA Balance Auto-Refill — Batcher/Proposer 잔액 자동 충전
+# Proposal 9: EOA Balance Auto-Refill — Automatic Batcher/Proposer Balance Refill
 
-> **작성일**: 2026-02-11
-> **선행 조건**: Proposal 2 (Anomaly Detection), Proposal 8 (Auto-Remediation) 구현 완료
-> **목적**: op-batcher / op-proposer EOA의 L1 잔액 고갈을 사전 감지하여 자동 충전, 롤업 지연 방지
-
----
-
-## 목차
-
-1. [개요](#1-개요)
-2. [아키텍처](#2-아키텍처)
-3. [Agent Act — 자동 실행 액션](#3-agent-act--자동-실행-액션)
-4. [구현 명세](#4-구현-명세)
-5. [Playbook 정의](#5-playbook-정의)
-6. [안전장치](#6-안전장치)
-7. [환경 변수](#7-환경-변수)
-8. [타입 정의](#8-타입-정의)
-9. [기존 모듈 수정](#9-기존-모듈-수정)
-10. [테스트 계획](#10-테스트-계획)
+> **Created**: 2026-02-11
+> **Prerequisites**: Proposal 2 (Anomaly Detection), Proposal 8 (Auto-Remediation) implementation completed
+> **Objective**: Proactively detect L1 balance depletion for op-batcher/op-proposer EOAs and automatically refill to prevent rollup submission delays
 
 ---
 
-## 1. 개요
+## Table of Contents
 
-### 1.1 문제
-
-op-batcher와 op-proposer는 L1에 트랜잭션을 제출할 때 ETH 가스비를 소모한다. 잔액이 고갈되면:
-
-| 컴포넌트 | 영향 | 증상 |
-|---------|------|------|
-| **op-batcher** | 배치 제출 중단 | txpool 단조 증가, data availability 지연 |
-| **op-proposer** | output root 제출 중단 | L2→L1 출금 finality 지연, challenge period 미시작 |
-
-현재 시스템은 `txPoolPending monotonic increase`를 탐지할 수 있지만:
-- 근본 원인이 **잔액 부족**인지 판별하지 못함
-- 잔액이 고갈되기 **전에 선제 대응**할 수 없음
-- 운영자가 수동으로 MetaMask/CLI를 사용해 ETH를 전송해야 함
-
-### 1.2 목표
-
-1. Agent Loop에서 30초마다 batcher/proposer EOA 잔액을 모니터링
-2. 임계값 이하로 떨어지면 Treasury 지갑에서 자동 충전
-3. 충전 실패 또는 Treasury 고갈 시 운영자 에스컬레이션
-
-### 1.3 핵심 원칙
-
-- **선제 대응**: 잔액이 완전히 바닥나기 전에 WARNING 단계에서 알림
-- **안전한 자동화**: 충전 한도(1회/일일), cooldown, gas price guard
-- **Graceful Degradation**: TREASURY_PRIVATE_KEY 미설정 시 알림 전용 모드
+1. [Overview](#1-overview)
+2. [Architecture](#2-architecture)
+3. [Agent Act — Automatic Execution Actions](#3-agent-act--automatic-execution-actions)
+4. [Implementation Specification](#4-implementation-specification)
+5. [Playbook Definition](#5-playbook-definition)
+6. [Safety Mechanisms](#6-safety-mechanisms)
+7. [Environment Variables](#7-environment-variables)
+8. [Type Definitions](#8-type-definitions)
+9. [Existing Module Modifications](#9-existing-module-modifications)
+10. [Testing Plan](#10-testing-plan)
 
 ---
 
-## 2. 아키텍처
+## 1. Overview
 
-### 2.1 데이터 플로우
+### 1.1 Problem
+
+op-batcher and op-proposer consume ETH gas fees when submitting transactions to L1. When balance is depleted:
+
+| Component | Impact | Symptoms |
+|-----------|--------|----------|
+| **op-batcher** | Batch submission halted | txpool monotonic increase, data availability delay |
+| **op-proposer** | Output root submission halted | L2→L1 withdrawal finality delay, challenge period not initiated |
+
+The current system can detect `txPoolPending monotonic increase` but:
+- Cannot determine if the root cause is **insufficient balance**
+- Cannot take **proactive action before balance completely depletes**
+- Operators must manually transfer ETH via MetaMask/CLI
+
+### 1.2 Objectives
+
+1. Monitor batcher/proposer EOA balance every 30 seconds in Agent Loop
+2. Automatically refill from Treasury wallet when balance falls below threshold
+3. Escalate to operator if refill fails or Treasury balance is depleted
+
+### 1.3 Core Principles
+
+- **Proactive Response**: Alert at WARNING stage before balance completely runs out
+- **Safe Automation**: Refill limits (daily), cooldown, gas price guard
+- **Graceful Degradation**: Notification-only mode when TREASURY_PRIVATE_KEY is not set
+
+---
+
+## 2. Architecture
+
+### 2.1 Data Flow
 
 ```
 Agent Loop (30s)
@@ -61,7 +61,7 @@ Agent Loop (30s)
   ├── Observe ──────────────────────────────────────────────
   │   l1Client.getBalance(batcherEOA)    → batcherBalance
   │   l1Client.getBalance(proposerEOA)   → proposerBalance
-  │   l1Client.getBalance(treasuryEOA)   → treasuryBalance (충전 가능 여부)
+  │   l1Client.getBalance(treasuryEOA)   → treasuryBalance (refill eligibility)
   │
   ├── Detect ──────────────────────────────────────────────
   │   eoa-balance-monitor.ts
@@ -79,34 +79,34 @@ Agent Loop (30s)
         ├── [Safe] check_l1_gas_price
         ├── [Guarded] refill_eoa → viem walletClient.sendTransaction()
         ├── [Safe] verify_balance_restored
-        └── [Safe] escalate_operator (실패 시)
+        └── [Safe] escalate_operator (on failure)
 ```
 
-### 2.2 모드별 동작
+### 2.2 Mode-Specific Behavior
 
-| 모드 | 조건 | 동작 |
-|------|------|------|
-| **Full Auto** | `TREASURY_PRIVATE_KEY` 설정 + `SCALING_SIMULATION_MODE=false` | 감지 → 충전 tx 실행 → 확인 |
-| **Notification Only** | `TREASURY_PRIVATE_KEY` 미설정 | 감지 → 알림만 (Slack/Dashboard) |
-| **Simulation** | `SCALING_SIMULATION_MODE=true` | 감지 → 로그 기록 (tx 미실행) |
+| Mode | Condition | Behavior |
+|------|-----------|----------|
+| **Full Auto** | `TREASURY_PRIVATE_KEY` set + `SCALING_SIMULATION_MODE=false` | Detect → Execute refill tx → Verify |
+| **Notification Only** | `TREASURY_PRIVATE_KEY` not set | Detect → Alert only (Slack/Dashboard) |
+| **Simulation** | `SCALING_SIMULATION_MODE=true` | Detect → Log (tx not executed) |
 
 ---
 
-## 3. Agent Act — 자동 실행 액션
+## 3. Agent Act — Automatic Execution Actions
 
-### 3.1 액션 테이블
+### 3.1 Action Table
 
 | # | Action | Safety | Trigger | Description |
 |---|--------|--------|---------|-------------|
-| 1 | `check_treasury_balance` | Safe | balance < CRITICAL | Treasury 지갑의 L1 잔액을 조회하여 충전 가능 여부 확인 |
-| 2 | `check_l1_gas_price` | Safe | balance < CRITICAL | 현재 L1 gas price 확인. 과도하면 충전 유보 |
-| 3 | `refill_eoa` | **Guarded** | balance < CRITICAL & treasury OK & gas OK | viem walletClient로 Treasury → Target EOA ETH 전송 tx 서명 & broadcast |
-| 4 | `verify_balance_restored` | Safe | refill tx confirmed | Target EOA 잔액 재조회, 임계값 이상 복구 확인 |
-| 5 | `escalate_operator` | Safe | EMERGENCY / treasury empty / refill failed | Slack/Webhook으로 운영자 긴급 알림 |
+| 1 | `check_treasury_balance` | Safe | balance < CRITICAL | Query Treasury wallet L1 balance to determine refill eligibility |
+| 2 | `check_l1_gas_price` | Safe | balance < CRITICAL | Check current L1 gas price. Hold if excessive |
+| 3 | `refill_eoa` | **Guarded** | balance < CRITICAL & treasury OK & gas OK | Sign and broadcast ETH transfer tx from Treasury → Target EOA via viem walletClient |
+| 4 | `verify_balance_restored` | Safe | refill tx confirmed | Requery Target EOA balance, confirm recovery above threshold |
+| 5 | `escalate_operator` | Safe | EMERGENCY / treasury empty / refill failed | Send urgent operator alert via Slack/Webhook |
 
-### 3.2 실행 흐름 예시
+### 3.2 Execution Flow Example
 
-**시나리오: Batcher 잔액 = 0.08 ETH (< CRITICAL 0.1)**
+**Scenario: Batcher balance = 0.08 ETH (< CRITICAL 0.1)**
 
 ```
 [Observe] l1Client.getBalance(batcherEOA) = 0.08 ETH
@@ -128,7 +128,7 @@ Agent Loop (30s)
 [Alert] Slack: "✅ Batcher EOA auto-refilled: 0.08 → 1.08 ETH"
 ```
 
-**시나리오: Treasury 잔액 부족**
+**Scenario: Treasury balance insufficient**
 
 ```
 [Observe] l1Client.getBalance(batcherEOA) = 0.05 ETH
@@ -142,7 +142,7 @@ Agent Loop (30s)
 
 ---
 
-## 4. 구현 명세
+## 4. Implementation Specification
 
 ### 4.1 `src/lib/eoa-balance-monitor.ts` (~200 LOC)
 
@@ -209,15 +209,15 @@ export async function canRefill(
 export function resetDailyCounter(): void;
 ```
 
-**핵심 로직: `refillEOA()`**
+**Core Logic: `refillEOA()`**
 
 ```
-1. Check TREASURY_PRIVATE_KEY exists → 없으면 {success: false, reason: 'no-signer'}
-2. Check SCALING_SIMULATION_MODE → true면 로그만 기록
-3. Check cooldown → lastRefillTime[target] + cooldownMs > now → skip
-4. Check daily limit → dailyRefillTotal + amount > maxDailyRefillEth → skip
-5. Check treasury balance → < minTreasuryBalanceEth → skip + escalate
-6. Check L1 gas price → > gasGuardGwei → skip (gas too high)
+1. Check TREASURY_PRIVATE_KEY exists → if not, return {success: false, reason: 'no-signer'}
+2. Check SCALING_SIMULATION_MODE → if true, log only
+3. Check cooldown → if lastRefillTime[target] + cooldownMs > now, skip
+4. Check daily limit → if dailyRefillTotal + amount > maxDailyRefillEth, skip
+5. Check treasury balance → if < minTreasuryBalanceEth, skip + escalate
+6. Check L1 gas price → if > gasGuardGwei, skip (gas too high)
 7. Create walletClient with treasury account
 8. sendTransaction({to: target, value: parseEther(amount)})
 9. waitForTransactionReceipt (timeout: 60s)
@@ -235,7 +235,7 @@ export function resetDailyCounter(): void;
 
 ---
 
-## 5. Playbook 정의
+## 5. Playbook Definition
 
 ### 5.1 Playbook: `eoa-balance-critical`
 
@@ -288,22 +288,22 @@ maxAttempts: 0  # Immediate escalation, no auto-remediation attempt
 
 ---
 
-## 6. 안전장치
+## 6. Safety Mechanisms
 
-### 6.1 충전 제한
+### 6.1 Refill Limits
 
-| 제한 | 값 | 설명 |
-|------|---|------|
-| 1회 충전 상한 | 1.0 ETH | `EOA_REFILL_AMOUNT_ETH` |
-| 일일 충전 상한 | 5.0 ETH | `EOA_REFILL_MAX_DAILY_ETH` (batcher + proposer 합산) |
-| Cooldown | 10분 | 동일 EOA에 대한 연속 충전 간격 |
-| Gas Guard | 100 gwei | L1 gas price가 이 이상이면 충전 유보 |
-| Treasury 최소 잔액 | 1.0 ETH | Treasury 자체 잔액이 이 이하면 충전 거부 |
+| Limit | Value | Description |
+|-------|-------|-------------|
+| Per-refill cap | 1.0 ETH | `EOA_REFILL_AMOUNT_ETH` |
+| Daily refill cap | 5.0 ETH | `EOA_REFILL_MAX_DAILY_ETH` (batcher + proposer combined) |
+| Cooldown | 10 minutes | Interval between refills for same EOA |
+| Gas Guard | 100 gwei | Hold refill if L1 gas price exceeds this |
+| Treasury minimum balance | 1.0 ETH | Deny refill if Treasury balance falls below this |
 
-### 6.2 Nonce 관리
+### 6.2 Nonce Management
 
 ```typescript
-// 동시 충전 방지: nonce를 명시적으로 관리
+// Prevent concurrent refills: manage nonce explicitly
 const nonce = lastNonce !== null
   ? lastNonce + 1
   : await l1Client.getTransactionCount({ address: treasuryAddress });
@@ -317,33 +317,33 @@ const hash = await walletClient.sendTransaction({
 lastNonce = nonce;
 ```
 
-### 6.3 Transaction 확인
+### 6.3 Transaction Verification
 
 ```typescript
-// Tx broadcast 후 반드시 receipt 대기
+// After tx broadcast, always wait for receipt
 const receipt = await l1Client.waitForTransactionReceipt({
   hash,
-  timeout: 60_000, // 60초 타임아웃
+  timeout: 60_000, // 60 second timeout
   confirmations: 1,
 });
 
 if (receipt.status === 'reverted') {
-  // Revert 시 실패 처리 + 에스컬레이션
+  // Handle revert: log failure + escalate
 }
 ```
 
-### 6.4 Private Key 보호
+### 6.4 Private Key Protection
 
-- `TREASURY_PRIVATE_KEY`는 `.env.local`에만 저장 (`.gitignore`에 포함됨)
-- 키 미설정 시 자동으로 Notification Only 모드로 전환
-- 로그에 private key 출력 금지 (address만 로깅)
+- `TREASURY_PRIVATE_KEY` stored only in `.env.local` (included in `.gitignore`)
+- Auto-switch to Notification Only mode if key not set
+- Never log private key (address only)
 
 ---
 
-## 7. 환경 변수
+## 7. Environment Variables
 
-| 변수 | 기본값 | 설명 |
-|------|--------|------|
+| Variable | Default | Description |
+|----------|---------|-------------|
 | `BATCHER_EOA_ADDRESS` | — | Batcher EOA address on L1 (required) |
 | `PROPOSER_EOA_ADDRESS` | — | Proposer EOA address on L1 (required) |
 | `TREASURY_PRIVATE_KEY` | — | Treasury wallet private key (optional, notification-only if unset) |
@@ -355,14 +355,14 @@ if (receipt.status === 'reverted') {
 | `EOA_REFILL_COOLDOWN_MIN` | `10` | Cooldown between refills (minutes) |
 | `EOA_GAS_GUARD_GWEI` | `100` | Max L1 gas price for refill (gwei) |
 
-**기존 환경변수 재사용:**
-- `L1_RPC_URL` → L1 잔액 조회 및 tx broadcast
-- `SCALING_SIMULATION_MODE` → true일 때 tx 미실행
-- `ALERT_WEBHOOK_URL` → 잔액 알림 전송
+**Reuse Existing Environment Variables:**
+- `L1_RPC_URL` → L1 balance queries and tx broadcast
+- `SCALING_SIMULATION_MODE` → Skip tx execution when true
+- `ALERT_WEBHOOK_URL` → Send balance alerts
 
 ---
 
-## 8. 타입 정의
+## 8. Type Definitions
 
 ### 8.1 `src/types/eoa-balance.ts` (~60 LOC)
 
@@ -415,14 +415,14 @@ export interface EOABalanceStatus {
 
 ---
 
-## 9. 기존 모듈 수정
+## 9. Existing Module Modifications
 
 ### 9.1 `src/lib/agent-loop.ts`
 
-`collectMetrics()` 함수에 EOA 잔액 조회 추가:
+Add EOA balance queries to `collectMetrics()` function:
 
 ```typescript
-// Line 93: Promise.all에 잔액 조회 추가
+// Line 93: Add balance queries to Promise.all
 const batcherAddress = process.env.BATCHER_EOA_ADDRESS as `0x${string}` | undefined;
 const proposerAddress = process.env.PROPOSER_EOA_ADDRESS as `0x${string}` | undefined;
 
@@ -436,7 +436,7 @@ const [block, l1BlockNumber, batcherBalance, proposerBalance] = await Promise.al
 
 ### 9.2 `src/types/anomaly.ts`
 
-`AnomalyMetric` 타입에 잔액 메트릭 추가:
+Add balance metrics to `AnomalyMetric` type:
 
 ```typescript
 export type AnomalyMetric =
@@ -451,10 +451,10 @@ export type AnomalyMetric =
 
 ### 9.3 `src/lib/anomaly-detector.ts`
 
-새 detection rule 추가:
+Add new detection rule:
 
 ```typescript
-// 절대 임계값 기반 잔액 감지 (Z-Score 아님)
+// Absolute threshold-based balance detection (not Z-Score)
 function detectBalanceThreshold(
   balanceEth: number,
   role: 'batcher' | 'proposer',
@@ -470,18 +470,18 @@ function detectBalanceThreshold(
       zScore: 0, direction: 'drop', rule: 'threshold-breach',
       description: `${role} EOA balance critical: ${balanceEth} ETH` };
   }
-  // WARNING은 anomaly가 아닌 dashboard alert로 처리
+  // WARNING handled as dashboard alert, not anomaly
   return null;
 }
 ```
 
 ### 9.4 `src/lib/playbook-matcher.ts`
 
-`PLAYBOOKS[]` 배열에 2개 플레이북 추가 + `matchesMetricCondition()`에 잔액 조건 추가.
+Add 2 playbooks to `PLAYBOOKS[]` array + add balance conditions to `matchesMetricCondition()`.
 
 ### 9.5 `src/lib/action-executor.ts`
 
-`executeAction()` switch문에 새 액션 추가:
+Add new actions to `executeAction()` switch statement:
 
 ```typescript
 case 'refill_eoa':
@@ -494,7 +494,7 @@ case 'verify_balance_restored':
 
 ### 9.6 `src/types/remediation.ts`
 
-`RemediationActionType`에 새 액션 추가:
+Add new actions to `RemediationActionType`:
 
 ```typescript
 export type RemediationActionType =
@@ -506,51 +506,51 @@ export type RemediationActionType =
 
 ---
 
-## 10. 테스트 계획
+## 10. Testing Plan
 
-### 10.1 유닛 테스트 (`eoa-balance-monitor.test.ts`)
+### 10.1 Unit Tests (`eoa-balance-monitor.test.ts`)
 
-| # | 테스트 | 검증 |
-|---|--------|------|
-| 1 | Balance threshold detection | WARNING/CRITICAL/EMERGENCY 구간별 정확한 anomaly 생성 |
-| 2 | Refill execution (simulation) | SCALING_SIMULATION_MODE=true일 때 tx 미실행, 로그만 기록 |
-| 3 | Cooldown enforcement | 10분 이내 재충전 시 거부 |
-| 4 | Daily limit enforcement | 일일 5 ETH 초과 시 거부 |
-| 5 | Gas guard | L1 gas > 100 gwei일 때 충전 유보 |
-| 6 | Treasury protection | Treasury 잔액 < 1.0 ETH일 때 충전 거부 |
-| 7 | No signer fallback | TREASURY_PRIVATE_KEY 미설정 시 알림 전용 모드 |
-| 8 | Nonce management | 연속 충전 시 nonce 순차 증가 |
-| 9 | Tx receipt verification | Reverted tx 처리 |
-| 10 | Daily counter reset | 날짜 변경 시 카운터 초기화 |
+| # | Test | Verification |
+|---|------|--------------|
+| 1 | Balance threshold detection | Accurate anomaly generation per WARNING/CRITICAL/EMERGENCY band |
+| 2 | Refill execution (simulation) | Skip tx execution and log only when SCALING_SIMULATION_MODE=true |
+| 3 | Cooldown enforcement | Deny refill within 10 minutes |
+| 4 | Daily limit enforcement | Deny refill if daily 5 ETH exceeded |
+| 5 | Gas guard | Hold refill if L1 gas > 100 gwei |
+| 6 | Treasury protection | Deny refill if Treasury balance < 1.0 ETH |
+| 7 | No signer fallback | Auto-switch to notification-only mode if TREASURY_PRIVATE_KEY unset |
+| 8 | Nonce management | Sequential nonce increment on consecutive refills |
+| 9 | Tx receipt verification | Handle reverted transactions |
+| 10 | Daily counter reset | Counter reset on date change |
 
-### 10.2 통합 테스트 시나리오
+### 10.2 Integration Test Scenarios
 
 ```
-시나리오 1: Batcher 잔액 0.08 ETH → auto-refill → 1.08 ETH 확인
-시나리오 2: Proposer 잔액 0.005 ETH → EMERGENCY → 운영자 알림 (refill skip)
-시나리오 3: Treasury 잔액 부족 → refill 거부 → 운영자 알림
-시나리오 4: L1 gas 150 gwei → refill 유보 → gas 30 gwei로 하락 → refill 실행
-시나리오 5: 일일 한도 도달 → 추가 refill 거부 → 다음 날 카운터 리셋
+Scenario 1: Batcher balance 0.08 ETH → auto-refill → verify 1.08 ETH
+Scenario 2: Proposer balance 0.005 ETH → EMERGENCY → operator alert (skip refill)
+Scenario 3: Treasury insufficient → deny refill → operator alert
+Scenario 4: L1 gas 150 gwei → hold refill → gas drops to 30 gwei → execute refill
+Scenario 5: Daily limit reached → deny additional refill → counter reset next day
 ```
 
 ---
 
-## 의존관계
+## Dependencies
 
 ```
-신규 모듈:
+New Modules:
   ├── src/lib/eoa-balance-monitor.ts
   ├── src/types/eoa-balance.ts
   └── src/app/api/eoa-balance/route.ts
 
-수정 모듈:
-  ├── src/lib/agent-loop.ts          → collectMetrics()에 getBalance 추가
-  ├── src/lib/anomaly-detector.ts    → detectBalanceThreshold() 추가
-  ├── src/lib/playbook-matcher.ts    → 2개 플레이북 추가
-  ├── src/lib/action-executor.ts     → 3개 액션 추가
-  ├── src/types/anomaly.ts           → AnomalyMetric 확장
-  └── src/types/remediation.ts       → RemediationActionType 확장
+Modified Modules:
+  ├── src/lib/agent-loop.ts          → Add getBalance to collectMetrics()
+  ├── src/lib/anomaly-detector.ts    → Add detectBalanceThreshold()
+  ├── src/lib/playbook-matcher.ts    → Add 2 playbooks
+  ├── src/lib/action-executor.ts     → Add 3 actions
+  ├── src/types/anomaly.ts           → Extend AnomalyMetric
+  └── src/types/remediation.ts       → Extend RemediationActionType
 
-의존 라이브러리:
-  └── viem (이미 설치됨) → createWalletClient, privateKeyToAccount
+Dependent Libraries:
+  └── viem (already installed) → createWalletClient, privateKeyToAccount
 ```
