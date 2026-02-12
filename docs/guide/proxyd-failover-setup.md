@@ -1,45 +1,96 @@
 # L1 Proxyd Failover Setup Guide
 
-This guide explains how to configure SentinAI's L1 RPC failover system to work with **Proxyd** (eth-optimism/infra load balancer).
+This guide explains how to configure SentinAI's L1 RPC failover system to work with **Proxyd** (eth-optimism/infra load balancer) for **L2 node protection**.
+
+## When Failover is Needed
+
+### ✅ Failover Required
+- **L2 Nodes** (op-node, op-batcher, op-proposer)
+  - Use **Paid L1 RPC endpoints** with limited monthly quotas
+  - Low call frequency → quota may reach free tier boundary
+  - **Critical**: Quota exceeded (429) → block production stops
+  - **Solution**: Configure multiple endpoints with automatic failover
+
+- **L1 Proxyd** (L2 nodes' L1 RPC router)
+  - Routes all L2 node L1 calls through Proxyd
+  - Proxyd's upstream config must match active L1 RPC
+  - **SentinAI failover updates Proxyd ConfigMap automatically**
+
+### ❌ Failover Not Required
+- **SentinAI Service** (monitoring & AI analysis)
+  - Uses **Public L1 RPC** (publicnode.com)
+  - High call volume (~24/7) → quota easily covered
+  - Designed for monitoring, not block production
+  - Temporary unavailability is acceptable
 
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────┐
-│ SentinAI (L1 Failover Module)               │
-│                                             │
-│  1. Detects L1 RPC failure (3x consecutive) │
-│  2. Finds healthy backup endpoint           │
-│  3. Updates Proxyd ConfigMap ──┐            │
-│  4. Updates op-* StatefulSets   │            │
-└─────────────────────────────────┼────────────┘
-                                  │
-                                  ▼
-                    ┌──────────────────────────┐
-                    │ proxyd-config ConfigMap  │
-                    │                          │
-                    │ [[upstreams]]            │
-                    │ name = "main"            │
-                    │ rpc_url = "https://..."  │ ◄─── Updated by SentinAI
-                    └──────────────────────────┘
-                                  │
-                                  ▼
-                    ┌──────────────────────────┐
-                    │ Proxyd Service           │
-                    │ http://proxyd:8080       │
-                    └──────────────────────────┘
-                      │       │        │
-        ┌─────────────┼───────┼────────┼─────────────┐
-        ▼             ▼       ▼        ▼             ▼
-    op-node    op-batcher  op-proposer  ...
-    (via Proxyd endpoint)
+┌──────────────────────────────────────┐
+│  SentinAI Monitoring Service         │
+│  (AI, anomaly detection, etc.)       │
+├──────────────────────────────────────┤
+│  L1 RPC: publicnode.com (public)     │
+│  Role: Read-only monitoring          │
+│  Failover: Not required              │
+└──────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────┐
+│  L2 Block Production (op-node)                   │
+│  + L2 Batch Submission (op-batcher)              │
+│  + L2 Output Submission (op-proposer)            │
+│  + L1 Proxyd (L1 RPC router)                     │
+├──────────────────────────────────────────────────┤
+│  L1 RPC: Paid endpoints (limited quota)          │
+│  Role: Block generation (CRITICAL)               │
+│  Failover: REQUIRED (quota exhaustion handling) │
+│                                                  │
+│  ┌──────────────────────────────────────────┐  │
+│  │ L1 Proxyd ConfigMap (TOML)               │  │
+│  │ [[upstreams]]                            │  │
+│  │ name = "main"                            │  │
+│  │ rpc_url = "https://paid-rpc1.io"         │  │
+│  │                                          │  │
+│  │ Updated by SentinAI on L1 RPC failure ◄───┤─ Failover trigger
+│  └──────────────────────────────────────────┘  │
+│          │                                      │
+│          ▼                                      │
+│  op-node ─────────────────────────────────────┤
+│  op-batcher ──── via Proxyd :8080 ────────────┤
+│  op-proposer ────────────────────────────────┤
+└──────────────────────────────────────────────────┘
 ```
 
 ## Prerequisites
 
+### Required Infrastructure
+
 1. **Proxyd Deployment**: Proxyd must be running in your K8s cluster
+   - Used by op-node, op-batcher, op-proposer as L1 RPC router
+   - Example: `http://proxyd-service:8080`
+
 2. **ConfigMap**: `proxyd-config` ConfigMap with `proxyd.toml` data key
-3. **RBAC**: SentinAI service account needs `get` + `patch` permissions on ConfigMaps
+   - Contains upstream L1 RPC URLs
+   - Must be in same namespace as L2 nodes
+
+3. **RBAC**: SentinAI service account needs permissions
+   ```yaml
+   - get + patch permissions: ConfigMaps (proxyd-config)
+   - get + patch permissions: StatefulSets (op-node, op-batcher, op-proposer)
+   ```
+
+### RPC Endpoint Strategy
+
+**SentinAI Service**:
+- Uses `publicnode.com` (public, unlimited)
+- No configuration needed
+- `getActiveL1RpcUrl()` returns publicnode
+
+**L2 Nodes** (op-node, op-batcher, op-proposer):
+- Use Paid endpoints (Alchemy, Infura, Ankr, etc.)
+- Limited monthly quota
+- **Must configure**: `L1_RPC_URLS` with 2+ endpoints
+- Failover detects quota exhaustion → switches endpoints
 
 ## Step 1: Verify Proxyd ConfigMap
 
@@ -104,20 +155,46 @@ kubectl create rolebinding sentinai-proxyd --role=sentinai-proxyd-manager --serv
 Edit `.env.local`:
 
 ```bash
-# Enable Proxyd mode
+# ========================================
+# SentinAI Monitoring (public RPC OK)
+# ========================================
+# Not configured → uses publicnode.com automatically
+# No failover needed for SentinAI itself
+
+# ========================================
+# L2 Node Protection (paid RPC + failover)
+# ========================================
+
+# Enable Proxyd failover mode
 L1_PROXYD_ENABLED=true
 
-# ConfigMap details (use defaults if standard)
-L1_PROXYD_CONFIGMAP_NAME=proxyd-config
-L1_PROXYD_DATA_KEY=proxyd.toml
-L1_PROXYD_UPSTREAM_GROUP=main
+# Proxyd ConfigMap details
+L1_PROXYD_CONFIGMAP_NAME=proxyd-config      # K8s ConfigMap name
+L1_PROXYD_DATA_KEY=proxyd.toml               # Key in ConfigMap
+L1_PROXYD_UPSTREAM_GROUP=main                # Upstream group in TOML
 
-# L1 RPC failover pool
-L1_RPC_URLS=https://paid-rpc1.io,https://paid-rpc2.io,https://publicnode.com
+# L1 RPC endpoints for L2 node failover (CRITICAL)
+# Use 2+ paid endpoints with independent quotas
+L1_RPC_URLS=https://eth-mainnet.g.alchemy.com/v2/YOUR_ALCHEMY_KEY,https://mainnet.infura.io/v3/YOUR_INFURA_KEY
 
-# StatefulSet prefix (for component env var updates)
+# K8s StatefulSet prefix (for kubectl updates)
 K8S_STATEFULSET_PREFIX=sepolia-thanos-stack
 ```
+
+**Important Notes**:
+- `L1_RPC_URLS`: Configure for **L2 nodes** (paid endpoints)
+  - Alchemy quota exhaustion → switch to Infura
+  - Infura quota exhaustion → switch to Ankr
+  - All exhausted → fall back to publicnode (slow, but blocks don't stop)
+
+- `L1_PROXYD_ENABLED=true`: Updates Proxyd ConfigMap on failover
+  - Proxyd routes all L2 node traffic through updated upstream
+  - Automatic ConfigMap watch reloads config
+
+- SentinAI monitoring: No configuration needed
+  - Automatically uses publicnode.com
+  - No risk of quota exhaustion
+  - Failover only protects L2 nodes
 
 ## Step 4: Test Failover
 
@@ -159,44 +236,92 @@ rpc_url = "https://paid-rpc1.io"  # <-- Updated to new URL
 
 ## How Failover Works
 
-### Timeline
+### Failure Scenario
 
-1. **L1 RPC Call Fails** (e.g., rate limit exceeded)
-   ```
-   op-node → Proxyd → Primary L1 RPC [FAIL] ❌
-   ```
+```
+Time: t0 → Block production: NORMAL
+    op-node → Proxyd → Paid L1 RPC (Alchemy) [OK]
+    └─ Blocks: 1000, 1001, 1002, ... ✅
 
-2. **3 Consecutive Failures Detected**
-   - SentinAI's agent loop counts failures
-   - After 3rd failure, triggers failover
+Time: t1 → Quota exhausted (429 Too Many Requests)
+    op-node → Proxyd → Paid L1 RPC (Alchemy) [FAIL] ❌
+    └─ Cannot get L1 block number
+    └─ Block production: STALLED
 
-3. **Backup Endpoint Found**
-   - Round-robin search through backup endpoints
-   - Health check via `eth_blockNumber`
+Time: t2 → 3 consecutive failures detected
+    SentinAI agent loop: failure_count = 3
+    └─ Triggers L1 RPC failover
+    └─ Action: Find healthy backup endpoint
+```
 
-4. **Proxyd ConfigMap Updated** (Priority 1)
-   ```
-   kubectl get configmap proxyd-config
-   kubectl patch configmap proxyd-config --type=json -p='[{"op":"replace","path":"/data/proxyd.toml",...}]'
-   ```
+### Failover Execution (Dual-Layer Update)
 
-5. **StatefulSet Env Vars Updated** (Priority 2-4)
-   ```
-   kubectl set env statefulset/sepolia-thanos-stack-op-node OP_NODE_L1_ETH_RPC=https://backup-rpc.io
-   kubectl set env statefulset/sepolia-thanos-stack-op-batcher OP_BATCHER_L1_ETH_RPC=https://backup-rpc.io
-   kubectl set env statefulset/sepolia-thanos-stack-op-proposer OP_PROPOSER_L1_ETH_RPC=https://backup-rpc.io
-   ```
+**Priority 1: Proxyd ConfigMap** (updates router config)
+```bash
+# Current
+kubectl get configmap proxyd-config
+# proxyd.toml:
+# [[upstreams]]
+# name = "main"
+# rpc_url = "https://alchemy.io/v2/key1"  ← Quota exhausted
 
-6. **Proxyd Reloads Config**
-   - Proxyd watches ConfigMap for changes
-   - On TOML update, reloads upstream configuration
-   - New L1 RPC connections use backup endpoint
+# Update
+kubectl patch configmap proxyd-config --type=json \
+  -p='[{"op":"replace","path":"/data/proxyd.toml","value":"[[upstreams]]...rpc_url=\"https://infura.io/v3/key2\""}]'
+
+# Result: Proxyd auto-watches ConfigMap
+# → New connections use Infura endpoint
+# → op-node/batcher/proposer get fresh quota ✅
+```
+
+**Priority 2-4: StatefulSet Env Vars** (backup for direct RPC)
+```bash
+kubectl set env statefulset/sepolia-thanos-stack-op-node \
+  OP_NODE_L1_ETH_RPC=https://infura.io/v3/key2
+
+kubectl set env statefulset/sepolia-thanos-stack-op-batcher \
+  OP_BATCHER_L1_ETH_RPC=https://infura.io/v3/key2
+
+kubectl set env statefulset/sepolia-thanos-stack-op-proposer \
+  OP_PROPOSER_L1_ETH_RPC=https://infura.io/v3/key2
+
+# Results in pod restart (rolling update)
+# → Containers boot with new L1 RPC env var
+```
+
+### Recovery Timeline
+
+```
+t0: Block production running
+    └─ 3 failures detected ❌
+
+t0+100ms: Proxyd ConfigMap updated
+          └─ Proxyd reloads TOML (automatic)
+          └─ New L1 RPC: Infura ✅
+
+t0+500ms: StatefulSet env vars updated
+          └─ Triggers rolling restart (pod recreation)
+          └─ New containers boot with Infura L1 RPC
+
+t0+10s: All pods ready with new RPC
+        └─ Block production resumes ✅
+```
+
+### Why Two-Layer Failover?
+
+| Layer | Purpose | Latency |
+|-------|---------|---------|
+| **Proxyd ConfigMap** | Immediate effect for running pods | ~100ms |
+| **StatefulSet Env Vars** | Persistent config for new pods | ~5-10s (rolling restart) |
+
+**Reason**: If only ConfigMap updated, a pod crash would revert to old RPC from env var. Both updates ensure consistency.
 
 ### Failover Cooldown
 
 - **5-minute cooldown** between failovers
 - Prevents flapping between endpoints
-- Can be adjusted by modifying constants in `src/lib/l1-rpc-failover.ts`
+- Example: If Infura also fails after 1 minute, failover is blocked until 4 minutes pass
+- Can be adjusted: `MAX_FAILOVER_COOLDOWN_MS` in `src/lib/l1-rpc-failover.ts`
 
 ## Rollback
 
@@ -335,8 +460,55 @@ kubectl logs -f deployment/sentinai -c sentinai | grep "L1 Failover"
 - **Total Failover Time**: ~2.1s (ConfigMap + 3 StatefulSets)
 - **Memory**: TOML parsing library adds ~50KB
 
+## Key Takeaways
+
+### ✅ What Failover Protects
+
+| Component | RPC Type | Status | Failover |
+|-----------|----------|--------|----------|
+| SentinAI Service | public (publicnode) | ✅ OK | ❌ Not needed |
+| op-node | paid (quota-limited) | ⚠️ At risk | ✅ Protected |
+| op-batcher | paid (quota-limited) | ⚠️ At risk | ✅ Protected |
+| op-proposer | paid (quota-limited) | ⚠️ At risk | ✅ Protected |
+| L1 Proxyd | routes via ConfigMap | ⚠️ At risk | ✅ Protected |
+
+### 🚨 Without Failover: What Happens?
+
+```
+Month 1-2: Normal operation
+  └─ Paid RPC used occasionally
+  └─ Quota cost: $0.05/day (free tier reached)
+
+Month 3: Quota exhaustion
+  ├─ RPC returns 429 (rate limited)
+  ├─ op-node cannot fetch L1 blocks
+  ├─ Block production: STALLED ❌
+  └─ L2 network DOWN
+
+Cost to fix: Manual intervention, lost blocks, reputation damage
+```
+
+### ✅ With Failover: What Happens?
+
+```
+Month 1-2: Normal operation
+  └─ Paid RPC used occasionally
+  └─ Quota cost: $0.05/day (free tier reached)
+
+Month 3: Quota exhaustion
+  ├─ SentinAI detects 3 consecutive L1 RPC failures
+  ├─ Automatically switches to backup paid RPC
+  ├─ Updates Proxyd ConfigMap (100ms)
+  ├─ Updates StatefulSet env vars (5s rolling restart)
+  ├─ Block production: RESUMED ✅
+  └─ Cost: $0.10/day split between 2 providers
+
+Cost to fix: Zero (automatic), no downtime, no manual intervention
+```
+
 ## Related Documentation
 
 - **CLAUDE.md**: L1 Proxyd environment variables
 - **.env.local.sample**: Configuration template
 - **ARCHITECTURE.md**: L1 Failover architecture
+- **src/lib/l1-rpc-failover.ts**: Implementation details
