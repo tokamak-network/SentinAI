@@ -115,11 +115,13 @@ async function getConfigMapToml(
   }
 
   try {
-    const jsonPath = `{.data['${dataKey}']}`;
+    // Escape dots in dataKey for jsonpath (e.g., proxyd-config.toml → proxyd-config\.toml)
+    const escapedKey = dataKey.replace(/\./g, '\\.');
+    const jsonPath = `{.data.${escapedKey}}`;
     const cmd = `get configmap ${configMapName} -n ${namespace} -o jsonpath='${jsonPath}'`;
     const { stdout } = await runK8sCommand(cmd, { timeout: 10000 });
 
-    const content = stdout.replace(/^'|'$/g, '').trim();
+    const content = stdout.trim();
 
     if (!content) {
       throw new Error(`ConfigMap ${configMapName} has empty ${dataKey}`);
