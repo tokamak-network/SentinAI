@@ -8,6 +8,7 @@ import { createPublicClient, createWalletClient, http, parseEther, formatEther, 
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 import { getActiveL1RpcUrl } from '@/lib/l1-rpc-failover';
+import { getEOAAddressWithAutoDetect } from '@/lib/eoa-detector';
 import type {
   EOABalanceConfig,
   EOARole,
@@ -91,11 +92,19 @@ function classifyBalance(balanceEth: number, config: EOABalanceConfig): BalanceL
   return 'normal';
 }
 
+/**
+ * Get EOA address with automatic detection fallback
+ * Priority: manual env var → L1 transaction analysis → null
+ * Note: This is sync wrapper; actual detection happens in getAllBalanceStatus
+ */
 function getEOAAddress(role: EOARole): `0x${string}` | null {
   const envKey = role === 'batcher' ? 'BATCHER_EOA_ADDRESS' : 'PROPOSER_EOA_ADDRESS';
   const addr = process.env[envKey];
-  if (!addr || !addr.startsWith('0x')) return null;
-  return addr as `0x${string}`;
+  if (addr && addr.startsWith('0x')) {
+    return addr as `0x${string}`;
+  }
+  // Async detection handled in getAllBalanceStatus
+  return null;
 }
 
 function getTreasuryKey(): `0x${string}` | null {
@@ -163,8 +172,28 @@ export async function getAllBalanceStatus(
   let proposer: BalanceCheckResult | null = null;
   let treasury: BalanceCheckResult | null = null;
 
-  const batcherAddr = getEOAAddress('batcher');
-  const proposerAddr = getEOAAddress('proposer');
+  // Try environment variables first, then auto-detect if needed
+  let batcherAddr = getEOAAddress('batcher');
+  let proposerAddr = getEOAAddress('proposer');
+
+  // If not in env, attempt auto-detection from L1 transactions
+  if (!batcherAddr || !proposerAddr) {
+    try {
+      const detectedBatcher = !batcherAddr ? await getEOAAddressWithAutoDetect('batcher', rpcUrl) : null;
+      const detectedProposer = !proposerAddr ? await getEOAAddressWithAutoDetect('proposer', rpcUrl) : null;
+
+      if (detectedBatcher) {
+        batcherAddr = detectedBatcher;
+        console.log(`[EOA Monitor] Auto-detected batcher: ${batcherAddr}`);
+      }
+      if (detectedProposer) {
+        proposerAddr = detectedProposer;
+        console.log(`[EOA Monitor] Auto-detected proposer: ${proposerAddr}`);
+      }
+    } catch (err) {
+      console.warn('[EOA Monitor] Auto-detection failed, continuing with available addresses:', err instanceof Error ? err.message : err);
+    }
+  }
 
   try {
     const client = createL1Client(rpcUrl);
