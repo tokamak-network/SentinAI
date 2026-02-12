@@ -3,6 +3,7 @@ import { mainnet, sepolia } from 'viem/chains';
 import { NextResponse } from 'next/server';
 import { recordUsage } from '@/lib/usage-tracker';
 import { getCachedL1BlockNumber } from '@/lib/l1-rpc-cache';
+import { getCurrentVcpu, getActiveScenario } from '@/lib/seed-vcpu-manager';
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -345,6 +346,13 @@ export async function GET(request: Request) {
         let effectiveCpu = realCpu;
         const effectiveTx = txPoolPending;
         let currentVcpu: number = l2Client ? (l2Client.rawCpu || 1) : 1;
+
+        // Apply seed scenario vCPU progression if active (before stress mode)
+        const activeScenario = getActiveScenario();
+        if (activeScenario && activeScenario !== 'live') {
+            // Seed scenario is active, use its vCPU progression
+            currentVcpu = getCurrentVcpu();
+        }
 
         if (isStressTest) {
             effectiveCpu = 96.5; // Simulate overload

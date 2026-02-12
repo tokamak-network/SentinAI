@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { pushMetric, clearMetrics, getRecentMetrics, getMetricsCount } from '@/lib/metrics-store';
 import { resetPredictionState } from '@/lib/predictive-scaler';
+import { initVcpuProfile, clearVcpuProfile } from '@/lib/seed-vcpu-manager';
 import { MetricDataPoint } from '@/types/prediction';
 
 export const dynamic = 'force-dynamic';
@@ -153,6 +154,7 @@ export async function POST(request: NextRequest) {
 
     // Only reset prediction cache, keep real data intact
     await resetPredictionState();
+    clearVcpuProfile(); // Clear vCPU seed profile when switching to live
 
     const liveData = await getRecentMetrics();
     return NextResponse.json({
@@ -173,6 +175,7 @@ export async function POST(request: NextRequest) {
   // Mock scenarios: clear existing data and inject generated data
   await clearMetrics();
   await resetPredictionState();
+  initVcpuProfile(scenario); // Initialize vCPU progression for the scenario
 
   const dataPoints = generateScenarioData(scenario);
   for (const point of dataPoints) {
