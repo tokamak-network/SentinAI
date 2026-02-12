@@ -34,14 +34,11 @@ interface MetricData {
     monthlySaving: number;
     isPeakMode: boolean;
   };
-  l1Rpc?: {
-    activeUrl: string;
+  l2NodesL1Rpc?: Array<{
+    component: string;
+    l1RpcUrl: string;
     healthy: boolean;
-    endpointCount: number;
-    healthyCount: number;
-    lastFailoverTime: string | null;
-    consecutiveFailures: number;
-  };
+  }>;
   eoaBalances?: {
     batcher: { address: string; balanceEth: number; level: string } | null;
     proposer: { address: string; balanceEth: number; level: string } | null;
@@ -433,21 +430,10 @@ export default function Dashboard() {
       <div className="bg-white rounded-2xl px-6 py-4 mb-8 shadow-sm border border-gray-200/60">
         <div className="flex items-center gap-8">
           <div className="flex items-center gap-3">
-            <div className={`w-2 h-2 rounded-full animate-pulse ${
-              current?.l1Rpc ? (current.l1Rpc.healthy ? 'bg-green-500' : 'bg-red-500') : 'bg-blue-500'
-            }`}></div>
+            <div className="w-2 h-2 rounded-full animate-pulse bg-blue-500"></div>
             <div>
               <p className="text-[10px] text-gray-400 font-semibold uppercase">L1 Block</p>
               <p className="text-lg font-bold text-gray-900 font-mono">{current?.metrics.l1BlockHeight?.toLocaleString() || '—'}</p>
-              {current?.l1Rpc && (
-                <p className="text-[10px] text-gray-400 font-mono">
-                  {current.l1Rpc.activeUrl}
-                  <span className="mx-1">·</span>
-                  <span className={current.l1Rpc.healthyCount === current.l1Rpc.endpointCount ? 'text-green-500' : 'text-amber-500'}>
-                    {current.l1Rpc.healthyCount}/{current.l1Rpc.endpointCount}
-                  </span>
-                </p>
-              )}
             </div>
           </div>
           <div className="h-8 w-px bg-gray-200"></div>
@@ -1103,6 +1089,27 @@ export default function Dashboard() {
             ))}
           </div>
 
+          {/* L2 Nodes L1 RPC Status */}
+          {current?.l2NodesL1Rpc && current.l2NodesL1Rpc.length > 0 && (
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <h4 className="text-sm font-medium text-gray-600 mb-3">L2 Nodes L1 RPC</h4>
+              <div className="space-y-2">
+                {current.l2NodesL1Rpc.map((node) => (
+                  <div key={node.component} className="flex items-center justify-between text-sm">
+                    <span className="text-gray-700 font-medium">{node.component}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-500 font-mono text-xs">{node.l1RpcUrl}</span>
+                      {node.healthy ? (
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                      ) : (
+                        <span className="text-red-500 text-xs">⚠</span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -18,6 +18,7 @@ import type {
   ConfigMapUpdateResult,
   BackendReplacementEvent,
   ProxydBackendHealth,
+  L2NodeL1RpcStatus,
 } from '@/types/l1-failover';
 
 // ============================================================
@@ -702,4 +703,136 @@ function isSimulationMode(): boolean {
 
 function hasK8sCluster(): boolean {
   return !!(process.env.AWS_CLUSTER_NAME || process.env.K8S_API_URL);
+}
+
+// ============================================================
+// L2 Nodes L1 RPC Status
+// ============================================================
+
+/**
+ * Get L2 nodes' L1 RPC endpoint status
+ * Supports both Proxyd (ConfigMap) and Direct (StatefulSet env var) modes
+ */
+export async function getL2NodesL1RpcStatus(): Promise<L2NodeL1RpcStatus[]> {
+  const isProxydEnabled = process.env.L1_PROXYD_ENABLED === 'true';
+
+  try {
+    if (isProxydEnabled) {
+      return await getL2NodesL1RpcFromProxyd();
+    } else {
+      return await getL2NodesL1RpcFromK8s();
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[getL2NodesL1RpcStatus] Failed:', message);
+    return []; // Graceful degradation
+  }
+}
+
+/**
+ * Path A: Get L2 nodes L1 RPC from Proxyd ConfigMap
+ * All L2 components share the same upstream backend
+ */
+async function getL2NodesL1RpcFromProxyd(): Promise<L2NodeL1RpcStatus[]> {
+  try {
+    // 1. Get ConfigMap TOML content
+    const tomlContent = await getConfigMapToml(
+      process.env.L1_PROXYD_CONFIGMAP_NAME || 'proxyd-config',
+      process.env.L1_PROXYD_DATA_KEY || 'proxyd.toml',
+      getNamespace()
+    );
+
+    // 2. Parse TOML
+    const parsed = TOML.parse(tomlContent) as Record<string, unknown>;
+    const backends = parsed.backends as Record<string, Record<string, unknown>>;
+    const backendGroups = parsed.backend_groups as Record<string, Record<string, unknown>>;
+    const upstreamGroup = process.env.L1_PROXYD_UPSTREAM_GROUP || 'main';
+    const group = backendGroups[upstreamGroup] as { backends?: string[] };
+    const backendNames = group.backends || [];
+
+    // 3. Extract first backend RPC URL (all L2 components share)
+    const firstBackendUrl = backendNames[0] ? (backends[backendNames[0]]?.rpc_url as string) : null;
+
+    // 4. Get health status from existing checks
+    const state = getL1FailoverState();
+    const healthMap = new Map(
+      state.proxydHealth.map(h => [h.rpcUrl, h.healthy])
+    );
+
+    // 5. Generate status for 3 L2 components
+    return ['op-node', 'op-batcher', 'op-proposer'].map(component => ({
+      component: component as L2NodeL1RpcStatus['component'],
+      l1RpcUrl: maskUrl(firstBackendUrl || 'unknown'),
+      healthy: healthMap.get(firstBackendUrl || '') ?? false,
+    }));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[getL2NodesL1RpcFromProxyd] Failed:', message);
+    return [];
+  }
+}
+
+/**
+ * Path B: Get L2 nodes L1 RPC from K8s StatefulSet environment variables
+ * Each component has its own L1_ETH_RPC environment variable
+ */
+async function getL2NodesL1RpcFromK8s(): Promise<L2NodeL1RpcStatus[]> {
+  try {
+    const namespace = getNamespace();
+    const prefix = process.env.K8S_STATEFULSET_PREFIX || 'sepolia-thanos-stack';
+    const components: Array<{ name: string; envVar: string }> = [
+      { name: 'op-node', envVar: 'OP_NODE_L1_ETH_RPC' },
+      { name: 'op-batcher', envVar: 'OP_BATCHER_L1_ETH_RPC' },
+      { name: 'op-proposer', envVar: 'OP_PROPOSER_L1_ETH_RPC' },
+    ];
+
+    // Fetch all component L1 RPC URLs in parallel
+    const results = await Promise.all(
+      components.map(async ({ name, envVar }) => {
+        try {
+          // 1. Get StatefulSet environment variable via kubectl
+          const stsName = `${prefix}-${name}`;
+          const jsonPath = `{.spec.template.spec.containers[0].env[?(@.name=="${envVar}")].value}`;
+          const cmd = `get statefulset ${stsName} -n ${namespace} -o jsonpath='${jsonPath}'`;
+          const { stdout } = await runK8sCommand(cmd, { timeout: 10000 });
+          const url = stdout.replace(/^'|'$/g, '').trim();
+
+          if (!url) {
+            return {
+              component: name as L2NodeL1RpcStatus['component'],
+              l1RpcUrl: 'N/A',
+              healthy: false,
+            };
+          }
+
+          // 2. Probe L1 RPC health
+          const client = createPublicClient({
+            chain: sepolia,
+            transport: http(url, { timeout: 5000 }),
+          });
+          await client.getBlockNumber();
+
+          return {
+            component: name as L2NodeL1RpcStatus['component'],
+            l1RpcUrl: maskUrl(url),
+            healthy: true,
+          };
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          console.error(`[getL2NodesL1RpcFromK8s] Failed for ${name}: ${message}`);
+          return {
+            component: name as L2NodeL1RpcStatus['component'],
+            l1RpcUrl: 'Error',
+            healthy: false,
+          };
+        }
+      })
+    );
+
+    return results;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.error('[getL2NodesL1RpcFromK8s] Failed:', message);
+    return [];
+  }
 }

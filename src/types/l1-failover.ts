@@ -94,3 +94,10 @@ export interface K8sUpdateResult {
   errors: string[];
   configMapResult?: ConfigMapUpdateResult;
 }
+
+/** L2 nodes L1 RPC status */
+export interface L2NodeL1RpcStatus {
+  component: 'op-node' | 'op-batcher' | 'op-proposer';
+  l1RpcUrl: string; // Masked URL
+  healthy: boolean;
+}

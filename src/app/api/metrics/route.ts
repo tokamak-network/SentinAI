@@ -13,7 +13,7 @@ import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import { getStore } from '@/lib/redis-store';
 import { runDetectionPipeline } from '@/lib/detection-pipeline';
 import { getContainerCpuUsage } from '@/lib/k8s-scaler';
-import { getActiveL1RpcUrl, getL1FailoverState, maskUrl } from '@/lib/l1-rpc-failover';
+import { getActiveL1RpcUrl, getL2NodesL1RpcStatus } from '@/lib/l1-rpc-failover';
 import { getAllBalanceStatus } from '@/lib/eoa-balance-monitor';
 import type { AnomalyResult } from '@/types/anomaly';
 
@@ -475,21 +475,14 @@ export async function GET(request: Request) {
             },
             status: "healthy",
             stressMode: isStressTest,
-            // === L1 RPC Status ===
-            l1Rpc: (() => {
-                const state = getL1FailoverState();
-                const active = state.endpoints[state.activeIndex];
-                return {
-                    activeUrl: maskUrl(state.activeUrl),
-                    healthy: active?.healthy ?? true,
-                    endpointCount: state.endpoints.length,
-                    healthyCount: state.endpoints.filter(e => e.healthy).length,
-                    lastFailoverTime: state.lastFailoverTime
-                        ? new Date(state.lastFailoverTime).toISOString()
-                        : null,
-                    consecutiveFailures: active?.consecutiveFailures ?? 0,
-                };
-            })(),
+            // === L2 Nodes L1 RPC Status ===
+            l2NodesL1Rpc: isStressTest
+                ? [
+                    { component: 'op-node', l1RpcUrl: 'https://eth-sepolia.public***', healthy: true },
+                    { component: 'op-batcher', l1RpcUrl: 'https://eth-sepolia.public***', healthy: true },
+                    { component: 'op-proposer', l1RpcUrl: 'https://eth-sepolia.public***', healthy: true },
+                ]
+                : await getL2NodesL1RpcStatus(),
             // === EOA Balance Status ===
             eoaBalances: await (async () => {
                 try {
