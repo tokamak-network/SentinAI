@@ -1078,15 +1078,22 @@ export default function Dashboard() {
                         {new Date(cycle.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </span>
                       {cycle.scaling ? (
-                        <span className={`font-bold ${
-                          cycle.scaling.score >= 70 ? 'text-red-500' :
-                          cycle.scaling.score >= 30 ? 'text-amber-500' :
-                          'text-green-600'
-                        }`}>
-                          score={cycle.scaling.score}
-                        </span>
+                        <div className="flex items-center gap-1 truncate">
+                          {/* vCPU Change */}
+                          <span className="font-bold text-gray-700 shrink-0">
+                            {cycle.scaling.currentVcpu}→{cycle.scaling.targetVcpu}
+                          </span>
+                          {/* CPU Metric */}
+                          <span className="text-gray-600 shrink-0">
+                            {Math.round(cycle.metrics?.cpuUsage || 0)}%
+                          </span>
+                          {/* Action Reason */}
+                          <span className="text-gray-500 truncate text-[9px]">
+                            {cycle.scaling.reason.split(',')[0].replace(/^\[.*?\]\s*/, '').slice(0, 20)}...
+                          </span>
+                        </div>
                       ) : cycle.error ? (
-                        <span className="text-red-400 truncate">{cycle.error.slice(0, 30)}</span>
+                        <span className="text-red-400 truncate text-[9px]">{cycle.error.slice(0, 25)}</span>
                       ) : (
                         <span className="text-gray-400">—</span>
                       )}
