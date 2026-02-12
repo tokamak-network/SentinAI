@@ -8,6 +8,7 @@ import {
   Send, Bot, User, RefreshCw, Pause
 } from 'lucide-react';
 import type { ChatMessage, NLOpsResponse, NLOpsIntent } from '@/types/nlops';
+import type { CostReport } from '@/types/cost';
 
 // --- Interfaces ---
 interface MetricData {
@@ -187,10 +188,9 @@ export default function Dashboard() {
   const [agentLoop, setAgentLoop] = useState<AgentLoopStatus | null>(null);
 
   // --- Cost Analysis State ---
-  const [costAnalysisOpen, setCostAnalysisOpen] = useState(false);
-  const [costAnalysisData, setCostAnalysisData] = useState<Record<string, unknown> | null>(null);
+  const [costAnalysisExpanded, setCostAnalysisExpanded] = useState(false);
+  const [costAnalysisData, setCostAnalysisData] = useState<CostReport | null>(null);
   const [costAnalysisLoading, setCostAnalysisLoading] = useState(false);
-  const [costAnalysisError, setCostAnalysisError] = useState<string | null>(null);
 
   // Seed prediction data for testing
   const seedPredictionData = async () => {
@@ -778,28 +778,84 @@ export default function Dashboard() {
             </div>
             <button
               onClick={() => {
-                setCostAnalysisOpen(true);
-                setCostAnalysisLoading(true);
-                setCostAnalysisError(null);
-                fetch('/api/cost-report')
-                  .then(r => {
-                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                    return r.json();
-                  })
-                  .then(data => {
-                    setCostAnalysisData(data);
-                    setCostAnalysisLoading(false);
-                  })
-                  .catch(e => {
-                    setCostAnalysisError(e instanceof Error ? e.message : 'Unknown error');
-                    setCostAnalysisLoading(false);
-                  });
+                if (costAnalysisExpanded) {
+                  setCostAnalysisExpanded(false);
+                } else {
+                  setCostAnalysisExpanded(true);
+                  setCostAnalysisLoading(true);
+                  fetch('/api/cost-report')
+                    .then(r => {
+                      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                      return r.json();
+                    })
+                    .then(data => {
+                      setCostAnalysisData(data);
+                      setCostAnalysisLoading(false);
+                    })
+                    .catch(e => {
+                      console.error('Cost analysis error:', e);
+                      setCostAnalysisLoading(false);
+                    });
+                }
               }}
               className="w-full mt-3 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-medium rounded-lg transition-colors"
               data-testid="cost-analysis-btn"
             >
-              Cost Analysis
+              {costAnalysisExpanded ? 'Hide Analysis' : 'Cost Analysis'}
             </button>
+
+            {/* Cost Analysis Results (Expandable) */}
+            {costAnalysisExpanded && (
+              <div className="mt-3 pt-3 border-t border-gray-100">
+                {costAnalysisLoading ? (
+                  <div className="flex items-center justify-center py-4">
+                    <RefreshCw size={16} className="text-blue-500 animate-spin mr-2" />
+                    <span className="text-xs text-gray-600">Loading analysis...</span>
+                  </div>
+                ) : costAnalysisData ? (
+                  <div className="space-y-3">
+                    {/* Savings Summary */}
+                    <div className="bg-green-50 rounded-lg p-3 border border-green-100">
+                      <p className="text-xs text-green-700 font-semibold">Potential Monthly Savings</p>
+                      <p className="text-lg font-black text-green-600 mt-1">
+                        ${Math.abs((costAnalysisData.currentMonthly - costAnalysisData.optimizedMonthly) || 0).toFixed(0)}
+                        <span className="text-xs font-normal ml-1">({costAnalysisData.totalSavingsPercent?.toFixed(0) || 0}%)</span>
+                      </p>
+                    </div>
+
+                    {/* AI Insight */}
+                    {costAnalysisData.aiInsight && (
+                      <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
+                        <p className="text-xs text-blue-700 font-semibold">AI Insight</p>
+                        <p className="text-xs text-blue-700 mt-1 leading-relaxed">{costAnalysisData.aiInsight}</p>
+                      </div>
+                    )}
+
+                    {/* Top Recommendations */}
+                    {costAnalysisData.recommendations && costAnalysisData.recommendations.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs text-gray-600 font-semibold">Top Recommendations</p>
+                        {costAnalysisData.recommendations.slice(0, 2).map((rec, idx) => (
+                          <div key={idx} className="bg-amber-50 rounded-lg p-2.5 border border-amber-100">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <p className="text-xs font-semibold text-amber-900">{rec.title}</p>
+                                <p className="text-xs text-amber-700 mt-0.5">{rec.description}</p>
+                              </div>
+                              <span className="text-xs font-bold text-green-600 whitespace-nowrap">
+                                -{rec.savingsPercent?.toFixed(0) || 0}%
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-500 text-center py-3">No data available</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1299,56 +1355,6 @@ export default function Dashboard() {
                 disabled={isSending || !chatInput.trim() || !!pendingConfirmation}
                 className="bg-blue-500 text-white p-3 rounded-xl hover:bg-blue-600 transition-colors disabled:opacity-50">
                 <Send size={18} />
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Cost Analysis Modal */}
-      {costAnalysisOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setCostAnalysisOpen(false)}>
-          <div className="bg-white rounded-2xl shadow-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-            {/* Header */}
-            <div className="sticky top-0 flex items-center justify-between p-6 border-b border-gray-200 bg-white">
-              <h2 className="text-lg font-bold text-gray-900">Cost Analysis Report</h2>
-              <button onClick={() => setCostAnalysisOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
-                <ChevronDown size={24} className="rotate-180" />
-              </button>
-            </div>
-
-            {/* Content */}
-            <div className="p-6">
-              {costAnalysisLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="animate-spin">
-                    <RefreshCw size={24} className="text-blue-500" />
-                  </div>
-                  <span className="ml-3 text-gray-600">Loading cost analysis...</span>
-                </div>
-              ) : costAnalysisError ? (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                  <p className="text-red-700 font-medium">Failed to load cost report</p>
-                  <p className="text-red-600 text-sm mt-1">{costAnalysisError}</p>
-                </div>
-              ) : costAnalysisData ? (
-                <div className="space-y-4">
-                  <pre className="bg-gray-50 rounded-lg p-4 overflow-x-auto text-xs text-gray-700 border border-gray-200">
-                    {JSON.stringify(costAnalysisData, null, 2)}
-                  </pre>
-                </div>
-              ) : (
-                <p className="text-gray-500 text-center py-8">No data available</p>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="sticky bottom-0 flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
-              <button
-                onClick={() => setCostAnalysisOpen(false)}
-                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 font-medium rounded-lg transition-colors"
-              >
-                Close
               </button>
             </div>
           </div>
