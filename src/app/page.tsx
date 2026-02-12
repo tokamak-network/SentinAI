@@ -155,6 +155,38 @@ const METRICS_REFRESH_INTERVAL_MS = 60_000;
 /** Agent Loop status polling interval (ms) */
 const AGENT_LOOP_REFRESH_INTERVAL_MS = 30_000;
 
+// --- Helper Functions ---
+/**
+ * Compress scaling reason into key decision factors
+ * E.g.: "[Skip] Cooldown 36s. System Idle, CPU 0.2% Low" → "Cooldown 36s | Idle"
+ */
+function compressReason(reason: string): string {
+  const parts: string[] = [];
+
+  // Extract cooldown time
+  const cooldownMatch = reason.match(/Cooldown (\d+s)/);
+  if (cooldownMatch) {
+    parts.push(cooldownMatch[1]);
+  }
+
+  // Extract decision status
+  if (reason.includes('Predictive')) {
+    parts.push('Predict');
+  } else if (reason.includes('System Idle')) {
+    parts.push('Idle');
+  } else if (reason.includes('High Load') || reason.includes('CPU.*High')) {
+    parts.push('High');
+  } else if (reason.includes('spiked') || reason.includes('spike')) {
+    parts.push('Spike');
+  } else if (reason.includes('Scale Up')) {
+    parts.push('ScaleUp');
+  } else if (reason.includes('Scale Down')) {
+    parts.push('ScaleDown');
+  }
+
+  return parts.length > 0 ? parts.join(' | ') : 'Running';
+}
+
 // --- Main Dashboard Component ---
 export default function Dashboard() {
   // State
@@ -1089,7 +1121,7 @@ export default function Dashboard() {
                           </span>
                           {/* Action Reason */}
                           <span className="text-gray-500 truncate text-[9px]">
-                            {cycle.scaling.reason.split(',')[0].replace(/^\[.*?\]\s*/, '').slice(0, 20)}...
+                            {compressReason(cycle.scaling.reason)}
                           </span>
                         </div>
                       ) : cycle.error ? (
