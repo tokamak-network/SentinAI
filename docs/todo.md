@@ -1,18 +1,43 @@
-# TODO: SentinAI Implementation (2026-02-10)
+# TODO: SentinAI Implementation (2026-02-12)
 
 ## 🎯 Current Status
 
-### ✅ Completed (2026-02-10)
-- [x] Proposal 1-7 전체 구현 완료 (88%)
-- [x] Unit Tests 541개 (100% passing)
+### ✅ Completed (2026-02-12)
+- [x] **Proposal 1-8 전체 구현 완료 (100%)**
+- [x] Unit Tests 677개 (100% passing, 24 files, Vitest)
 - [x] E2E Verification 스크립트 (`scripts/verify-e2e.sh`)
 - [x] Redis State Store (Proposal 7)
+- [x] **Auto-Remediation Engine (Proposal 8)** - 5 Playbooks + Circuit Breaker
+- [x] **L1 RPC Rate Limit 완화** - 95% 호출량 절감
+- [x] **5분 데모 자료** - 3종 완성:
+  - `scripts/demo-5min.sh` (429줄) - 자동화 데모 스크립트
+  - `DEMO_GUIDE.md` (323줄) - 데모 가이드 + 관찰 포인트
+  - `PRESENTATION_SCRIPT.md` (540줄) - 5단계 발표 스크립트
+- [x] L2 Nodes L1 RPC Status 표시 - 운영자 가시성 개선
 
 ---
 
 ## 📋 Future Tasks
 
-### P1: CI/CD Pipeline (High Priority)
+### P1: Production Deployment (High Priority)
+
+**현황:** 배포 계획 수립 중
+
+**작업 내용:**
+- [ ] **2-Day Production Deployment Plan** (`docs/todo/production-deployment-2day-plan.md`)
+  - Phase 1: Infrastructure Setup (Day 1)
+  - Phase 2: Application Deployment (Day 2)
+  - Pre-flight Checklist, Rollback Plan
+- [ ] **Production Shift Plan** (`docs/todo/production-shift-plan.md`)
+  - Operational runbook
+  - On-call procedures
+  - Incident response playbook
+
+**예상 소요:** 3-5일 (배포)
+
+---
+
+### P2: CI/CD Pipeline (Medium Priority)
 
 **현황:** `.github/workflows/` 디렉토리 비어있음
 
@@ -28,21 +53,6 @@
   - Cache: node_modules, .next
 
 **예상 소요:** 1일
-
----
-
-### P2: Proposal 8 - Auto-Remediation Engine (Medium Priority)
-
-**상태:** 명세 완료 → 구현 대기
-
-**핵심 기능:**
-- RCA 결과 기반 자동 복구 루프
-- Playbook 시스템 (K8s 재시작, 스케일 조정 등)
-- 복구 이력 추적 + 성공률 모니터링
-
-**문서:** `docs/todo/proposal-8-auto-remediation.md`
-
-**예상 소요:** 5-7일
 
 ---
 
@@ -65,11 +75,22 @@
 
 | Category | Completed | Total | Progress |
 |----------|-----------|-------|----------|
-| Proposals | 7 | 9 | 78% |
-| Unit Tests | 541 | — | — |
-| E2E Tests | verify-e2e.sh | — | — |
+| Proposals | 8 | 13+ | 62% |
+| Unit Tests | 677 | — | ✅ 100% pass |
+| E2E Tests | verify-e2e.sh | — | ✅ 6-phase |
+| Demo Materials | 3 | 3 | ✅ 100% |
 | CI/CD | 0 | 3 workflows | 0% |
+| Production Deploy | Planning | — | In Progress |
 
 ---
 
-**Updated:** 2026-02-10
+## 🔄 Recent Changes (2026-02-12)
+
+- **L1 RPC Caching** - `l1-rpc-cache.ts` (150 LOC) + 19 tests
+- **Dashboard Refresh Rate** - 1s → 60s (metrics), 5s → 30s (agent loop)
+- **L1 Failover UI** - L2 nodes에서 현재 L1 RPC endpoint 표시
+- **Demo Automation** - 5분 완전 자동화 데모 + 발표 스크립트
+
+---
+
+**Updated:** 2026-02-12
