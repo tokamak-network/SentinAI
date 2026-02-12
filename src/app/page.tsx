@@ -1155,24 +1155,24 @@ export default function Dashboard() {
                     color = 'text-red-400';
                   } else if (scaling?.executed) {
                     event = 'SCALED';
-                    detail = `${scaling.currentVcpu}→${scaling.targetVcpu} vCPU (score: ${scaling.score})`;
+                    detail = `${scaling.currentVcpu}→${scaling.targetVcpu} vCPU`;
                     color = 'text-amber-400';
                   } else if (scaling && scaling.score >= 70) {
                     event = 'HIGH';
-                    detail = `score: ${scaling.score}`;
+                    detail = '';
                     // Extract skip reason
-                    if (scaling.reason.includes('Cooldown')) detail += ' — cooldown active';
-                    else if (scaling.reason.includes('Already at')) detail += ` — already at ${scaling.currentVcpu} vCPU`;
+                    if (scaling.reason.includes('Cooldown')) detail = 'Cooldown active';
+                    else if (scaling.reason.includes('Already at')) detail = `Already at ${scaling.currentVcpu} vCPU`;
                     color = 'text-red-400';
                   } else if (scaling && scaling.score >= 30) {
                     event = 'NORMAL';
-                    detail = `score: ${scaling.score}`;
-                    if (scaling.reason.includes('Cooldown')) detail += ' — cooldown active';
-                    else if (scaling.reason.includes('Already at')) detail += ` — at ${scaling.currentVcpu} vCPU`;
+                    detail = '';
+                    if (scaling.reason.includes('Cooldown')) detail = 'Cooldown active';
+                    else if (scaling.reason.includes('Already at')) detail = `At ${scaling.currentVcpu} vCPU`;
                     color = 'text-blue-400';
                   } else {
                     event = 'IDLE';
-                    detail = `score: ${scaling?.score ?? '—'}`;
+                    detail = '';
                     color = 'text-green-500/70';
                   }
 

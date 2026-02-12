@@ -293,10 +293,12 @@ export class RedisStateStore implements IStateStore {
   }
 
   async setSeedScenario(scenario: string | null): Promise<void> {
+    const key = this.key(KEYS.seedScenario);
     if (scenario) {
-      await this.client.set(this.key(KEYS.seedScenario), scenario);
+      // Keep seed scenario for 20 seconds (auto-cleanup after testing)
+      await this.client.setex(key, 20, scenario);
     } else {
-      await this.client.del(this.key(KEYS.seedScenario));
+      await this.client.del(key);
     }
   }
 
@@ -743,6 +745,7 @@ export class InMemoryStateStore implements IStateStore {
 
   // Seed Scenario (Cross-Worker Persistence)
   private seedScenario: string | null = null;
+  private seedScenarioTimeout: NodeJS.Timeout | null = null;
 
   // Agent Cycle History (Cross-Worker Persistence)
   private agentCycleHistory: any[] = [];
@@ -854,7 +857,22 @@ export class InMemoryStateStore implements IStateStore {
   }
 
   async setSeedScenario(scenario: string | null): Promise<void> {
-    this.seedScenario = scenario;
+    // Clear existing timeout
+    if (this.seedScenarioTimeout) {
+      clearTimeout(this.seedScenarioTimeout);
+      this.seedScenarioTimeout = null;
+    }
+
+    if (scenario) {
+      this.seedScenario = scenario;
+      // Auto-clear after 20 seconds
+      this.seedScenarioTimeout = setTimeout(() => {
+        this.seedScenario = null;
+        this.seedScenarioTimeout = null;
+      }, 20_000);
+    } else {
+      this.seedScenario = null;
+    }
   }
 
   // --- Agent Cycle History (Cross-Worker Persistence) ---
