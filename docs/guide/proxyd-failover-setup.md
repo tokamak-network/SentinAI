@@ -255,30 +255,64 @@ Time: t2 → 3 consecutive failures detected
 
 ### Failover Execution (ConfigMap-Centric)
 
-**Primary: Proxyd ConfigMap Update** (sufficient for all L2 nodes)
+**Step 1: Update Proxyd ConfigMap** (both upstreams AND backends)
+
 ```bash
-# Current
-kubectl get configmap proxyd-config
-# proxyd.toml:
-# [[upstreams]]
-# name = "main"
-# rpc_url = "https://alchemy.io/v2/key1"  ← Quota exhausted
+# Current state
+kubectl get configmap proxyd-config -o yaml
+# data:
+#   proxyd.toml: |
+#     [[upstreams]]
+#     name = "main"
+#     rpc_url = "https://alchemy.io/v2/key1"  ← Quota exhausted
+#     ws_url = "wss://alchemy.io/v2/key1"
+#
+#     [[backends]]
+#     rpc_url = "main"
+#     ws_url = "main"
 
-# Update
+# SentinAI updates via kubectl patch:
+# 1. Changes upstreams[name="main"].rpc_url → https://infura.io/v3/key2
+# 2. Changes upstreams[name="main"].ws_url → wss://infura.io/v3/key2
+# 3. Ensures backends[].rpc_url still references "main" (no change needed)
+# 4. Ensures backends[].ws_url still references "main" (no change needed)
+
 kubectl patch configmap proxyd-config --type=json \
-  -p='[{"op":"replace","path":"/data/proxyd.toml","value":"[[upstreams]]...rpc_url=\"https://infura.io/v3/key2\""}]'
+  -p='[{"op":"replace","path":"/data/proxyd.toml","value":"[[upstreams]]..."}]'
 
-# Result: Proxyd auto-watches ConfigMap
-# → Proxyd reloads TOML (automatic)
-# → All L2 nodes route through Proxyd with new Infura endpoint
-# → op-node, op-batcher, op-proposer all get fresh quota ✅
-# → NO pod restarts needed (instant effect)
+echo "[L1 Failover] Updated Proxyd ConfigMap: https://alchemy.io → https://infura.io"
 ```
 
-**Key Point**: ConfigMap update applies to ALL L2 nodes regardless of their deployment type:
-- ✅ op-node (may be StatefulSet or Pod)
-- ✅ op-batcher (Pod - NOT StatefulSet)
-- ✅ op-proposer (Pod - NOT StatefulSet)
+**Step 2: Restart Proxyd Pod** (CRITICAL - ConfigMap watcher alone is NOT sufficient)
+
+```bash
+# SentinAI automatically triggers pod restart:
+kubectl delete pod -l app=proxyd
+
+# Kubernetes deployment/statefulset respawns new Proxyd pod
+# → New pod reads updated ConfigMap
+# → New pod loads new L1 RPC endpoint (Infura)
+# → All L2 nodes now route through Proxyd with fresh quota ✅
+```
+
+**Timeline with ConfigMap + Pod Restart**:
+```
+t=0ms:   ConfigMap updated (upstreams + backends changes applied)
+t=10ms:  Proxyd pod deletion triggered
+t=50ms:  Proxyd pod respawning
+t=500ms: Proxyd pod ready and running
+         → Reads updated ConfigMap
+         → Loads new upstream (Infura)
+         → All L2 node requests now route through Infura ✅
+
+Total downtime: ~500ms (acceptable for L1 RPC router)
+```
+
+**Key Points**:
+- ✅ ConfigMap update changes **both upstreams AND backends** rpc_url/ws_url
+- ✅ Proxyd pod **MUST restart** to load ConfigMap changes
+- ✅ All L2 nodes (op-node, op-batcher, op-proposer) benefit from single update
+- ✅ Independent of L2 deployment type (StatefulSet, Pod, etc.)
 
 **Optional: Individual Pod Env Vars** (backup, only if not using Proxyd)
 ```bash
@@ -296,15 +330,45 @@ kubectl set env pod/op-node-0 OP_NODE_L1_ETH_RPC=https://infura.io/v3/key2
 
 ### Recovery Timeline
 
+**For HTTP 429 (quota exhaustion)**:
 ```
-t0: Block production running
-    └─ 3 failures detected ❌
+t=0s:       Block production running
+            └─ 10 consecutive 429 failures detected (≥5 minutes)
 
-t0+100ms: Proxyd ConfigMap updated
-          └─ Proxyd auto-reloads TOML (watches ConfigMap)
-          └─ New L1 RPC: Infura ✅
-          └─ op-node, op-batcher, op-proposer immediately route through new endpoint
-          └─ Block production resumes ✅
+t=300s+:    Failover triggered
+            └─ ConfigMap updated (upstreams + backends changed)
+            └─ Proxyd pod restart initiated
+
+t=300s+50ms: Proxyd pod terminating
+            └─ Old Proxyd still routing to exhausted Alchemy
+            └─ Brief ~50ms window of failure
+
+t=300s+200ms: Proxyd pod respawning
+             └─ Reading new ConfigMap
+
+t=300s+500ms: Proxyd pod READY
+             └─ Loaded new upstream: Infura ✅
+             └─ op-node, op-batcher, op-proposer routing through Infura
+             └─ Block production resumes ✅
+             └─ Fresh quota available
+
+Total downtime: ~500ms + pod startup time (usually <1s total)
+```
+
+**For other errors (timeout, 5xx)**:
+```
+t=0s:       Block production running
+            └─ 3 consecutive failures detected (~90 seconds)
+
+t=90s+:     Failover triggered
+            └─ ConfigMap updated
+            └─ Proxyd pod restart
+
+t=90s+500ms: New Proxyd pod active
+            └─ Backup endpoint available
+            └─ Block production resumes ✅
+
+Total downtime: ~500ms
 ```
 
 ### ConfigMap-First Approach
@@ -334,49 +398,59 @@ t0+100ms: Proxyd ConfigMap updated
 
 ### Detection Mechanism
 
-SentinAI detects L1 RPC quota exhaustion through **consecutive failure tracking**:
+SentinAI detects L1 RPC quota exhaustion through **consecutive failure tracking with error-specific thresholds**:
 
 ```
 Agent Loop (every 30s)
     ↓
     Calls: getBlockNumber() on active L1 RPC endpoint
     ↓
-    Failure? (ANY error type: 429, timeout, connection refused, etc.)
+    Failure? (Check error type)
     ↓
-    YES → reportL1Failure(error)
-         └─ Increment consecutive failure counter
-         └─ Is counter >= 3?
-            YES → executeFailover()
-            NO → Continue with same endpoint
+    HTTP 429? (quota exhaustion)
+    │   YES → Increment 429-counter
+    │        └─ Is counter >= 10?
+    │           YES → executeFailover() ← Tolerates 10x failures
+    │           NO → Continue with same endpoint
+    │
+    NO (other errors: timeout, 5xx, etc.)
+        └─ Increment error-counter
+           └─ Is counter >= 3?
+              YES → executeFailover() ← Faster failover
+              NO → Continue with same endpoint
 
     SUCCESS → reportL1Success()
-             └─ Reset failure counter to 0
+             └─ Reset ALL counters to 0
              └─ Mark endpoint as healthy
 ```
 
-### Error Types That Trigger Failover
+### Error Types and Thresholds
 
-**All error types** trigger the same failover mechanism:
+**Different error types have different failover thresholds**:
 
-| Error Type | Source | Handled | Notes |
-|-----------|--------|---------|-------|
-| **HTTP 429** (Too Many Requests) | Quota exhaustion | ✅ Yes | Most common quota indicator |
-| **HTTP 5xx** | RPC server error | ✅ Yes | Temporary outage |
-| **Connection timeout** (>10s) | Network/overload | ✅ Yes | Indicates endpoint unavailability |
-| **ECONNREFUSED** | RPC down | ✅ Yes | Endpoint offline |
-| **RPC Error** (invalid block, etc.) | RPC logic error | ✅ Yes | Unexpected error |
+| Error Type | Threshold | Timeout | Reasoning |
+|-----------|-----------|---------|-----------|
+| **HTTP 429** (Too Many Requests) | 10 failures | 5+ minutes | Quota exhaustion is often temporary; wait longer before failover |
+| **HTTP 5xx** | 3 failures | ~90 seconds | RPC server error; failover quickly |
+| **Connection timeout** (>10s) | 3 failures | ~90 seconds | Network issue; failover quickly |
+| **ECONNREFUSED** | 3 failures | ~90 seconds | Endpoint offline; failover immediately |
+| **RPC Error** | 3 failures | ~90 seconds | Other errors; failover quickly |
 
-**Key Point**: The failover system does **NOT** distinguish between different error types. Any 3 consecutive failures trigger failover, regardless of the reason:
+**Key Point**: HTTP 429 (quota exhaustion) uses a **higher threshold (10)** to tolerate temporary quota limits. Other errors trigger failover at **3 consecutive failures**:
 
 ```javascript
 // From l1-rpc-failover.ts
 export async function reportL1Failure(error: Error): Promise<string | null> {
   const endpoint = state.endpoints[state.activeIndex];
   if (endpoint) {
-    endpoint.consecutiveFailures++;  // ← Increment counter (error type ignored)
+    endpoint.consecutiveFailures++;
   }
 
-  if (endpoint.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {  // 3
+  // Determine threshold based on error type
+  const is429Error = error.message.includes('429') || error.message.includes('quota');
+  const threshold = is429Error ? 10 : 3;  // ← Different thresholds
+
+  if (endpoint.consecutiveFailures >= threshold) {
     // Execute failover...
   }
 }
@@ -384,23 +458,47 @@ export async function reportL1Failure(error: Error): Promise<string | null> {
 
 ### Failure Detection Timeline
 
+**Scenario: HTTP 429 (quota exhaustion) - uses 10-failure threshold**
+
 ```
-t=0s: L1 RPC call #1 fails (429 Too Many Requests) ← Failure #1
-      └─ Quota exhaustion suspected
-      └─ Continue with same endpoint
+t=0s:   L1 RPC call fails: HTTP 429 ← Failure #1
+        └─ Quota exhaustion suspected
+        └─ Continue with same endpoint (429 is more tolerant)
 
-t=30s: L1 RPC call #2 fails (429 again) ← Failure #2
-       └─ Quota still exhausted
-       └─ Continue with same endpoint
+t=30s:  L1 RPC call fails: HTTP 429 ← Failure #2
+        └─ Quota still exhausted
+        └─ Continue (7 failures remaining before failover)
 
-t=60s: L1 RPC call #3 fails (429 again) ← Failure #3
-       └─ THRESHOLD REACHED
-       └─ Failover triggered immediately ← ~100ms
-       └─ New endpoint active
+t=60s:  L1 RPC call fails: HTTP 429 ← Failure #3
+        ...
+        └─ Continue (6 failures remaining)
 
-t=61s: L1 RPC call #4 succeeds on new endpoint ✅
-       └─ Failure counter reset to 0
-       └─ New endpoint marked healthy
+t=270s: L1 RPC call fails: HTTP 429 ← Failure #9
+        └─ Continue (1 failure remaining before failover)
+
+t=300s: L1 RPC call fails: HTTP 429 ← Failure #10
+        └─ THRESHOLD REACHED (10)
+        └─ Failover triggered ← ~100ms
+        └─ New endpoint active ✅
+
+t=301s: L1 RPC call succeeds on new endpoint
+        └─ Failure counter reset to 0
+        └─ New endpoint marked healthy
+```
+
+**Scenario: Other errors (timeout, 5xx, etc.) - uses 3-failure threshold**
+
+```
+t=0s:   L1 RPC call fails: timeout ← Failure #1
+        └─ Continue with same endpoint
+
+t=30s:  L1 RPC call fails: timeout ← Failure #2
+        └─ Continue (1 failure remaining)
+
+t=60s:  L1 RPC call fails: timeout ← Failure #3
+        └─ THRESHOLD REACHED (3)
+        └─ Failover triggered ← ~100ms
+        └─ New endpoint active ✅
 ```
 
 ### When Quota Exhaustion Happens
@@ -443,31 +541,41 @@ L1_RPC_URLS=https://alchemy.io/v2/key1,https://infura.io/v3/key2
 ```
 SentinAI Agent Loop (every 30s)
     ↓
-    getBlockNumber() via current L1_RPC_URL
+    getBlockNumber() via current L1_RPC_URL (= Proxyd service URL)
     ↓
-    If using Proxyd as L1_RPC_URL:
-    ├─ HTTP/gRPC → Proxyd Service (http://proxyd-service:8080)
-    │  └─ Proxyd: Forwards to upstream (currently Alchemy)
-    │     ↓
-    │     Alchemy RPC OK → returns block number ✅
-    │     Alchemy RPC 429 → Proxyd returns 429 to SentinAI
-    │  └─ SentinAI sees: 429 error (ANY error works)
-    │     └─ reportL1Failure() triggered
-    │     └─ After 3 failures: executeFailover()
+    HTTP → Proxyd Service (http://proxyd-service:8080)
     │
-    └─ SentinAI Updates Proxyd ConfigMap
-       └─ OLD: [[upstreams]] name="main" rpc_url="alchemy.io..."
-       └─ NEW: [[upstreams]] name="main" rpc_url="infura.io..."
-       └─ Proxyd auto-watches ConfigMap
-       └─ Proxyd reloads TOML (~50ms)
-       └─ **INSTANT EFFECT**: All L2 nodes now use Infura via Proxyd
+    └─ Proxyd reads ConfigMap upstreams: name="main" rpc_url="alchemy.io..."
+    │  └─ Proxyd forwards to Alchemy
+    │  └─ Alchemy 429 (quota exhausted) → Proxyd returns 429
+    │
+    └─ SentinAI detects: "429" error
+       ├─ Increments 429-counter
+       ├─ 429-counter >= 10?
+       │  YES → executeFailover() triggered ✅
+       │  NO  → Continue with same endpoint
+       │
+       └─ executeFailover() actions:
+          1. Updates ConfigMap:
+             - OLD: upstreams[main].rpc_url = "alchemy.io..."
+             - NEW: upstreams[main].rpc_url = "infura.io..."
+             - ALSO updates: backends[].rpc_url references
+
+          2. Restarts Proxyd pod:
+             - kubectl delete pod -l app=proxyd
+             - Pod respawns with new ConfigMap
+
+          3. Result:
+             - All L2 nodes now route through Proxyd → Infura ✅
+             - Fresh quota available
+             - Block production resumes
 ```
 
 **Advantages**:
-- ✅ Single ConfigMap update → affects all L2 nodes
-- ✅ Instant recovery (~100ms)
-- ✅ No pod restarts required
+- ✅ Single ConfigMap update + pod restart → affects ALL L2 nodes
+- ✅ Recovery time: ~500ms (ConfigMap patch + pod restart)
 - ✅ Independent of L2 deployment type (StatefulSet, Pod, etc.)
+- ✅ Tolerates quota exhaustion better (10 failures vs 3)
 - ✅ **Recommended for production**
 
 ---
@@ -513,14 +621,17 @@ SentinAI Agent Loop (every 30s)
 
 | Aspect | Proxyd Mode | Direct RPC Mode |
 |--------|-------------|-----------------|
-| **Quota Detection** | Same (ANY error type) | Same (ANY error type) |
-| **Failure Threshold** | 3 consecutive failures | 3 consecutive failures |
-| **Update Method** | ConfigMap patch | kubectl set env + pod restart |
-| **Recovery Time** | ~100ms (instant) | 30-60s (pod restart) |
+| **HTTP 429 Detection** | 10-failure threshold | 3-failure threshold |
+| **Other Errors** | 3-failure threshold | 3-failure threshold |
+| **429 Tolerance** | ✅ 5+ minutes before failover | ❌ ~90 seconds |
+| **Update Method** | ConfigMap patch + pod restart | kubectl set env per pod |
+| **ConfigMap Changes** | Upstreams + Backends | N/A |
+| **Recovery Time** | ~500ms (ConfigMap + pod restart) | 30-60s (multiple pod restarts) |
 | **L2 Nodes Affected** | All (single update) | Each pod individually |
+| **Pod Restarts** | 1 (Proxyd only) | 3 (op-node, op-batcher, op-proposer) |
 | **Dependency on Pod Type** | ❌ None | ✅ StatefulSet vs Pod differences |
-| **Block Production** | Resumed after ~100ms | Paused 30-60s during restart |
-| **Production Ready** | ✅ Yes | ❌ Legacy |
+| **Block Production Impact** | Minimal (~500ms) | Significant (30-60s+ per pod) |
+| **Production Ready** | ✅ Yes (Recommended) | ❌ Legacy |
 
 ---
 

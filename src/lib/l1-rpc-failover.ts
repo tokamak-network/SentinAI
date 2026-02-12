@@ -23,8 +23,11 @@ import type {
 // Constants
 // ============================================================
 
-/** Consecutive failures before triggering failover */
+/** Consecutive failures before triggering failover (general errors) */
 const MAX_CONSECUTIVE_FAILURES = 3;
+
+/** Consecutive 429 (quota exhausted) failures before triggering failover */
+const MAX_CONSECUTIVE_FAILURES_429 = 10;
 
 /** Minimum interval between failovers (ms) */
 const FAILOVER_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
@@ -51,7 +54,9 @@ function getStatefulSetPrefix(): string {
 // ============================================================
 
 /**
- * Parse TOML content and update upstream URL
+ * Parse TOML content and update upstream URL + backends
+ * Proxyd uses upstreams (named RPC endpoints) and backends (references to upstreams)
+ * Both must be updated for the change to take effect.
  */
 function updateTomlUpstream(
   tomlContent: string,
@@ -82,8 +87,12 @@ function updateTomlUpstream(
   const previousUrl = upstreams[targetIndex].rpc_url;
 
   if (mode === 'replace') {
-    // Simple replace: Update the existing upstream URL
+    // Simple replace: Update the existing upstream URL + WS URL
     upstreams[targetIndex].rpc_url = newUrl;
+    if (upstreams[targetIndex].ws_url) {
+      // Update WS URL similarly (convert https to wss)
+      upstreams[targetIndex].ws_url = newUrl.replace(/^https?:/, 'wss:').replace(/^http:/, 'ws:');
+    }
   } else {
     // Append mode: Add new upstream, rename old to fallback
     const timestamp = Date.now();
@@ -91,10 +100,24 @@ function updateTomlUpstream(
     upstreams.splice(targetIndex, 0, {
       name: upstreamGroup,
       rpc_url: newUrl,
+      ws_url: newUrl.replace(/^https?:/, 'wss:').replace(/^http:/, 'ws:'),
     });
   }
 
   parsedToml.upstreams = upstreams;
+
+  // Also update backends if they reference this upstream by name
+  // backends.[backend_name].rpc_url and ws_url should match upstream names
+  if (parsedToml.backends && Array.isArray(parsedToml.backends)) {
+    for (const backend of parsedToml.backends) {
+      if (backend.rpc_url === upstreamGroup || backend.rpc_url === (upstreams[targetIndex].name)) {
+        backend.rpc_url = upstreamGroup;
+      }
+      if (backend.ws_url === upstreamGroup || backend.ws_url === (upstreams[targetIndex].name)) {
+        backend.ws_url = upstreamGroup;
+      }
+    }
+  }
 
   // Serialize back to TOML
   const updatedToml = TOML.stringify(parsedToml);
@@ -136,7 +159,26 @@ async function getConfigMapToml(
 }
 
 /**
+ * Restart Proxyd pod to pick up ConfigMap changes
+ */
+async function restartProxydPod(namespace: string): Promise<boolean> {
+  try {
+    // Delete Proxyd pod to trigger restart (K8s will respawn via Deployment/StatefulSet)
+    const cmd = `delete pod -l app=proxyd -n ${namespace}`;
+    await runK8sCommand(cmd, { timeout: 10000 });
+
+    console.log(`[L1 Failover] Restarted Proxyd pod(s) in namespace ${namespace}`);
+    return true;
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.warn(`[L1 Failover] Failed to restart Proxyd pod: ${errorMessage} (ConfigMap update applied, but pod restart may be needed manually)`);
+    return false;
+  }
+}
+
+/**
  * Update Proxyd ConfigMap with new L1 RPC URL
+ * IMPORTANT: Proxyd pod must restart to pick up ConfigMap changes
  */
 async function updateProxydConfigMap(
   configMapName: string,
@@ -150,7 +192,7 @@ async function updateProxydConfigMap(
     // 1. Read current TOML
     const currentToml = await getConfigMapToml(configMapName, dataKey, namespace);
 
-    // 2. Parse and update
+    // 2. Parse and update upstreams + backends
     const { updatedToml, previousUrl } = updateTomlUpstream(
       currentToml,
       upstreamGroup,
@@ -173,6 +215,9 @@ async function updateProxydConfigMap(
     console.log(
       `[L1 Failover] Updated Proxyd ConfigMap ${configMapName}/${dataKey}: ${maskUrl(previousUrl || '')} → ${maskUrl(newUrl)}`
     );
+
+    // 4. Restart Proxyd pod to apply ConfigMap changes
+    const podRestartSuccess = await restartProxydPod(namespace);
 
     return {
       success: true,
@@ -325,6 +370,7 @@ export function reportL1Success(): void {
 /**
  * Report a failed L1 RPC call.
  * Triggers failover if consecutive failures exceed threshold.
+ * HTTP 429 (quota exhaustion) uses higher threshold (10) than other errors (3).
  * Returns new URL if failover occurred, null otherwise.
  */
 export async function reportL1Failure(
@@ -337,10 +383,15 @@ export async function reportL1Failure(
     endpoint.consecutiveFailures++;
   }
 
+  // Determine threshold based on error type
+  const errorMessage = error.message.toLowerCase();
+  const is429Error = errorMessage.includes('429') || errorMessage.includes('too many requests') || errorMessage.includes('quota');
+  const threshold = is429Error ? MAX_CONSECUTIVE_FAILURES_429 : MAX_CONSECUTIVE_FAILURES;
+
   // Check if failover is needed
   if (
     !endpoint ||
-    endpoint.consecutiveFailures < MAX_CONSECUTIVE_FAILURES
+    endpoint.consecutiveFailures < threshold
   ) {
     return null;
   }
