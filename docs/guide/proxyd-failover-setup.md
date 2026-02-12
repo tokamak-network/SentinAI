@@ -330,6 +330,200 @@ t0+100ms: Proxyd ConfigMap updated
 - Example: If Infura also fails after 1 minute, failover is blocked until 4 minutes pass
 - Can be adjusted: `MAX_FAILOVER_COOLDOWN_MS` in `src/lib/l1-rpc-failover.ts`
 
+## Technical Details: Quota Exhaustion Detection
+
+### Detection Mechanism
+
+SentinAI detects L1 RPC quota exhaustion through **consecutive failure tracking**:
+
+```
+Agent Loop (every 30s)
+    ↓
+    Calls: getBlockNumber() on active L1 RPC endpoint
+    ↓
+    Failure? (ANY error type: 429, timeout, connection refused, etc.)
+    ↓
+    YES → reportL1Failure(error)
+         └─ Increment consecutive failure counter
+         └─ Is counter >= 3?
+            YES → executeFailover()
+            NO → Continue with same endpoint
+
+    SUCCESS → reportL1Success()
+             └─ Reset failure counter to 0
+             └─ Mark endpoint as healthy
+```
+
+### Error Types That Trigger Failover
+
+**All error types** trigger the same failover mechanism:
+
+| Error Type | Source | Handled | Notes |
+|-----------|--------|---------|-------|
+| **HTTP 429** (Too Many Requests) | Quota exhaustion | ✅ Yes | Most common quota indicator |
+| **HTTP 5xx** | RPC server error | ✅ Yes | Temporary outage |
+| **Connection timeout** (>10s) | Network/overload | ✅ Yes | Indicates endpoint unavailability |
+| **ECONNREFUSED** | RPC down | ✅ Yes | Endpoint offline |
+| **RPC Error** (invalid block, etc.) | RPC logic error | ✅ Yes | Unexpected error |
+
+**Key Point**: The failover system does **NOT** distinguish between different error types. Any 3 consecutive failures trigger failover, regardless of the reason:
+
+```javascript
+// From l1-rpc-failover.ts
+export async function reportL1Failure(error: Error): Promise<string | null> {
+  const endpoint = state.endpoints[state.activeIndex];
+  if (endpoint) {
+    endpoint.consecutiveFailures++;  // ← Increment counter (error type ignored)
+  }
+
+  if (endpoint.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {  // 3
+    // Execute failover...
+  }
+}
+```
+
+### Failure Detection Timeline
+
+```
+t=0s: L1 RPC call #1 fails (429 Too Many Requests) ← Failure #1
+      └─ Quota exhaustion suspected
+      └─ Continue with same endpoint
+
+t=30s: L1 RPC call #2 fails (429 again) ← Failure #2
+       └─ Quota still exhausted
+       └─ Continue with same endpoint
+
+t=60s: L1 RPC call #3 fails (429 again) ← Failure #3
+       └─ THRESHOLD REACHED
+       └─ Failover triggered immediately ← ~100ms
+       └─ New endpoint active
+
+t=61s: L1 RPC call #4 succeeds on new endpoint ✅
+       └─ Failure counter reset to 0
+       └─ New endpoint marked healthy
+```
+
+### When Quota Exhaustion Happens
+
+**Paid Alchemy RPC**: 300,000 calls/month quota
+```
+Scenario 1: Normal L2 block production
+- op-node: ~2 calls/block * 60 blocks/hour = 120 calls/hour
+- op-batcher: ~0.5 calls/transaction
+- op-proposer: ~1 call/output
+- Total: ~200-300 calls/hour
+- 300,000 / 300 = 1,000 hours ✅ Plenty of quota
+
+Scenario 2: High L2 activity or multiple endpoints
+- Same nodes making calls via Proxyd
+- Proxyd itself may cache/reuse responses → fewer upstream calls
+- Quota still should last 30+ days
+
+Scenario 3: When quota exhaustion actually occurs
+- Endpoint downtime forcing retries
+- Multiple L2 chains on same paid endpoint
+- Unexpected traffic spikes
+- → 429 Too Many Requests response
+- → Failover to backup endpoint (Infura, Ankr, etc.)
+```
+
+---
+
+## Proxyd vs Direct RPC Path
+
+### Path 1: **Proxyd Mode** (Recommended)
+
+**Configuration**:
+```bash
+L1_PROXYD_ENABLED=true
+L1_RPC_URLS=https://alchemy.io/v2/key1,https://infura.io/v3/key2
+```
+
+**Request Flow**:
+```
+SentinAI Agent Loop (every 30s)
+    ↓
+    getBlockNumber() via current L1_RPC_URL
+    ↓
+    If using Proxyd as L1_RPC_URL:
+    ├─ HTTP/gRPC → Proxyd Service (http://proxyd-service:8080)
+    │  └─ Proxyd: Forwards to upstream (currently Alchemy)
+    │     ↓
+    │     Alchemy RPC OK → returns block number ✅
+    │     Alchemy RPC 429 → Proxyd returns 429 to SentinAI
+    │  └─ SentinAI sees: 429 error (ANY error works)
+    │     └─ reportL1Failure() triggered
+    │     └─ After 3 failures: executeFailover()
+    │
+    └─ SentinAI Updates Proxyd ConfigMap
+       └─ OLD: [[upstreams]] name="main" rpc_url="alchemy.io..."
+       └─ NEW: [[upstreams]] name="main" rpc_url="infura.io..."
+       └─ Proxyd auto-watches ConfigMap
+       └─ Proxyd reloads TOML (~50ms)
+       └─ **INSTANT EFFECT**: All L2 nodes now use Infura via Proxyd
+```
+
+**Advantages**:
+- ✅ Single ConfigMap update → affects all L2 nodes
+- ✅ Instant recovery (~100ms)
+- ✅ No pod restarts required
+- ✅ Independent of L2 deployment type (StatefulSet, Pod, etc.)
+- ✅ **Recommended for production**
+
+---
+
+### Path 2: **Direct RPC Mode** (Legacy)
+
+**Configuration**:
+```bash
+L1_PROXYD_ENABLED=false
+L1_RPC_URLS=https://alchemy.io/v2/key1,https://infura.io/v3/key2
+```
+
+**Request Flow**:
+```
+SentinAI Agent Loop (every 30s)
+    ↓
+    getBlockNumber() via current L1_RPC_URL
+    ↓
+    If NOT using Proxyd (L1_RPC_URL is direct endpoint):
+    ├─ HTTP/gRPC → Alchemy RPC directly
+    │  ├─ Alchemy OK → returns block number ✅
+    │  └─ Alchemy 429 → Alchemy returns 429 to SentinAI
+    │     └─ SentinAI sees: 429 error
+    │     └─ reportL1Failure() triggered
+    │     └─ After 3 failures: executeFailover()
+    │
+    └─ SentinAI Updates L2 Pod Env Vars
+       └─ kubectl set env pod/op-node-0 OP_NODE_L1_ETH_RPC=infura.io...
+       └─ kubectl set env pod/op-batcher-0 OP_BATCHER_L1_ETH_RPC=infura.io...
+       └─ Pods must **restart** to pick up new env var (requires restart or hot-reload support)
+       └─ **SLOW RECOVERY**: 30-60 seconds for pods to restart
+```
+
+**Disadvantages**:
+- ❌ Requires updating EACH L2 pod individually
+- ❌ Pods must restart (30-60s downtime)
+- ❌ op-batcher and op-proposer restarts may break ongoing operations
+- ❌ NOT recommended (legacy only)
+
+---
+
+### Comparison Table
+
+| Aspect | Proxyd Mode | Direct RPC Mode |
+|--------|-------------|-----------------|
+| **Quota Detection** | Same (ANY error type) | Same (ANY error type) |
+| **Failure Threshold** | 3 consecutive failures | 3 consecutive failures |
+| **Update Method** | ConfigMap patch | kubectl set env + pod restart |
+| **Recovery Time** | ~100ms (instant) | 30-60s (pod restart) |
+| **L2 Nodes Affected** | All (single update) | Each pod individually |
+| **Dependency on Pod Type** | ❌ None | ✅ StatefulSet vs Pod differences |
+| **Block Production** | Resumed after ~100ms | Paused 30-60s during restart |
+| **Production Ready** | ✅ Yes | ❌ Legacy |
+
+---
+
 ## Rollback
 
 If Proxyd mode causes issues, disable it:
