@@ -302,7 +302,7 @@ describe('redis-store (InMemoryStateStore)', () => {
     });
 
     it('should toggle zero-downtime flag', async () => {
-      let enabled = await store.getZeroDowntimeEnabled();
+      const enabled = await store.getZeroDowntimeEnabled();
       await store.setZeroDowntimeEnabled(!enabled);
 
       const toggled = await store.getZeroDowntimeEnabled();
