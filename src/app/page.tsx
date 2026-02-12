@@ -196,24 +196,55 @@ export default function Dashboard() {
   const seedPredictionData = async () => {
     setIsSeeding(true);
     try {
+      console.log(`[Dashboard] Starting seed injection for scenario: ${seedScenario}`);
       const res = await fetch(`/api/metrics/seed?scenario=${seedScenario}`, { method: 'POST' });
-      if (res.ok) {
-        // Immediately fetch updated metrics after seed injection
-        const metricsRes = await fetch('/api/metrics?t=' + Date.now(), { cache: 'no-store' });
-        if (metricsRes.ok) {
-          const metricsData = await metricsRes.json();
-          setCurrent(metricsData);
+      const seedRes = await res.json();
+      console.log(`[Dashboard] Seed injection response:`, seedRes);
 
-          // Update data history
-          const point = {
-            name: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-            cpu: metricsData.metrics.cpuUsage,
-            gethVcpu: metricsData.metrics.gethVcpu,
-            gethMemGiB: metricsData.metrics.gethMemGiB,
-            saving: metricsData.cost.monthlySaving,
-            cost: metricsData.cost.monthlyEstimated,
-          };
-          setDataHistory(prev => [...prev.slice(-20), point]);
+      if (res.ok) {
+        // Wait a moment for seed data to be processed
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Immediately fetch updated metrics after seed injection
+        console.log(`[Dashboard] Fetching metrics after seed injection...`);
+        let metricsData: any = null;
+        let metricsFetched = false;
+
+        for (let i = 0; i < 3; i++) {
+          console.log(`[Dashboard] Metrics fetch attempt ${i + 1}/3...`);
+          const metricsRes = await fetch('/api/metrics?t=' + Date.now() + '&_=' + Math.random(), { cache: 'no-store' });
+          if (metricsRes.ok) {
+            metricsData = await metricsRes.json();
+            metricsFetched = true;
+            console.log(`[Dashboard] Metrics received:`, {
+              cpuUsage: metricsData?.metrics?.cpuUsage,
+              gethVcpu: metricsData?.metrics?.gethVcpu,
+              gethMemGiB: metricsData?.metrics?.gethMemGiB,
+              source: (metricsData?.metrics as any)?.source,
+              cpuSource: (metricsData?.metrics as any)?.cpuSource,
+            });
+            setCurrent(metricsData);
+
+            // Update data history
+            const point = {
+              name: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+              cpu: metricsData.metrics.cpuUsage,
+              gethVcpu: metricsData.metrics.gethVcpu,
+              gethMemGiB: metricsData.metrics.gethMemGiB,
+              saving: metricsData.cost.monthlySaving,
+              cost: metricsData.cost.monthlyEstimated,
+            };
+            setDataHistory(prev => [...prev.slice(-20), point]);
+            console.log(`[Dashboard] State updated with new metrics`);
+            break;
+          } else {
+            console.error(`[Dashboard] Metrics fetch attempt ${i + 1} failed:`, metricsRes.status);
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        }
+
+        if (!metricsFetched) {
+          console.error(`[Dashboard] Failed to fetch metrics after seed injection`);
         }
 
         // Re-fetch scaler to get updated prediction
@@ -223,6 +254,8 @@ export default function Dashboard() {
           setPrediction(scalerData.prediction);
           setPredictionMeta(scalerData.predictionMeta);
         }
+      } else {
+        console.error(`[Dashboard] Seed injection failed:`, res.status, seedRes);
       }
     } catch (e) {
       console.error('Seed failed:', e);
