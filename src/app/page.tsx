@@ -46,6 +46,14 @@ interface MetricData {
   };
 }
 
+interface L1FailoverStatus {
+  activeUrl: string;
+  failoverCount: number;
+  spareUrlCount: number;
+  healthy: boolean;
+  lastFailover: string | null;
+  lastFailoverReason?: string | null;
+}
 
 interface ComponentData {
   name: string;
@@ -158,6 +166,9 @@ export default function Dashboard() {
   const [predictionMeta, setPredictionMeta] = useState<PredictionMeta | null>(null);
   const [seedScenario, setSeedScenario] = useState<'stable' | 'rising' | 'spike' | 'falling' | 'live'>('rising');
   const [isSeeding, setIsSeeding] = useState(false);
+
+  // --- L1 RPC Failover State ---
+  const [l1Failover, setL1Failover] = useState<L1FailoverStatus | null>(null);
 
   // --- NLOps Chat State ---
   const [chatOpen, setChatOpen] = useState(false);
@@ -359,6 +370,20 @@ export default function Dashboard() {
           }
         }
 
+        // Fetch L1 Failover status
+        try {
+          const l1Response = await fetch('/api/l1-failover', {
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+          if (l1Response.ok) {
+            const l1Data: L1FailoverStatus = await l1Response.json();
+            setL1Failover(l1Data);
+          }
+        } catch {
+          // Ignore l1-failover fetch errors
+        }
+
         setIsLoading(false);
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
@@ -500,6 +525,37 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* L1 RPC Failover Status */}
+      {l1Failover && (
+        <div className="bg-white rounded-2xl px-6 py-4 mb-8 shadow-sm border border-gray-200/60">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3">
+                <div className={`w-2 h-2 rounded-full ${l1Failover.healthy ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
+                <div>
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase">L1 RPC (L2 Nodes)</p>
+                  <p className="text-sm font-bold text-gray-900 font-mono">{l1Failover.activeUrl}</p>
+                </div>
+              </div>
+              <div className="h-6 w-px bg-gray-200"></div>
+              <div>
+                <p className="text-[10px] text-gray-400 font-semibold uppercase">Failover Pool</p>
+                <p className="text-sm font-bold text-gray-900">{l1Failover.failoverCount} endpoints</p>
+              </div>
+              <div className="h-6 w-px bg-gray-200"></div>
+              <div>
+                <p className="text-[10px] text-gray-400 font-semibold uppercase">Spare URLs</p>
+                <p className="text-sm font-bold text-gray-900">{l1Failover.spareUrlCount} ready</p>
+              </div>
+            </div>
+            {l1Failover.lastFailover && (
+              <div className="text-xs text-gray-500">
+                Last failover: {new Date(l1Failover.lastFailover).toLocaleTimeString()}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Row 1: At-a-Glance Status */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
@@ -714,6 +770,18 @@ export default function Dashboard() {
               <span className="text-[9px] text-gray-400">$0</span>
               <span className="text-[9px] text-gray-400">${current?.cost.fixedCost?.toFixed(0) || '166'}</span>
             </div>
+            <button
+              onClick={() => {
+                fetch('/api/cost-report')
+                  .then(r => r.json())
+                  .then(data => console.log('Cost Report:', data))
+                  .catch(e => console.error('Failed to fetch cost report:', e));
+              }}
+              className="w-full mt-3 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-medium rounded-lg transition-colors"
+              data-testid="cost-analysis-btn"
+            >
+              Cost Analysis
+            </button>
           </div>
         </div>
       </div>
