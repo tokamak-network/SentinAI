@@ -740,7 +740,7 @@ async function getL2NodesL1RpcFromProxyd(): Promise<L2NodeL1RpcStatus[]> {
     // 1. Get ConfigMap TOML content
     const tomlContent = await getConfigMapToml(
       process.env.L1_PROXYD_CONFIGMAP_NAME || 'proxyd-config',
-      process.env.L1_PROXYD_DATA_KEY || 'proxyd.toml',
+      process.env.L1_PROXYD_DATA_KEY || 'proxyd-config.toml',
       getNamespace()
     );
 
