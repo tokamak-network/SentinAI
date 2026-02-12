@@ -215,10 +215,9 @@ Expected output:
 ```
 [L1 Failover] Switched: https://dead-rpc.invalid → https://paid-rpc1.io (reason: 3 consecutive failures)
 [L1 Failover] Updated Proxyd ConfigMap proxyd-config/proxyd.toml: https://publicnode.com → https://paid-rpc1.io
-[L1 Failover] Updated sepolia-thanos-stack-op-node OP_NODE_L1_ETH_RPC
-[L1 Failover] Updated sepolia-thanos-stack-op-batcher OP_BATCHER_L1_ETH_RPC
-[L1 Failover] Updated sepolia-thanos-stack-op-proposer OP_PROPOSER_L1_ETH_RPC
 ```
+
+**Note**: ConfigMap update is sufficient. All L2 nodes (op-node, op-batcher, op-proposer) immediately route through Proxyd with the new RPC endpoint. Optional pod env var updates are only logged if not using Proxyd.
 
 ## Step 5: Verify ConfigMap Update
 
@@ -254,9 +253,9 @@ Time: t2 → 3 consecutive failures detected
     └─ Action: Find healthy backup endpoint
 ```
 
-### Failover Execution (Dual-Layer Update)
+### Failover Execution (ConfigMap-Centric)
 
-**Priority 1: Proxyd ConfigMap** (updates router config)
+**Primary: Proxyd ConfigMap Update** (sufficient for all L2 nodes)
 ```bash
 # Current
 kubectl get configmap proxyd-config
@@ -270,23 +269,29 @@ kubectl patch configmap proxyd-config --type=json \
   -p='[{"op":"replace","path":"/data/proxyd.toml","value":"[[upstreams]]...rpc_url=\"https://infura.io/v3/key2\""}]'
 
 # Result: Proxyd auto-watches ConfigMap
-# → New connections use Infura endpoint
-# → op-node/batcher/proposer get fresh quota ✅
+# → Proxyd reloads TOML (automatic)
+# → All L2 nodes route through Proxyd with new Infura endpoint
+# → op-node, op-batcher, op-proposer all get fresh quota ✅
+# → NO pod restarts needed (instant effect)
 ```
 
-**Priority 2-4: StatefulSet Env Vars** (backup for direct RPC)
+**Key Point**: ConfigMap update applies to ALL L2 nodes regardless of their deployment type:
+- ✅ op-node (may be StatefulSet or Pod)
+- ✅ op-batcher (Pod - NOT StatefulSet)
+- ✅ op-proposer (Pod - NOT StatefulSet)
+
+**Optional: Individual Pod Env Vars** (backup, only if not using Proxyd)
 ```bash
-kubectl set env statefulset/sepolia-thanos-stack-op-node \
-  OP_NODE_L1_ETH_RPC=https://infura.io/v3/key2
+# Only if L2 nodes configured for DIRECT L1 RPC (bypassing Proxyd)
+# This is NOT the recommended approach when Proxyd is available
 
-kubectl set env statefulset/sepolia-thanos-stack-op-batcher \
-  OP_BATCHER_L1_ETH_RPC=https://infura.io/v3/key2
+# Environment variables to set (if needed):
+# OP_NODE_L1_ETH_RPC=https://infura.io/v3/key2
+# OP_BATCHER_L1_ETH_RPC=https://infura.io/v3/key2
+# OP_PROPOSER_L1_ETH_RPC=https://infura.io/v3/key2
 
-kubectl set env statefulset/sepolia-thanos-stack-op-proposer \
-  OP_PROPOSER_L1_ETH_RPC=https://infura.io/v3/key2
-
-# Results in pod restart (rolling update)
-# → Containers boot with new L1 RPC env var
+kubectl set env pod/op-node-0 OP_NODE_L1_ETH_RPC=https://infura.io/v3/key2
+# (Note: op-batcher and op-proposer are Pods, not StatefulSets)
 ```
 
 ### Recovery Timeline
@@ -296,25 +301,27 @@ t0: Block production running
     └─ 3 failures detected ❌
 
 t0+100ms: Proxyd ConfigMap updated
-          └─ Proxyd reloads TOML (automatic)
+          └─ Proxyd auto-reloads TOML (watches ConfigMap)
           └─ New L1 RPC: Infura ✅
-
-t0+500ms: StatefulSet env vars updated
-          └─ Triggers rolling restart (pod recreation)
-          └─ New containers boot with Infura L1 RPC
-
-t0+10s: All pods ready with new RPC
-        └─ Block production resumes ✅
+          └─ op-node, op-batcher, op-proposer immediately route through new endpoint
+          └─ Block production resumes ✅
 ```
 
-### Why Two-Layer Failover?
+### ConfigMap-First Approach
 
-| Layer | Purpose | Latency |
-|-------|---------|---------|
-| **Proxyd ConfigMap** | Immediate effect for running pods | ~100ms |
-| **StatefulSet Env Vars** | Persistent config for new pods | ~5-10s (rolling restart) |
+| Aspect | Details |
+|--------|---------|
+| **What to Update** | Proxyd ConfigMap only |
+| **Effect** | Instant (~100ms) |
+| **Coverage** | All L2 nodes (op-node, op-batcher, op-proposer) |
+| **Pod Restarts** | None required |
+| **Dependency on Deployment Type** | None (works for StatefulSet, Pod, or mixed) |
 
-**Reason**: If only ConfigMap updated, a pod crash would revert to old RPC from env var. Both updates ensure consistency.
+**Recommendation**: Update ONLY Proxyd ConfigMap. This is:
+- ✅ Simplest (no per-node updates)
+- ✅ Fastest (instant, no pod restarts)
+- ✅ Most Reliable (central RPC router)
+- ✅ Independent of L2 node deployment type
 
 ### Failover Cooldown
 
@@ -332,7 +339,7 @@ If Proxyd mode causes issues, disable it:
 L1_PROXYD_ENABLED=false
 ```
 
-Restart SentinAI. Failover will revert to StatefulSet-only updates.
+Restart SentinAI. Failover will revert to updating individual pod environment variables (OP_NODE_L1_ETH_RPC, OP_BATCHER_L1_ETH_RPC, OP_PROPOSER_L1_ETH_RPC).
 
 ## Advanced: Append Mode
 
@@ -449,10 +456,12 @@ kubectl logs -f deployment/sentinai -c sentinai | grep "L1 Failover"
 [L1 Failover] Checking candidate: https://rpc2.io
 [L1 Failover] Switched: https://old.io → https://rpc2.io (reason: 3 consecutive failures)
 [L1 Failover] Updated Proxyd ConfigMap proxyd-config/proxyd.toml: https://old.io → https://rpc2.io
-[L1 Failover] Updated sepolia-thanos-stack-op-node OP_NODE_L1_ETH_RPC
-[L1 Failover] Updated sepolia-thanos-stack-op-batcher OP_BATCHER_L1_ETH_RPC
-[L1 Failover] Updated sepolia-thanos-stack-op-proposer OP_PROPOSER_L1_ETH_RPC
 ```
+
+**Result**: Proxyd ConfigMap updated instantly (~100ms)
+- ✅ op-node, op-batcher, op-proposer all route through new endpoint
+- ✅ Block production resumes immediately
+- ✅ No pod restarts needed
 
 ## Performance Impact
 
