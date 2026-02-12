@@ -388,8 +388,12 @@ export async function GET(request: Request) {
         let currentVcpu: number = l2Client ? (l2Client.rawCpu || 1) : 1;
 
         // Apply seed scenario vCPU progression if active (before stress mode)
-        if (activeScenario && activeScenario !== 'live') {
-            // Seed scenario is active, use its vCPU progression
+        // Use seed data's vCPU directly (works across worker threads)
+        if (usingSeedMetrics && seedMetricData && seedMetricData.currentVcpu) {
+            console.log(`[Metrics API] Using seed data vCPU = ${seedMetricData.currentVcpu}`);
+            currentVcpu = seedMetricData.currentVcpu;
+        } else if (activeScenario && activeScenario !== 'live') {
+            // Fallback: try to get vCPU from in-memory profile if seed data unavailable
             const seedVcpu = getCurrentVcpu();
             console.log(`[Metrics API] Seed scenario active (${activeScenario}): using vCPU = ${seedVcpu}`);
             currentVcpu = seedVcpu;
