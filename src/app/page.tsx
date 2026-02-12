@@ -972,16 +972,6 @@ export default function Dashboard() {
               {agentLoop?.lastCycle?.scaling ? (
                 <div className="mt-2 space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-[10px] text-gray-500">Score</span>
-                    <span className={`text-lg font-bold font-mono ${
-                      agentLoop.lastCycle.scaling.score >= 70 ? 'text-red-500' :
-                      agentLoop.lastCycle.scaling.score >= 30 ? 'text-amber-500' :
-                      'text-green-600'
-                    }`}>
-                      {agentLoop.lastCycle.scaling.score}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center">
                     <span className="text-[10px] text-gray-500">vCPU</span>
                     <span className="text-xs font-bold text-gray-900 font-mono">
                       {agentLoop.lastCycle.scaling.currentVcpu} → {agentLoop.lastCycle.scaling.targetVcpu}
