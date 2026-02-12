@@ -28,8 +28,8 @@ function generateVcpuProgression(scenario: Scenario): number[] {
       return [1, 1, 1, 1, 1, 1.2, 1.4, 1.6, 2, 2.2, 2.5, 2.8, 3, 3.3, 3.5, 3.7, 3.9, 4, 4, 4];
 
     case 'spike':
-      // Spike: stable then sudden jump to 4
-      return [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 4, 4, 4, 4];
+      // Spike: stable then sudden jump to 8 (max vCPU)
+      return [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 8, 8, 8, 8, 8];
 
     case 'falling':
       // Falling: 4 → 2 → 1
