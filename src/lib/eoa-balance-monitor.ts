@@ -9,6 +9,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 import { getActiveL1RpcUrl } from '@/lib/l1-rpc-failover';
 import { getEOAAddressWithAutoDetect } from '@/lib/eoa-detector';
+import { getCachedEOABalance, invalidateEOABalanceCache } from '@/lib/l1-rpc-cache';
 import type {
   EOABalanceConfig,
   EOARole,
@@ -201,7 +202,7 @@ export async function getAllBalanceStatus(
 
     if (batcherAddr) {
       promises.push(
-        client.getBalance({ address: batcherAddr }).then(bal => {
+        getCachedEOABalance(batcherAddr, () => client.getBalance({ address: batcherAddr })).then(bal => {
           const eth = parseFloat(formatEther(bal));
           batcher = {
             address: batcherAddr,
@@ -216,7 +217,7 @@ export async function getAllBalanceStatus(
 
     if (proposerAddr) {
       promises.push(
-        client.getBalance({ address: proposerAddr }).then(bal => {
+        getCachedEOABalance(proposerAddr, () => client.getBalance({ address: proposerAddr })).then(bal => {
           const eth = parseFloat(formatEther(bal));
           proposer = {
             address: proposerAddr,
@@ -232,7 +233,7 @@ export async function getAllBalanceStatus(
     if (treasuryKey) {
       const account = privateKeyToAccount(treasuryKey);
       promises.push(
-        client.getBalance({ address: account.address }).then(bal => {
+        getCachedEOABalance(account.address, () => client.getBalance({ address: account.address })).then(bal => {
           const eth = parseFloat(formatEther(bal));
           treasury = {
             address: account.address,
@@ -428,6 +429,9 @@ export async function refillEOA(
       console.error(`[EOA Monitor] Refill tx reverted: ${hash}`);
       return { success: false, reason: 'tx-reverted', txHash: hash };
     }
+
+    // Invalidate target EOA balance cache after successful refill
+    invalidateEOABalanceCache(targetAddress);
 
     // 10. Verify new balance
     let newBalanceEth: number;

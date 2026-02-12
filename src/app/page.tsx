@@ -142,6 +142,13 @@ interface AgentLoopStatus {
   };
 }
 
+// --- Configuration Constants ---
+/** Metrics API polling interval (ms). Adjusted to reduce L1 RPC load (1s → 60s). */
+const METRICS_REFRESH_INTERVAL_MS = 60_000;
+
+/** Agent Loop status polling interval (ms) */
+const AGENT_LOOP_REFRESH_INTERVAL_MS = 30_000;
+
 // --- Main Dashboard Component ---
 export default function Dashboard() {
   // State
@@ -366,7 +373,7 @@ export default function Dashboard() {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 1000);
+    const interval = setInterval(fetchData, METRICS_REFRESH_INTERVAL_MS);
     return () => {
       clearInterval(interval);
       if (abortControllerRef.current) {
@@ -388,7 +395,7 @@ export default function Dashboard() {
       }
     };
     fetchAgentLoop();
-    const interval = setInterval(fetchAgentLoop, 5000);
+    const interval = setInterval(fetchAgentLoop, AGENT_LOOP_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
 

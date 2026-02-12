@@ -2,6 +2,7 @@ import { createPublicClient, http } from 'viem';
 import { mainnet, sepolia } from 'viem/chains';
 import { NextResponse } from 'next/server';
 import { recordUsage } from '@/lib/usage-tracker';
+import { getCachedL1BlockNumber } from '@/lib/l1-rpc-cache';
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -194,7 +195,7 @@ export async function GET(request: Request) {
                 const l1Client = createPublicClient({ chain: sepolia, transport: http(l1RpcUrl) });
                 const [l2Block, l1Block] = await Promise.all([
                     l2Client.getBlockNumber(),
-                    l1Client.getBlockNumber(),
+                    getCachedL1BlockNumber(() => l1Client.getBlockNumber()),
                 ]);
                 realL2Block = Number(l2Block);
                 realL1Block = Number(l1Block);
@@ -296,7 +297,7 @@ export async function GET(request: Request) {
         // Fetch L2 block details and L1 block number in parallel (1 less RPC call)
         const [block, l1BlockNumber] = await Promise.all([
             l2RpcClient.getBlock({ blockTag: 'latest' }),
-            l1RpcClient.getBlockNumber()
+            getCachedL1BlockNumber(() => l1RpcClient.getBlockNumber())
         ]);
         const blockNumber = block.number;
 
