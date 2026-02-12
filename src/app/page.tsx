@@ -186,6 +186,12 @@ export default function Dashboard() {
   // --- Agent Loop State ---
   const [agentLoop, setAgentLoop] = useState<AgentLoopStatus | null>(null);
 
+  // --- Cost Analysis State ---
+  const [costAnalysisOpen, setCostAnalysisOpen] = useState(false);
+  const [costAnalysisData, setCostAnalysisData] = useState<Record<string, unknown> | null>(null);
+  const [costAnalysisLoading, setCostAnalysisLoading] = useState(false);
+  const [costAnalysisError, setCostAnalysisError] = useState<string | null>(null);
+
   // Seed prediction data for testing
   const seedPredictionData = async () => {
     setIsSeeding(true);
@@ -772,10 +778,22 @@ export default function Dashboard() {
             </div>
             <button
               onClick={() => {
+                setCostAnalysisOpen(true);
+                setCostAnalysisLoading(true);
+                setCostAnalysisError(null);
                 fetch('/api/cost-report')
-                  .then(r => r.json())
-                  .then(data => console.log('Cost Report:', data))
-                  .catch(e => console.error('Failed to fetch cost report:', e));
+                  .then(r => {
+                    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                    return r.json();
+                  })
+                  .then(data => {
+                    setCostAnalysisData(data);
+                    setCostAnalysisLoading(false);
+                  })
+                  .catch(e => {
+                    setCostAnalysisError(e instanceof Error ? e.message : 'Unknown error');
+                    setCostAnalysisLoading(false);
+                  });
               }}
               className="w-full mt-3 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-600 text-xs font-medium rounded-lg transition-colors"
               data-testid="cost-analysis-btn"
@@ -1281,6 +1299,56 @@ export default function Dashboard() {
                 disabled={isSending || !chatInput.trim() || !!pendingConfirmation}
                 className="bg-blue-500 text-white p-3 rounded-xl hover:bg-blue-600 transition-colors disabled:opacity-50">
                 <Send size={18} />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cost Analysis Modal */}
+      {costAnalysisOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4" onClick={() => setCostAnalysisOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            {/* Header */}
+            <div className="sticky top-0 flex items-center justify-between p-6 border-b border-gray-200 bg-white">
+              <h2 className="text-lg font-bold text-gray-900">Cost Analysis Report</h2>
+              <button onClick={() => setCostAnalysisOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                <ChevronDown size={24} className="rotate-180" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              {costAnalysisLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="animate-spin">
+                    <RefreshCw size={24} className="text-blue-500" />
+                  </div>
+                  <span className="ml-3 text-gray-600">Loading cost analysis...</span>
+                </div>
+              ) : costAnalysisError ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <p className="text-red-700 font-medium">Failed to load cost report</p>
+                  <p className="text-red-600 text-sm mt-1">{costAnalysisError}</p>
+                </div>
+              ) : costAnalysisData ? (
+                <div className="space-y-4">
+                  <pre className="bg-gray-50 rounded-lg p-4 overflow-x-auto text-xs text-gray-700 border border-gray-200">
+                    {JSON.stringify(costAnalysisData, null, 2)}
+                  </pre>
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">No data available</p>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 flex items-center justify-end gap-3 p-6 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => setCostAnalysisOpen(false)}
+                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-900 font-medium rounded-lg transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>
