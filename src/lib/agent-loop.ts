@@ -100,6 +100,22 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     return null;
   }
 
+  // Check if seed scenario is active
+  const activeSeedScenario = await getStore().getSeedScenario();
+
+  // If seed scenario is active (not live), use seed metrics from store
+  if (activeSeedScenario && activeSeedScenario !== 'live') {
+    const recentMetrics = await getRecentMetrics(1);
+    if (recentMetrics && recentMetrics.length > 0) {
+      const seedMetric = recentMetrics[0];
+      console.log(`[AgentLoop] Using seed metrics (${activeSeedScenario}): CPU=${seedMetric.cpuUsage.toFixed(1)}%, TxPool=${seedMetric.txPoolPending}, vCPU=${seedMetric.currentVcpu}`);
+      return {
+        dataPoint: seedMetric,
+        l1BlockHeight: 0, // Seed metrics don't include L1
+      };
+    }
+  }
+
   const l2Client = createPublicClient({ chain: mainnet, transport: http(rpcUrl, { timeout: RPC_TIMEOUT_MS }) });
 
   // L2 block fetch
