@@ -8,7 +8,7 @@ import { getCurrentVcpu, getActiveScenario } from '@/lib/seed-vcpu-manager';
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-import { pushMetric } from '@/lib/metrics-store';
+import { pushMetric, getRecentMetrics } from '@/lib/metrics-store';
 import { MetricDataPoint } from '@/types/prediction';
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import { getStore } from '@/lib/redis-store';
@@ -325,33 +325,62 @@ export async function GET(request: Request) {
         }
         console.log(`[Timer] RPC Fetch: ${(performance.now() - startRpc).toFixed(2)}ms`);
 
-        // 3. Metrics (Host Resource - Best Effort)
-        const gasUsed = Number(block.gasUsed);
-        const gasLimit = Number(block.gasLimit);
-        const evmLoad = (gasUsed / gasLimit) * 100;
+        // 3. Check if seed scenario is active - use stored metrics if so
+        const activeScenario = getActiveScenario();
+        let usingSeedMetrics = false;
+        let seedMetricData: Awaited<ReturnType<typeof getRecentMetrics>>[0] | null = null;
 
-        // Use real container CPU if available, otherwise fallback to EVM load
-        let cpuSource: 'container' | 'evm_load' = 'evm_load';
-        let realCpu = evmLoad;
-        if (containerUsage) {
-            const requestMillicores = (l2Client?.rawCpu || 1) * 1000;
-            realCpu = (containerUsage.cpuMillicores / requestMillicores) * 100;
-            cpuSource = 'container';
+        if (activeScenario && activeScenario !== 'live') {
+            // Seed scenario is active - use metrics from store
+            const recentMetrics = await getRecentMetrics();
+            if (recentMetrics && recentMetrics.length > 0) {
+                seedMetricData = recentMetrics[recentMetrics.length - 1]; // Get latest
+                usingSeedMetrics = true;
+                console.log(`[Metrics API] Using seed metrics from store (${activeScenario}):`, seedMetricData);
+            }
         }
 
-        // 4. Simulation & Stress Mode
+        // 4. Metrics (Host Resource - Best Effort) or Seed Data
+        let cpuSource: 'container' | 'evm_load' | 'seed' = 'evm_load';
+        let realCpu = 0;
+        let effectiveTx = txPoolPending;
+
+        if (usingSeedMetrics && seedMetricData) {
+            // Use seed metrics
+            realCpu = seedMetricData.cpuUsage;
+            effectiveTx = seedMetricData.txPoolPending;
+            cpuSource = 'seed';
+            console.log(`[Metrics API] Using seed CPU=${realCpu.toFixed(1)}%, txPool=${effectiveTx}`);
+        } else {
+            // Use real K8s metrics
+            const gasUsed = Number(block.gasUsed);
+            const gasLimit = Number(block.gasLimit);
+            const evmLoad = (gasUsed / gasLimit) * 100;
+
+            // Use real container CPU if available, otherwise fallback to EVM load
+            realCpu = evmLoad;
+            if (containerUsage) {
+                const requestMillicores = (l2Client?.rawCpu || 1) * 1000;
+                realCpu = (containerUsage.cpuMillicores / requestMillicores) * 100;
+                cpuSource = 'container';
+            }
+        }
+
+        // 5. Simulation & Stress Mode
         const url = new URL(request.url);
         const isStressTest = url.searchParams.get('stress') === 'true';
 
         let effectiveCpu = realCpu;
-        const effectiveTx = txPoolPending;
         let currentVcpu: number = l2Client ? (l2Client.rawCpu || 1) : 1;
 
         // Apply seed scenario vCPU progression if active (before stress mode)
-        const activeScenario = getActiveScenario();
         if (activeScenario && activeScenario !== 'live') {
             // Seed scenario is active, use its vCPU progression
-            currentVcpu = getCurrentVcpu();
+            const seedVcpu = getCurrentVcpu();
+            console.log(`[Metrics API] Seed scenario active (${activeScenario}): using vCPU = ${seedVcpu}`);
+            currentVcpu = seedVcpu;
+        } else if (!activeScenario || activeScenario === 'live') {
+            console.log(`[Metrics API] No active seed scenario, using K8s vCPU = ${currentVcpu}`);
         }
 
         if (isStressTest) {
