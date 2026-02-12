@@ -649,12 +649,12 @@ export default function Dashboard() {
       )}
 
       {/* Row 1: At-a-Glance Status */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
 
         {/* Card 1: Scaling Forecast */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
           <div className="flex justify-between items-center mb-3">
-            <h3 className="font-bold text-gray-900">Simulation Zone</h3>
+            <h3 className="font-bold text-gray-900 text-lg">Simulation Zone</h3>
             <span className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
               prediction?.recommendedAction === 'scale_up'
                 ? 'bg-indigo-500'
@@ -690,7 +690,7 @@ export default function Dashboard() {
           {stressMode ? (
             <div className="flex items-center gap-3 mb-3" data-testid="current-vcpu">
               <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-lg font-bold text-gray-900">{preStressVcpuRef.current} vCPU</span>
+                <span className="text-xl font-bold text-gray-900">{preStressVcpuRef.current} vCPU</span>
               </div>
               <ArrowUpRight size={20} className="shrink-0 text-red-500" />
               <div className="flex-1 h-8 rounded-lg flex items-center justify-center bg-red-100 border border-red-200">
@@ -701,7 +701,7 @@ export default function Dashboard() {
           ) : prediction ? (
             <div className="flex items-center gap-3 mb-3" data-testid="current-vcpu">
               <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
+                <span className="text-xl font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
               </div>
               <ArrowUpRight size={20} className={`shrink-0 ${
                 prediction.trend === 'rising' ? 'text-indigo-500' :
@@ -715,7 +715,7 @@ export default function Dashboard() {
                   ? 'bg-green-100 border border-green-200'
                   : 'bg-blue-100 border border-blue-200'
               }`}>
-                <span className={`text-lg font-bold ${
+                <span className={`text-xl font-bold ${
                   prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
                     ? 'text-indigo-600'
                     : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
@@ -778,12 +778,12 @@ export default function Dashboard() {
         {/* Card 2: Monthly Cost */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
           <div data-testid="monthly-cost">
-            <span className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">Monthly Cost</span>
+            <span className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider">Monthly Cost</span>
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-3xl font-black text-gray-900">
+              <span className="text-4xl font-black text-gray-900">
                 ${(current?.cost.opGethMonthlyCost || current?.cost.monthlyEstimated || 42).toFixed(0)}
               </span>
-              <span className="text-sm font-bold text-gray-400">/mo</span>
+              <span className="text-base font-bold text-gray-400">/mo</span>
             </div>
             <p className="text-gray-400 text-[10px] mt-1">
               {current?.metrics.gethVcpu || 1} vCPU · {current?.metrics.gethMemGiB || 2} GiB
@@ -895,8 +895,8 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <RefreshCw size={16} className={`text-gray-400 ${agentLoop?.scheduler.agentTaskRunning ? 'animate-spin' : ''}`} />
-            <h3 className="font-bold text-gray-900 text-sm">Agent Loop</h3>
+            <RefreshCw size={18} className={`text-gray-400 ${agentLoop?.scheduler.agentTaskRunning ? 'animate-spin' : ''}`} />
+            <h3 className="font-bold text-gray-900 text-lg">Agent Loop</h3>
           </div>
           <div className="flex items-center gap-3">
             {agentLoop?.scheduler.agentLoopEnabled ? (
@@ -1102,8 +1102,8 @@ export default function Dashboard() {
             {/* Terminal Header */}
             <div className="bg-[#25282D] px-6 py-4 flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
-                <Activity className={`${hasScalingAction ? 'text-amber-400' : 'text-blue-400'}`} size={20} />
-                <span className="text-gray-200 font-bold text-sm tracking-wide">ACTIVITY LOG</span>
+                <Activity className={`${hasScalingAction ? 'text-amber-400' : 'text-blue-400'}`} size={22} />
+                <span className="text-gray-200 font-bold text-base tracking-wide">ACTIVITY LOG</span>
               </div>
               <div className="flex items-center gap-3">
                 {cycles.length > 0 && (
