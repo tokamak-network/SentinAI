@@ -8,6 +8,11 @@ services:
       - .env.local
     environment:
       - REDIS_URL=redis://redis:6379
+      # 공개 대시보드 설정 (Cloudflare Tunnel - HTTPS)
+      - NEXT_PUBLIC_API_BASE_URL=https://sentinai.tokamak.network/thanos-sepolia
+      - NEXT_PUBLIC_APP_URL=https://sentinai.tokamak.network/thanos-sepolia
+      # 읽기 전용 모드 (공개 대시보드 보호)
+      - NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE=true
     volumes:
       - sentinai-reports:/app/data/reports
       # Host K8s 클러스터 접근용 (읽기 전용)
@@ -18,11 +23,11 @@ services:
     deploy:
       resources:
         limits:
+          cpus: '2'
+          memory: 1G
+        reservations:
           cpus: '1'
           memory: 512M
-        reservations:
-          cpus: '0.5'
-          memory: 256M
     depends_on:
       redis:
         condition: service_healthy
@@ -70,16 +75,12 @@ services:
     image: cloudflare/cloudflared:latest
     container_name: sentinai-tunnel
 
-    # Named Tunnel 사용 (권장): 토큰 기반, 안정적
-    # 토큰은 .env.local에서 CLOUDFLARE_TUNNEL_TOKEN으로 설정
-    command: >
-      tunnel
-      --no-autoupdate
-      --protocol http2
-      --loglevel info
-      run
+    # Named Tunnel 설정 (프로덕션)
+    # HTTP/2 프로토콜 사용 (안정성)
+    # Service Token을 사용하여 인증
+    command: tunnel --no-autoupdate --protocol http2 run --token ${CLOUDFLARE_TUNNEL_TOKEN}
 
-    # Quick Tunnel 대체 설정 (개발용):
+    # Quick Tunnel 대체 설정 (개발/테스트용, 임시 URL 생성):
     # command: tunnel --no-autoupdate --url http://sentinai:8080 --protocol http2
 
     environment:
@@ -102,8 +103,6 @@ services:
         reservations:
           cpus: '0.1'
           memory: 32M
-    profiles:
-      - tunnel
 
 volumes:
   sentinai-reports:

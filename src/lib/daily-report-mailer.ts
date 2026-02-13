@@ -91,28 +91,38 @@ function formatDate(date: Date): string {
 // ============================================================================
 
 /**
- * Generate Slack Block Kit message for daily report
+ * Extract status emoji from report content
+ */
+function extractStatusEmoji(markdown: string | undefined): string {
+  if (!markdown) return '❓';
+  const lowerContent = markdown.toLowerCase();
+  if (lowerContent.includes('위험') || lowerContent.includes('critical')) return '🔴';
+  if (lowerContent.includes('주의') || lowerContent.includes('warning')) return '🟡';
+  return '🟢';
+}
+
+/**
+ * Generate Slack Block Kit message for daily report with enhanced structure
  */
 function formatDailyReportMessage(reportContent: string, date: string): object {
-  const summaryText = extractSummary(reportContent, 200);
-  const reportUrl = `http://localhost:3002/api/reports/daily?date=${date}`;
+  const summaryText = extractSummary(reportContent, 300);
+  const statusEmoji = extractStatusEmoji(reportContent);
+  const reportUrl = `https://sentinai.tokamak.network/api/reports/daily/view?date=${date}`;
+  const dashboardUrl = `https://sentinai.tokamak.network/thanos-sepolia`;
 
   return {
     blocks: [
-      // Header with emoji
+      // Header with status
       {
         type: 'header',
         text: {
           type: 'plain_text',
-          text: '📊 SentinAI 일일 운영 보고서',
+          text: `${statusEmoji} SentinAI 일일 운영 보고서`,
           emoji: true,
         },
       },
 
-      // Divider
-      { type: 'divider' },
-
-      // Date and time section
+      // Info section
       {
         type: 'section',
         fields: [
@@ -124,22 +134,42 @@ function formatDailyReportMessage(reportContent: string, date: string): object {
             type: 'mrkdwn',
             text: `*⏰ 생성 시각*\n${formatTime(new Date().toISOString())}`,
           },
+          {
+            type: 'mrkdwn',
+            text: '*📍 시스템*\nThanos Sepolia',
+          },
+          {
+            type: 'mrkdwn',
+            text: '*🔍 유형*\n24H 자동 분석',
+          },
         ],
       },
 
-      // Summary
+      // Divider
+      { type: 'divider' },
+
+      // Summary section
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*요약*\n${summaryText}`,
+          text: `*📌 Executive Summary*\n${summaryText}`,
         },
       },
 
       // Divider
       { type: 'divider' },
 
-      // View full report link
+      // Quick stats section (placeholder)
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*📊 상세 분석*\n자세한 CPU, TxPool, Gas, 블록 지표는 아래 버튼에서 확인하세요.`,
+        },
+      },
+
+      // Action buttons
       {
         type: 'actions',
         elements: [
@@ -147,15 +177,28 @@ function formatDailyReportMessage(reportContent: string, date: string): object {
             type: 'button',
             text: {
               type: 'plain_text',
-              text: '📄 전체 보고서 보기',
+              text: '📄 전체 리포트',
               emoji: true,
             },
             url: reportUrl,
             action_id: 'view_full_report',
             style: 'primary',
           },
+          {
+            type: 'button',
+            text: {
+              type: 'plain_text',
+              text: '📊 대시보드',
+              emoji: true,
+            },
+            url: dashboardUrl,
+            action_id: 'open_dashboard',
+          },
         ],
       },
+
+      // Divider
+      { type: 'divider' },
 
       // Footer
       {
@@ -163,7 +206,7 @@ function formatDailyReportMessage(reportContent: string, date: string): object {
         elements: [
           {
             type: 'mrkdwn',
-            text: 'Powered by SentinAI',
+            text: '🤖 Powered by SentinAI | Optimism L2 Monitoring',
           },
         ],
       },

@@ -41,17 +41,26 @@ export async function initializeScheduler(): Promise<void> {
   // Initialize accumulator for today
   await initializeAccumulator();
 
-  // Agent loop: every 30 seconds — autonomous observe-detect-decide-act
+  // Agent loop: every 60 seconds — autonomous observe-detect-decide-act
+  // Increased from 30s to 60s to prevent scheduler overload
   if (isAgentLoopEnabled()) {
-    agentTask = cron.schedule('*/30 * * * * *', async () => {
+    agentTask = cron.schedule('*/60 * * * * *', async () => {
       if (agentTaskRunning) return;
       agentTaskRunning = true;
+      const startTime = Date.now();
       try {
-        const result = await runAgentCycle();
+        // 50-second timeout to ensure completion before next cycle
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Agent loop timeout after 50s')), 50000)
+        );
+        const result = await Promise.race([runAgentCycle(), timeoutPromise]) as any;
+        const duration = Date.now() - startTime;
         if (result.phase === 'error') {
           console.error('[AgentLoop] Cycle error:', result.error);
         } else if (result.scaling?.executed) {
-          console.log(`[AgentLoop] Scaling executed: ${result.scaling.reason}`);
+          console.log(`[AgentLoop] Scaling executed: ${result.scaling.reason} (${duration}ms)`);
+        } else {
+          console.log(`[AgentLoop] Cycle completed (${duration}ms)`);
         }
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -60,7 +69,7 @@ export async function initializeScheduler(): Promise<void> {
         agentTaskRunning = false;
       }
     });
-    console.log('[Scheduler] Agent loop enabled (every 30s)');
+    console.log('[Scheduler] Agent loop enabled (every 60s, 50s timeout)');
   } else {
     console.log('[Scheduler] Agent loop disabled (set AGENT_LOOP_ENABLED=true or L2_RPC_URL to enable)');
   }
