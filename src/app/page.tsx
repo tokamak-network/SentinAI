@@ -928,7 +928,34 @@ export default function Dashboard() {
                     color = 'text-red-400';
                   } else if (scaling?.executed) {
                     event = 'SCALED';
-                    detail = `${scaling.currentVcpu}→${scaling.targetVcpu} vCPU`;
+                    // Extract scaling reason and build detail with score context
+                    let reasonSummary = '';
+                    let direction = '';
+                    if (scaling.reason) {
+                      if (scaling.reason.includes('Normal Load')) {
+                        reasonSummary = 'Normal Load';
+                        direction = scaling.targetVcpu > scaling.currentVcpu ? '↑' : scaling.targetVcpu < scaling.currentVcpu ? '↓' : '→';
+                      } else if (scaling.reason.includes('High Load')) {
+                        reasonSummary = 'High Load';
+                        direction = '↑';
+                      } else if (scaling.reason.includes('Critical')) {
+                        reasonSummary = 'Critical Load';
+                        direction = '↑↑';
+                      } else if (scaling.reason.includes('System Idle')) {
+                        reasonSummary = 'System Idle';
+                        direction = '↓';
+                      }
+                      // Extract metrics from reason
+                      const cpuMatch = scaling.reason.match(/CPU (\d+\.?\d*%)/);
+                      const gasMatch = scaling.reason.match(/Gas (\d+\.?\d*%)/);
+                      const metricsStr = [
+                        cpuMatch ? `CPU${cpuMatch[1]}` : null,
+                        gasMatch ? `Gas${gasMatch[1]}` : null,
+                      ].filter(Boolean).join(' ');
+                      detail = `${direction} ${scaling.currentVcpu}→${scaling.targetVcpu}vCPU (${reasonSummary}, score:${scaling.score?.toFixed(0) || '?'}/100${metricsStr ? ', ' + metricsStr : ''})`;
+                    } else {
+                      detail = `${scaling.currentVcpu}→${scaling.targetVcpu} vCPU (score:${scaling.score?.toFixed(0) || '?'}/100)`;
+                    }
                     color = 'text-amber-400';
                   } else if (scaling && scaling.score >= 70) {
                     event = 'HIGH';
