@@ -59,12 +59,37 @@ services:
   # Cloudflare Tunnel: HTTPS + Access 인증으로 대시보드 공개
   # 활성화: docker compose --profile tunnel up -d
   # 사전 설정: https://one.dash.cloudflare.com → Networks → Tunnels
+
+  # 설정 방법:
+  # 1. Named Tunnel 생성: https://one.dash.cloudflare.com/tunnels
+  # 2. 토큰 복사: cloudflared service install <TOKEN>에서 <TOKEN> 부분
+  # 3. CLOUDFLARE_TUNNEL_TOKEN 환경변수 설정
+  # 4. 도메인 설정: Public Hostnames에서 subdomain 추가
+
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: sentinai-tunnel
-    # Quick Tunnel: 자동으로 공개 URL 생성 (도메인 설정 불필요)
-    # TCP 모드로 변경하여 네트워크 안정성 개선 (QUIC/UDP 타임아웃 해결)
-    command: tunnel --no-autoupdate --url http://sentinai:8080 --protocol http2
+
+    # Named Tunnel 사용 (권장): 토큰 기반, 안정적
+    # 토큰은 .env.local에서 CLOUDFLARE_TUNNEL_TOKEN으로 설정
+    command: >
+      tunnel
+      --no-autoupdate
+      --protocol http2
+      --loglevel info
+      run
+
+    # Quick Tunnel 대체 설정 (개발용):
+    # command: tunnel --no-autoupdate --url http://sentinai:8080 --protocol http2
+
+    environment:
+      - CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+      - TUNNEL_CRED_FILE=/root/.cloudflared/cert.json
+
+    volumes:
+      # Named Tunnel 크레덴셜 저장 (선택사항)
+      - ~/.cloudflared:/root/.cloudflared:ro
+
     depends_on:
       sentinai:
         condition: service_healthy
