@@ -833,7 +833,7 @@ export default function Dashboard() {
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] text-gray-500">CPU</span>
                     <span className="text-xs font-bold text-gray-900 font-mono">
-                      {agentLoop.lastCycle.metrics.cpuUsage.toFixed(0)}%
+                      {agentLoop.lastCycle.metrics.cpuUsage.toFixed(3)}%
                     </span>
                   </div>
                 </div>
@@ -984,7 +984,7 @@ export default function Dashboard() {
                         {detail}
                         {metrics && event !== 'ERROR' && (
                           <span className="text-gray-600">
-                            {' '}— cpu:{metrics.cpuUsage.toFixed(0)}% gas:{(metrics.gasUsedRatio * 100).toFixed(0)}% tx:{metrics.txPoolPending}
+                            {' '}— cpu:{metrics.cpuUsage.toFixed(3)}% gas:{(metrics.gasUsedRatio * 100).toFixed(0)}% tx:{metrics.txPoolPending}
                           </span>
                         )}
                       </span>
@@ -1067,7 +1067,7 @@ export default function Dashboard() {
                     <div className="flex justify-between text-[10px] text-gray-500 mb-1">
                       <span>Usage</span>
                       <span className="font-mono text-blue-600 font-bold">
-                        {current.metrics.cpuUsage.toFixed(0)}% CPU / {current.metrics.memoryUsage.toFixed(0)} MB
+                        {current.metrics.cpuUsage.toFixed(3)}% CPU / {current.metrics.memoryUsage.toFixed(0)} MB
                       </span>
                     </div>
                     <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
