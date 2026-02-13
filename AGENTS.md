@@ -34,6 +34,48 @@
 - PRs should include a concise description, linked issues if applicable, and screenshots/GIFs for UI changes.
 - Note any new environment variables or setup steps in the PR description.
 
+## AI Model Configuration (Tier-Based)
+
+SentinAI uses automatic tier-based model selection:
+
+### Model Tiers
+
+**Fast Tier** — Real-time operations (latency < 5s):
+- Primary: `qwen3-80b-next` (1.8s, 100% accuracy, $30/mo)
+- Fallback: `qwen3-coder-flash` (3.3s, 100% accuracy, $15/mo)
+
+**Best Tier** — Complex analysis (latency < 15s):
+- Primary: `qwen3-235b` (11s, 100% accuracy, $60/mo)
+- Alternative: `gpt-5.2-codex` (10s, 100% accuracy, $300/mo)
+
+### Automatic Tier Selection
+
+```typescript
+// No model name needed — tier automatically selects optimal model
+await chatCompletion({
+  systemPrompt: '...',
+  userPrompt: '...',
+  modelTier: 'fast'   // → auto-selects qwen3-80b-next
+});
+
+await chatCompletion({
+  systemPrompt: '...',
+  userPrompt: '...',
+  modelTier: 'best'   // → auto-selects qwen3-235b
+});
+```
+
+### Configuration
+
+Set only the API key in `.env.local`:
+```bash
+QWEN_API_KEY=sk-fFKWrjzL-01D2b6_BCbjdg
+```
+
+No model override needed; tier-based selection works automatically.
+
+---
+
 ## Security & Configuration Tips
 - Keep secrets in `.env.local`; never commit API keys.
 - Required config is documented in `ENV_GUIDE.md`. Use `npm run setup` to generate `.env.local`.

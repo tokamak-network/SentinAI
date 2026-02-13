@@ -94,11 +94,11 @@ Enabled automatically when `L2_RPC_URL` is set. Override with `AGENT_LOOP_ENABLE
 
 **Scaling Engine** — Hybrid scoring (0–100) = CPU 30% + Gas 30% + TxPool 20% + AI Severity 20%. Three tiers: Idle (<30, 1 vCPU), Normal (30–70, 2 vCPU), High (≥70, 4 vCPU). 5-minute cooldown. Stress mode simulates 8 vCPU.
 - `scaling-decision.ts` → `k8s-scaler.ts` → `zero-downtime-scaler.ts`
-- `predictive-scaler.ts`: AI time-series prediction via fast tier model
+- `predictive-scaler.ts`: AI time-series prediction via Fast Tier (`qwen3-80b-next`, 1.8s response)
 
 **3-Layer Anomaly Detection** — Statistical → AI → Alert pipeline:
 1. `anomaly-detector.ts`: Z-Score detection (threshold: Z > 2.5)
-2. `anomaly-ai-analyzer.ts`: AI semantic analysis (fast tier)
+2. `anomaly-ai-analyzer.ts`: AI semantic analysis (Fast Tier: `qwen3-80b-next`)
 3. `alert-dispatcher.ts`: Slack/Webhook dispatch. Events in `anomaly-event-store.ts` (in-memory).
 
 **RCA Engine** — `rca-engine.ts` traces fault propagation using Optimism component dependency graph:
@@ -110,13 +110,15 @@ L1 → op-node → op-geth
 
 **NLOps Chat** — Natural language operations interface:
 - `nlops-engine.ts`: 7 intents (query, scale, analyze, config, explain, rca, unknown)
-- `nlops-responder.ts`: AI response generation (fast tier)
+- `nlops-responder.ts`: AI response generation (Fast Tier: `qwen3-80b-next`, 1.8s)
 - Dangerous actions (scale, config) require confirmation flow
 
 **Cost & Reporting** — `cost-optimizer.ts` + `usage-tracker.ts` for vCPU cost tracking (AWS Fargate Seoul pricing). `daily-report-generator.ts` + `daily-accumulator.ts` for scheduled reports via `scheduler.ts`.
 
 **AI Client** (`ai-client.ts`) — Unified AI interface. `chatCompletion()` single function for all AI calls.
-- Model tiers: `fast` (haiku/gpt-4.1-mini/gemini-flash-lite), `best` (sonnet-4.5/gpt-4.1/gemini-pro)
+- **Model tiers (auto-selected, tier-based):**
+  - Fast Tier: `qwen3-80b-next` (1.8s response, $30/mo) — Real-time anomaly detection, NLOps responses
+  - Best Tier: `qwen3-235b` (11s response, $60/mo) — RCA, daily reports, predictive scaling
 - Priority: Module Override > Gateway (with fallback) > Anthropic > OpenAI > Gemini
 - Gateway 400/401 errors auto-fallback to Anthropic Direct
 - All AI features have graceful degradation (service continues if AI fails)

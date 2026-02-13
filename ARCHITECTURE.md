@@ -426,8 +426,12 @@ Execution → Escalation Ladder (if fails):
 **`ai-client.ts`** (345 lines)
 - Multi-provider unified interface (Anthropic/OpenAI/Gemini)
 - LiteLLM Gateway support + fallback
-- Model tier selection (fast vs best)
+- **Model tier selection (automatic, no config needed):**
+  - Fast Tier: `qwen3-80b-next` (1.8s, 100% accuracy, $30/mo) — Real-time ops
+  - Best Tier: `qwen3-235b` (11s, 100% accuracy, $60/mo) — Complex analysis
+  - Fallback: GPT-5.2 series or Claude via auto-detection
 - Error logging & resilience
+- Per-tier cost estimation & token tracking
 
 **Used by:** All AI-dependent modules
 
@@ -881,7 +885,10 @@ switch (action.safetyLevel) {
 - **Container:** Docker (multi-stage)
 - **Orchestration:** Kubernetes (StatefulSet)
 - **State:** Redis 7+ or InMemory
-- **AI:** Claude 3.5 (primary), GPT-4.1 (secondary), Gemini 2.5 (tertiary)
+- **AI:**
+  - Fast Tier: Qwen 3 80B-Next (1.8s, 100% accuracy, $30/mo) ⭐
+  - Best Tier: Qwen 3 235B (11s, 100% accuracy, $60/mo) ⭐
+  - Alternative: GPT-5.2 series or Claude (via auto-fallback)
 - **Web3:** viem (L1/L2 RPC)
 - **UI:** React 19 + Tailwind CSS 4 + Recharts + Lucide icons
 
