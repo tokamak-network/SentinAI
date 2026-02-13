@@ -46,9 +46,9 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: sentinai-tunnel
-    command: tunnel run
-    environment:
-      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    # Quick Tunnel: 자동으로 공개 URL 생성 (도메인 설정 불필요)
+    # TCP 모드로 변경하여 네트워크 안정성 개선 (QUIC/UDP 타임아웃 해결)
+    command: tunnel --no-autoupdate --url http://sentinai:8080 --protocol http2
     depends_on:
       sentinai:
         condition: service_healthy
