@@ -617,131 +617,9 @@ export default function Dashboard() {
       )}
 
       {/* Row 1: At-a-Glance Status */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <div className="grid grid-cols-1 gap-6 mb-6">
 
-        {/* Card 1: Scaling Forecast */}
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="font-bold text-gray-900 text-lg">Simulation Zone</h3>
-            <span className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
-              prediction?.recommendedAction === 'scale_up'
-                ? 'bg-indigo-500'
-                : prediction?.recommendedAction === 'scale_down'
-                ? 'bg-green-500'
-                : 'bg-blue-500'
-            }`}>
-              {prediction?.recommendedAction === 'scale_up' ? 'Scale Up' :
-               prediction?.recommendedAction === 'scale_down' ? 'Scale Down' : 'Stable'}
-            </span>
-          </div>
-
-          {/* Stress Mode Toggle - Disabled */}
-          <div className="mb-3">
-            <button
-              disabled
-              onClick={() => {
-                if (!stressMode) {
-                  preStressVcpuRef.current = current?.metrics.gethVcpu || 1;
-                }
-                setStressMode(!stressMode);
-              }}
-              className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all opacity-50 cursor-not-allowed bg-gray-100 text-gray-400 border border-gray-200`}
-            >
-              {stressMode ? <Zap size={16} fill="currentColor" className="animate-pulse" /> : <Zap size={16} />}
-              Stress Mode Disabled
-            </button>
-          </div>
-
-          {/* vCPU Summary Row */}
-          {stressMode ? (
-            <div className="flex items-center gap-3 mb-3" data-testid="current-vcpu">
-              <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-xl font-bold text-gray-900">{preStressVcpuRef.current} vCPU</span>
-              </div>
-              <ArrowUpRight size={20} className="shrink-0 text-red-500" />
-              <div className="flex-1 h-8 rounded-lg flex items-center justify-center bg-red-100 border border-red-200">
-                <span className="text-lg font-bold text-red-600">8 vCPU</span>
-              </div>
-              <span className="text-[10px] text-red-400 shrink-0 font-semibold">STRESS</span>
-            </div>
-          ) : prediction ? (
-            <div className="flex items-center gap-3 mb-3" data-testid="current-vcpu">
-              <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-xl font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
-              </div>
-              <ArrowUpRight size={20} className={`shrink-0 ${
-                prediction.trend === 'rising' ? 'text-indigo-500' :
-                prediction.trend === 'falling' ? 'text-green-500 rotate-180' :
-                'text-gray-400 rotate-45'
-              }`} />
-              <div className={`flex-1 h-8 rounded-lg flex items-center justify-center ${
-                prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
-                  ? 'bg-indigo-100 border border-indigo-200'
-                  : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
-                  ? 'bg-green-100 border border-green-200'
-                  : 'bg-blue-100 border border-blue-200'
-              }`}>
-                <span className={`text-xl font-bold ${
-                  prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
-                    ? 'text-indigo-600'
-                    : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
-                    ? 'text-green-600'
-                    : 'text-blue-600'
-                }`}>{prediction.predictedVcpu} vCPU</span>
-              </div>
-              <span className="text-[10px] text-gray-400 shrink-0">
-                {(prediction.confidence * 100).toFixed(0)}%
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 mb-3" data-testid="current-vcpu">
-              <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
-              <span className="text-xs text-gray-400">/ {(current?.metrics.gethVcpu || 1) * 2} GiB</span>
-            </div>
-          )}
-
-          {/* Seed Test Data (Dev Only) */}
-          {process.env.NODE_ENV !== 'production' && <div className="mb-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
-            <div className="flex items-center gap-2">
-              <Database size={14} className="text-indigo-600 shrink-0" />
-              <select
-                value={seedScenario}
-                onChange={(e) => setSeedScenario(e.target.value as typeof seedScenario)}
-                className="flex-1 text-xs bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-              >
-                <option value="stable">Stable</option>
-                <option value="rising">Rising</option>
-                <option value="spike">Spike</option>
-                <option value="falling">Falling</option>
-                <option value="live">Live</option>
-              </select>
-              <button onClick={seedPredictionData} disabled={isSeeding}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isSeeding ? 'bg-indigo-300 text-white cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}>
-                {isSeeding ? '...' : 'Seed'}
-              </button>
-            </div>
-          </div>}
-
-          {/* AI Insight */}
-          <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-            <div className="flex items-start gap-2">
-              <Zap size={14} className="text-blue-500 mt-0.5 shrink-0" />
-              <p className="text-xs text-gray-600 leading-relaxed">
-                {prediction ? (
-                  prediction.reasoning.includes('AI unavailable')
-                    ? prediction.reasoning.replace(/\s*\(AI unavailable\)/, '').replace('Fallback prediction based on simple', 'Prediction based on')
-                    : prediction.reasoning
-                ) : current?.cost.isPeakMode ? (
-                  `Scaling up to handle traffic spike, current cost: $${current?.cost.opGethMonthlyCost?.toFixed(0) || '166'}/mo.`
-                ) : (
-                  <>Running at {current?.metrics.gethVcpu || 1} vCPU, estimated savings: <span className="text-green-600 font-bold">${current?.cost.monthlySaving?.toFixed(0) || '124'}/mo</span></>
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Card 2: Monthly Cost */}
+        {/* Card 1: Monthly Cost */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
           <div data-testid="monthly-cost">
             <span className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider">Monthly Cost</span>
@@ -1308,6 +1186,130 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+
+      {/* Row 3: Simulation Zone (Bottom) */}
+      <div className="mt-24 mb-6">
+        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
+          <div className="flex justify-between items-center mb-3">
+            <h3 className="font-bold text-gray-900 text-lg">Simulation Zone</h3>
+            <span className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
+              prediction?.recommendedAction === 'scale_up'
+                ? 'bg-indigo-500'
+                : prediction?.recommendedAction === 'scale_down'
+                ? 'bg-green-500'
+                : 'bg-blue-500'
+            }`}>
+              {prediction?.recommendedAction === 'scale_up' ? 'Scale Up' :
+               prediction?.recommendedAction === 'scale_down' ? 'Scale Down' : 'Stable'}
+            </span>
+          </div>
+
+          {/* Stress Mode Toggle - Disabled */}
+          <div className="mb-3">
+            <button
+              disabled
+              onClick={() => {
+                if (!stressMode) {
+                  preStressVcpuRef.current = current?.metrics.gethVcpu || 1;
+                }
+                setStressMode(!stressMode);
+              }}
+              className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all opacity-50 cursor-not-allowed bg-gray-100 text-gray-400 border border-gray-200`}
+            >
+              {stressMode ? <Zap size={16} fill="currentColor" className="animate-pulse" /> : <Zap size={16} />}
+              Stress Mode Disabled
+            </button>
+          </div>
+
+          {/* vCPU Summary Row */}
+          {stressMode ? (
+            <div className="flex items-center gap-3 mb-3" data-testid="current-vcpu">
+              <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                <span className="text-xl font-bold text-gray-900">{preStressVcpuRef.current} vCPU</span>
+              </div>
+              <ArrowUpRight size={20} className="shrink-0 text-red-500" />
+              <div className="flex-1 h-8 rounded-lg flex items-center justify-center bg-red-100 border border-red-200">
+                <span className="text-lg font-bold text-red-600">8 vCPU</span>
+              </div>
+              <span className="text-[10px] text-red-400 shrink-0 font-semibold">STRESS</span>
+            </div>
+          ) : prediction ? (
+            <div className="flex items-center gap-3 mb-3" data-testid="current-vcpu">
+              <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
+                <span className="text-xl font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
+              </div>
+              <ArrowUpRight size={20} className={`shrink-0 ${
+                prediction.trend === 'rising' ? 'text-indigo-500' :
+                prediction.trend === 'falling' ? 'text-green-500 rotate-180' :
+                'text-gray-400 rotate-45'
+              }`} />
+              <div className={`flex-1 h-8 rounded-lg flex items-center justify-center ${
+                prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
+                  ? 'bg-indigo-100 border border-indigo-200'
+                  : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
+                  ? 'bg-green-100 border border-green-200'
+                  : 'bg-blue-100 border border-blue-200'
+              }`}>
+                <span className={`text-xl font-bold ${
+                  prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
+                    ? 'text-indigo-600'
+                    : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
+                    ? 'text-green-600'
+                    : 'text-blue-600'
+                }`}>{prediction.predictedVcpu} vCPU</span>
+              </div>
+              <span className="text-[10px] text-gray-400 shrink-0">
+                {(prediction.confidence * 100).toFixed(0)}%
+              </span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 mb-3" data-testid="current-vcpu">
+              <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
+              <span className="text-xs text-gray-400">/ {(current?.metrics.gethVcpu || 1) * 2} GiB</span>
+            </div>
+          )}
+
+          {/* Seed Test Data (Dev Only) */}
+          {process.env.NODE_ENV !== 'production' && <div className="mb-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+            <div className="flex items-center gap-2">
+              <Database size={14} className="text-indigo-600 shrink-0" />
+              <select
+                value={seedScenario}
+                onChange={(e) => setSeedScenario(e.target.value as typeof seedScenario)}
+                className="flex-1 text-xs bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
+              >
+                <option value="stable">Stable</option>
+                <option value="rising">Rising</option>
+                <option value="spike">Spike</option>
+                <option value="falling">Falling</option>
+                <option value="live">Live</option>
+              </select>
+              <button onClick={seedPredictionData} disabled={isSeeding}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isSeeding ? 'bg-indigo-300 text-white cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}>
+                {isSeeding ? '...' : 'Seed'}
+              </button>
+            </div>
+          </div>}
+
+          {/* AI Insight */}
+          <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
+            <div className="flex items-start gap-2">
+              <Zap size={14} className="text-blue-500 mt-0.5 shrink-0" />
+              <p className="text-xs text-gray-600 leading-relaxed">
+                {prediction ? (
+                  prediction.reasoning.includes('AI unavailable')
+                    ? prediction.reasoning.replace(/\s*\(AI unavailable\)/, '').replace('Fallback prediction based on simple', 'Prediction based on')
+                    : prediction.reasoning
+                ) : current?.cost.isPeakMode ? (
+                  `Scaling up to handle traffic spike, current cost: $${current?.cost.opGethMonthlyCost?.toFixed(0) || '166'}/mo.`
+                ) : (
+                  <>Running at {current?.metrics.gethVcpu || 1} vCPU, estimated savings: <span className="text-green-600 font-bold">${current?.cost.monthlySaving?.toFixed(0) || '124'}/mo</span></>
+                )}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
 
     </div>
   );
