@@ -11,7 +11,8 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "setup": "node scripts/setup.mjs",
-    "verify": "bash scripts/verify-e2e.sh"
+    "verify": "bash scripts/verify-e2e.sh",
+    "benchmark": "npx tsx scripts/benchmark-models.ts"
   },
   "dependencies": {
     "@iarna/toml": "^3.0.0",

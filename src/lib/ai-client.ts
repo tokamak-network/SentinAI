@@ -23,6 +23,7 @@ export interface ChatCompletionOptions {
   systemPrompt: string;
   userPrompt: string;
   modelTier: ModelTier;
+  modelName?: string; // Optional: explicit model name for benchmarking
   temperature?: number;
   maxTokens?: number;
   signal?: AbortSignal;
@@ -79,10 +80,74 @@ interface ProviderConfig {
   baseUrl: string;
 }
 
-function detectProvider(modelTier: ModelTier): ProviderConfig {
+function detectProvider(modelTier: ModelTier, modelName?: string): ProviderConfig {
   const gatewayUrl = process.env.AI_GATEWAY_URL;
 
-  // Priority 1: Qwen
+  // If explicit modelName is provided, infer provider from model name
+  if (modelName) {
+    let provider: AIProvider = 'openai';
+    if (modelName.startsWith('qwen') || modelName.startsWith('qwen3')) {
+      provider = 'qwen';
+    } else if (modelName.startsWith('claude')) {
+      provider = 'anthropic';
+    } else if (modelName.startsWith('gemini')) {
+      provider = 'gemini';
+    }
+    // 'gpt', 'gpt-5', 'gpt-4', etc. stay as 'openai'
+
+    // When using gateway, select API key based on detected provider
+    if (gatewayUrl) {
+      // Select API key matching the provider (not just any key)
+      let apiKey: string | undefined;
+
+      if (provider === 'qwen') {
+        apiKey = process.env.QWEN_API_KEY;
+      } else if (provider === 'anthropic') {
+        apiKey = process.env.ANTHROPIC_API_KEY;
+      } else if (provider === 'openai') {
+        // For GPT models, prioritize GPT_API_KEY, then fallback to OPENAI_API_KEY
+        apiKey = process.env.GPT_API_KEY || process.env.OPENAI_API_KEY;
+      } else if (provider === 'gemini') {
+        apiKey = process.env.GEMINI_API_KEY;
+      }
+
+      if (!apiKey) {
+        throw new Error(`No API key configured for provider: ${provider}. Set ${provider.toUpperCase()}_API_KEY.`);
+      }
+
+      return {
+        provider,
+        apiKey,
+        model: modelName,
+        baseUrl: gatewayUrl,
+      };
+    }
+
+    // Without gateway, use provider-specific logic
+    let apiKey: string | undefined;
+    if (provider === 'qwen') {
+      apiKey = process.env.QWEN_API_KEY;
+    } else if (provider === 'anthropic') {
+      apiKey = process.env.ANTHROPIC_API_KEY;
+    } else if (provider === 'openai') {
+      apiKey = process.env.GPT_API_KEY || process.env.OPENAI_API_KEY;
+    } else if (provider === 'gemini') {
+      apiKey = process.env.GEMINI_API_KEY;
+    }
+
+    if (!apiKey) {
+      throw new Error(`No API key configured for provider: ${provider}`);
+    }
+
+    return {
+      provider,
+      apiKey,
+      model: modelName,
+      baseUrl: gatewayUrl || DEFAULT_BASE_URLS[provider],
+    };
+  }
+
+  // Priority 1: Qwen (DashScope or any OpenAI-compatible endpoint)
   const qwenKey = process.env.QWEN_API_KEY;
   if (qwenKey) {
     return {
@@ -222,21 +287,37 @@ async function callOpenAI(
   config: ProviderConfig,
   options: ChatCompletionOptions
 ): Promise<ChatCompletionResult> {
-  const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
+  const baseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+
+  // Build request body with model-specific handling
+  const body: Record<string, any> = {
+    model: config.model,
+    messages: [
+      { role: 'system', content: options.systemPrompt },
+      { role: 'user', content: options.userPrompt },
+    ],
+    max_tokens: options.maxTokens || 4096,
+  };
+
+  // GPT-5.2-pro doesn't support custom temperature, only 1.0
+  // GPT-5.2-codex doesn't support temperature parameter at all
+  if (config.model === 'gpt-5.2-codex') {
+    // Don't include temperature for gpt-5.2-codex
+  } else if (config.model === 'gpt-5.2-pro') {
+    // gpt-5.2-pro only supports temperature=1
+    body.temperature = 1;
+  } else {
+    // All other models support custom temperature
+    body.temperature = options.temperature ?? 0.2;
+  }
+
+  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${config.apiKey}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        { role: 'system', content: options.systemPrompt },
-        { role: 'user', content: options.userPrompt },
-      ],
-      max_tokens: options.maxTokens || 4096,
-      temperature: options.temperature ?? 0.2,
-    }),
+    body: JSON.stringify(body),
     signal: options.signal,
   });
 
@@ -307,7 +388,7 @@ async function callGemini(
 // =====================================================
 
 export async function chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult> {
-  const config = detectProvider(options.modelTier);
+  const config = detectProvider(options.modelTier, options.modelName);
 
   switch (config.provider) {
     case 'qwen':

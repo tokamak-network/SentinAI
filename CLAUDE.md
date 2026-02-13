@@ -40,6 +40,18 @@ bash scripts/verify-e2e.sh --phase 2 # Run specific phase only
 
 `scripts/verify-e2e.sh` runs against a live EKS + L2 RPC + AI Provider environment. Auto-starts dev server if not running.
 
+### Model Benchmarking
+
+```bash
+npm run benchmark                                          # Run all providers, 3 iterations
+npm run benchmark -- --providers qwen,anthropic           # Test specific providers
+npm run benchmark -- --providers qwen --iterations 1      # Single iteration for quick test
+npm run benchmark -- --output ./my-results                # Custom output directory
+npm run benchmark -- --help                               # Show detailed help
+```
+
+Compares AI model performance using 5 real-world prompts (Predictive Scaler, Anomaly Analyzer, RCA Engine, Daily Report, NLOps). Generates CSV (raw data) and Markdown (summary) reports in `benchmark-results/`. Requires at least one AI API key set (QWEN_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY).
+
 ## Architecture
 
 ### Data Flow

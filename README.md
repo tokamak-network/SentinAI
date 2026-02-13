@@ -18,6 +18,7 @@ npm run dev
 - **AI-Powered Log Analysis**: Claude-based anomaly detection for Optimism Rollup components
 - **Stress Test Simulation**: Simulate peak load scenarios (8 vCPU / 16 GiB)
 - **K8s Integration**: AWS EKS connection with **cached dynamic token generation** (10-minute expiry) for low-latency polling.
+- **Model Benchmarking** (New!): Compare AI model performance (Qwen, Claude, GPT, Gemini) using 5 production prompts. Generate CSV/Markdown reports with latency, cost, and accuracy metrics.
 
 ## Dynamic Resource Scaling
 Combines **Rule-based Metrics** and **AI-driven Insights** to optimize `op-geth` resources automatically.

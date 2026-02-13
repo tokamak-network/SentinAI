@@ -1,0 +1,31 @@
+prompt_id,model_id,provider,tier,iteration,latency_ms,tokens_in,tokens_out,cost_usd,accuracy,error
+predictive-scaler,qwen3-coder-flash,qwen,fast,1,3863,1103,217,0.000660,1,
+predictive-scaler,gemini-3-flash,gemini,fast,1,0,0,0,0.000000,0,"Gemini API error 404: {""detail"":""Not Found""}"
+predictive-scaler,gpt-4o-mini,openai,fast,1,0,0,0,0.000000,0,"OpenAI API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access gpt-4o-mini"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+predictive-scaler,qwen3-235b,qwen,best,1,4671,1103,224,0.006635,0,
+predictive-scaler,gemini-3-pro,gemini,best,1,0,0,0,0.000000,0,"Gemini API error 404: {""detail"":""Not Found""}"
+predictive-scaler,gpt-4o,openai,best,1,0,0,0,0.000000,0,"OpenAI API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access gpt-4o"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+anomaly-analyzer,qwen3-coder-flash,qwen,fast,1,5008,830,213,0.000522,1,
+anomaly-analyzer,gemini-3-flash,gemini,fast,1,0,0,0,0.000000,0,"Gemini API error 404: {""detail"":""Not Found""}"
+anomaly-analyzer,gpt-4o-mini,openai,fast,1,0,0,0,0.000000,0,"OpenAI API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access gpt-4o-mini"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+anomaly-analyzer,qwen3-235b,qwen,best,1,4113,830,199,0.005145,1,
+anomaly-analyzer,gemini-3-pro,gemini,best,1,0,0,0,0.000000,0,"Gemini API error 404: {""detail"":""Not Found""}"
+anomaly-analyzer,gpt-4o,openai,best,1,0,0,0,0.000000,0,"OpenAI API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access gpt-4o"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+rca-engine,qwen3-coder-flash,qwen,fast,1,10140,1377,514,0.000946,1,
+rca-engine,gemini-3-flash,gemini,fast,1,0,0,0,0.000000,0,"Gemini API error 404: {""detail"":""Not Found""}"
+rca-engine,gpt-4o-mini,openai,fast,1,0,0,0,0.000000,0,"OpenAI API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access gpt-4o-mini"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+rca-engine,qwen3-235b,qwen,best,1,8890,1377,454,0.009155,1,
+rca-engine,gemini-3-pro,gemini,best,1,0,0,0,0.000000,0,"Gemini API error 404: {""detail"":""Not Found""}"
+rca-engine,gpt-4o,openai,best,1,0,0,0,0.000000,0,"OpenAI API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access gpt-4o"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+daily-report,qwen3-coder-flash,qwen,fast,1,0,0,0,0.000000,0,"This operation was aborted"
+daily-report,gemini-3-flash,gemini,fast,1,0,0,0,0.000000,0,"Gemini API error 404: {""detail"":""Not Found""}"
+daily-report,gpt-4o-mini,openai,fast,1,0,0,0,0.000000,0,"OpenAI API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access gpt-4o-mini"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+daily-report,qwen3-235b,qwen,best,1,41013,930,2153,0.015415,1,
+daily-report,gemini-3-pro,gemini,best,1,0,0,0,0.000000,0,"Gemini API error 404: {""detail"":""Not Found""}"
+daily-report,gpt-4o,openai,best,1,0,0,0,0.000000,0,"OpenAI API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access gpt-4o"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+nlops-responder,qwen3-coder-flash,qwen,fast,1,3509,457,251,0.000354,1,
+nlops-responder,gemini-3-flash,gemini,fast,1,0,0,0,0.000000,0,"Gemini API error 404: {""detail"":""Not Found""}"
+nlops-responder,gpt-4o-mini,openai,fast,1,0,0,0,0.000000,0,"OpenAI API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access gpt-4o-mini"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+nlops-responder,qwen3-235b,qwen,best,1,5431,457,274,0.003655,1,
+nlops-responder,gemini-3-pro,gemini,best,1,0,0,0,0.000000,0,"Gemini API error 404: {""detail"":""Not Found""}"
+nlops-responder,gpt-4o,openai,best,1,0,0,0,0.000000,0,"OpenAI API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access gpt-4o"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"

@@ -1,0 +1,31 @@
+prompt_id,model_id,provider,tier,iteration,latency_ms,tokens_in,tokens_out,cost_usd,accuracy,error
+predictive-scaler,qwen3-coder-flash,qwen,fast,1,5203,1103,206,0.000655,1,
+predictive-scaler,qwen-turbo-latest,qwen,fast,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-turbo-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+predictive-scaler,qwen3-235b-thinking,qwen,best,1,26412,1105,1369,0.025268,1,
+predictive-scaler,qwen3-235b,qwen,best,1,4536,1103,221,0.006620,1,
+predictive-scaler,qwen3-80b-next,qwen,best,1,2087,1103,247,0.003993,1,
+predictive-scaler,qwen-max-latest,qwen,best,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-max-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+anomaly-analyzer,qwen3-coder-flash,qwen,fast,1,3099,830,236,0.000533,1,
+anomaly-analyzer,qwen-turbo-latest,qwen,fast,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-turbo-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+anomaly-analyzer,qwen3-235b-thinking,qwen,best,1,43252,832,2266,0.033848,1,
+anomaly-analyzer,qwen3-235b,qwen,best,1,4115,830,195,0.005125,1,
+anomaly-analyzer,qwen3-80b-next,qwen,best,1,1755,830,205,0.003100,1,
+anomaly-analyzer,qwen-max-latest,qwen,best,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-max-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+rca-engine,qwen3-coder-flash,qwen,fast,1,7533,1377,474,0.000925,1,
+rca-engine,qwen-turbo-latest,qwen,fast,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-turbo-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+rca-engine,qwen3-235b-thinking,qwen,best,1,0,0,0,0.000000,0,"This operation was aborted"
+rca-engine,qwen3-235b,qwen,best,1,9313,1377,467,0.009220,1,
+rca-engine,qwen3-80b-next,qwen,best,1,3769,1377,491,0.005897,1,
+rca-engine,qwen-max-latest,qwen,best,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-max-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+daily-report,qwen3-coder-flash,qwen,fast,1,0,0,0,0.000000,0,"This operation was aborted"
+daily-report,qwen-turbo-latest,qwen,fast,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-turbo-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+daily-report,qwen3-235b-thinking,qwen,best,1,0,0,0,0.000000,0,"This operation was aborted"
+daily-report,qwen3-235b,qwen,best,1,42914,930,2248,0.015890,1,
+daily-report,qwen3-80b-next,qwen,best,1,16966,930,2252,0.013585,1,
+daily-report,qwen-max-latest,qwen,best,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-max-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+nlops-responder,qwen3-coder-flash,qwen,fast,1,4350,457,246,0.000351,1,
+nlops-responder,qwen-turbo-latest,qwen,fast,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-turbo-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+nlops-responder,qwen3-235b-thinking,qwen,best,1,0,0,0,0.000000,0,"This operation was aborted"
+nlops-responder,qwen3-235b,qwen,best,1,5686,457,281,0.003690,1,
+nlops-responder,qwen3-80b-next,qwen,best,1,1883,457,219,0.002237,1,
+nlops-responder,qwen-max-latest,qwen,best,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-max-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"

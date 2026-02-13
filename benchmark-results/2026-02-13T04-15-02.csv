@@ -1,0 +1,6 @@
+prompt_id,provider,tier,iteration,latency_ms,tokens_in,tokens_out,cost_usd,accuracy,error
+predictive-scaler,openai,fast,1,334,0,0,0.000000,0,"OpenAI API error 404: {""detail"":""Not Found""}"
+anomaly-analyzer,openai,fast,1,125,0,0,0.000000,0,"OpenAI API error 404: {""detail"":""Not Found""}"
+rca-engine,openai,best,1,125,0,0,0.000000,0,"OpenAI API error 404: {""detail"":""Not Found""}"
+daily-report,openai,best,1,125,0,0,0.000000,0,"OpenAI API error 404: {""detail"":""Not Found""}"
+nlops-responder,openai,fast,1,121,0,0,0.000000,0,"OpenAI API error 404: {""detail"":""Not Found""}"

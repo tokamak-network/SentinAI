@@ -1,0 +1,45 @@
+# SentinAI Configuration
+
+# SentinAI L1 RPC Failover Configuration
+L1_RPC_URLS=https://ethereum-sepolia-rpc.publicnode.com,https://sepolia.drpc.org,https://rpc.sepolia.org
+
+# L2 Node L1 RPC Failover Configuration
+L1_PROXYD_ENABLED=true
+L1_PROXYD_CONFIGMAP_NAME=sepolia-thanos-stack-l1-proxyd
+L1_PROXYD_SPARE_URLS=https://eth-sepolia.g.alchemy.com/v2/x4EOshikyKeyJci-23VSqFnwKIddeS7f,https://eth-sepolia.g.alchemy.com/v2/zZlp3J0Widt7178fulMmCV7kz8spqDVB
+
+# EOA Balance Monitoring Configuration
+BATCHER_EOA_ADDRESS=0x61dc95E5f27266b94805ED23D95B4C9553A3D049
+PROPOSER_EOA_ADDRESS=0xA24E06AF98029DA5120c1A93AdF260bcdB491E7b
+TREASURY_PRIVATE_KEY=146fedcf637a75dca5bb4270a1ddf679596ea12afac1c7016e9d3d201c3b88ae
+EOA_BALANCE_CRITICAL_ETH=0.1
+EOA_REFILL_AMOUNT_ETH=0.5
+
+# --- 1. L2 Chain RPC ---
+L2_RPC_URL=https://rpc.thanos-sepolia.tokamak.network
+
+# --- 2. AI Configuration
+# (Fallback: Qwen > Anthropic > OpenAI > Gemini)
+AI_GATEWAY_URL=https://api.ai.tokamak.network
+QWEN_API_KEY=sk-fFKWrjzL-01D2b6_BCbjdg
+QWEN_MODEL=qwen3-coder-flash
+
+# --- 4. Kubernetes Monitoring ---
+AWS_CLUSTER_NAME=thanos-sepolia
+AWS_PROFILE=thanos-sepolia
+K8S_NAMESPACE=thanos-sepolia
+K8S_APP_PREFIX=sepolia-thanos-stack-op
+
+# --- 3. State Persistence (Redis) ---
+REDIS_URL=redis://localhost:6379
+
+# --- Defaults ---
+COST_TRACKING_ENABLED=true
+SCALING_SIMULATION_MODE=true
+
+# To add webhooks or hybrid AI settings:
+# Run: npm run setup (choose Advanced mode)
+# Or edit this file manually
+
+AGENT_LOOP_ENABLED=true
+AUTO_REMEDIATION_ENABLED=true

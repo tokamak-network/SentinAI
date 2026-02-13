@@ -1,0 +1,11 @@
+prompt_id,model_id,provider,tier,iteration,latency_ms,tokens_in,tokens_out,cost_usd,accuracy,error
+predictive-scaler,qwen3-coder-flash,qwen,fast,1,3808,1103,207,0.000655,1,
+predictive-scaler,qwen-turbo-latest,qwen,fast,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-turbo-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+anomaly-analyzer,qwen3-coder-flash,qwen,fast,1,4169,830,218,0.000524,1,
+anomaly-analyzer,qwen-turbo-latest,qwen,fast,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-turbo-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+rca-engine,qwen3-coder-flash,qwen,fast,1,12281,1377,513,0.000945,1,
+rca-engine,qwen-turbo-latest,qwen,fast,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-turbo-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+daily-report,qwen3-coder-flash,qwen,fast,1,0,0,0,0.000000,0,"This operation was aborted"
+daily-report,qwen-turbo-latest,qwen,fast,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-turbo-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
+nlops-responder,qwen3-coder-flash,qwen,fast,1,4707,457,215,0.000336,1,
+nlops-responder,qwen-turbo-latest,qwen,fast,1,0,0,0,0.000000,0,"Qwen API error 401: {""error"":{""message"":""key not allowed to access model. This key can only access models=['qwen3-coder-flash', 'qwen3-235b-thinking', 'qwen3-235b', 'qwen3-80b-next']. Tried to access qwen-turbo-latest"",""type"":""key_model_access_denied"",""param"":""model"",""code"":""401""}}"
