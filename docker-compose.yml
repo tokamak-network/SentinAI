@@ -15,6 +15,14 @@ services:
       # Host AWS 자격증명 접근용 (읽기 전용)
       - ~/.aws:/home/nextjs/.aws:ro
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
     depends_on:
       redis:
         condition: service_healthy
@@ -34,6 +42,14 @@ services:
       - redis-data:/data
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.25'
+          memory: 64M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -53,6 +69,14 @@ services:
       sentinai:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 32M
     profiles:
       - tunnel
 
