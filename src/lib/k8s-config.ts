@@ -14,12 +14,11 @@ const execFileAsync = promisify(execFile);
 // ============================================================
 
 /**
- * Detect if running in development mode (no K8s configured)
+ * Detect if running in development mode
+ * Development = K8S_API_URL not explicitly configured (includes Docker local dev)
  */
 function isDevelopmentEnvironment(): boolean {
-  return !process.env.AWS_CLUSTER_NAME &&
-         !process.env.K8S_API_URL &&
-         !process.env.KUBECONFIG;
+  return !process.env.K8S_API_URL;
 }
 
 /**
@@ -304,9 +303,9 @@ export async function runK8sCommand(
     if (options?.stdin) {
       // Safely escape stdin for shell
       const escapedStdin = options.stdin.replace(/'/g, "'\\''");
-      fullCmd = `echo '${escapedStdin}' | ${baseCmd}${argsStr} ${command}`;
+      fullCmd = `echo '${escapedStdin}' | ${baseCmd}${argsStr} ${command} 2>/dev/null`;
     } else {
-      fullCmd = `${baseCmd}${argsStr} ${command}`;
+      fullCmd = `${baseCmd}${argsStr} ${command} 2>/dev/null`;
     }
 
     const result = await execAsync(fullCmd, {

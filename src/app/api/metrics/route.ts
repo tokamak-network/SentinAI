@@ -143,7 +143,10 @@ async function getComponentDetails(labelSelector: string, displayName: string, i
         };
 
     } catch (e) {
-        console.error(`Failed to fetch ${displayName}:`, e);
+        // Only log detailed errors if DEBUG_K8S is enabled
+        if (process.env.DEBUG_K8S === 'true') {
+            console.error(`Failed to fetch ${displayName}:`, e);
+        }
         return {
             name: displayName,
             type: "Unknown",

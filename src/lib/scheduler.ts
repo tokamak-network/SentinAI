@@ -10,6 +10,7 @@
 import cron, { type ScheduledTask } from 'node-cron';
 import { takeSnapshot, getAccumulatedData, initializeAccumulator } from '@/lib/daily-accumulator';
 import { generateDailyReport } from '@/lib/daily-report-generator';
+import { deliverDailyReport } from '@/lib/daily-report-mailer';
 import { runAgentCycle } from '@/lib/agent-loop';
 
 let initialized = false;
@@ -89,6 +90,16 @@ export async function initializeScheduler(): Promise<void> {
         const result = await generateDailyReport(data);
         if (result.success) {
           console.log(`[Scheduler] Daily report generated: ${result.reportPath}`);
+
+          // Deliver report via Slack (신규 추가)
+          const yesterday = new Date();
+          yesterday.setDate(yesterday.getDate() - 1);
+          const deliveryResult = await deliverDailyReport(yesterday);
+          if (deliveryResult.success) {
+            console.log(`[Scheduler] Daily report delivered via ${deliveryResult.method}`);
+          } else {
+            console.error(`[Scheduler] Daily report delivery failed: ${deliveryResult.error}`);
+          }
         } else {
           console.error(`[Scheduler] Daily report failed: ${result.error}`);
         }

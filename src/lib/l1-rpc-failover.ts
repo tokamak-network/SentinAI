@@ -780,7 +780,9 @@ async function getL2NodesL1RpcFromProxyd(): Promise<L2NodeL1RpcStatus[]> {
     }));
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[getL2NodesL1RpcFromProxyd] Failed:', message);
+    if (process.env.DEBUG_K8S === 'true') {
+      console.error('[getL2NodesL1RpcFromProxyd] Failed:', message);
+    }
     return [];
   }
 }

@@ -26,6 +26,13 @@ const NLOPS_ENABLED = process.env.NLOPS_ENABLED !== 'false';
 
 const DANGEROUS_TOOLS = ['scale_node', 'update_config'];
 
+/**
+ * Check if read-only mode is enabled
+ */
+function isReadOnlyMode(): boolean {
+  return process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE === 'true';
+}
+
 // ============================================================
 // Tool Definitions
 // ============================================================
@@ -488,6 +495,19 @@ export async function processCommand(
       response: directResponse,
       suggestedFollowUp: ['현재 상태', '로그 분석', '비용 확인'],
     };
+  }
+
+  // Check read-only mode for dangerous tools
+  if (isReadOnlyMode()) {
+    const hasDangerousTool = toolCalls.some((tc) => DANGEROUS_TOOLS.includes(tc.name));
+    if (hasDangerousTool) {
+      return {
+        intent: extractIntent(toolCalls, userInput),
+        executed: false,
+        response: '⚠️ 읽기 전용 모드에서는 스케일링 및 설정 변경이 불가능합니다.\n\n조회 명령어를 사용하세요:\n- "현재 상태는?"\n- "메트릭 조회"\n- "비용 분석"',
+        suggestedFollowUp: ['현재 상태', '로그 분석', '비용 확인'],
+      };
+    }
   }
 
   // Check for dangerous tools needing confirmation

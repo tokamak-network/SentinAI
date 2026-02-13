@@ -10,6 +10,10 @@ services:
       - REDIS_URL=redis://redis:6379
     volumes:
       - sentinai-reports:/app/data/reports
+      # Host K8s 클러스터 접근용 (읽기 전용)
+      - ~/.kube/config:/home/nextjs/.kube/config:ro
+      # Host AWS 자격증명 접근용 (읽기 전용)
+      - ~/.aws:/home/nextjs/.aws:ro
     restart: unless-stopped
     depends_on:
       redis:

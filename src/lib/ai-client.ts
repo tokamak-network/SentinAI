@@ -345,12 +345,28 @@ async function callGemini(
   config: ProviderConfig,
   options: ChatCompletionOptions
 ): Promise<ChatCompletionResult> {
-  const response = await fetch(`${config.baseUrl}/v1beta/openai/chat/completions`, {
+  // Gemini API endpoint - use gateway if available
+  const isGateway = config.baseUrl !== DEFAULT_BASE_URLS.gemini;
+
+  // Determine endpoint and headers based on whether using gateway or direct API
+  const endpoint = isGateway
+    ? `${config.baseUrl}/v1/chat/completions`
+    : `${config.baseUrl}/v1beta/openai/chat/completions`;
+
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  // Set authorization header based on API endpoint
+  if (isGateway) {
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+  } else {
+    headers['x-goog-api-key'] = config.apiKey;
+  }
+
+  const response = await fetch(endpoint, {
     method: 'POST',
-    headers: {
-      'x-goog-api-key': config.apiKey,
-      'Content-Type': 'application/json',
-    },
+    headers,
     body: JSON.stringify({
       model: config.model,
       messages: [

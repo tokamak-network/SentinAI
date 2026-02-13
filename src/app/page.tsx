@@ -510,6 +510,19 @@ export default function Dashboard() {
         </div>
       </header>
 
+      {/* Read-Only Mode Banner */}
+      {process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE === 'true' && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 flex items-start gap-3">
+          <span className="text-yellow-600 text-lg shrink-0">⚠️</span>
+          <div>
+            <h3 className="font-semibold text-yellow-800 text-sm">Read-Only Mode</h3>
+            <p className="text-xs text-yellow-700 mt-1">
+              Public demo mode is active. Metric queries are allowed, but scaling and configuration changes are disabled.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Network Stats Bar */}
       <div className="bg-white rounded-2xl px-6 py-4 mb-8 shadow-sm border border-gray-200/60">
         <div className="flex items-center gap-8">
@@ -1297,7 +1310,7 @@ export default function Dashboard() {
           )}
 
           {/* Seed Test Data (Dev Only) */}
-          {process.env.NODE_ENV !== 'production' && <div className="mb-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+          {process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE !== 'true' && <div className="mb-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
             <div className="flex items-center gap-2">
               <Database size={14} className="text-indigo-600 shrink-0" />
               <select

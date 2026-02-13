@@ -162,11 +162,20 @@ export const BENCHMARK_PRESETS = {
     description: 'Standard: Qwen & GPT-5.2 comparison × 1 iteration (~15 min)',
   },
 
-  // 완전 테스트 - All Models with Multiple Iterations
+  // 완전 테스트 - All Models (Qwen + GPT + Gemini)
   'comprehensive': {
-    models: TEST_MODELS_QWEN_VS_GPT.map(m => m.id),
-    iterations: 3,
-    description: 'Comprehensive: All models × 3 iterations (~45 min)',
+    models: [
+      'qwen3-coder-flash',
+      'qwen3-235b',
+      'qwen3-80b-next',
+      'gpt-5.2',
+      'gpt-5.2-pro',
+      'gpt-5.2-codex',
+      'gemini-3-flash',
+      'gemini-3-pro',
+    ],
+    iterations: 1,
+    description: 'Comprehensive: All models (Qwen/GPT/Gemini) × 1 iteration (~30 min)',
   },
 
   // 비용 최적화 테스트 - Qwen Only (Cheapest)
