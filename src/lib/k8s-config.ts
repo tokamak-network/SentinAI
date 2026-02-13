@@ -10,6 +10,39 @@ const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
 
 // ============================================================
+// Environment Detection
+// ============================================================
+
+/**
+ * Detect if running in development mode (no K8s configured)
+ */
+function isDevelopmentEnvironment(): boolean {
+  return !process.env.AWS_CLUSTER_NAME &&
+         !process.env.K8S_API_URL &&
+         !process.env.KUBECONFIG;
+}
+
+/**
+ * Log warning only in production/configured environments
+ */
+function logK8sWarning(message: string): void {
+  if (!isDevelopmentEnvironment()) {
+    console.warn(`[K8s Config] ${message}`);
+  } else if (process.env.DEBUG_K8S === 'true') {
+    console.debug(`[K8s Config] ${message}`);
+  }
+}
+
+/**
+ * Log errors only in production/configured environments
+ */
+function logK8sError(message: string): void {
+  if (!isDevelopmentEnvironment()) {
+    console.error(`[K8s Config] ${message}`);
+  }
+}
+
+// ============================================================
 // Input Validation
 // ============================================================
 
@@ -58,7 +91,7 @@ function getAwsProfile(): string | undefined {
   const profile = process.env.AWS_PROFILE;
   if (!profile) return undefined;
   if (!isValidShellIdentifier(profile)) {
-    console.warn(`[K8s Config] Invalid AWS_PROFILE value: ${profile.substring(0, 30)}`);
+    logK8sWarning(`Invalid AWS_PROFILE value: ${profile.substring(0, 30)}`);
     return undefined;
   }
   return profile;
@@ -80,7 +113,7 @@ async function resolveAwsRegion(): Promise<string | undefined> {
   const envRegion = process.env.AWS_REGION;
   if (envRegion) {
     if (!isValidShellIdentifier(envRegion)) {
-      console.warn(`[K8s Config] Invalid AWS_REGION value: ${envRegion.substring(0, 30)}`);
+      logK8sWarning(`Invalid AWS_REGION value: ${envRegion.substring(0, 30)}`);
       return undefined;
     }
     regionCache = envRegion;
@@ -128,7 +161,7 @@ async function resolveK8sApiUrl(): Promise<string | undefined> {
   if (!clusterName) return undefined;
 
   if (!isValidShellIdentifier(clusterName)) {
-    console.warn(`[K8s Config] Invalid AWS_CLUSTER_NAME value: ${clusterName.substring(0, 30)}`);
+    logK8sWarning(`Invalid AWS_CLUSTER_NAME value: ${clusterName.substring(0, 30)}`);
     return undefined;
   }
 
@@ -151,7 +184,7 @@ async function resolveK8sApiUrl(): Promise<string | undefined> {
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error';
-    console.warn(`[K8s Config] Failed to auto-detect K8S_API_URL: ${message}`);
+    logK8sWarning(`Failed to auto-detect K8S_API_URL: ${message}`);
   }
 
   return undefined;
@@ -175,7 +208,7 @@ async function getK8sToken(): Promise<string | undefined> {
   if (!clusterName) return undefined;
 
   if (!isValidShellIdentifier(clusterName)) {
-    console.warn(`[K8s Config] Invalid AWS_CLUSTER_NAME value: ${clusterName.substring(0, 30)}`);
+    logK8sWarning(`Invalid AWS_CLUSTER_NAME value: ${clusterName.substring(0, 30)}`);
     return undefined;
   }
 
@@ -204,7 +237,7 @@ async function getK8sToken(): Promise<string | undefined> {
     return token;
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error';
-    console.warn(`[K8s Config] Token generation failed: ${message}`);
+    logK8sWarning(`Token generation failed: ${message}`);
     return undefined;
   }
 }
@@ -282,7 +315,10 @@ export async function runK8sCommand(
     console.log(`[K8s Config] kubectl (${Date.now() - startTime}ms): ${command.substring(0, 40)}...`);
     return result;
   } catch (e) {
-    console.log(`[K8s Config] kubectl failed (${Date.now() - startTime}ms): ${command}`);
+    // Only log kubectl failures in production/configured environments
+    if (!isDevelopmentEnvironment()) {
+      console.log(`[K8s Config] kubectl failed (${Date.now() - startTime}ms): ${command}`);
+    }
     throw e;
   }
 }
