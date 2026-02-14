@@ -14,6 +14,7 @@ import type {
 } from '@/types/daily-report';
 import { chatCompletion } from './ai-client';
 import { formatAWSCostForReport } from './aws-cost-tracker';
+import { getChainPlugin } from '@/chains';
 
 const REPORTS_DIR = process.env.REPORTS_DIR || 'data/reports';
 
@@ -21,7 +22,9 @@ const REPORTS_DIR = process.env.REPORTS_DIR || 'data/reports';
 // AI Prompt Templates
 // ============================================================
 
-const SYSTEM_PROMPT = `당신은 Optimism L2 노드 운영 전문가입니다. 제공된 24시간 운영 데이터를 분석하여 한국어로 일일 운영 보고서를 작성합니다.
+function buildDailyReportSystemPrompt(): string {
+  const plugin = getChainPlugin();
+  return `${plugin.aiPrompts.dailyReportContext}
 
 보고서 구조 (정확히 이 형식을 따를 것):
 
@@ -97,6 +100,7 @@ const SYSTEM_PROMPT = `당신은 Optimism L2 노드 운영 전문가입니다. �
 - 각 섹션은 명확한 헤더와 구분선으로 분리
 - 수치는 구체적으로 (예: "높음" X, "85%" O)
 - 이모지 활용: 🟢정상 🟡주의 🔴위험`;
+}
 
 // ============================================================
 // User Prompt Helpers
@@ -364,7 +368,7 @@ export async function generateDailyReport(
     console.warn(`[Daily Report] Low data: only ${data.snapshots.length} snapshots available`);
   }
 
-  const systemPrompt = SYSTEM_PROMPT;
+  const systemPrompt = buildDailyReportSystemPrompt();
   const userPrompt = buildUserPrompt(data);
 
   try {

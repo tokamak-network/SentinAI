@@ -16,6 +16,7 @@ import { getRecentMetrics, getMetricsStats, getMetricsCount } from './metrics-st
 import { getStore } from '@/lib/redis-store';
 import { chatCompletion } from './ai-client';
 import { parseAIJSON } from './ai-response-parser';
+import { getChainPlugin } from '@/chains';
 
 // ============================================================================
 // Helper Functions for TargetVcpu
@@ -41,22 +42,12 @@ function nextVcpuDown(current: number): TargetVcpu {
  * Build the system prompt for prediction AI
  */
 function buildSystemPrompt(): string {
-  return `You are an expert Site Reliability Engineer specializing in Kubernetes auto-scaling for Optimism L2 blockchain nodes.
+  const plugin = getChainPlugin();
+  return `You are an expert Site Reliability Engineer specializing in Kubernetes auto-scaling for ${plugin.displayName} blockchain nodes.
 
 Your task is to analyze time-series metrics and predict the optimal vCPU allocation for the next 5 minutes.
 
-CONTEXT:
-- Target: op-geth (Optimism Execution Client) running on AWS Fargate
-- vCPU options: 1, 2, or 4 vCPU (memory is always vCPU × 2 GiB)
-- Current scaling is reactive; you must predict AHEAD of load spikes
-- Cost optimization is important: avoid over-provisioning
-
-ANALYSIS FACTORS:
-1. CPU Usage Trend: Rising trend suggests upcoming load
-2. TxPool Pending: High pending txs indicate batch processing ahead
-3. Gas Usage Ratio: Reflects EVM computation intensity
-4. Block Interval: Shorter intervals mean faster chain, higher resource needs
-5. Time Patterns: Consider time-of-day patterns if visible in data
+${plugin.aiPrompts.predictiveScalerContext}
 
 DECISION RULES:
 - Stable low load (CPU < 30%, TxPool < 50): Recommend 1 vCPU

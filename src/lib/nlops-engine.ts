@@ -17,6 +17,7 @@ import type {
 import { chatCompletion } from '@/lib/ai-client';
 import { analyzeLogChunk } from '@/lib/ai-analyzer';
 import { getAllLiveLogs, generateMockLogs } from '@/lib/log-ingester';
+import { getChainPlugin } from '@/chains';
 
 // ============================================================
 // Constants
@@ -84,7 +85,7 @@ const TOOLS: ToolDefinition[] = [
   },
   {
     name: 'analyze_logs',
-    description: 'Run AI-powered log analysis across all L2 components (op-geth, op-node, batcher, proposer). Use when user asks to analyze logs, check for issues, or diagnose problems.',
+    description: 'Run AI-powered log analysis across all L2 components. Use when user asks to analyze logs, check for issues, or diagnose problems.',
     parameters: {
       type: 'object',
       properties: {
@@ -152,7 +153,9 @@ const TOOLS: ToolDefinition[] = [
 // System Prompt
 // ============================================================
 
-const SYSTEM_PROMPT = `You are SentinAI Assistant, a friendly and knowledgeable AI assistant for SentinAI — an Optimism L2 node monitoring and auto-scaling system.
+function buildNlopsSystemPrompt(): string {
+  const plugin = getChainPlugin();
+  return `You are SentinAI Assistant, a friendly and knowledgeable AI assistant for SentinAI — a ${plugin.displayName} node monitoring and auto-scaling system.
 
 ## Your Personality
 - Friendly, professional, and concise
@@ -176,6 +179,7 @@ You have tools to query system status, metrics, costs, anomalies, run log analys
 - Use bullet points for lists
 - Don't use markdown headers
 - Include relevant numbers and metrics when available`;
+}
 
 // ============================================================
 // Tool Execution
@@ -359,7 +363,7 @@ async function generateResponseWithData(
 
   try {
     const result = await chatCompletion({
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: buildNlopsSystemPrompt(),
       userPrompt: `User asked: "${userInput}"
 
 Current system: ${currentState.vcpu} vCPU, CPU ${currentState.cpuUsage.toFixed(1)}%, TxPool ${currentState.txPoolCount}

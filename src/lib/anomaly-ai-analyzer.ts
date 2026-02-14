@@ -8,6 +8,7 @@ import { AnomalyResult, DeepAnalysisResult, AnomalyType } from '@/types/anomaly'
 import { AISeverity } from '@/types/scaling';
 import { chatCompletion } from './ai-client';
 import { parseAIJSON } from './ai-response-parser';
+import { getChainPlugin } from '@/chains';
 
 // ============================================================================
 // Configuration
@@ -38,25 +39,19 @@ let analysisCache: AnalysisCache | null = null;
 // System Prompt
 // ============================================================================
 
-const SYSTEM_PROMPT = `You are a Senior SRE for an Optimism L2 Rollup Network performing anomaly analysis.
+function buildSystemPrompt(): string {
+  const plugin = getChainPlugin();
+  return `You are a Senior SRE for a ${plugin.displayName} Network performing anomaly analysis.
 
 Your task is to analyze detected anomalies in the context of:
 1. **Metrics data** - CPU, TxPool, Gas, Block intervals
-2. **Component logs** - op-geth, op-node, op-batcher, op-proposer
-3. **Known failure patterns** for Optimism Rollups
+2. **Component logs** - ${plugin.components.join(', ')}
+3. **Known failure patterns** for ${plugin.displayName}
 
-## Optimism Component Relationships:
-- **op-node** derives L2 state from L1, feeds to all other components
-- **op-geth** executes transactions, depends on op-node
-- **op-batcher** submits transaction batches to L1, depends on op-node
-- **op-proposer** submits state roots to L1, depends on op-node
+${plugin.aiPrompts.anomalyAnalyzerContext}
 
 ## Common Failure Patterns:
-1. **L1 Reorg** → op-node derivation reset → temporary sync stall
-2. **L1 Gas Spike** → batcher unable to post → txpool accumulation
-3. **op-geth Crash** → CPU drops to 0% → all downstream affected
-4. **Network Partition** → P2P gossip failure → unsafe head divergence
-5. **Sequencer Stall** → block height plateau → txpool growth
+${plugin.aiPrompts.failurePatterns}
 
 ## Analysis Guidelines:
 - Correlate anomalies: multiple symptoms often share a root cause
@@ -71,8 +66,9 @@ Return ONLY a JSON object (no markdown code blocks):
   "correlations": ["correlation1", "correlation2"],
   "predictedImpact": "description of expected impact",
   "suggestedActions": ["action1", "action2"],
-  "relatedComponents": ["op-geth", "op-node"]
+  "relatedComponents": [${plugin.components.map(c => `"${c}"`).join(', ')}]
 }`;
+}
 
 // ============================================================================
 // Helper Functions
@@ -235,7 +231,7 @@ Analyze these anomalies and provide your assessment.`;
     lastAICallTime = now;
 
     const aiResult = await chatCompletion({
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: buildSystemPrompt(),
       userPrompt,
       modelTier: 'fast',
       temperature: 0.2,

@@ -1,13 +1,13 @@
-// Mock Data Generator for Phase 1 & 2
-// L2 Components with configurable K8s labels via K8S_APP_PREFIX env var
+import { getChainPlugin } from '@/chains';
+
+// L2 Components dynamically loaded from chain plugin
 function getL2Components() {
     const appPrefix = process.env.K8S_APP_PREFIX || 'op';
-    return [
-        { name: 'op-geth', label: `app=${appPrefix}-geth` },
-        { name: 'op-node', label: `app=${appPrefix}-node` },
-        { name: 'op-batcher', label: `app=${appPrefix}-batcher` },
-        { name: 'op-proposer', label: `app=${appPrefix}-proposer` },
-    ];
+    const plugin = getChainPlugin();
+    return plugin.k8sComponents.map(c => ({
+        name: c.component,
+        label: `app=${appPrefix}-${c.labelSuffix}`,
+    }));
 }
 
 // Mock Data Generator for all components

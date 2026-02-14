@@ -7,12 +7,15 @@
 
 import type { NLOpsIntent, ConfigSetting } from '@/types/nlops';
 import { chatCompletion } from '@/lib/ai-client';
+import { getChainPlugin } from '@/chains';
 
 // ============================================================
 // Response Generation
 // ============================================================
 
-const RESPONSE_SYSTEM_PROMPT = `You are a helpful assistant for SentinAI, an Optimism L2 node monitoring system.
+function buildResponseSystemPrompt(): string {
+  const plugin = getChainPlugin();
+  return `${plugin.aiPrompts.nlopsSystemContext}
 
 Your task is to convert structured data into natural, friendly responses.
 
@@ -32,6 +35,7 @@ Your task is to convert structured data into natural, friendly responses.
 1. Main status/result
 2. Key metrics (if applicable)
 3. Brief explanation or next steps (if applicable)`;
+}
 
 /**
  * Convert execution results into natural language responses
@@ -46,7 +50,7 @@ export async function generateResponse(
 
   try {
     const aiResult = await chatCompletion({
-      systemPrompt: RESPONSE_SYSTEM_PROMPT,
+      systemPrompt: buildResponseSystemPrompt(),
       userPrompt: `Generate a response for the following:
 
 Intent type: ${intent.type}

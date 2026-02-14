@@ -1,6 +1,7 @@
 /**
  * Root Cause Analysis Engine
- * Analyzes root causes of Optimism Rollup incidents and traces causal chains
+ * Analyzes root causes of L2 incidents and traces causal chains.
+ * Component topology and AI prompts are loaded from the active ChainPlugin.
  *
  * NOTE: Adapts to the existing MetricDataPoint type from prediction.ts
  * which uses `blockHeight`/`blockInterval` and `timestamp: string`.
@@ -19,40 +20,22 @@ import type {
 } from '@/types/rca';
 import type { AISeverity } from '@/types/scaling';
 import { chatCompletion } from './ai-client';
+import { getChainPlugin } from '@/chains';
 
 // ============================================================================
-// Constants
+// Constants (delegated to chain plugin)
 // ============================================================================
 
 /**
- * Optimism Rollup component dependency graph
+ * Get the component dependency graph from the active chain plugin.
+ * @deprecated Direct import — use getChainPlugin().dependencyGraph instead.
  */
-export const DEPENDENCY_GRAPH: Record<RCAComponent, ComponentDependency> = {
-  'op-geth': {
-    dependsOn: ['op-node'],
-    feeds: [],
-  },
-  'op-node': {
-    dependsOn: ['l1'],
-    feeds: ['op-geth', 'op-batcher', 'op-proposer'],
-  },
-  'op-batcher': {
-    dependsOn: ['op-node', 'l1'],
-    feeds: [],
-  },
-  'op-proposer': {
-    dependsOn: ['op-node', 'l1'],
-    feeds: [],
-  },
-  'l1': {
-    dependsOn: [],
-    feeds: ['op-node', 'op-batcher', 'op-proposer'],
-  },
-  'system': {
-    dependsOn: [],
-    feeds: ['op-geth', 'op-node', 'op-batcher', 'op-proposer'],
-  },
-};
+export function getDependencyGraph(): Record<RCAComponent, ComponentDependency> {
+  return getChainPlugin().dependencyGraph;
+}
+
+/** @deprecated Use getDependencyGraph() or getChainPlugin().dependencyGraph */
+export const DEPENDENCY_GRAPH = getDependencyGraph();
 
 /**
  * Log level to RCAEventType mapping
@@ -65,19 +48,7 @@ const LOG_LEVEL_MAP: Record<string, 'error' | 'warning'> = {
   'WARNING': 'warning',
 };
 
-/**
- * Component name normalization map
- */
-const COMPONENT_NAME_MAP: Record<string, RCAComponent> = {
-  'op-geth': 'op-geth',
-  'geth': 'op-geth',
-  'op-node': 'op-node',
-  'node': 'op-node',
-  'op-batcher': 'op-batcher',
-  'batcher': 'op-batcher',
-  'op-proposer': 'op-proposer',
-  'proposer': 'op-proposer',
-};
+// Component name normalization — delegated to chain plugin
 
 /**
  * Maximum RCA history entries to keep
@@ -156,8 +127,7 @@ function extractLogLevel(logLine: string): 'error' | 'warning' | null {
  * Normalize component name
  */
 function normalizeComponentName(name: string): RCAComponent {
-  const lowered = name.toLowerCase().trim();
-  return COMPONENT_NAME_MAP[lowered] || 'system';
+  return getChainPlugin().normalizeComponentName(name);
 }
 
 /**
@@ -205,14 +175,7 @@ function anomaliesToEvents(anomalies: AnomalyResult[]): RCAEvent[] {
   return anomalies
     .filter(a => a.isAnomaly)
     .map(anomaly => {
-      let component: RCAComponent = 'system';
-      if (anomaly.metric.includes('cpu') || anomaly.metric.includes('memory')) {
-        component = 'op-geth';
-      } else if (anomaly.metric.includes('txPool') || anomaly.metric.includes('gas')) {
-        component = 'op-geth';
-      } else if (anomaly.metric.includes('block') || anomaly.metric.includes('Block')) {
-        component = 'op-node';
-      }
+      const component: RCAComponent = getChainPlugin().mapMetricToComponent(anomaly.metric);
 
       let severity: AISeverity = 'medium';
       if (Math.abs(anomaly.zScore) > 3.5) {
@@ -269,7 +232,8 @@ export function findAffectedComponents(rootComponent: RCAComponent): RCAComponen
       continue;
     }
 
-    const deps = DEPENDENCY_GRAPH[current];
+    const graph = getChainPlugin().dependencyGraph;
+    const deps = graph[current];
     if (deps) {
       for (const downstream of deps.feeds) {
         if (!affected.has(downstream)) {
@@ -287,7 +251,7 @@ export function findAffectedComponents(rootComponent: RCAComponent): RCAComponen
  * Get upstream dependencies of a component
  */
 export function findUpstreamComponents(component: RCAComponent): RCAComponent[] {
-  const deps = DEPENDENCY_GRAPH[component];
+  const deps = getChainPlugin().dependencyGraph[component];
   return deps ? deps.dependsOn : [];
 }
 
@@ -295,81 +259,10 @@ export function findUpstreamComponents(component: RCAComponent): RCAComponent[] 
 // AI Integration
 // ============================================================================
 
-const RCA_SYSTEM_PROMPT = `You are performing Root Cause Analysis (RCA) for an Optimism L2 Rollup incident.
-
-== Optimism Rollup Component Architecture ==
-
-1. **L1 (Ethereum Mainnet/Sepolia)**
-   - External dependency providing L1 block data and finality
-   - All L2 components ultimately depend on L1
-
-2. **op-node (Consensus Client / Derivation Driver)**
-   - Reads L1 blocks and derives L2 state
-   - Feeds derived blocks to op-geth for execution
-   - Triggers op-batcher for batch submissions
-   - Triggers op-proposer for state root submissions
-   - CRITICAL: If op-node fails, ALL downstream components are affected
-
-3. **op-geth (Execution Client)**
-   - Executes L2 blocks received from op-node
-   - Manages transaction pool (txpool)
-   - Depends solely on op-node
-
-4. **op-batcher (Transaction Batch Submitter)**
-   - Collects L2 transactions and submits batches to L1
-   - Depends on op-node for block data and L1 for gas/submission
-   - If batcher fails: txpool accumulates, but L2 continues producing blocks
-
-5. **op-proposer (State Root Proposer)**
-   - Submits L2 state roots to L1 for fraud proof window
-   - Depends on op-node for state data and L1 for submission
-   - If proposer fails: withdrawals delayed, but L2 continues operating
-
-== Component Dependency Graph ==
-L1 -> op-node -> op-geth
-                -> op-batcher -> L1
-                -> op-proposer -> L1
-
-== Common Optimism Failure Patterns ==
-
-1. **L1 Reorg / Gas Spike**: op-batcher/op-proposer submission failures, txpool growth
-2. **op-node Derivation Stall**: L2 block production stops, all components show errors
-3. **op-geth Crash / OOM**: CPU/Memory anomalies, connection refused errors
-4. **Batcher Backlog**: txpool monotonically increasing, no batch submissions
-5. **Network Partition / P2P Issues**: Peer disconnections, gossip failures
-
-== Your Task ==
-
-Given the event timeline, anomalies, metrics, and logs below:
-
-1. **Identify the ROOT CAUSE**: Find the earliest triggering event
-2. **Trace the CAUSAL CHAIN**: Follow propagation from root cause to symptoms
-3. **Consider Dependencies**: Upstream failures propagate downstream
-4. **Provide REMEDIATION**: Immediate steps + preventive measures
-
-== Output Format ==
-
-Respond ONLY with a valid JSON object (no markdown code blocks):
-{
-  "rootCause": {
-    "component": "op-geth" | "op-node" | "op-batcher" | "op-proposer" | "l1" | "system",
-    "description": "Clear explanation of what triggered the incident",
-    "confidence": 0.0-1.0
-  },
-  "causalChain": [
-    {
-      "timestamp": <unix_ms>,
-      "component": "<component>",
-      "type": "error" | "warning" | "metric_anomaly" | "state_change",
-      "description": "What happened at this step"
-    }
-  ],
-  "affectedComponents": ["<component1>", "<component2>"],
-  "remediation": {
-    "immediate": ["Step 1", "Step 2"],
-    "preventive": ["Measure 1", "Measure 2"]
-  }
-}`;
+// RCA system prompt — loaded from chain plugin
+function getRcaSystemPrompt(): string {
+  return getChainPlugin().aiPrompts.rcaSystemPrompt;
+}
 
 /**
  * Build user prompt for RCA
@@ -482,7 +375,7 @@ async function callAIForRCA(
       const timeout = setTimeout(() => controller.abort(), 30000);
 
       const aiResult = await chatCompletion({
-        systemPrompt: RCA_SYSTEM_PROMPT,
+        systemPrompt: getRcaSystemPrompt(),
         userPrompt,
         modelTier: 'best',
         temperature: 0.2,

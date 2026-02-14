@@ -5,229 +5,18 @@
 
 import type { AnomalyEvent, DeepAnalysisResult } from '@/types/anomaly';
 import type { Playbook, RCAComponent } from '@/types/remediation';
+import { getChainPlugin } from '@/chains';
 
 // ============================================================
-// Playbook Definitions
+// Playbook Definitions (loaded from chain plugin)
 // ============================================================
 
-export const PLAYBOOKS: Playbook[] = [
-  // Playbook 1: op-geth Resource Exhaustion
-  {
-    name: 'op-geth-resource-exhaustion',
-    description: 'op-geth OOM or high CPU usage',
-    trigger: {
-      component: 'op-geth',
-      indicators: [
-        { type: 'metric', condition: 'cpuUsage > 90' },
-        { type: 'metric', condition: 'memoryPercent > 85' },
-        { type: 'log_pattern', condition: 'out of memory|OOM killed' },
-      ],
-    },
-    actions: [
-      {
-        type: 'scale_up',
-        safetyLevel: 'guarded',
-        target: 'op-geth',
-        params: { targetVcpu: 'next_tier' },
-      },
-      {
-        type: 'health_check',
-        safetyLevel: 'safe',
-        target: 'op-geth',
-        waitAfterMs: 30000,
-      },
-    ],
-    fallback: [
-      {
-        type: 'restart_pod',
-        safetyLevel: 'guarded',
-        target: 'op-geth',
-      },
-    ],
-    maxAttempts: 2,
-  },
+function getPlaybooks(): Playbook[] {
+  return getChainPlugin().getPlaybooks();
+}
 
-  // Playbook 2: op-node Derivation Stall
-  {
-    name: 'op-node-derivation-stall',
-    description: 'op-node derivation pipeline stagnation',
-    trigger: {
-      component: 'op-node',
-      indicators: [
-        { type: 'metric', condition: 'l2BlockHeight stagnant' },
-        { type: 'log_pattern', condition: 'derivation pipeline|reset' },
-      ],
-    },
-    actions: [
-      {
-        type: 'check_l1_connection',
-        safetyLevel: 'safe',
-      },
-      {
-        type: 'restart_pod',
-        safetyLevel: 'guarded',
-        target: 'op-node',
-        waitAfterMs: 60000,
-      },
-      {
-        type: 'health_check',
-        safetyLevel: 'safe',
-        target: 'op-node',
-      },
-    ],
-    maxAttempts: 1,
-  },
-
-  // Playbook 3: op-batcher Backlog
-  {
-    name: 'op-batcher-backlog',
-    description: 'op-batcher transaction submission failures',
-    trigger: {
-      component: 'op-batcher',
-      indicators: [
-        { type: 'metric', condition: 'txPoolPending monotonic increase' },
-        { type: 'log_pattern', condition: 'failed to submit|insufficient funds' },
-      ],
-    },
-    actions: [
-      {
-        type: 'check_l1_connection',
-        safetyLevel: 'safe',
-      },
-      {
-        type: 'collect_logs',
-        safetyLevel: 'safe',
-        target: 'op-batcher',
-      },
-      {
-        type: 'restart_pod',
-        safetyLevel: 'guarded',
-        target: 'op-batcher',
-      },
-    ],
-    maxAttempts: 1,
-  },
-
-  // Playbook 4: General Resource Pressure
-  {
-    name: 'general-resource-pressure',
-    description: 'System-wide resource constraints',
-    trigger: {
-      component: 'system',
-      indicators: [
-        { type: 'metric', condition: 'hybridScore >= 70' },
-        { type: 'metric', condition: 'cpuUsage > 80' },
-      ],
-    },
-    actions: [
-      {
-        type: 'scale_up',
-        safetyLevel: 'guarded',
-        target: 'op-geth',
-        params: { targetVcpu: 'next_tier' },
-      },
-      {
-        type: 'zero_downtime_swap',
-        safetyLevel: 'guarded',
-        target: 'op-geth',
-      },
-    ],
-    maxAttempts: 1,
-  },
-
-  // Playbook 5: L1 Connectivity Failure
-  {
-    name: 'l1-connectivity-failure',
-    description: 'L1 RPC connection issues',
-    trigger: {
-      component: 'l1',
-      indicators: [
-        { type: 'metric', condition: 'l1BlockNumber stagnant' },
-        { type: 'log_pattern', condition: 'connection refused|timeout|ECONNRESET' },
-      ],
-    },
-    actions: [
-      {
-        type: 'check_l1_connection',
-        safetyLevel: 'safe',
-      },
-      {
-        type: 'collect_logs',
-        safetyLevel: 'safe',
-        target: 'op-node',
-      },
-      {
-        type: 'collect_logs',
-        safetyLevel: 'safe',
-        target: 'op-batcher',
-      },
-    ],
-    maxAttempts: 0, // Immediate escalation — L1 issues cannot be auto-resolved
-  },
-
-  // Playbook 6: EOA Balance Critical — Auto-refill
-  {
-    name: 'eoa-balance-critical',
-    description: 'Batcher or proposer EOA balance below critical threshold',
-    trigger: {
-      component: 'op-batcher',
-      indicators: [
-        { type: 'metric', condition: 'batcherBalance < critical' },
-        { type: 'metric', condition: 'proposerBalance < critical' },
-      ],
-    },
-    actions: [
-      {
-        type: 'check_treasury_balance',
-        safetyLevel: 'safe',
-      },
-      {
-        type: 'check_l1_gas_price',
-        safetyLevel: 'safe',
-      },
-      {
-        type: 'refill_eoa',
-        safetyLevel: 'guarded',
-        params: { role: 'batcher' },
-        waitAfterMs: 30000,
-      },
-      {
-        type: 'verify_balance_restored',
-        safetyLevel: 'safe',
-        params: { role: 'batcher' },
-      },
-    ],
-    fallback: [
-      {
-        type: 'escalate_operator',
-        safetyLevel: 'safe',
-        params: { message: 'EOA refill failed. Manual intervention required.' },
-      },
-    ],
-    maxAttempts: 1,
-  },
-
-  // Playbook 7: EOA Balance Critical — Immediate Escalation
-  {
-    name: 'eoa-balance-critical',
-    description: 'EOA balance critically low — immediate operator alert and auto-refill',
-    trigger: {
-      component: 'op-batcher',
-      indicators: [
-        { type: 'metric', condition: 'batcherBalance < critical' },
-        { type: 'metric', condition: 'proposerBalance < critical' },
-      ],
-    },
-    actions: [
-      {
-        type: 'escalate_operator',
-        safetyLevel: 'safe',
-        params: { urgency: 'critical', message: 'EOA balance near zero. Rollup submission will halt imminently.' },
-      },
-    ],
-    maxAttempts: 0, // Immediate escalation
-  },
-];
+/** @deprecated Use getChainPlugin().getPlaybooks() */
+export const PLAYBOOKS: Playbook[] = getPlaybooks();
 
 // ============================================================
 // Matching Logic
@@ -240,33 +29,18 @@ function identifyComponent(
   event: AnomalyEvent,
   analysis?: DeepAnalysisResult
 ): RCAComponent {
+  const plugin = getChainPlugin();
+
   // Priority 1: AI analysis component identification
   if (analysis?.relatedComponents && analysis.relatedComponents.length > 0) {
-    const firstComponent = analysis.relatedComponents[0].toLowerCase();
-    if (firstComponent.includes('geth')) return 'op-geth';
-    if (firstComponent.includes('node')) return 'op-node';
-    if (firstComponent.includes('batcher')) return 'op-batcher';
-    if (firstComponent.includes('proposer')) return 'op-proposer';
-    if (firstComponent.includes('l1')) return 'l1';
-    if (firstComponent.includes('system')) return 'system';
+    const normalized = plugin.normalizeComponentName(analysis.relatedComponents[0]);
+    if (normalized !== 'system') return normalized;
   }
 
   // Priority 2: Anomaly metrics hint
-  const metrics = event.anomalies.map(a => a.metric);
-  if (metrics.includes('cpuUsage') || metrics.includes('gasUsedRatio')) {
-    return 'op-geth'; // CPU/gas typically op-geth
-  }
-  if (metrics.includes('l2BlockHeight') || metrics.includes('l2BlockInterval')) {
-    return 'op-node'; // Block progression = op-node
-  }
-  if (metrics.includes('txPoolPending')) {
-    return 'op-batcher'; // TxPool = batcher
-  }
-  if (metrics.includes('batcherBalance')) {
-    return 'op-batcher';
-  }
-  if (metrics.includes('proposerBalance')) {
-    return 'op-proposer';
+  for (const anomaly of event.anomalies) {
+    const component = plugin.mapMetricToComponent(anomaly.metric);
+    if (component !== 'system') return component;
   }
 
   // Fallback
@@ -346,7 +120,7 @@ export function matchPlaybook(
   const component = identifyComponent(event, analysis);
 
   // Find playbooks matching the component
-  const candidatePlaybooks = PLAYBOOKS.filter(
+  const candidatePlaybooks = getPlaybooks().filter(
     p => p.trigger.component === component
   );
 
@@ -378,5 +152,5 @@ export function matchPlaybook(
  * Get playbook by name (for manual triggering)
  */
 export function getPlaybookByName(name: string): Playbook | null {
-  return PLAYBOOKS.find(p => p.name === name) || null;
+  return getPlaybooks().find(p => p.name === name) || null;
 }

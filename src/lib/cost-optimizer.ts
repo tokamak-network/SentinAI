@@ -15,6 +15,7 @@ import { analyzePatterns, getUsageSummary } from './usage-tracker';
 import { getScalingHistory } from './k8s-scaler';
 import { chatCompletion } from './ai-client';
 import { parseAIJSON } from './ai-response-parser';
+import { getChainPlugin } from '@/chains';
 
 // ============================================================
 // Cost Calculation Utilities
@@ -59,25 +60,14 @@ export function calculateProjectedCost(recommendations: CostRecommendation[]): n
 /**
  * System prompt for AI cost analysis
  */
-const SYSTEM_PROMPT = `You are a cloud cost optimization advisor for an Optimism L2 Rollup infrastructure running on AWS Fargate.
+function buildCostSystemPrompt(): string {
+  const plugin = getChainPlugin();
+  return `You are a cloud cost optimization advisor for a ${plugin.displayName} infrastructure running on AWS Fargate.
 
 ## Your Role
 Analyze vCPU usage patterns and scaling history to identify cost optimization opportunities.
 
-## Infrastructure Context
-- Platform: AWS Fargate (Seoul Region: ap-northeast-2)
-- Pricing:
-  - vCPU: $0.04656 per hour
-  - Memory: $0.00511 per GB-hour
-  - Memory allocation: vCPU * 2 GiB (e.g., 2 vCPU = 4 GiB)
-- vCPU Range: 1-4 vCPU (dynamic scaling)
-- Baseline comparison: Fixed 4 vCPU = ~$166/month
-
-## Optimism L2 Workload Characteristics
-- Batcher submits batches every 2-5 minutes
-- Sequencer produces blocks every 2 seconds
-- Traffic patterns: typically lower on weekends and night hours (KST)
-- Peak hours: weekday business hours (9am-6pm KST)
+${plugin.aiPrompts.costOptimizerContext}
 
 ## Recommendation Types
 1. **downscale**: Reduce max vCPU or adjust idle thresholds
@@ -92,6 +82,7 @@ Analyze vCPU usage patterns and scaling history to identify cost optimization op
 - Calculate exact USD savings based on provided pricing
 
 Respond ONLY in valid JSON format without markdown code blocks.`;
+}
 
 /**
  * Build user prompt template for AI cost analysis
@@ -193,7 +184,7 @@ async function getAIRecommendations(
 
   try {
     const aiResult = await chatCompletion({
-      systemPrompt: SYSTEM_PROMPT,
+      systemPrompt: buildCostSystemPrompt(),
       userPrompt,
       modelTier: 'best',
       temperature: 0.2,
