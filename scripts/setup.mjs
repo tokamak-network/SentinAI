@@ -180,6 +180,19 @@ async function testAnthropicKey(apiKey, gatewayUrl) {
   }
 }
 
+async function testOpenAIKeyWithModel(apiKey, baseUrl, model) {
+  try {
+    const res = await httpPost(
+      `${baseUrl}/v1/chat/completions`,
+      { model, max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] },
+      { Authorization: `Bearer ${apiKey}` }
+    );
+    return { ok: res.status === 200, status: res.status };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+}
+
 async function testOpenAIKey(apiKey, gatewayUrl) {
   try {
     const baseUrl = gatewayUrl || 'https://api.openai.com';
@@ -472,14 +485,14 @@ async function stepAIProvider(config) {
     const gwUrl = await askRequired('  ▸ AI_GATEWAY_URL: ', validateUrl);
     config.AI_GATEWAY_URL = gwUrl;
 
-    // Re-test through gateway
+    // Re-test through gateway using provider-specific model
     process.stdout.write('  Testing via gateway... ');
+    const gwTestModels = { qwen: 'qwen3-coder-flash', openai: 'gpt-4.1-mini', gemini: 'gemini-2.5-flash-lite' };
     let gwResult;
     if (provider === 'anthropic') {
       gwResult = await testAnthropicKey(apiKey, gwUrl);
     } else {
-      // OpenAI, Qwen, Gemini all use OpenAI-compatible endpoint through gateway
-      gwResult = await testOpenAIKey(apiKey, gwUrl);
+      gwResult = await testOpenAIKeyWithModel(apiKey, gwUrl, gwTestModels[provider] || 'gpt-4.1-mini');
     }
     if (gwResult.ok) console.log(ok('Gateway reachable'));
     else console.log(fail(`${gwResult.error || `HTTP ${gwResult.status}`}`));
