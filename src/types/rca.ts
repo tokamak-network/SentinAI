@@ -6,21 +6,11 @@
 import type { AISeverity } from './scaling';
 
 /**
- * Optimism Rollup component identifier
- * - op-geth: Execution Client (executes L2 blocks)
- * - op-node: Consensus Client / Derivation Driver (derives L2 state from L1)
- * - op-batcher: Transaction Batch Submitter (submits L2 transactions to L1)
- * - op-proposer: State Root Proposer (submits L2 state roots to L1)
- * - l1: L1 Ethereum (external dependency)
- * - system: System-level events (K8s, network, etc.)
+ * L2 stack component identifier.
+ * Chain-agnostic string type — actual component names are defined by the active ChainPlugin.
+ * Examples: 'op-geth', 'op-node', 'nitro-node', 'l1', 'system'
  */
-export type RCAComponent =
-  | 'op-geth'
-  | 'op-node'
-  | 'op-batcher'
-  | 'op-proposer'
-  | 'l1'
-  | 'system';
+export type RCAComponent = string;
 
 /**
  * RCA event type

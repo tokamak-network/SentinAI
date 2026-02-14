@@ -5,18 +5,11 @@
 import type { AISeverity } from './scaling';
 
 // ============================================================
-// RCA Component Type (imported concept from RCA)
+// RCA Component Type (re-exported from rca.ts)
 // ============================================================
 
-/** Optimism Rollup component identifier */
-export type RCAComponent =
-  | 'op-geth'
-  | 'op-node'
-  | 'op-batcher'
-  | 'op-proposer'
-  | 'l1'
-  | 'system'
-  | 'unknown';
+import type { RCAComponent } from './rca';
+export type { RCAComponent };
 
 // ============================================================
 // Action Types

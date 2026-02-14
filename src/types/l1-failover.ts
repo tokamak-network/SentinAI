@@ -97,7 +97,7 @@ export interface K8sUpdateResult {
 
 /** L2 nodes L1 RPC status */
 export interface L2NodeL1RpcStatus {
-  component: 'op-node' | 'op-batcher' | 'op-proposer';
+  component: string;
   l1RpcUrl: string; // Masked URL
   healthy: boolean;
 }

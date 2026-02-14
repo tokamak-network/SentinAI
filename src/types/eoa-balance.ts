@@ -7,8 +7,8 @@
 // Core Types
 // ============================================================
 
-/** EOA role in the Optimism rollup stack */
-export type EOARole = 'batcher' | 'proposer';
+/** EOA role in the L2 stack (e.g. 'batcher', 'proposer', 'sequencer') */
+export type EOARole = string;
 
 /** Balance level relative to configured thresholds */
 export type BalanceLevel = 'normal' | 'warning' | 'critical';

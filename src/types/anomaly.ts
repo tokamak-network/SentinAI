@@ -18,16 +18,19 @@ import { AISeverity } from './scaling';
 export type AnomalyDirection = 'spike' | 'drop' | 'plateau';
 
 /**
- * Detection target metrics
+ * Detection target metric identifier.
+ * Chain-agnostic string — core metrics are shared, balance metrics are chain-specific.
  */
-export type AnomalyMetric =
-  | 'cpuUsage'
-  | 'txPoolPending'
-  | 'gasUsedRatio'
-  | 'l2BlockHeight'
-  | 'l2BlockInterval'
-  | 'batcherBalance'
-  | 'proposerBalance';
+export type AnomalyMetric = string;
+
+/** Core metrics shared across all EVM L2 chains */
+export const CORE_ANOMALY_METRICS = [
+  'cpuUsage',
+  'txPoolPending',
+  'gasUsedRatio',
+  'l2BlockHeight',
+  'l2BlockInterval',
+] as const;
 
 /**
  * Layer 1 statistical anomaly detection result
