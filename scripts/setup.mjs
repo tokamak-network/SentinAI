@@ -223,7 +223,7 @@ async function testQwenKey(apiKey) {
   try {
     const res = await httpPost(
       'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-      { model: 'qwen3-coder-flash', max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] },
+      { model: 'qwen3-80b-next', max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] },
       { Authorization: `Bearer ${apiKey}` }
     );
     return { ok: res.status === 200, status: res.status };
@@ -487,7 +487,7 @@ async function stepAIProvider(config) {
 
     // Re-test through gateway using provider-specific model
     process.stdout.write('  Testing via gateway... ');
-    const gwTestModels = { qwen: 'qwen3-coder-flash', openai: 'gpt-4.1-mini', gemini: 'gemini-2.5-flash-lite' };
+    const gwTestModels = { qwen: 'qwen3-80b-next', openai: 'gpt-4.1-mini', gemini: 'gemini-2.5-flash-lite' };
     let gwResult;
     if (provider === 'anthropic') {
       gwResult = await testAnthropicKey(apiKey, gwUrl);
