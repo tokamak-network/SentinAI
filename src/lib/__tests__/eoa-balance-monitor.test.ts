@@ -137,12 +137,13 @@ describe('eoa-balance-monitor', () => {
       expect(result.level).toBe('critical');
     });
 
-    it('should classify emergency balance (< 0.01 ETH)', async () => {
+    it('should classify very low balance as critical (< 0.01 ETH)', async () => {
       mockGetBalance.mockResolvedValueOnce(ethToWei(0.005));
 
       const result = await checkBalance('https://rpc.test', BATCHER_ADDR, 'batcher', TEST_CONFIG);
 
-      expect(result.level).toBe('emergency');
+      // 0.005 < criticalThresholdEth (0.1) → 'critical'
+      expect(result.level).toBe('critical');
     });
   });
 

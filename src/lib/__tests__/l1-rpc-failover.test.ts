@@ -26,6 +26,7 @@ vi.mock('viem/chains', () => ({
 vi.mock('@/lib/k8s-config', () => ({
   runK8sCommand: mockRunK8sCommand,
   getNamespace: vi.fn(() => 'default'),
+  getAppPrefix: vi.fn(() => process.env.K8S_APP_PREFIX || 'op'),
 }));
 
 import {

@@ -29,23 +29,50 @@ const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
 import { chatCompletion } from '../ai-client';
-import { classifyIntent, executeAction, isNLOpsEnabled } from '../nlops-engine';
+import { processCommand, classifyIntent, executeAction, isNLOpsEnabled } from '../nlops-engine';
 import { generateResponse, getSuggestedFollowUps } from '../nlops-responder';
-import type { CurrentSystemState, NLOpsIntent } from '@/types/nlops';
+import type { NLOpsIntent } from '@/types/nlops';
 
 const mockChatCompletion = vi.mocked(chatCompletion);
 
-const DEFAULT_STATE: CurrentSystemState = {
-  vcpu: 1,
-  memoryGiB: 2,
-  autoScalingEnabled: true,
-  simulationMode: true,
-  cpuUsage: 15.5,
-  txPoolCount: 0,
-  cooldownRemaining: 0,
-};
-
 const BASE_URL = 'http://localhost:3002';
+
+// Helper: mock the fetchCurrentState calls (metrics + scaler)
+function mockFetchCurrentState() {
+  mockFetch
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ metrics: { gethVcpu: 1, cpuUsage: 15.5, txPoolCount: 0, gethMemGiB: 2 } }),
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        currentVcpu: 1,
+        currentMemoryGiB: 2,
+        autoScalingEnabled: true,
+        simulationMode: true,
+        cooldownRemaining: 0,
+      }),
+    });
+}
+
+// Helper: mock planToolCalls response
+function mockPlanResponse(tools: Array<{ name: string; params: Record<string, unknown> }>, directResponse: string | null = null) {
+  mockChatCompletion.mockResolvedValueOnce({
+    content: JSON.stringify({ tools, directResponse }),
+    provider: 'anthropic',
+    model: 'claude-haiku-4-5-20251001',
+  });
+}
+
+// Helper: mock generateResponseWithData
+function mockGenerateResponse(content: string) {
+  mockChatCompletion.mockResolvedValueOnce({
+    content,
+    provider: 'anthropic',
+    model: 'claude-haiku-4-5-20251001',
+  });
+}
 
 describe('nlops-engine', () => {
   beforeEach(() => {
@@ -64,294 +91,300 @@ describe('nlops-engine', () => {
   });
 
   // ============================================================
-  // Intent Classification
+  // Deprecated APIs
   // ============================================================
 
-  describe('classifyIntent', () => {
-    it('should return unknown for empty input', async () => {
-      const result = await classifyIntent('', DEFAULT_STATE);
-      expect(result.intent.type).toBe('unknown');
-      expect(result.requireConfirmation).toBe(false);
+  describe('deprecated APIs', () => {
+    it('should throw on classifyIntent (deprecated in v2)', async () => {
+      await expect(classifyIntent()).rejects.toThrow('deprecated');
     });
 
-    it('should classify query/status intent', async () => {
-      mockChatCompletion.mockResolvedValueOnce({
-        content: JSON.stringify({
-          intent: { type: 'query', target: 'status' },
-          requireConfirmation: false,
-        }),
-        provider: 'anthropic',
-        model: 'claude-haiku-4-5-20251001',
-      });
-
-      const result = await classifyIntent('현재 상태 알려줘', DEFAULT_STATE);
-      expect(result.intent).toEqual({ type: 'query', target: 'status' });
-      expect(result.requireConfirmation).toBe(false);
-    });
-
-    it('should classify scale intent with confirmation', async () => {
-      mockChatCompletion.mockResolvedValueOnce({
-        content: JSON.stringify({
-          intent: { type: 'scale', targetVcpu: 2, force: false },
-          requireConfirmation: true,
-        }),
-        provider: 'anthropic',
-        model: 'claude-haiku-4-5-20251001',
-      });
-
-      const result = await classifyIntent('2 vCPU로 스케일해줘', DEFAULT_STATE);
-      expect(result.intent).toEqual({ type: 'scale', targetVcpu: 2, force: false });
-      expect(result.requireConfirmation).toBe(true);
-    });
-
-    it('should classify config intent', async () => {
-      mockChatCompletion.mockResolvedValueOnce({
-        content: JSON.stringify({
-          intent: { type: 'config', setting: 'autoScaling', value: false },
-          requireConfirmation: true,
-        }),
-        provider: 'anthropic',
-        model: 'claude-haiku-4-5-20251001',
-      });
-
-      const result = await classifyIntent('자동 스케일링 꺼줘', DEFAULT_STATE);
-      expect(result.intent).toEqual({ type: 'config', setting: 'autoScaling', value: false });
-      expect(result.requireConfirmation).toBe(true);
-    });
-
-    it('should classify analyze intent', async () => {
-      mockChatCompletion.mockResolvedValueOnce({
-        content: JSON.stringify({
-          intent: { type: 'analyze', mode: 'live' },
-          requireConfirmation: false,
-        }),
-        provider: 'anthropic',
-        model: 'claude-haiku-4-5-20251001',
-      });
-
-      const result = await classifyIntent('로그 분석 해줘', DEFAULT_STATE);
-      expect(result.intent).toEqual({ type: 'analyze', mode: 'live' });
-    });
-
-    it('should classify explain intent', async () => {
-      mockChatCompletion.mockResolvedValueOnce({
-        content: JSON.stringify({
-          intent: { type: 'explain', topic: 'CPU 사용률' },
-          requireConfirmation: false,
-        }),
-        provider: 'anthropic',
-        model: 'claude-haiku-4-5-20251001',
-      });
-
-      const result = await classifyIntent('CPU가 뭐야?', DEFAULT_STATE);
-      expect(result.intent.type).toBe('explain');
-    });
-
-    it('should classify rca intent', async () => {
-      mockChatCompletion.mockResolvedValueOnce({
-        content: JSON.stringify({
-          intent: { type: 'rca' },
-          requireConfirmation: false,
-        }),
-        provider: 'anthropic',
-        model: 'claude-haiku-4-5-20251001',
-      });
-
-      const result = await classifyIntent('근본 원인 분석해줘', DEFAULT_STATE);
-      expect(result.intent).toEqual({ type: 'rca' });
-    });
-
-    it('should fallback to unknown on AI failure', async () => {
-      mockChatCompletion.mockRejectedValueOnce(new Error('AI unavailable'));
-
-      const result = await classifyIntent('테스트 입력', DEFAULT_STATE);
-      expect(result.intent.type).toBe('unknown');
-    });
-
-    it('should reject invalid scale vCPU values', async () => {
-      mockChatCompletion.mockResolvedValueOnce({
-        content: JSON.stringify({
-          intent: { type: 'scale', targetVcpu: 3, force: false },
-          requireConfirmation: true,
-        }),
-        provider: 'anthropic',
-        model: 'claude-haiku-4-5-20251001',
-      });
-
-      const result = await classifyIntent('3 vCPU로 해줘', DEFAULT_STATE);
-      expect(result.intent.type).toBe('unknown');
-    });
-
-    it('should reject invalid config settings', async () => {
-      mockChatCompletion.mockResolvedValueOnce({
-        content: JSON.stringify({
-          intent: { type: 'config', setting: 'invalidSetting', value: true },
-          requireConfirmation: true,
-        }),
-        provider: 'anthropic',
-        model: 'claude-haiku-4-5-20251001',
-      });
-
-      const result = await classifyIntent('잘못된 설정', DEFAULT_STATE);
-      expect(result.intent.type).toBe('unknown');
-    });
-
-    it('should handle markdown-wrapped JSON from AI', async () => {
-      mockChatCompletion.mockResolvedValueOnce({
-        content: '```json\n{"intent": {"type": "query", "target": "cost"}, "requireConfirmation": false}\n```',
-        provider: 'anthropic',
-        model: 'claude-haiku-4-5-20251001',
-      });
-
-      const result = await classifyIntent('비용 확인', DEFAULT_STATE);
-      expect(result.intent).toEqual({ type: 'query', target: 'cost' });
+    it('should throw on executeAction (deprecated in v2)', async () => {
+      await expect(executeAction()).rejects.toThrow('deprecated');
     });
   });
 
   // ============================================================
-  // Action Execution
+  // processCommand - Casual Conversation
   // ============================================================
 
-  describe('executeAction', () => {
-    it('should block dangerous actions without confirmation', async () => {
-      const scaleIntent: NLOpsIntent = { type: 'scale', targetVcpu: 2, force: false };
-      const result = await executeAction(scaleIntent, BASE_URL);
+  describe('processCommand - casual conversation', () => {
+    it('should handle casual greeting with direct response', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([], 'Hello! How can I help you today?');
+
+      const result = await processCommand('안녕하세요', BASE_URL);
+
       expect(result.executed).toBe(false);
-      expect(result.result).toBeNull();
+      expect(result.response).toBe('Hello! How can I help you today?');
+      expect(result.intent.type).toBe('unknown');
     });
 
-    it('should block config actions without confirmation', async () => {
-      const configIntent: NLOpsIntent = { type: 'config', setting: 'autoScaling', value: false };
-      const result = await executeAction(configIntent, BASE_URL);
-      expect(result.executed).toBe(false);
+    it('should return follow-up suggestions for casual conversation', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([], 'Hi there!');
+
+      const result = await processCommand('hi', BASE_URL);
+
+      expect(result.suggestedFollowUp).toBeDefined();
+      expect(result.suggestedFollowUp!.length).toBeGreaterThan(0);
     });
+  });
 
-    it('should execute scale with confirmation', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ currentVcpu: 2, previousVcpu: 1 }),
-      });
+  // ============================================================
+  // processCommand - Query Tools
+  // ============================================================
 
-      const intent: NLOpsIntent = { type: 'scale', targetVcpu: 2, force: false };
-      const result = await executeAction(intent, BASE_URL, true);
-      expect(result.executed).toBe(true);
-      expect(mockFetch).toHaveBeenCalledWith(
-        `${BASE_URL}/api/scaler`,
-        expect.objectContaining({ method: 'POST' }),
-      );
-    });
-
-    it('should execute config with confirmation', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({ autoScalingEnabled: false }),
-      });
-
-      const intent: NLOpsIntent = { type: 'config', setting: 'autoScaling', value: false };
-      const result = await executeAction(intent, BASE_URL, true);
-      expect(result.executed).toBe(true);
-      expect(mockFetch).toHaveBeenCalledWith(
-        `${BASE_URL}/api/scaler`,
-        expect.objectContaining({ method: 'PATCH' }),
-      );
-    });
-
-    it('should execute query/status (parallel fetch)', async () => {
+  describe('processCommand - query tools', () => {
+    it('should query system status', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'get_system_status', params: {} }]);
+      // Tool: get_system_status fetches /api/metrics + /api/scaler
       mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ metrics: { cpuUsage: 10 } }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ currentVcpu: 1 }),
-        });
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ metrics: { cpuUsage: 15 } }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ currentVcpu: 1 }) });
+      mockGenerateResponse('System is running normally at 1 vCPU with 15% CPU usage.');
 
-      const intent: NLOpsIntent = { type: 'query', target: 'status' };
-      const result = await executeAction(intent, BASE_URL);
+      const result = await processCommand('현재 상태 알려줘', BASE_URL);
+
       expect(result.executed).toBe(true);
-      expect(result.result).toHaveProperty('metrics');
-      expect(result.result).toHaveProperty('scaler');
+      expect(result.intent).toEqual({ type: 'query', target: 'status' });
+      expect(result.response).toContain('1 vCPU');
     });
 
-    it('should execute query/cost', async () => {
+    it('should query cost report', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'get_cost_report', params: {} }]);
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ currentMonthly: 41.45, recommendations: [] }),
       });
+      mockGenerateResponse('Current monthly cost is $41.45.');
 
-      const intent: NLOpsIntent = { type: 'query', target: 'cost' };
-      const result = await executeAction(intent, BASE_URL);
+      const result = await processCommand('비용 확인', BASE_URL);
+
       expect(result.executed).toBe(true);
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/cost-report'),
-        expect.any(Object),
-      );
+      expect(result.intent).toEqual({ type: 'query', target: 'cost' });
     });
 
-    it('should execute query/anomalies', async () => {
+    it('should query anomalies', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'get_anomalies', params: {} }]);
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({ events: [], total: 0 }),
       });
+      mockGenerateResponse('No anomalies detected.');
 
-      const intent: NLOpsIntent = { type: 'query', target: 'anomalies' };
-      const result = await executeAction(intent, BASE_URL);
+      const result = await processCommand('이상 탐지 결과', BASE_URL);
+
       expect(result.executed).toBe(true);
+      expect(result.intent).toEqual({ type: 'query', target: 'anomalies' });
     });
 
-    it('should execute analyze (uses mock logs on K8s failure)', async () => {
-      const intent: NLOpsIntent = { type: 'analyze', mode: 'live' };
-      const result = await executeAction(intent, BASE_URL);
-      expect(result.executed).toBe(true);
-      expect(result.result).toHaveProperty('analysis');
-    });
-
-    it('should execute explain with known topic', async () => {
-      const intent: NLOpsIntent = { type: 'explain', topic: 'CPU 사용률' };
-      const result = await executeAction(intent, BASE_URL);
-      expect(result.executed).toBe(true);
-      const explanation = (result.result as Record<string, string>)?.explanation;
-      expect(explanation).toContain('CPU');
-    });
-
-    it('should execute explain with unknown topic', async () => {
-      const intent: NLOpsIntent = { type: 'explain', topic: '블록 타임' };
-      const result = await executeAction(intent, BASE_URL);
-      expect(result.executed).toBe(true);
-      const explanation = (result.result as Record<string, string>)?.explanation;
-      expect(explanation).toContain('Try keywords like');
-    });
-
-    it('should execute rca', async () => {
+    it('should query metrics', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'get_metrics', params: {} }]);
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ rootCause: { component: 'op-geth' } }),
+        json: async () => ({ metrics: { cpuUsage: 25.3, txPoolCount: 5 } }),
       });
+      mockGenerateResponse('CPU at 25.3%, TxPool has 5 pending transactions.');
 
-      const intent: NLOpsIntent = { type: 'rca' };
-      const result = await executeAction(intent, BASE_URL);
+      const result = await processCommand('메트릭 조회', BASE_URL);
+
       expect(result.executed).toBe(true);
-      expect(mockFetch).toHaveBeenCalledWith(
-        `${BASE_URL}/api/rca`,
-        expect.objectContaining({ method: 'POST' }),
-      );
+      expect(result.intent).toEqual({ type: 'query', target: 'metrics' });
+    });
+  });
+
+  // ============================================================
+  // processCommand - Analysis Tools
+  // ============================================================
+
+  describe('processCommand - analysis tools', () => {
+    it('should analyze logs (falls back to mock logs on K8s failure)', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'analyze_logs', params: { mode: 'live' } }]);
+      // analyze_logs uses mocked getAllLiveLogs (rejects) -> generateMockLogs -> analyzeLogChunk
+      mockGenerateResponse('Logs look healthy. All components operating normally.');
+
+      const result = await processCommand('로그 분석 해줘', BASE_URL);
+
+      expect(result.executed).toBe(true);
+      expect(result.intent.type).toBe('analyze');
     });
 
-    it('should return error for unknown intent', async () => {
-      const intent: NLOpsIntent = { type: 'unknown', originalInput: 'gibberish' };
-      const result = await executeAction(intent, BASE_URL);
-      expect(result.executed).toBe(false);
-      expect(result.error).toBeDefined();
+    it('should run root cause analysis', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'run_rca', params: {} }]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ rootCause: { component: 'op-geth', confidence: 0.85 } }),
+      });
+      mockGenerateResponse('Root cause identified: op-geth component issue.');
+
+      const result = await processCommand('근본 원인 분석해줘', BASE_URL);
+
+      expect(result.executed).toBe(true);
+      expect(result.intent.type).toBe('rca');
     });
 
-    it('should handle fetch failure gracefully', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+    it('should get prediction', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'get_prediction', params: {} }]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ prediction: { targetVcpu: 2 }, predictionMeta: {} }),
+      });
+      mockGenerateResponse('Prediction: scaling to 2 vCPU likely needed soon.');
 
-      const intent: NLOpsIntent = { type: 'query', target: 'metrics' };
-      const result = await executeAction(intent, BASE_URL);
+      const result = await processCommand('예측 확인', BASE_URL);
+
+      expect(result.executed).toBe(true);
+    });
+  });
+
+  // ============================================================
+  // processCommand - Dangerous Actions
+  // ============================================================
+
+  describe('processCommand - dangerous actions', () => {
+    it('should require confirmation for scale actions', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'scale_node', params: { targetVcpu: 4 } }]);
+
+      const result = await processCommand('4 vCPU로 스케일해줘', BASE_URL);
+
       expect(result.executed).toBe(false);
-      expect(result.error).toContain('Network error');
+      expect(result.needsConfirmation).toBe(true);
+      expect(result.intent.type).toBe('scale');
+    });
+
+    it('should require confirmation for config changes', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'update_config', params: { setting: 'autoScaling', value: false } }]);
+
+      const result = await processCommand('자동 스케일링 꺼줘', BASE_URL);
+
+      expect(result.executed).toBe(false);
+      expect(result.needsConfirmation).toBe(true);
+      expect(result.intent.type).toBe('config');
+    });
+
+    it('should execute scale when confirmed', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'scale_node', params: { targetVcpu: 2 } }]);
+      // Tool: scale_node POST /api/scaler
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ currentVcpu: 2, previousVcpu: 1 }),
+      });
+      mockGenerateResponse('Scaled to 2 vCPU successfully.');
+
+      const result = await processCommand('2 vCPU로 스케일해줘', BASE_URL, true);
+
+      expect(result.executed).toBe(true);
+      expect(result.intent.type).toBe('scale');
+    });
+
+    it('should execute config change when confirmed', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'update_config', params: { setting: 'autoScaling', value: false } }]);
+      // Tool: update_config PATCH /api/scaler
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ autoScalingEnabled: false }),
+      });
+      mockGenerateResponse('Auto-scaling has been disabled.');
+
+      const result = await processCommand('자동 스케일링 꺼줘', BASE_URL, true);
+
+      expect(result.executed).toBe(true);
+      expect(result.intent.type).toBe('config');
+    });
+
+    it('should include confirmation message for scale', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'scale_node', params: { targetVcpu: 4 } }]);
+
+      const result = await processCommand('4 vCPU', BASE_URL);
+
+      expect(result.confirmationMessage).toContain('4 vCPU');
+    });
+
+    it('should include confirmation message for config', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'update_config', params: { setting: 'autoScaling', value: true } }]);
+
+      const result = await processCommand('자동 스케일링 켜줘', BASE_URL);
+
+      expect(result.confirmationMessage).toContain('Auto-scaling');
+    });
+  });
+
+  // ============================================================
+  // processCommand - Error Handling
+  // ============================================================
+
+  describe('processCommand - error handling', () => {
+    it('should handle AI planning failure gracefully', async () => {
+      mockFetchCurrentState();
+      mockChatCompletion.mockRejectedValueOnce(new Error('AI unavailable'));
+
+      const result = await processCommand('상태 알려줘', BASE_URL);
+
+      // planToolCalls returns empty on failure → treated as no response
+      expect(result.intent.type).toBe('unknown');
+    });
+
+    it('should handle tool execution error gracefully', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'get_system_status', params: {} }]);
+      // Tool fetch fails
+      mockFetch
+        .mockRejectedValueOnce(new Error('Network error'))
+        .mockRejectedValueOnce(new Error('Network error'));
+      mockGenerateResponse('Unable to fetch system data. Please try again.');
+
+      const result = await processCommand('상태', BASE_URL);
+
+      expect(result.executed).toBe(true);
+      // Tool returned error object but execution completed
+    });
+
+    it('should handle fetchCurrentState failure gracefully', async () => {
+      // Both metrics and scaler fetch fail
+      mockFetch
+        .mockRejectedValueOnce(new Error('Server down'))
+        .mockRejectedValueOnce(new Error('Server down'));
+      mockPlanResponse([], 'System appears to be unavailable.');
+
+      const result = await processCommand('안녕', BASE_URL);
+
+      expect(result).toBeDefined();
+      expect(result.response).toBeDefined();
+    });
+  });
+
+  // ============================================================
+  // processCommand - Follow-up Suggestions
+  // ============================================================
+
+  describe('processCommand - follow-up suggestions', () => {
+    it('should suggest relevant follow-ups after status query', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([{ name: 'get_system_status', params: {} }]);
+      mockFetch
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ metrics: {} }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      mockGenerateResponse('Status OK.');
+
+      const result = await processCommand('상태', BASE_URL);
+
+      expect(result.suggestedFollowUp).toBeDefined();
+      expect(result.suggestedFollowUp!.length).toBeGreaterThan(0);
+      expect(result.suggestedFollowUp!.length).toBeLessThanOrEqual(3);
     });
   });
 

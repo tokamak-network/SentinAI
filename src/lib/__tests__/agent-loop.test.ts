@@ -22,6 +22,7 @@ vi.mock('viem', () => ({
 vi.mock('viem/chains', () => ({
   mainnet: { id: 1 },
   sepolia: { id: 11155111 },
+  optimismSepolia: { id: 11155420 },
 }));
 
 vi.mock('@/lib/metrics-store', () => ({
@@ -44,6 +45,8 @@ vi.mock('@/lib/redis-store', () => ({
     updateScalingState: vi.fn().mockResolvedValue(undefined),
     addScalingHistory: vi.fn().mockResolvedValue(undefined),
     getZeroDowntimeEnabled: vi.fn().mockResolvedValue(false),
+    pushAgentCycleResult: vi.fn().mockResolvedValue(undefined),
+    getSeedScenario: vi.fn().mockResolvedValue(null),
   })),
 }));
 

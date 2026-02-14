@@ -20,6 +20,8 @@ describe('ai-client', () => {
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
     delete process.env.GEMINI_API_KEY;
+    delete process.env.OPENAI_BASE_URL;
+    delete process.env.QWEN_BASE_URL;
     mockFetch.mockReset();
   });
 
@@ -61,7 +63,7 @@ describe('ai-client', () => {
       });
 
       expect(result.provider).toBe('qwen');
-      expect(result.model).toBe('qwen-turbo-latest');
+      expect(result.model).toBe('qwen3-80b-next');
       expect(result.content).toBe('qwen response');
 
       expect(mockFetch).toHaveBeenCalledWith(
@@ -177,7 +179,7 @@ describe('ai-client', () => {
       });
 
       expect(result.provider).toBe('openai');
-      expect(result.model).toBe('gpt-4.1-mini');
+      expect(result.model).toBe('gpt-5.2');
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.openai.com/v1/chat/completions',
         expect.objectContaining({
@@ -243,7 +245,7 @@ describe('ai-client', () => {
       expect(result.model).toBe('claude-sonnet-4-5-20250929');
     });
 
-    it('should map Qwen best tier to qwen-max-latest', async () => {
+    it('should map Qwen best tier to qwen3-235b', async () => {
       process.env.QWEN_API_KEY = 'test';
 
       mockFetch.mockResolvedValueOnce({
@@ -260,10 +262,10 @@ describe('ai-client', () => {
         modelTier: 'best',
       });
 
-      expect(result.model).toBe('qwen-max-latest');
+      expect(result.model).toBe('qwen3-235b');
     });
 
-    it('should map OpenAI best tier to gpt-4.1', async () => {
+    it('should map OpenAI best tier to gpt-5.2-codex', async () => {
       process.env.OPENAI_API_KEY = 'test';
 
       mockFetch.mockResolvedValueOnce({
@@ -280,7 +282,7 @@ describe('ai-client', () => {
         modelTier: 'best',
       });
 
-      expect(result.model).toBe('gpt-4.1');
+      expect(result.model).toBe('gpt-5.2-codex');
     });
   });
 
@@ -338,12 +340,12 @@ describe('ai-client', () => {
     });
 
     it('should pass maxTokens and temperature', async () => {
-      process.env.OPENAI_API_KEY = 'test';
+      process.env.ANTHROPIC_API_KEY = 'test';
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          choices: [{ message: { content: 'ok' } }],
+          content: [{ type: 'text', text: 'ok' }],
         }),
       });
 
