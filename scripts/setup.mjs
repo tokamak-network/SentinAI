@@ -210,7 +210,7 @@ async function testQwenKey(apiKey) {
   try {
     const res = await httpPost(
       'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions',
-      { model: 'qwen-turbo-latest', max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] },
+      { model: 'qwen3-coder-flash', max_tokens: 10, messages: [{ role: 'user', content: 'hi' }] },
       { Authorization: `Bearer ${apiKey}` }
     );
     return { ok: res.status === 200, status: res.status };

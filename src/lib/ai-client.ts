@@ -44,8 +44,8 @@ export interface ChatCompletionResult {
 
 const MODEL_MAP: Record<AIProvider, Record<ModelTier, string>> = {
   qwen: {
-    fast: 'qwen-turbo-latest',
-    best: 'qwen-max-latest',
+    fast: 'qwen3-coder-flash',
+    best: 'qwen3-235b-thinking',
   },
   anthropic: {
     fast: 'claude-haiku-4-5-20251001',
