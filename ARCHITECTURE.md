@@ -6,13 +6,49 @@ System architecture, design patterns, and technical decision rationale for Auton
 
 ## System Overview
 
-**SentinAI** is an AI-powered autonomous monitoring and auto-scaling system for Optimism L2 networks.
+**SentinAI** is an AI-powered autonomous monitoring and auto-scaling system for L2 networks. Chain-specific logic is encapsulated in a modular **ChainPlugin** system (`src/chains/`), with Optimism as the default plugin.
 
 **Core Design Principles:**
 - **AI-First**: All critical decisions powered by AI (Claude, GPT, Gemini)
 - **Graceful Degradation**: AI failure → statistical fallback (zero downtime)
 - **Zero-Downtime**: Parallel Pod Swap for horizontal scaling
 - **State Persistence**: Redis (production) + InMemory (fallback)
+- **Chain Agnostic**: Modular plugin system for multi-chain L2 support
+
+---
+
+## Chain Plugin System
+
+All chain-specific knowledge is abstracted behind the `ChainPlugin` interface (`src/chains/types.ts`):
+
+```
+src/chains/
+├── types.ts              ← ChainPlugin interface
+├── registry.ts           ← Global singleton registry (lazy-loads default)
+├── index.ts              ← Barrel re-export
+└── optimism/             ← Default Optimism plugin
+    ├── index.ts          ← OptimismPlugin class
+    ├── components.ts     ← Dependency graph, K8s configs, EOA configs
+    ├── prompts.ts        ← AI prompt fragments (RCA, anomaly, scaling, etc.)
+    └── playbooks.ts      ← 7 remediation playbooks
+```
+
+**What ChainPlugin provides:**
+- Component topology & dependency graph (RCA engine)
+- K8s naming conventions & pod selectors
+- EOA roles & address env var mapping
+- L1/L2 viem chain configs
+- AI prompt fragments (all 6 engine modules)
+- Remediation playbooks
+
+**Adding a new chain** = 4 files in `src/chains/<chain>/`:
+```
+src/chains/arbitrum/       (or zkstack/, polygon/, etc.)
+├── index.ts               ← ArbitrumPlugin implements ChainPlugin
+├── components.ts          ← Dependency graph, K8s configs
+├── prompts.ts             ← AI prompts for Arbitrum-specific patterns
+└── playbooks.ts           ← Arbitrum remediation playbooks
+```
 
 ---
 
@@ -326,7 +362,9 @@ Anomaly Event (with RCA Result)
 │  (playbook-matcher.ts)                       │
 ├──────────────────────────────────────────────┤
 │                                              │
-│  5 Predefined Playbooks:                     │
+│  Chain-Specific Playbooks                    │
+│  (loaded from ChainPlugin.getPlaybooks())    │
+│  Optimism example:                           │
 │  1. op-geth Crash/High Load                  │
 │  2. op-node Derivation Lag                   │
 │  3. op-batcher Transaction Failure           │
@@ -422,6 +460,26 @@ Execution → Escalation Ladder (if fails):
 ## Core Modules Organization
 
 ### Tier 1: AI Integration (Foundation)
+
+### Tier 0: Chain Plugin System
+
+**`src/chains/types.ts`** — ChainPlugin interface
+- Component topology, dependency graph, K8s configs, EOA configs
+- AI prompt fragments, viem chain configs, playbooks
+
+**`src/chains/registry.ts`** — Global singleton registry
+- Lazy-loads OptimismPlugin by default
+- `getChainPlugin()` / `registerChainPlugin()` API
+
+**`src/chains/optimism/`** — Default Optimism plugin (~720 lines)
+- `components.ts` — Dependency graph, K8s component configs, EOA configs
+- `prompts.ts` — AI prompts for all 6 engine modules
+- `playbooks.ts` — 7 remediation playbooks
+- `index.ts` — OptimismPlugin class
+
+---
+
+### Tier 1: AI Client
 
 **`ai-client.ts`** (345 lines)
 - Multi-provider unified interface (Anthropic/OpenAI/Gemini)
@@ -558,7 +616,7 @@ Execution → Escalation Ladder (if fails):
 - Execution tracking & metrics
 
 **`playbook-matcher.ts`** (304 lines)
-- 5 predefined Playbooks (op-geth, op-node, op-batcher, general, l1)
+- Chain-specific playbooks (loaded from ChainPlugin.getPlaybooks())
 - Pattern matching (component + metric + logs)
 - Confidence scoring
 

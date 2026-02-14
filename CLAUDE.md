@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**SentinAI (Autonomous Node Guardian)** — Monitoring and auto-scaling dashboard for Optimism-based L2 networks.
+**SentinAI (Autonomous Node Guardian)** — Monitoring and auto-scaling dashboard for L2 networks via modular chain plugins (default: Optimism).
 
 Real-time web UI with L1/L2 block monitoring, K8s integration, AI-powered log analysis, anomaly detection, root cause analysis, NLOps chat interface, and hybrid auto-scaling engine.
 
@@ -87,7 +87,7 @@ Enabled automatically when `L2_RPC_URL` is set. Override with `AGENT_LOOP_ENABLE
 **L1 RPC Failover** (`l1-rpc-failover.ts`) — Automatic endpoint switching when L1 RPC quota is exhausted:
 - Detects consecutive failures (≥3) in agent loop L1 calls
 - Switches to next healthy endpoint from `L1_RPC_URLS` list
-- Updates K8s components via `kubectl set env` (op-node, op-batcher, op-proposer)
+- Updates K8s components via `kubectl set env` (components determined by active ChainPlugin)
 - 5-minute cooldown between failovers, URL masking in logs
 
 ### Core Subsystems
@@ -101,12 +101,18 @@ Enabled automatically when `L2_RPC_URL` is set. Override with `AGENT_LOOP_ENABLE
 2. `anomaly-ai-analyzer.ts`: AI semantic analysis (Fast Tier: `qwen3-80b-next`)
 3. `alert-dispatcher.ts`: Slack/Webhook dispatch. Events in `anomaly-event-store.ts` (in-memory).
 
-**RCA Engine** — `rca-engine.ts` traces fault propagation using Optimism component dependency graph:
+**RCA Engine** — `rca-engine.ts` traces fault propagation using chain-specific dependency graph (from `ChainPlugin.dependencyGraph`). Example for Optimism:
 ```
 L1 → op-node → op-geth
            → op-batcher → L1
            → op-proposer → L1
 ```
+
+**Chain Plugin System** — Modular abstraction for multi-chain L2 support (`src/chains/`):
+- `ChainPlugin` interface encapsulates all chain-specific knowledge
+- `getChainPlugin()` returns the active plugin (defaults to Optimism)
+- Components, dependency graphs, AI prompts, playbooks, K8s configs, EOA roles — all from plugin
+- Adding new chain = 4 files in `src/chains/<chain>/` (index, components, prompts, playbooks)
 
 **NLOps Chat** — Natural language operations interface:
 - `nlops-engine.ts`: 7 intents (query, scale, analyze, config, explain, rca, unknown)
