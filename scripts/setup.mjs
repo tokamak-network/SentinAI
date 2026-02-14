@@ -472,14 +472,16 @@ async function stepAIProvider(config) {
     config.AI_GATEWAY_URL = gwUrl;
 
     // Re-test through gateway
-    if (provider === 'anthropic' || provider === 'openai') {
-      process.stdout.write('  Testing via gateway... ');
-      const gwResult = provider === 'anthropic'
-        ? await testAnthropicKey(apiKey, gwUrl)
-        : await testOpenAIKey(apiKey, gwUrl);
-      if (gwResult.ok) console.log(ok('Gateway reachable'));
-      else console.log(fail(`${gwResult.error || `HTTP ${gwResult.status}`}`));
+    process.stdout.write('  Testing via gateway... ');
+    let gwResult;
+    if (provider === 'anthropic') {
+      gwResult = await testAnthropicKey(apiKey, gwUrl);
+    } else {
+      // OpenAI, Qwen, Gemini all use OpenAI-compatible endpoint through gateway
+      gwResult = await testOpenAIKey(apiKey, gwUrl);
     }
+    if (gwResult.ok) console.log(ok('Gateway reachable'));
+    else console.log(fail(`${gwResult.error || `HTTP ${gwResult.status}`}`));
   }
 }
 
