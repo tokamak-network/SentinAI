@@ -207,15 +207,15 @@ export const PLAYBOOKS: Playbook[] = [
     maxAttempts: 1,
   },
 
-  // Playbook 7: EOA Balance Emergency — Immediate Escalation
+  // Playbook 7: EOA Balance Critical — Immediate Escalation
   {
-    name: 'eoa-balance-emergency',
-    description: 'EOA balance critically low — immediate operator alert',
+    name: 'eoa-balance-critical',
+    description: 'EOA balance critically low — immediate operator alert and auto-refill',
     trigger: {
       component: 'op-batcher',
       indicators: [
-        { type: 'metric', condition: 'batcherBalance < emergency' },
-        { type: 'metric', condition: 'proposerBalance < emergency' },
+        { type: 'metric', condition: 'batcherBalance < critical' },
+        { type: 'metric', condition: 'proposerBalance < critical' },
       ],
     },
     actions: [

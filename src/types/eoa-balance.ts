@@ -11,7 +11,7 @@
 export type EOARole = 'batcher' | 'proposer';
 
 /** Balance level relative to configured thresholds */
-export type BalanceLevel = 'normal' | 'warning' | 'critical' | 'emergency';
+export type BalanceLevel = 'normal' | 'warning' | 'critical';
 
 /** Reason why a refill was not executed */
 export type RefillDeniedReason =
@@ -33,10 +33,8 @@ export type RefillDeniedReason =
 export interface EOABalanceConfig {
   /** Balance below this triggers warning alert (ETH) */
   warningThresholdEth: number;
-  /** Balance below this triggers auto-refill (ETH) */
+  /** Balance below this triggers auto-refill and operator escalation (ETH) */
   criticalThresholdEth: number;
-  /** Balance below this triggers immediate operator escalation (ETH) */
-  emergencyThresholdEth: number;
   /** Amount to refill per transaction (ETH) */
   refillAmountEth: number;
   /** Maximum daily refill total across all EOAs (ETH) */

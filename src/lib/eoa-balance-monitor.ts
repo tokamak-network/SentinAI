@@ -27,7 +27,6 @@ import type {
 const DEFAULT_CONFIG: EOABalanceConfig = {
   warningThresholdEth: parseFloat(process.env.EOA_BALANCE_WARNING_ETH || '0.5'),
   criticalThresholdEth: parseFloat(process.env.EOA_BALANCE_CRITICAL_ETH || '0.1'),
-  emergencyThresholdEth: parseFloat(process.env.EOA_BALANCE_EMERGENCY_ETH || '0.01'),
   refillAmountEth: parseFloat(process.env.EOA_REFILL_AMOUNT_ETH || '1.0'),
   maxDailyRefillEth: parseFloat(process.env.EOA_REFILL_MAX_DAILY_ETH || '5.0'),
   cooldownMs: parseInt(process.env.EOA_REFILL_COOLDOWN_MIN || '10', 10) * 60 * 1000,
@@ -87,7 +86,6 @@ function getConfig(overrides?: Partial<EOABalanceConfig>): EOABalanceConfig {
 }
 
 function classifyBalance(balanceEth: number, config: EOABalanceConfig): BalanceLevel {
-  if (balanceEth < config.emergencyThresholdEth) return 'emergency';
   if (balanceEth < config.criticalThresholdEth) return 'critical';
   if (balanceEth < config.warningThresholdEth) return 'warning';
   return 'normal';

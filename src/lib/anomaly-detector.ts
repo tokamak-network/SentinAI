@@ -338,20 +338,7 @@ function detectLowBalance(
   if (balanceEth === undefined) return null;
 
   const criticalThreshold = parseFloat(process.env.EOA_BALANCE_CRITICAL_ETH || '0.1');
-  const emergencyThreshold = parseFloat(process.env.EOA_BALANCE_EMERGENCY_ETH || '0.01');
   const role = metric === 'batcherBalance' ? 'Batcher' : 'Proposer';
-
-  if (balanceEth < emergencyThreshold) {
-    return {
-      isAnomaly: true,
-      metric,
-      value: balanceEth,
-      zScore: 0,
-      direction: 'drop',
-      description: `${role} EOA balance emergency: ${balanceEth.toFixed(4)} ETH (< ${emergencyThreshold} ETH)`,
-      rule: 'threshold-breach',
-    };
-  }
 
   if (balanceEth < criticalThreshold) {
     return {

@@ -233,7 +233,7 @@ const globalForFailover = globalThis as unknown as {
 function initFromEnv(): L1FailoverState {
   const urls: string[] = [];
 
-  // Priority 1: L1_RPC_URLS (comma-separated)
+  // L1_RPC_URLS (comma-separated, supports single URL too)
   const urlsList = process.env.L1_RPC_URLS;
   if (urlsList) {
     urls.push(
@@ -244,9 +244,10 @@ function initFromEnv(): L1FailoverState {
     );
   }
 
-  // Priority 2: L1_RPC_URL (single)
+  // Deprecated: L1_RPC_URL (use L1_RPC_URLS instead)
   const singleUrl = process.env.L1_RPC_URL;
   if (singleUrl && !urls.includes(singleUrl)) {
+    console.warn('[L1 Failover] L1_RPC_URL is deprecated — use L1_RPC_URLS instead');
     urls.push(singleUrl);
   }
 
