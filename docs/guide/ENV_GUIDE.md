@@ -127,7 +127,8 @@ If op-node/batcher/proposer connect to L1 through Proxyd:
 
 | Variable | Default | Description |
 |---|---|---|
-| `L1_PROXYD_CONFIGMAP_NAME` | — | Proxyd ConfigMap name (setting this enables Proxyd mode) |
+| `L1_PROXYD_ENABLED` | `false` | Enable Proxyd mode |
+| `L1_PROXYD_CONFIGMAP_NAME` | `proxyd-config` | Proxyd ConfigMap name |
 | `L1_PROXYD_DATA_KEY` | `proxyd.toml` | TOML key in ConfigMap |
 | `L1_PROXYD_UPSTREAM_GROUP` | `main` | Upstream group to update |
 | `L1_PROXYD_UPDATE_MODE` | `replace` | `replace` or `append` |
