@@ -441,8 +441,11 @@ export async function executeFailover(
       `[L1 Failover] Switched: ${maskUrl(fromUrl)} → ${maskUrl(candidate.url)} (reason: ${reason})`
     );
 
-    // Update K8s components
-    const k8sResult = await updateK8sL1Rpc(candidate.url);
+    // Update K8s components (skip StatefulSet env patch when Proxyd handles L1 routing)
+    const isProxydMode = process.env.L1_PROXYD_ENABLED === 'true';
+    const k8sResult = isProxydMode
+      ? { updated: [] as string[], errors: [] as string[] }
+      : await updateK8sL1Rpc(candidate.url);
 
     const event: FailoverEvent = {
       timestamp: new Date().toISOString(),
