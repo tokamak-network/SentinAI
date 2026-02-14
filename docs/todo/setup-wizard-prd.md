@@ -18,6 +18,53 @@ A step-by-step CLI wizard that:
 - Generates a clean `.env.local` with only what's needed
 - Can be re-run safely to add/modify specific sections
 
+## Environment Variables — Completeness Audit
+
+### Covered by Wizard (user-facing)
+
+| Category | Variables | Wizard Step |
+|---|---|---|
+| **Required** | `L2_RPC_URL` | Step 1 |
+| **AI Provider** | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`, `QWEN_API_KEY`, `AI_GATEWAY_URL` | Step 2 |
+| **K8s** | `AWS_CLUSTER_NAME`, `K8S_NAMESPACE`, `K8S_APP_PREFIX`, `AWS_REGION` | Step 3 |
+| **L1 RPC** | `L1_RPC_URLS` (spare URLs for L2 node 429 failover) | Step 4 |
+| **L1 Proxyd** | `L1_PROXYD_ENABLED`, `L1_PROXYD_CONFIGMAP_NAME`, `L1_PROXYD_DATA_KEY`, `L1_PROXYD_UPSTREAM_GROUP`, `L1_PROXYD_UPDATE_MODE` | Step 4 (sub-section) |
+| **EOA** | `BATCHER_EOA_ADDRESS`, `PROPOSER_EOA_ADDRESS`, `BATCHER_PRIVATE_KEY`, `PROPOSER_PRIVATE_KEY`, `TREASURY_PRIVATE_KEY`, `EOA_BALANCE_WARNING_ETH`, `EOA_BALANCE_CRITICAL_ETH` | Step 5 |
+| **Alerts** | `ALERT_WEBHOOK_URL` | Step 6 |
+| **Advanced** | `REDIS_URL`, `COST_TRACKING_ENABLED`, `CLOUDFLARE_TUNNEL_TOKEN`, `AGENT_LOOP_ENABLED`, `AUTO_REMEDIATION_ENABLED`, `ANOMALY_DETECTION_ENABLED`, `SCALING_SIMULATION_MODE` | Step 7 (Advanced) |
+
+### Auto-detected (no user input needed)
+
+| Variable | Detection Method |
+|---|---|
+| `K8S_API_URL` | `aws eks describe-cluster` |
+| `K8S_TOKEN` | `aws eks get-token` |
+| `AWS_PROFILE` | Standard AWS credential chain |
+
+### Hidden (defaults are fine, docs only)
+
+| Variable | Default | Reason |
+|---|---|---|
+| `EOA_REFILL_AMOUNT_ETH` | `1.0` | Fine-tuning, docs reference |
+| `EOA_REFILL_MAX_DAILY_ETH` | `5.0` | Fine-tuning, docs reference |
+| `EOA_REFILL_COOLDOWN_MIN` | `10` | Fine-tuning, docs reference |
+| `EOA_GAS_GUARD_GWEI` | `100` | Fine-tuning, docs reference |
+| `EOA_TREASURY_MIN_ETH` | `1.0` | Fine-tuning, docs reference |
+| `REMEDIATION_ALLOW_GUARDED` | — | Advanced remediation |
+| `REMEDIATION_COOLDOWN_MIN` | — | Advanced remediation |
+| `REMEDIATION_MAX_VCPU` | — | Advanced remediation |
+| `K8S_INSECURE_TLS` | `false` | Dev only |
+| `KUBECONFIG` | — | Alternative to EKS |
+
+### Excluded (internal / test only)
+
+| Variable | Reason |
+|---|---|
+| `LLM_TEST_*` (6 vars) | Moved to `.env.test.sample` |
+| `NEXT_RUNTIME`, `NODE_ENV` | Next.js internal |
+| `NLOPS_ENABLED` | Legacy / unimplemented |
+| `REPORTS_DIR` | Internal path |
+
 ## Design
 
 ### Flow
@@ -44,18 +91,24 @@ Step 1: L2 RPC          (required)
 Step 2: AI Provider      (required for AI features)
   → Pick provider (Anthropic/OpenAI/Gemini/Qwen)
   → Enter API key → test with a simple completion → show ✓
+  → "Route through an AI gateway/proxy? (y/N)"
+    → If yes: enter AI_GATEWAY_URL
 
 Step 3: K8s Monitoring   (optional, skip by default)
   → "Do you have a K8s cluster to monitor? (y/N)"
   → If yes: enter cluster name → validate with aws eks describe-cluster
   → Show: region, endpoint, namespace
+  → Optional: K8S_NAMESPACE, K8S_APP_PREFIX
 
 Step 4: L1 RPC           (optional, skip by default)
-  → "Custom L1 RPC endpoints? (y/N)"
+  → "Configure spare L1 RPC endpoints for 429 failover? (y/N)"
   → If yes: enter comma-separated URLs → test each → show latency
-  → Default: publicnode.com (no config needed)
+  → Note: Used as spare URLs when L2 nodes hit 429 errors 10x consecutively
+  → Default: publicnode.com fallback (no config needed)
+  → "Enable L1 Proxyd integration? (y/N)"
+    → If yes: ConfigMap name, data key, upstream group
 
-Step 5: EOA Monitoring   (optional, skip by default)  
+Step 5: EOA Monitoring   (optional, skip by default)
   → "Monitor batcher/proposer ETH balances? (y/N)"
   → If yes: enter addresses or private keys
   → Optional: treasury key for auto-refill
@@ -66,6 +119,8 @@ Step 6: Alerts           (optional, skip by default)
 
 Step 7: Summary & Write
   → Show all configured values (masked secrets)
+  → "Configure advanced settings? (y/N)"
+    → Redis, Cost Tracking, Cloudflare Tunnel, Simulation Mode, etc.
   → Write .env.local
   → "Run `npm run dev` to start SentinAI"
 ```
@@ -79,7 +134,7 @@ What would you like to configure?
   1. L2 RPC
   2. AI Provider
   3. K8s Monitoring
-  4. L1 RPC
+  4. L1 RPC & Proxyd
   5. EOA Monitoring
   6. Alerts
   7. Advanced (Redis, Cost Tracking, Cloudflare, etc.)
@@ -93,11 +148,25 @@ Run all validation checks on existing `.env.local`:
 Validating .env.local...
   ✓ L2_RPC_URL          connected (chain 111551119090, block #4,521,003)
   ✓ ANTHROPIC_API_KEY    valid (claude-haiku-4.5 responding)
+  ✓ AI_GATEWAY_URL       reachable (https://your-gateway.com)
   ✓ AWS_CLUSTER_NAME     found (us-east-1, endpoint reachable)
-  ✗ L1_RPC_URLS          endpoint 2/3 unreachable (https://rpc.sepolia.org)
+  ✓ L1_RPC_URLS          3 spare endpoints configured (all reachable, avg 120ms)
   ○ EOA addresses        not configured (optional)
   ○ ALERT_WEBHOOK_URL    not configured (optional)
 ```
+
+## Key Design Decision: L1_RPC_URLS
+
+`L1_RPC_URLS` serves as the **single** L1 RPC variable:
+- **Primary use**: Spare URL pool for L2 node 429 failover
+- **Trigger**: When an L2 node (op-node, op-batcher, op-proposer) hits **10 consecutive 429 errors**, SentinAI swaps to the next URL from this list
+- **Replaces**: `L1_PROXYD_SPARE_URLS` (deprecated, merged into `L1_RPC_URLS`)
+- **Fallback**: If not set, uses publicnode.com as last resort
+
+This means:
+- `L1_RPC_URLS` = spare/failover URLs (not the primary L1 RPC used by L2 nodes)
+- L2 nodes get their primary L1 RPC from K8s ConfigMap / Proxyd config
+- SentinAI only intervenes when 429 threshold is breached
 
 ## Technical Spec
 
@@ -115,6 +184,7 @@ Validating .env.local...
 | AI key (OpenAI) | `POST /v1/chat/completions` with minimal prompt, check 200 |
 | AI key (Gemini) | `POST /v1beta/models/gemini-2.5-flash-lite:generateContent` |
 | AI key (Qwen) | `POST /v1/chat/completions` to DashScope endpoint |
+| AI Gateway | `HEAD` or `GET /health` to gateway URL, check reachable |
 | K8s cluster | `aws eks describe-cluster --name <name>` via execFileSync |
 | L1 RPC | `POST` with `eth_blockNumber`, measure latency per endpoint |
 | Webhook | `POST` with test payload, check 2xx response |
@@ -139,12 +209,14 @@ L2_RPC_URL=https://rpc.titok.tokamak.network
 
 # === AI Provider ===
 ANTHROPIC_API_KEY=sk-ant-xxx
+# AI_GATEWAY_URL=https://your-gateway.com   # (optional) Route AI requests through proxy
 
 # === K8s Monitoring ===
 # Not configured. Run `npm run setup` to add.
 
-# === L1 RPC ===
-# Using default (publicnode.com). Run `npm run setup` to customize.
+# === L1 RPC (Spare URLs for 429 Failover) ===
+# L1_RPC_URLS=https://rpc1.example.com,https://rpc2.example.com
+# Used when L2 nodes hit 429 errors 10x consecutively
 
 # === EOA Monitoring ===
 # Not configured. Run `npm run setup` to add.
@@ -171,9 +243,22 @@ ANTHROPIC_API_KEY=sk-ant-xxx
 
 ### Out of Scope
 - Web UI (future: Telegram Mini App onboarding)
-- L1 Proxyd advanced config (point to docs instead)
 - LLM stress test config (moved to `.env.test.sample`)
-- Auto-refill fine-tuning params (use defaults, point to docs)
+- EOA auto-refill fine-tuning params (use defaults, point to ENV_GUIDE.md)
+- Remediation fine-tuning params (use defaults, point to ENV_GUIDE.md)
+
+## Code Changes Required (Pre-Wizard)
+
+Before building the wizard, these code changes are needed:
+
+1. **Merge `L1_PROXYD_SPARE_URLS` into `L1_RPC_URLS`** in `src/lib/l1-rpc-failover.ts`
+   - Remove `L1_PROXYD_SPARE_URLS` references
+   - Use `L1_RPC_URLS` as the spare URL pool for 429 backend replacement
+   - Update 429 threshold to 10 consecutive errors
+
+2. **Deprecate `L1_RPC_URL`** (already done — prints warning, falls back)
+
+3. **Update `.env.local.sample`** to reflect merged L1_RPC_URLS usage
 
 ## Success Criteria
 
@@ -181,4 +266,5 @@ ANTHROPIC_API_KEY=sk-ant-xxx
 - [ ] Re-running setup preserves existing config unless explicitly changed
 - [ ] All validation checks pass/fail with clear feedback
 - [ ] Zero external dependencies (pure Node.js)
-- [ ] Deprecated env vars (`L1_RPC_URL`, `K8S_STATEFULSET_PREFIX`, `EOA_BALANCE_EMERGENCY_ETH`) not shown
+- [ ] Deprecated env vars not shown in wizard
+- [ ] Every `process.env.*` in production code is either in wizard, auto-detected, or documented as hidden/internal
