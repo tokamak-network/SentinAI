@@ -124,7 +124,7 @@ export interface ScalingConfig {
 export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
   minVcpu: 1,
   maxVcpu: 8,
-  cooldownSeconds: process.env.NODE_ENV === 'development' ? 10 : 300,  // 10s (dev), 5 min (prod)
+  cooldownSeconds: parseInt(process.env.SCALING_COOLDOWN_SECONDS ?? (process.env.NODE_ENV === 'development' ? '10' : '300')),
   namespace: 'thanos-sepolia',
   statefulSetName: 'sepolia-thanos-stack-op-geth',
   containerIndex: 0,
@@ -135,9 +135,9 @@ export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
     ai: 0.2,
   },
   thresholds: {
-    idle: 30,
-    normal: 70,
-    critical: 85,  // new threshold for 8 vCPU scaling
+    idle: parseInt(process.env.SCALING_IDLE_THRESHOLD ?? '30'),
+    normal: parseInt(process.env.SCALING_NORMAL_THRESHOLD ?? '70'),
+    critical: parseInt(process.env.SCALING_CRITICAL_THRESHOLD ?? '85'),
   },
   serviceName: 'sepolia-thanos-stack-op-geth',
 };
