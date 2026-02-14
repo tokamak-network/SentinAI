@@ -321,10 +321,9 @@ function generateEnvFile(config) {
   blank();
 
   // L1 Proxyd
-  if (config.L1_PROXYD_ENABLED) {
+  if (config.L1_PROXYD_CONFIGMAP_NAME) {
     section('L1 Proxyd');
-    val('L1_PROXYD_ENABLED', 'true');
-    if (config.L1_PROXYD_CONFIGMAP_NAME) val('L1_PROXYD_CONFIGMAP_NAME', config.L1_PROXYD_CONFIGMAP_NAME);
+    val('L1_PROXYD_CONFIGMAP_NAME', config.L1_PROXYD_CONFIGMAP_NAME);
     if (config.L1_PROXYD_DATA_KEY) val('L1_PROXYD_DATA_KEY', config.L1_PROXYD_DATA_KEY);
     if (config.L1_PROXYD_UPSTREAM_GROUP) val('L1_PROXYD_UPSTREAM_GROUP', config.L1_PROXYD_UPSTREAM_GROUP);
     blank();
@@ -381,7 +380,7 @@ function generateEnvFile(config) {
 const WIZARD_KEYS = new Set([
   'L2_RPC_URL', 'ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GEMINI_API_KEY', 'QWEN_API_KEY',
   'AI_GATEWAY_URL', 'AWS_CLUSTER_NAME', 'K8S_NAMESPACE', 'K8S_APP_PREFIX', 'AWS_REGION',
-  'L1_RPC_URLS', 'L1_RPC_URL', 'L1_PROXYD_ENABLED', 'L1_PROXYD_CONFIGMAP_NAME',
+  'L1_RPC_URLS', 'L1_RPC_URL', 'L1_PROXYD_CONFIGMAP_NAME',
   'L1_PROXYD_DATA_KEY', 'L1_PROXYD_UPSTREAM_GROUP', 'L1_PROXYD_UPDATE_MODE', 'L1_PROXYD_SPARE_URLS',
   'BATCHER_EOA_ADDRESS', 'PROPOSER_EOA_ADDRESS', 'BATCHER_PRIVATE_KEY', 'PROPOSER_PRIVATE_KEY',
   'TREASURY_PRIVATE_KEY', 'EOA_BALANCE_WARNING_ETH', 'EOA_BALANCE_CRITICAL_ETH',
@@ -549,9 +548,8 @@ async function stepL1Rpc(config) {
 }
 
 async function configureProxyd(config) {
-  config.L1_PROXYD_ENABLED = true;
   const cmName = await askOptional('  ▸ L1_PROXYD_CONFIGMAP_NAME', 'proxyd-config');
-  if (cmName !== 'proxyd-config') config.L1_PROXYD_CONFIGMAP_NAME = cmName;
+  config.L1_PROXYD_CONFIGMAP_NAME = cmName;
   const dataKey = await askOptional('  ▸ L1_PROXYD_DATA_KEY', 'proxyd.toml');
   if (dataKey !== 'proxyd.toml') config.L1_PROXYD_DATA_KEY = dataKey;
   const group = await askOptional('  ▸ L1_PROXYD_UPSTREAM_GROUP', 'main');
@@ -670,7 +668,7 @@ async function stepSummaryAndWrite(config) {
     show('K8S_APP_PREFIX', config.K8S_APP_PREFIX || 'op');
   }
   if (config.L1_RPC_URLS) show('L1_RPC_URLS', config.L1_RPC_URLS);
-  if (config.L1_PROXYD_ENABLED) show('L1_PROXYD_ENABLED', 'true');
+  if (config.L1_PROXYD_CONFIGMAP_NAME) show('L1_PROXYD_CONFIGMAP_NAME', config.L1_PROXYD_CONFIGMAP_NAME);
   if (config.BATCHER_EOA_ADDRESS) show('BATCHER_EOA_ADDRESS', config.BATCHER_EOA_ADDRESS);
   if (config.PROPOSER_EOA_ADDRESS) show('PROPOSER_EOA_ADDRESS', config.PROPOSER_EOA_ADDRESS);
   if (config.TREASURY_PRIVATE_KEY) show('TREASURY_PRIVATE_KEY', config.TREASURY_PRIVATE_KEY, true);

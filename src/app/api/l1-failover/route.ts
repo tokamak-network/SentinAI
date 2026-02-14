@@ -20,7 +20,7 @@ export async function GET() {
       const configMapName = process.env.L1_PROXYD_CONFIGMAP_NAME || 'proxyd-config';
       const dataKey = process.env.L1_PROXYD_DATA_KEY || 'proxyd-config.toml';
 
-      if (process.env.L1_PROXYD_ENABLED === 'true') {
+      if (!!process.env.L1_PROXYD_CONFIGMAP_NAME) {
         // Import getConfigMapToml is not directly available, so we'll read directly
         const tomlContent = await getConfigMapToml(configMapName, dataKey, namespace);
         const parsed = TOML.parse(tomlContent) as Record<string, unknown>;

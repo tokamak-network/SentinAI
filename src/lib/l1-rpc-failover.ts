@@ -450,7 +450,7 @@ export async function executeFailover(
     );
 
     // Update K8s components (skip StatefulSet env patch when Proxyd handles L1 routing)
-    const isProxydMode = process.env.L1_PROXYD_ENABLED === 'true';
+    const isProxydMode = !!process.env.L1_PROXYD_CONFIGMAP_NAME;
     const k8sResult = isProxydMode
       ? { updated: [] as string[], errors: [] as string[] }
       : await updateK8sL1Rpc(candidate.url);
@@ -558,7 +558,7 @@ export async function probeBackend(url: string): Promise<{ ok: boolean; status?:
  * Called from agent-loop every cycle (30s).
  */
 export async function checkProxydBackends(): Promise<BackendReplacementEvent | null> {
-  if (process.env.L1_PROXYD_ENABLED !== 'true') return null;
+  if (!process.env.L1_PROXYD_CONFIGMAP_NAME) return null;
 
   const state = getState();
   const configMapName = process.env.L1_PROXYD_CONFIGMAP_NAME || 'proxyd-config';
@@ -727,7 +727,7 @@ function hasK8sCluster(): boolean {
  * Supports both Proxyd (ConfigMap) and Direct (StatefulSet env var) modes
  */
 export async function getL2NodesL1RpcStatus(): Promise<L2NodeL1RpcStatus[]> {
-  const isProxydEnabled = process.env.L1_PROXYD_ENABLED === 'true';
+  const isProxydEnabled = !!process.env.L1_PROXYD_CONFIGMAP_NAME;
 
   try {
     if (isProxydEnabled) {
