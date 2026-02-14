@@ -6,7 +6,7 @@
 
 import { createPublicClient, createWalletClient, http, parseEther, formatEther, parseGwei } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { sepolia } from 'viem/chains';
+import { getChainPlugin } from '@/chains';
 import { getActiveL1RpcUrl } from '@/lib/l1-rpc-failover';
 import { getEOAAddressWithAutoDetect } from '@/lib/eoa-detector';
 import { getCachedEOABalance, invalidateEOABalanceCache } from '@/lib/l1-rpc-cache';
@@ -97,7 +97,9 @@ function classifyBalance(balanceEth: number, config: EOABalanceConfig): BalanceL
  * Note: This is sync wrapper; actual detection happens in getAllBalanceStatus
  */
 function getEOAAddress(role: EOARole): `0x${string}` | null {
-  const envKey = role === 'batcher' ? 'BATCHER_EOA_ADDRESS' : 'PROPOSER_EOA_ADDRESS';
+  const plugin = getChainPlugin();
+  const eoaConfig = plugin.eoaConfigs.find(c => c.role === role);
+  const envKey = eoaConfig?.addressEnvVar || (role === 'batcher' ? 'BATCHER_EOA_ADDRESS' : 'PROPOSER_EOA_ADDRESS');
   const addr = process.env[envKey];
   if (addr && addr.startsWith('0x')) {
     return addr as `0x${string}`;
@@ -114,7 +116,7 @@ function getTreasuryKey(): `0x${string}` | null {
 
 function createL1Client(l1RpcUrl: string) {
   return createPublicClient({
-    chain: sepolia,
+    chain: getChainPlugin().l1Chain,
     transport: http(l1RpcUrl, { timeout: RPC_TIMEOUT_MS }),
   });
 }
@@ -402,7 +404,7 @@ export async function refillEOA(
   // 8. Send transaction
   const walletClient = createWalletClient({
     account,
-    chain: sepolia,
+    chain: getChainPlugin().l1Chain,
     transport: http(l1RpcUrl, { timeout: RPC_TIMEOUT_MS }),
   });
 

@@ -6,7 +6,7 @@
  */
 
 import { createPublicClient, http } from 'viem';
-import { sepolia } from 'viem/chains';
+import { getChainPlugin } from '@/chains';
 import TOML from '@iarna/toml';
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import type {
@@ -210,16 +210,19 @@ async function applyBackendReplacement(
   }
 }
 
-/** Components that need L1 RPC env var updates */
+/** Components that need L1 RPC env var updates (built from chain plugin) */
 export function getL1Components(): L1ComponentConfig[] {
   const prefix = getStatefulSetPrefix();
+  const plugin = getChainPlugin();
 
-  // StatefulSets only — Proxyd backend replacement is handled separately by checkProxydBackends()
-  return [
-    { type: 'statefulset', statefulSetName: `${prefix}-op-node`, envVarName: 'OP_NODE_L1_ETH_RPC' },
-    { type: 'statefulset', statefulSetName: `${prefix}-op-batcher`, envVarName: 'OP_BATCHER_L1_ETH_RPC' },
-    { type: 'statefulset', statefulSetName: `${prefix}-op-proposer`, envVarName: 'OP_PROPOSER_L1_ETH_RPC' },
-  ];
+  // StatefulSets with L1 RPC env var — Proxyd backend replacement handled separately
+  return plugin.k8sComponents
+    .filter(c => c.l1RpcEnvVar)
+    .map(c => ({
+      type: 'statefulset' as const,
+      statefulSetName: `${prefix}-${c.statefulSetSuffix}`,
+      envVarName: c.l1RpcEnvVar!,
+    }));
 }
 
 // ============================================================
@@ -399,7 +402,7 @@ export async function reportL1Failure(
 export async function healthCheckEndpoint(url: string): Promise<boolean> {
   try {
     const client = createPublicClient({
-      chain: sepolia,
+      chain: getChainPlugin().l1Chain,
       transport: http(url, { timeout: HEALTH_CHECK_TIMEOUT_MS }),
     });
     const blockNumber = await client.getBlockNumber();
@@ -772,12 +775,15 @@ async function getL2NodesL1RpcFromProxyd(): Promise<L2NodeL1RpcStatus[]> {
       state.proxydHealth.map(h => [h.rpcUrl, h.healthy])
     );
 
-    // 5. Generate status for 3 L2 components
-    return ['op-node', 'op-batcher', 'op-proposer'].map(component => ({
-      component: component as L2NodeL1RpcStatus['component'],
-      l1RpcUrl: maskUrl(firstBackendUrl || 'unknown'),
-      healthy: healthMap.get(firstBackendUrl || '') ?? false,
-    }));
+    // 5. Generate status for L2 components with L1 RPC dependency
+    const plugin = getChainPlugin();
+    return plugin.k8sComponents
+      .filter(c => c.l1RpcEnvVar)
+      .map(c => ({
+        component: c.component,
+        l1RpcUrl: maskUrl(firstBackendUrl || 'unknown'),
+        healthy: healthMap.get(firstBackendUrl || '') ?? false,
+      }));
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     if (process.env.DEBUG_K8S === 'true') {
@@ -847,11 +853,10 @@ async function getL2NodesL1RpcFromK8s(): Promise<L2NodeL1RpcStatus[]> {
   try {
     const namespace = getNamespace();
     const prefix = getAppPrefix();
-    const components: Array<{ name: string; configMapKey: string }> = [
-      { name: 'op-node', configMapKey: 'OP_NODE_L1_ETH_RPC' },
-      { name: 'op-batcher', configMapKey: 'OP_BATCHER_L1_ETH_RPC' },
-      { name: 'op-proposer', configMapKey: 'OP_PROPOSER_L1_ETH_RPC' },
-    ];
+    const plugin = getChainPlugin();
+    const components = plugin.k8sComponents
+      .filter(c => c.l1RpcEnvVar)
+      .map(c => ({ name: c.component, configMapKey: c.l1RpcEnvVar! }));
 
     // Fetch all component L1 RPC URLs in parallel
     const results = await Promise.all(
@@ -879,7 +884,7 @@ async function getL2NodesL1RpcFromK8s(): Promise<L2NodeL1RpcStatus[]> {
 
           // Step 3: Health check
           const client = createPublicClient({
-            chain: sepolia,
+            chain: getChainPlugin().l1Chain,
             transport: http(finalUrl, { timeout: 5000 }),
           });
           await client.getBlockNumber();

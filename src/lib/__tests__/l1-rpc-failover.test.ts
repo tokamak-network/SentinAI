@@ -18,7 +18,9 @@ vi.mock('viem', () => ({
 }));
 
 vi.mock('viem/chains', () => ({
+  mainnet: { id: 1 },
   sepolia: { id: 11155111 },
+  optimismSepolia: { id: 11155420 },
 }));
 
 vi.mock('@/lib/k8s-config', () => ({

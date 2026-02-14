@@ -125,8 +125,8 @@ export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
   minVcpu: 1,
   maxVcpu: 8,
   cooldownSeconds: parseInt(process.env.SCALING_COOLDOWN_SECONDS ?? (process.env.NODE_ENV === 'development' ? '10' : '300')),
-  namespace: 'thanos-sepolia',
-  statefulSetName: 'sepolia-thanos-stack-op-geth',
+  namespace: process.env.K8S_NAMESPACE || 'default',
+  statefulSetName: process.env.K8S_STATEFULSET_NAME || 'op-geth',
   containerIndex: 0,
   weights: {
     cpu: 0.3,

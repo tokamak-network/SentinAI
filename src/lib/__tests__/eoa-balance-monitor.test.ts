@@ -37,7 +37,9 @@ vi.mock('viem/accounts', () => ({
 }));
 
 vi.mock('viem/chains', () => ({
+  mainnet: { id: 1, name: 'Ethereum' },
   sepolia: { id: 11155111, name: 'Sepolia' },
+  optimismSepolia: { id: 11155420, name: 'OP Sepolia' },
 }));
 
 vi.mock('@/lib/l1-rpc-failover', () => ({

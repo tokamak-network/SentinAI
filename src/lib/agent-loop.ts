@@ -5,7 +5,7 @@
  */
 
 import { createPublicClient, http, formatEther } from 'viem';
-import { mainnet, sepolia } from 'viem/chains';
+import { getChainPlugin } from '@/chains';
 import { pushMetric, getRecentMetrics } from '@/lib/metrics-store';
 import { getStore } from '@/lib/redis-store';
 import { recordUsage } from '@/lib/usage-tracker';
@@ -116,7 +116,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     }
   }
 
-  const l2Client = createPublicClient({ chain: mainnet, transport: http(rpcUrl, { timeout: RPC_TIMEOUT_MS }) });
+  const l2Client = createPublicClient({ chain: getChainPlugin().l2Chain, transport: http(rpcUrl, { timeout: RPC_TIMEOUT_MS }) });
 
   // L2 block fetch
   const block = await l2Client.getBlock({ blockTag: 'latest' });
@@ -127,7 +127,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
   let failoverInfo: AgentCycleResult['failover'] | undefined;
 
   const l1RpcUrl = getActiveL1RpcUrl();
-  const l1Client = createPublicClient({ chain: sepolia, transport: http(l1RpcUrl, { timeout: RPC_TIMEOUT_MS }) });
+  const l1Client = createPublicClient({ chain: getChainPlugin().l1Chain, transport: http(l1RpcUrl, { timeout: RPC_TIMEOUT_MS }) });
 
   try {
     l1BlockNumber = await l1Client.getBlockNumber();
@@ -142,7 +142,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     if (newUrl) {
       // Failover occurred — retry with new endpoint
       const retryClient = createPublicClient({
-        chain: sepolia,
+        chain: getChainPlugin().l1Chain,
         transport: http(newUrl, { timeout: RPC_TIMEOUT_MS }),
       });
       try {
@@ -183,7 +183,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
   if (batcherAddr || proposerAddr) {
     // Use whichever L1 client succeeded
     const activeL1Client = failoverInfo?.triggered
-      ? createPublicClient({ chain: sepolia, transport: http(failoverInfo.toUrl, { timeout: RPC_TIMEOUT_MS }) })
+      ? createPublicClient({ chain: getChainPlugin().l1Chain, transport: http(failoverInfo.toUrl, { timeout: RPC_TIMEOUT_MS }) })
       : l1Client;
 
     try {

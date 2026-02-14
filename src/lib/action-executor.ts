@@ -12,6 +12,7 @@ import { getActiveL1RpcUrl, healthCheckEndpoint, getL1FailoverState, maskUrl } f
 import { checkBalance, refillEOA, getAllBalanceStatus } from '@/lib/eoa-balance-monitor';
 import type { EOARole } from '@/types/eoa-balance';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
+import { getChainPlugin } from '@/chains';
 
 // ============================================================
 // Configuration
@@ -24,20 +25,24 @@ const MAX_AUTO_SCALE_VCPU = parseInt(process.env.REMEDIATION_MAX_VCPU || '4', 10
 // ============================================================
 
 function getPodName(component: RCAComponent, config: ScalingConfig): string {
-  const { statefulSetName, namespace } = config;
-  
-  switch (component) {
-    case 'op-geth':
-      return `${statefulSetName}-0`;
-    case 'op-node':
-      return 'sepolia-thanos-stack-op-node-0';
-    case 'op-batcher':
-      return 'sepolia-thanos-stack-op-batcher-0';
-    case 'op-proposer':
-      return 'sepolia-thanos-stack-op-proposer-0';
-    default:
-      return `${statefulSetName}-0`;
+  const { statefulSetName } = config;
+  const plugin = getChainPlugin();
+
+  // Primary execution client uses the config's statefulSetName
+  if (component === plugin.primaryExecutionClient) {
+    return `${statefulSetName}-0`;
   }
+
+  // Other components: derive from statefulSetName prefix + plugin k8s config
+  const k8sConfig = plugin.k8sComponents.find(c => c.component === component);
+  if (k8sConfig) {
+    // Extract prefix from statefulSetName (e.g. 'op-geth' → prefix not needed, use env-based naming)
+    const prefix = process.env.K8S_APP_PREFIX || 'op';
+    // Build pod name: prefix-statefulSetSuffix-0
+    return `${prefix}-${k8sConfig.statefulSetSuffix}-0`;
+  }
+
+  return `${statefulSetName}-0`;
 }
 
 // ============================================================
@@ -342,9 +347,9 @@ async function executeCheckTreasuryBalance(): Promise<string> {
  */
 async function executeCheckL1GasPrice(): Promise<string> {
   const { createPublicClient: createClient, http: httpTransport, formatGwei } = await import('viem');
-  const { sepolia: sepoliaChain } = await import('viem/chains');
+  const plugin = getChainPlugin();
   const l1RpcUrl = getActiveL1RpcUrl();
-  const client = createClient({ chain: sepoliaChain, transport: httpTransport(l1RpcUrl, { timeout: 15000 }) });
+  const client = createClient({ chain: plugin.l1Chain, transport: httpTransport(l1RpcUrl, { timeout: 15000 }) });
 
   try {
     const gasPrice = await client.getGasPrice();
@@ -363,9 +368,11 @@ async function executeCheckL1GasPrice(): Promise<string> {
  */
 async function executeRefillEOA(action: RemediationAction): Promise<string> {
   const role = (action.params?.role as EOARole) || 'batcher';
-  const targetAddr = role === 'batcher'
-    ? process.env.BATCHER_EOA_ADDRESS
-    : process.env.PROPOSER_EOA_ADDRESS;
+  const plugin = getChainPlugin();
+  const eoaConfig = plugin.eoaConfigs.find(c => c.role === role);
+  const targetAddr = eoaConfig
+    ? process.env[eoaConfig.addressEnvVar]
+    : (role === 'batcher' ? process.env.BATCHER_EOA_ADDRESS : process.env.PROPOSER_EOA_ADDRESS);
 
   if (!targetAddr) {
     throw new Error(`${role} EOA address not configured`);

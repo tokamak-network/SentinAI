@@ -1,5 +1,5 @@
 import { createPublicClient, http } from 'viem';
-import { mainnet, sepolia } from 'viem/chains';
+import { getChainPlugin } from '@/chains';
 import { NextResponse } from 'next/server';
 import { recordUsage } from '@/lib/usage-tracker';
 import { getCachedL1BlockNumber } from '@/lib/l1-rpc-cache';
@@ -195,8 +195,8 @@ export async function GET(request: Request) {
             const rpcUrl = process.env.L2_RPC_URL;
             const l1RpcUrl = getActiveL1RpcUrl();
             if (rpcUrl) {
-                const l2Client = createPublicClient({ chain: mainnet, transport: http(rpcUrl) });
-                const l1Client = createPublicClient({ chain: sepolia, transport: http(l1RpcUrl) });
+                const l2Client = createPublicClient({ chain: getChainPlugin().l2Chain, transport: http(rpcUrl) });
+                const l1Client = createPublicClient({ chain: getChainPlugin().l1Chain, transport: http(l1RpcUrl) });
                 const [l2Block, l1Block] = await Promise.all([
                     l2Client.getBlockNumber(),
                     getCachedL1BlockNumber(() => l1Client.getBlockNumber()),
@@ -295,8 +295,8 @@ export async function GET(request: Request) {
         }
         const l1RpcUrl = getActiveL1RpcUrl();
 
-        const l2RpcClient = createPublicClient({ chain: mainnet, transport: http(rpcUrl) });
-        const l1RpcClient = createPublicClient({ chain: sepolia, transport: http(l1RpcUrl) });
+        const l2RpcClient = createPublicClient({ chain: getChainPlugin().l2Chain, transport: http(rpcUrl) });
+        const l1RpcClient = createPublicClient({ chain: getChainPlugin().l1Chain, transport: http(l1RpcUrl) });
 
         // Fetch L2 block details and L1 block number in parallel (1 less RPC call)
         const [block, l1BlockNumber] = await Promise.all([
@@ -535,11 +535,9 @@ export async function GET(request: Request) {
             stressMode: isStressTest,
             // === L2 Nodes L1 RPC Status ===
             l2NodesL1Rpc: isStressTest
-                ? [
-                    { component: 'op-node', l1RpcUrl: 'https://eth-sepolia.public***', healthy: true },
-                    { component: 'op-batcher', l1RpcUrl: 'https://eth-sepolia.public***', healthy: true },
-                    { component: 'op-proposer', l1RpcUrl: 'https://eth-sepolia.public***', healthy: true },
-                ]
+                ? getChainPlugin().k8sComponents
+                    .filter(c => c.l1RpcEnvVar)
+                    .map(c => ({ component: c.component, l1RpcUrl: 'https://l1-rpc.mock***', healthy: true }))
                 : await getL2NodesL1RpcStatus(),
             // === EOA Balance Status ===
             eoaBalances: await (async () => {
