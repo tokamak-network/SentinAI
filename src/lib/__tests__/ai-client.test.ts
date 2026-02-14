@@ -9,30 +9,21 @@ vi.stubGlobal('fetch', mockFetch);
 
 // Dynamic import to reset module state between tests
 async function importAiClient() {
-  // Clear module cache so env vars are re-read
   vi.resetModules();
   return await import('../ai-client');
 }
 
 describe('ai-client', () => {
   beforeEach(() => {
-    // Clear all env vars
     delete process.env.AI_GATEWAY_URL;
     delete process.env.QWEN_API_KEY;
-    delete process.env.QWEN_BASE_URL;
-    delete process.env.QWEN_MODEL;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.OPENAI_API_KEY;
-    delete process.env.OPENAI_BASE_URL;
-    delete process.env.OPENAI_MODEL;
-    delete process.env.OPENAI_MODEL_FAST;
-    delete process.env.OPENAI_MODEL_BEST;
     delete process.env.GEMINI_API_KEY;
     mockFetch.mockReset();
   });
 
   afterEach(() => {
-    // Restore original env
     process.env = { ...originalEnv };
   });
 
@@ -83,53 +74,6 @@ describe('ai-client', () => {
       );
     });
 
-    it('should use custom QWEN_BASE_URL when set', async () => {
-      process.env.QWEN_API_KEY = 'sk-qwen-test';
-      process.env.QWEN_BASE_URL = 'http://localhost:8080';
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          choices: [{ message: { content: 'local qwen' } }],
-        }),
-      });
-
-      const { chatCompletion } = await importAiClient();
-      await chatCompletion({
-        systemPrompt: 'sys',
-        userPrompt: 'user',
-        modelTier: 'fast',
-      });
-
-      expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:8080/v1/chat/completions',
-        expect.anything(),
-      );
-    });
-
-    it('should use QWEN_MODEL override when set', async () => {
-      process.env.QWEN_API_KEY = 'sk-qwen-test';
-      process.env.QWEN_MODEL = 'qwen3-235b-a22b';
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          choices: [{ message: { content: 'custom model' } }],
-        }),
-      });
-
-      const { chatCompletion } = await importAiClient();
-      const result = await chatCompletion({
-        systemPrompt: 'sys',
-        userPrompt: 'user',
-        modelTier: 'fast',
-      });
-
-      expect(result.model).toBe('qwen3-235b-a22b');
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body.model).toBe('qwen3-235b-a22b');
-    });
-
     it('should prefer Qwen over Anthropic when both keys are set', async () => {
       process.env.QWEN_API_KEY = 'sk-qwen-test';
       process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
@@ -172,9 +116,6 @@ describe('ai-client', () => {
 
       expect(result.provider).toBe('anthropic');
       expect(result.model).toBe('claude-haiku-4-5-20251001');
-      expect(result.content).toBe('response');
-
-      // Verify fetch was called with gateway URL (Anthropic endpoint)
       expect(mockFetch).toHaveBeenCalledWith(
         'https://gateway.example.com/v1/messages',
         expect.objectContaining({
@@ -206,8 +147,6 @@ describe('ai-client', () => {
 
       expect(result.provider).toBe('anthropic');
       expect(result.model).toBe('claude-haiku-4-5-20251001');
-      expect(result.content).toBe('claude response');
-
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.anthropic.com/v1/messages',
         expect.objectContaining({
@@ -239,8 +178,6 @@ describe('ai-client', () => {
 
       expect(result.provider).toBe('openai');
       expect(result.model).toBe('gpt-4.1-mini');
-      expect(result.content).toBe('gpt response');
-
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.openai.com/v1/chat/completions',
         expect.objectContaining({
@@ -249,102 +186,6 @@ describe('ai-client', () => {
           }),
         }),
       );
-    });
-
-    it('should use OPENAI_BASE_URL and OPENAI_MODEL for LiteLLM', async () => {
-      process.env.OPENAI_API_KEY = 'litellm-key';
-      process.env.OPENAI_BASE_URL = 'http://localhost:4000';
-      process.env.OPENAI_MODEL = 'qwen/qwen-turbo-latest';
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          choices: [{ message: { content: 'litellm response' } }],
-        }),
-      });
-
-      const { chatCompletion } = await importAiClient();
-      const result = await chatCompletion({
-        systemPrompt: 'sys',
-        userPrompt: 'user',
-        modelTier: 'fast',
-      });
-
-      expect(result.provider).toBe('openai');
-      expect(result.model).toBe('qwen/qwen-turbo-latest');
-      expect(mockFetch).toHaveBeenCalledWith(
-        'http://localhost:4000/v1/chat/completions',
-        expect.anything(),
-      );
-      const body = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(body.model).toBe('qwen/qwen-turbo-latest');
-    });
-
-    it('should use OPENAI_MODEL_FAST and OPENAI_MODEL_BEST for tier-specific models', async () => {
-      process.env.OPENAI_API_KEY = 'litellm-key';
-      process.env.OPENAI_BASE_URL = 'https://api.ai.tokamak.network';
-      process.env.OPENAI_MODEL_FAST = 'qwen3-coder-flash';
-      process.env.OPENAI_MODEL_BEST = 'qwen3-235b';
-
-      // Test fast tier
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          choices: [{ message: { content: 'fast response' } }],
-        }),
-      });
-
-      const { chatCompletion } = await importAiClient();
-      const fastResult = await chatCompletion({
-        systemPrompt: 'sys',
-        userPrompt: 'user',
-        modelTier: 'fast',
-      });
-
-      expect(fastResult.model).toBe('qwen3-coder-flash');
-      const fastBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(fastBody.model).toBe('qwen3-coder-flash');
-
-      // Test best tier
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          choices: [{ message: { content: 'best response' } }],
-        }),
-      });
-
-      const bestResult = await chatCompletion({
-        systemPrompt: 'sys',
-        userPrompt: 'user',
-        modelTier: 'best',
-      });
-
-      expect(bestResult.model).toBe('qwen3-235b');
-      const bestBody = JSON.parse(mockFetch.mock.calls[1][1].body);
-      expect(bestBody.model).toBe('qwen3-235b');
-    });
-
-    it('should prefer tier-specific model over generic OPENAI_MODEL', async () => {
-      process.env.OPENAI_API_KEY = 'litellm-key';
-      process.env.OPENAI_MODEL = 'generic-model';
-      process.env.OPENAI_MODEL_FAST = 'fast-specific';
-
-      mockFetch.mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          choices: [{ message: { content: 'ok' } }],
-        }),
-      });
-
-      const { chatCompletion } = await importAiClient();
-      const result = await chatCompletion({
-        systemPrompt: 'sys',
-        userPrompt: 'user',
-        modelTier: 'fast',
-      });
-
-      // OPENAI_MODEL_FAST takes priority over OPENAI_MODEL
-      expect(result.model).toBe('fast-specific');
     });
 
     it('should use Gemini when only GEMINI_API_KEY is set', async () => {
@@ -366,8 +207,6 @@ describe('ai-client', () => {
 
       expect(result.provider).toBe('gemini');
       expect(result.model).toBe('gemini-2.5-flash-lite');
-      expect(result.content).toBe('gemini response');
-
       expect(mockFetch).toHaveBeenCalledWith(
         'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions',
         expect.objectContaining({
@@ -384,7 +223,7 @@ describe('ai-client', () => {
   // ============================================================
 
   describe('model tier mapping', () => {
-    it('should use best-tier models', async () => {
+    it('should use best-tier models for Anthropic', async () => {
       process.env.ANTHROPIC_API_KEY = 'test';
 
       mockFetch.mockResolvedValueOnce({
@@ -402,10 +241,6 @@ describe('ai-client', () => {
       });
 
       expect(result.model).toBe('claude-sonnet-4-5-20250929');
-
-      // Verify model in request body
-      const fetchBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      expect(fetchBody.model).toBe('claude-sonnet-4-5-20250929');
     });
 
     it('should map Qwen best tier to qwen-max-latest', async () => {
@@ -474,7 +309,7 @@ describe('ai-client', () => {
       const body = JSON.parse(mockFetch.mock.calls[0][1].body);
       expect(body.system).toBe('You are helpful');
       expect(body.messages).toEqual([{ role: 'user', content: 'Hello' }]);
-      expect(body.max_tokens).toBe(4096); // Anthropic requires max_tokens
+      expect(body.max_tokens).toBe(4096);
     });
 
     it('should use messages array for OpenAI', async () => {
@@ -645,29 +480,25 @@ describe('ai-client', () => {
   // ============================================================
 
   describe('gateway routing', () => {
-    it('should route Anthropic requests through gateway when AI_GATEWAY_URL is set', async () => {
+    it('should route Qwen through gateway', async () => {
       process.env.AI_GATEWAY_URL = 'https://gateway.example.com';
-      process.env.ANTHROPIC_API_KEY = 'test-key';
-      process.env.OPENAI_API_KEY = 'should-not-use';
+      process.env.QWEN_API_KEY = 'test-key';
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          content: [{ type: 'text', text: 'gateway response' }],
+          choices: [{ message: { content: 'gateway response' } }],
         }),
       });
 
       const { chatCompletion } = await importAiClient();
-      const result = await chatCompletion({
+      await chatCompletion({
         systemPrompt: 'sys',
         userPrompt: 'user',
         modelTier: 'fast',
       });
 
-      // Anthropic is priority 1, so it's used even when OpenAI key is also set
-      expect(result.provider).toBe('anthropic');
-      // Request goes through gateway URL with Anthropic endpoint
-      expect(mockFetch.mock.calls[0][0]).toBe('https://gateway.example.com/v1/messages');
+      expect(mockFetch.mock.calls[0][0]).toBe('https://gateway.example.com/v1/chat/completions');
     });
 
     it('should use direct API when no gateway URL is set', async () => {

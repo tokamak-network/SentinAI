@@ -3,6 +3,13 @@
  *
  * Fallback chain: Qwen > Claude > GPT > Gemini
  * Gateway support: Route through proxy when AI_GATEWAY_URL is set
+ *
+ * Environment variables:
+ *   AI_GATEWAY_URL       (optional) - Route all requests through a gateway/proxy
+ *   QWEN_API_KEY         - Qwen (DashScope) API key
+ *   ANTHROPIC_API_KEY    - Anthropic (Claude) API key
+ *   OPENAI_API_KEY       - OpenAI (GPT) API key
+ *   GEMINI_API_KEY       - Google (Gemini) API key
  */
 
 // =====================================================
@@ -32,7 +39,7 @@ export interface ChatCompletionResult {
 }
 
 // =====================================================
-// Model Mapping
+// Model & Endpoint Mapping
 // =====================================================
 
 const MODEL_MAP: Record<AIProvider, Record<ModelTier, string>> = {
@@ -54,6 +61,13 @@ const MODEL_MAP: Record<AIProvider, Record<ModelTier, string>> = {
   },
 };
 
+const DEFAULT_BASE_URLS: Record<AIProvider, string> = {
+  qwen: 'https://dashscope.aliyuncs.com/compatible-mode',
+  anthropic: 'https://api.anthropic.com',
+  openai: 'https://api.openai.com',
+  gemini: 'https://generativelanguage.googleapis.com',
+};
+
 // =====================================================
 // Provider Detection (Priority: Qwen > Claude > GPT > Gemini)
 // =====================================================
@@ -62,23 +76,20 @@ interface ProviderConfig {
   provider: AIProvider;
   apiKey: string;
   model: string;
-  useGateway: boolean;
-  gatewayUrl?: string;
+  baseUrl: string;
 }
 
 function detectProvider(modelTier: ModelTier): ProviderConfig {
   const gatewayUrl = process.env.AI_GATEWAY_URL;
-  const useGateway = !!gatewayUrl;
 
-  // Priority 1: Qwen (DashScope or any OpenAI-compatible endpoint)
+  // Priority 1: Qwen
   const qwenKey = process.env.QWEN_API_KEY;
   if (qwenKey) {
     return {
       provider: 'qwen',
       apiKey: qwenKey,
-      model: process.env.QWEN_MODEL || MODEL_MAP.qwen[modelTier],
-      useGateway,
-      gatewayUrl,
+      model: MODEL_MAP.qwen[modelTier],
+      baseUrl: gatewayUrl || DEFAULT_BASE_URLS.qwen,
     };
   }
 
@@ -89,23 +100,18 @@ function detectProvider(modelTier: ModelTier): ProviderConfig {
       provider: 'anthropic',
       apiKey: anthropicKey,
       model: MODEL_MAP.anthropic[modelTier],
-      useGateway,
-      gatewayUrl,
+      baseUrl: gatewayUrl || DEFAULT_BASE_URLS.anthropic,
     };
   }
 
-  // Priority 3: OpenAI (GPT / LiteLLM compatible)
+  // Priority 3: OpenAI (GPT)
   const openaiKey = process.env.OPENAI_API_KEY;
   if (openaiKey) {
-    const tierModel = modelTier === 'fast'
-      ? process.env.OPENAI_MODEL_FAST
-      : process.env.OPENAI_MODEL_BEST;
     return {
       provider: 'openai',
       apiKey: openaiKey,
-      model: tierModel || process.env.OPENAI_MODEL || MODEL_MAP.openai[modelTier],
-      useGateway,
-      gatewayUrl,
+      model: MODEL_MAP.openai[modelTier],
+      baseUrl: gatewayUrl || DEFAULT_BASE_URLS.openai,
     };
   }
 
@@ -116,8 +122,7 @@ function detectProvider(modelTier: ModelTier): ProviderConfig {
       provider: 'gemini',
       apiKey: geminiKey,
       model: MODEL_MAP.gemini[modelTier],
-      useGateway,
-      gatewayUrl,
+      baseUrl: gatewayUrl || DEFAULT_BASE_URLS.gemini,
     };
   }
 
@@ -134,11 +139,7 @@ async function callQwen(
   config: ProviderConfig,
   options: ChatCompletionOptions
 ): Promise<ChatCompletionResult> {
-  const baseUrl = config.useGateway && config.gatewayUrl
-    ? config.gatewayUrl
-    : process.env.QWEN_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode';
-
-  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+  const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${config.apiKey}`,
@@ -180,11 +181,7 @@ async function callAnthropic(
   config: ProviderConfig,
   options: ChatCompletionOptions
 ): Promise<ChatCompletionResult> {
-  const baseUrl = config.useGateway && config.gatewayUrl
-    ? config.gatewayUrl
-    : 'https://api.anthropic.com';
-
-  const response = await fetch(`${baseUrl}/v1/messages`, {
+  const response = await fetch(`${config.baseUrl}/v1/messages`, {
     method: 'POST',
     headers: {
       'x-api-key': config.apiKey,
@@ -225,11 +222,7 @@ async function callOpenAI(
   config: ProviderConfig,
   options: ChatCompletionOptions
 ): Promise<ChatCompletionResult> {
-  const baseUrl = config.useGateway && config.gatewayUrl
-    ? config.gatewayUrl
-    : process.env.OPENAI_BASE_URL || 'https://api.openai.com';
-
-  const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+  const response = await fetch(`${config.baseUrl}/v1/chat/completions`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${config.apiKey}`,
@@ -271,11 +264,7 @@ async function callGemini(
   config: ProviderConfig,
   options: ChatCompletionOptions
 ): Promise<ChatCompletionResult> {
-  const baseUrl = config.useGateway && config.gatewayUrl
-    ? config.gatewayUrl
-    : 'https://generativelanguage.googleapis.com';
-
-  const response = await fetch(`${baseUrl}/v1beta/openai/chat/completions`, {
+  const response = await fetch(`${config.baseUrl}/v1beta/openai/chat/completions`, {
     method: 'POST',
     headers: {
       'x-goog-api-key': config.apiKey,
@@ -340,7 +329,7 @@ export function getProviderInfo(): { provider: AIProvider; hasGateway: boolean }
     const config = detectProvider('fast');
     return {
       provider: config.provider,
-      hasGateway: config.useGateway,
+      hasGateway: !!process.env.AI_GATEWAY_URL,
     };
   } catch {
     return null;
