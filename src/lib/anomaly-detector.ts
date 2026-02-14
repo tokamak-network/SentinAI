@@ -80,7 +80,15 @@ function detectZScoreAnomaly(
   const stdDev = calculateStdDev(historicalValues, mean);
   const zScore = calculateZScore(currentValue, mean, stdDev);
 
-  if (Math.abs(zScore) > Z_SCORE_THRESHOLD) {
+  // Special-case: for l2BlockInterval, only treat slowdowns (interval increases)
+  // as anomalies. Faster block production (interval decreases) can be normal
+  // depending on network configuration and should not trigger alerts.
+  const isL2BlockInterval = metric === 'l2BlockInterval';
+  const exceedsThreshold = isL2BlockInterval
+    ? zScore > Z_SCORE_THRESHOLD
+    : Math.abs(zScore) > Z_SCORE_THRESHOLD;
+
+  if (exceedsThreshold) {
     const direction: AnomalyDirection = zScore > 0 ? 'spike' : 'drop';
     return {
       isAnomaly: true,
