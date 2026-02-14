@@ -40,7 +40,7 @@ These 3 variables are all you need to get SentinAI running. Everything else is o
 
 | Priority | Provider | Variable | Models (fast / best) |
 |:---:|---|---|---|
-| 1 | Qwen | `QWEN_API_KEY` | qwen3-coder-flash / qwen3-235b-thinking |
+| 1 | Qwen | `QWEN_API_KEY` | qwen3-coder-flash / qwen3-80b-next |
 | 2 | **Anthropic** (recommended) | `ANTHROPIC_API_KEY` | claude-haiku-4.5 / claude-sonnet-4.5 |
 | 3 | OpenAI | `OPENAI_API_KEY` | gpt-4.1-mini / gpt-4.1 |
 | 4 | Gemini | `GEMINI_API_KEY` | gemini-2.5-flash-lite / gemini-2.5-pro |
