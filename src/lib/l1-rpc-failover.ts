@@ -264,9 +264,12 @@ function initFromEnv(): L1FailoverState {
     consecutiveFailures: 0,
   }));
 
-  // Parse spare URLs for Proxyd backend replacement
+  // Parse spare URLs for Proxyd backend 429 replacement (unified into L1_RPC_URLS)
   const spareUrls: string[] = [];
-  const spareUrlsList = process.env.L1_PROXYD_SPARE_URLS;
+  const spareUrlsList = process.env.L1_RPC_URLS || process.env.L1_PROXYD_SPARE_URLS;
+  if (process.env.L1_PROXYD_SPARE_URLS && !process.env.L1_RPC_URLS) {
+    console.warn('[L1 Failover] L1_PROXYD_SPARE_URLS is deprecated — use L1_RPC_URLS instead');
+  }
   if (spareUrlsList) {
     spareUrls.push(
       ...spareUrlsList
@@ -627,7 +630,7 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
         // Threshold reached — replace with spare URL
         if (state.spareUrls.length === 0) {
           console.error(
-            `[L1 Failover] Backend ${backendName} needs replacement but no spare URLs available (L1_PROXYD_SPARE_URLS)`
+            `[L1 Failover] Backend ${backendName} needs replacement but no spare URLs available (L1_RPC_URLS)`
           );
           return null;
         }
