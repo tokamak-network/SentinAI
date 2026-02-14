@@ -8,7 +8,7 @@
 import { createPublicClient, http } from 'viem';
 import { sepolia } from 'viem/chains';
 import TOML from '@iarna/toml';
-import { runK8sCommand, getNamespace } from '@/lib/k8s-config';
+import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import type {
   L1RpcEndpoint,
   FailoverEvent,
@@ -50,8 +50,12 @@ const DEFAULT_PUBLIC_ENDPOINT = 'https://ethereum-sepolia-rpc.publicnode.com';
 // K8s Component Config
 // ============================================================
 
+/**
+ * Returns the K8s app prefix used for StatefulSet names, labels, and ConfigMaps.
+ * Unified with K8S_APP_PREFIX (previously separate K8S_STATEFULSET_PREFIX).
+ */
 function getStatefulSetPrefix(): string {
-  return process.env.K8S_STATEFULSET_PREFIX || 'sepolia-thanos-stack';
+  return getAppPrefix();
 }
 
 // ============================================================
@@ -836,7 +840,7 @@ async function resolveProxydBackend(
 async function getL2NodesL1RpcFromK8s(): Promise<L2NodeL1RpcStatus[]> {
   try {
     const namespace = getNamespace();
-    const prefix = process.env.K8S_STATEFULSET_PREFIX || 'sepolia-thanos-stack';
+    const prefix = getAppPrefix();
     const components: Array<{ name: string; configMapKey: string }> = [
       { name: 'op-node', configMapKey: 'OP_NODE_L1_ETH_RPC' },
       { name: 'op-batcher', configMapKey: 'OP_BATCHER_L1_ETH_RPC' },

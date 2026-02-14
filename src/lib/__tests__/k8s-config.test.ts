@@ -38,7 +38,6 @@ describe('k8s-config', () => {
       K8S_TOKEN: undefined,
       KUBECONFIG: undefined,
       AWS_REGION: undefined,
-      AWS_DEFAULT_REGION: undefined,
       AWS_PROFILE: undefined,
       K8S_INSECURE_TLS: undefined,
     };

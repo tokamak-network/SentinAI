@@ -71,14 +71,13 @@ function getAwsProfile(): string | undefined {
 /**
  * Resolve AWS region with fallback chain:
  * 1. AWS_REGION env
- * 2. AWS_DEFAULT_REGION env
- * 3. aws configure get region (CLI config, respects AWS_PROFILE)
+ * 2. aws configure get region (CLI config, respects AWS_PROFILE)
  */
 async function resolveAwsRegion(): Promise<string | undefined> {
   if (regionCache) return regionCache;
 
-  // 1. Explicit env vars
-  const envRegion = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION;
+  // 1. Explicit env var
+  const envRegion = process.env.AWS_REGION;
   if (envRegion) {
     if (!isValidShellIdentifier(envRegion)) {
       console.warn(`[K8s Config] Invalid AWS_REGION value: ${envRegion.substring(0, 30)}`);

@@ -52,7 +52,7 @@ describe('l1-rpc-failover', () => {
     // Reset env
     delete process.env.L1_RPC_URLS;
     delete process.env.L1_RPC_URL;
-    delete process.env.K8S_STATEFULSET_PREFIX;
+    delete process.env.K8S_APP_PREFIX;
     delete process.env.SCALING_SIMULATION_MODE;
     delete process.env.AWS_CLUSTER_NAME;
     delete process.env.K8S_API_URL;
@@ -402,7 +402,7 @@ describe('l1-rpc-failover', () => {
     it('should execute kubectl set env for 3 components', async () => {
       process.env.SCALING_SIMULATION_MODE = 'false';
       process.env.AWS_CLUSTER_NAME = 'test-cluster';
-      process.env.K8S_STATEFULSET_PREFIX = 'my-stack';
+      process.env.K8S_APP_PREFIX = 'my-stack';
       mockRunK8sCommand.mockResolvedValue({ stdout: '', stderr: '' });
 
       const result = await updateK8sL1Rpc('https://new-rpc.io');
@@ -509,7 +509,7 @@ describe('l1-rpc-failover', () => {
   describe('Proxyd ConfigMap Integration', () => {
     describe('getL1Components', () => {
       it('should return StatefulSets only', () => {
-        process.env.K8S_STATEFULSET_PREFIX = 'test-stack';
+        process.env.K8S_APP_PREFIX = 'test-stack';
         resetL1FailoverState();
 
         const components = getL1Components();
