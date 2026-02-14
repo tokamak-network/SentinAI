@@ -167,10 +167,9 @@ export async function POST(request: NextRequest) {
     const body: ScalerRequest = await request.json().catch(() => ({}));
     const { targetVcpu: manualTarget, reason: manualReason, dryRun } = body;
 
-    // Extract base URL (In Vercel environment)
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3002';
+    // Extract base URL from request
+    const reqUrl = new URL(request.url);
+    const baseUrl = `${reqUrl.protocol}//${reqUrl.host}`;
 
     let decision;
     let triggeredBy: 'auto' | 'manual' = 'auto';

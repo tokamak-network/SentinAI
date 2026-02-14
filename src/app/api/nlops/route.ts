@@ -53,7 +53,6 @@ export async function POST(request: NextRequest): Promise<NextResponse<NLOpsResp
 }
 
 function getBaseUrl(request: NextRequest): string {
-  if (process.env.NEXT_PUBLIC_BASE_URL) return process.env.NEXT_PUBLIC_BASE_URL;
   const url = new URL(request.url);
   return `${url.protocol}//${url.host}`;
 }
