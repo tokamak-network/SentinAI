@@ -13,6 +13,7 @@
 #
 # Non-interactive mode (CI/CD, user-data):
 #   SENTINAI_L2_RPC_URL=https://rpc.example.com
+#   SENTINAI_AI_GATEWAY_URL=https://...  # 선택 (AI Gateway URL, 미설정 시 공식 Gateway 사용)
 #   SENTINAI_AI_PROVIDER=anthropic     # anthropic(기본), openai, gemini
 #   SENTINAI_AI_KEY=sk-ant-...
 #   SENTINAI_CLUSTER_NAME=my-cluster   # 미설정 시 시뮬레이션 모드
@@ -206,6 +207,7 @@ setup_env() {
       *)         err "지원하지 않는 AI Provider: ${SENTINAI_AI_PROVIDER}. (anthropic, openai, gemini 중 선택)" ;;
     esac
 
+    AI_GATEWAY_URL="${SENTINAI_AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
     AWS_CLUSTER_NAME="${SENTINAI_CLUSTER_NAME:-}"
     DOMAIN_NAME="${SENTINAI_DOMAIN:-}"
     ALERT_WEBHOOK_URL="${SENTINAI_WEBHOOK_URL:-}"
@@ -220,6 +222,13 @@ setup_env() {
     read -rp "  L2 RPC URL (필수): " L2_RPC_URL
     [[ -z "${L2_RPC_URL}" ]] && err "L2_RPC_URL은 필수입니다."
     [[ ! "${L2_RPC_URL}" =~ ^https?:// ]] && err "L2_RPC_URL은 http:// 또는 https://로 시작해야 합니다."
+
+    # AI Gateway URL (선택 — 미입력 시 공식 Gateway 사용)
+    echo ""
+    echo "  AI Gateway URL 설정:"
+    echo "  모든 AI 요청을 Gateway 서버를 통해 라우팅합니다."
+    read -rp "  AI Gateway URL [https://api.ai.tokamak.network]: " AI_GATEWAY_URL
+    AI_GATEWAY_URL="${AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
 
     # AI Provider (필수)
     echo ""
@@ -293,6 +302,7 @@ ENVEOF
   # 사용자 입력값을 안전하게 기록 (셸 확장 없음)
   {
     printf 'L2_RPC_URL=%s\n' "${L2_RPC_URL}"
+    printf 'AI_GATEWAY_URL=%s\n' "${AI_GATEWAY_URL}"
     printf '%s=%s\n' "${ai_key_name}" "${ai_key_value}"
     printf 'AWS_CLUSTER_NAME=%s\n' "${AWS_CLUSTER_NAME:-}"
     printf 'SCALING_SIMULATION_MODE=%s\n' "${scaling_mode}"
