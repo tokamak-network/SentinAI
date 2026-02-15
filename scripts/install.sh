@@ -512,8 +512,10 @@ ENVEOF
   chmod 600 .env.local
   log ".env.local created (permissions: 600)."
 
-  # Generate Caddyfile for HTTPS (if domain is set)
+  # Generate Caddyfile and update docker-compose.yml for HTTPS (if domain is set)
   if [ -n "${DOMAIN_NAME:-}" ]; then
+    local public_url="https://${DOMAIN_NAME}/thanos-sepolia"
+
     cat > Caddyfile << CADDYEOF
 ${DOMAIN_NAME} {
     reverse_proxy sentinai:8080
@@ -526,6 +528,13 @@ ${DOMAIN_NAME} {
 }
 CADDYEOF
     log "Caddyfile created (domain: ${DOMAIN_NAME})."
+
+    # Update docker-compose.yml public URLs for production HTTPS
+    if [ -f docker-compose.yml ]; then
+      sed -i "s|NEXT_PUBLIC_API_BASE_URL=http://localhost:3002/thanos-sepolia|NEXT_PUBLIC_API_BASE_URL=${public_url}|" docker-compose.yml
+      sed -i "s|NEXT_PUBLIC_APP_URL=http://localhost:3002/thanos-sepolia|NEXT_PUBLIC_APP_URL=${public_url}|" docker-compose.yml
+      log "docker-compose.yml updated (NEXT_PUBLIC_*_URL → ${public_url})."
+    fi
   fi
 }
 
