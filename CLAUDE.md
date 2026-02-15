@@ -97,7 +97,7 @@ Enabled automatically when `L2_RPC_URL` is set. Override with `AGENT_LOOP_ENABLE
 - `predictive-scaler.ts`: AI time-series prediction via Fast Tier (`qwen3-80b-next`, 1.8s response)
 
 **3-Layer Anomaly Detection** — Statistical → AI → Alert pipeline:
-1. `anomaly-detector.ts`: Z-Score detection (threshold: Z > 2.5)
+1. `anomaly-detector.ts`: Z-Score detection (threshold: Z > 3.0)
 2. `anomaly-ai-analyzer.ts`: AI semantic analysis (Fast Tier: `qwen3-80b-next`)
 3. `alert-dispatcher.ts`: Slack/Webhook dispatch. Events in `anomaly-event-store.ts` (in-memory).
 

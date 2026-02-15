@@ -13,8 +13,8 @@ import { AnomalyResult, AnomalyMetric, AnomalyDirection } from '@/types/anomaly'
 // Configuration
 // ============================================================================
 
-/** Z-Score anomaly threshold (anomaly if |z| > 2.5) */
-const Z_SCORE_THRESHOLD = 2.5;
+/** Z-Score anomaly threshold (anomaly if |z| > 3.0) */
+const Z_SCORE_THRESHOLD = 3.0;
 
 /** Block plateau detection time (seconds) - anomaly if no change for 2+ minutes */
 const BLOCK_PLATEAU_SECONDS = 120;

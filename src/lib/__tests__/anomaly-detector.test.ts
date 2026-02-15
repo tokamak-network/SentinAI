@@ -133,11 +133,11 @@ describe('anomaly-detector', () => {
   // ========================================================================
 
   describe('Z-Score Spike Detection (CPU)', () => {
-    it('should detect CPU spike when Z-Score > 2.5', () => {
+    it('should detect CPU spike when Z-Score > 3.0', () => {
       // Create stable history: 10, 11, 12, 13, 14, 15, 16, 17, 18, 19
       // Mean = 14.5, StdDev ≈ 3.03
       const history = generateHistory(10, { cpuUsage: 14 });
-      // Spike to 28 → Z = (28 - 14.5) / 3.03 ≈ 4.5 (> 2.5)
+      // Spike to 28 → Z = (28 - 14.5) / 3.03 ≈ 4.5 (> 3.0)
       const current = createMetric({ cpuUsage: 28 });
 
       const anomalies = detectAnomalies(current, history);
@@ -153,7 +153,7 @@ describe('anomaly-detector', () => {
       // History: 90, 91, 92, 93, 94, 95, 96, 97, 98, 99
       // Mean ≈ 94.5, StdDev ≈ 3.03
       const history = generateHistory(10, { cpuUsage: 94 });
-      // Current = 95 → Z = (95 - 94.5) / 3.03 ≈ 0.16 (< 2.5)
+      // Current = 95 → Z = (95 - 94.5) / 3.03 ≈ 0.16 (< 3.0)
       const current = createMetric({ cpuUsage: 95 });
 
       const anomalies = detectAnomalies(current, history);
@@ -164,7 +164,7 @@ describe('anomaly-detector', () => {
   });
 
   describe('Z-Score Drop Detection (CPU)', () => {
-    it('should detect CPU drop when Z-Score < -2.5', () => {
+    it('should detect CPU drop when Z-Score < -3.0', () => {
       // Create stable history around 50: 45, 46, 47, 48, 49, 50, 51, 52, 53, 54
       // Mean = 49.5, StdDev ≈ 3.03
       const history = generateHistory(10, { cpuUsage: 49 });
@@ -183,7 +183,7 @@ describe('anomaly-detector', () => {
     it('should detect TxPool spike', () => {
       // Create stable history around 10
       const history = generateHistory(10, { txPoolPending: 10 });
-      // Spike to 40 (extreme value for Z > 2.5)
+      // Spike to 40 (extreme value for Z > 3.0)
       const current = createMetric({ txPoolPending: 40 });
 
       const anomalies = detectAnomalies(current, history);
@@ -435,7 +435,7 @@ describe('anomaly-detector', () => {
 
       // Current has extreme values that should trigger multiple anomalies
       const current = createMetric({
-        cpuUsage: 40, // Large spike (Z >> 2.5)
+        cpuUsage: 40, // Large spike (Z >> 3.0)
         gasUsedRatio: 1.0, // Large spike
         blockInterval: 5.0, // Large spike
       });
@@ -483,7 +483,7 @@ describe('anomaly-detector', () => {
       const config = getDetectorConfig();
 
       expect(config).toBeDefined();
-      expect(config.zScoreThreshold).toBe(2.5);
+      expect(config.zScoreThreshold).toBe(3.0);
       expect(config.blockPlateauSeconds).toBe(120);
       expect(config.txPoolMonotonicSeconds).toBe(300);
       expect(config.minHistoryPoints).toBe(5);
@@ -495,4 +495,4 @@ describe('anomaly-detector', () => {
 // Constants for Z-Score Threshold (used in tests)
 // ============================================================================
 
-const Z_SCORE_THRESHOLD = 2.5;
+const Z_SCORE_THRESHOLD = 3.0;
