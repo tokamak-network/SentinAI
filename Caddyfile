@@ -1,0 +1,18 @@
+# SentinAI Caddy Configuration
+# Auto HTTPS via Let's Encrypt (certificate auto-issued and renewed)
+#
+# Domain is injected via DOMAIN env var in docker-compose:
+#   DOMAIN=sentinai.tokamak.network docker compose --profile production up -d
+#
+# Default: localhost (for local testing without HTTPS)
+
+{$DOMAIN:localhost} {
+    reverse_proxy sentinai:8080
+
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}

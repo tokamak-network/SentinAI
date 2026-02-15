@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# SentinAI EC2 Installation Script
+# SentinAI Installer
 # Supports: Amazon Linux 2023, Ubuntu 22.04/24.04
 #
 # Usage:
@@ -16,7 +16,7 @@
 #   SENTINAI_AI_PROVIDER=anthropic     # anthropic(기본), openai, gemini
 #   SENTINAI_AI_KEY=sk-ant-...
 #   SENTINAI_CLUSTER_NAME=my-cluster   # 미설정 시 시뮬레이션 모드
-#   SENTINAI_TUNNEL_TOKEN=eyJ...       # 선택
+#   SENTINAI_DOMAIN=sentinai.example.com  # 선택 (HTTPS 도메인)
 #   SENTINAI_WEBHOOK_URL=https://...   # 선택
 # ============================================================
 
@@ -182,7 +182,7 @@ setup_env() {
   fi
 
   local L2_RPC_URL="" ai_key_name="" ai_key_value=""
-  local AWS_CLUSTER_NAME="" CLOUDFLARE_TUNNEL_TOKEN="" ALERT_WEBHOOK_URL=""
+  local AWS_CLUSTER_NAME="" DOMAIN_NAME="" ALERT_WEBHOOK_URL=""
 
   # --- Partial env var detection: error early ---
   if [ -n "${SENTINAI_L2_RPC_URL:-}" ] && [ -z "${SENTINAI_AI_KEY:-}" ]; then
@@ -207,7 +207,7 @@ setup_env() {
     esac
 
     AWS_CLUSTER_NAME="${SENTINAI_CLUSTER_NAME:-}"
-    CLOUDFLARE_TUNNEL_TOKEN="${SENTINAI_TUNNEL_TOKEN:-}"
+    DOMAIN_NAME="${SENTINAI_DOMAIN:-}"
     ALERT_WEBHOOK_URL="${SENTINAI_WEBHOOK_URL:-}"
 
   # --- Interactive mode ---
@@ -256,12 +256,16 @@ setup_env() {
       warn "AWS_CLUSTER_NAME 미설정. K8s 모니터링 없이 시뮬레이션 모드로 실행됩니다."
     fi
 
-    # Cloudflare Tunnel (선택)
+    # HTTPS Domain (선택 — Caddy auto-certificate)
     echo ""
-    echo "  Cloudflare Tunnel을 사용하면 HTTPS + 인증으로 대시보드를 공개할 수 있습니다."
-    echo "  사전 설정: https://one.dash.cloudflare.com → Networks → Tunnels"
-    read -rsp "  Cloudflare Tunnel Token (선택, Enter로 건너뛰기): " CLOUDFLARE_TUNNEL_TOKEN
-    echo ""
+    echo "  HTTPS 도메인 설정 (Caddy가 Let's Encrypt 인증서를 자동 발급합니다):"
+    echo "  서버의 Public IP가 DNS에 등록되어 있어야 합니다."
+    read -rp "  Public Domain (e.g., sentinai.tokamak.network, Enter로 건너뛰기): " DOMAIN_NAME
+    if [ -z "${DOMAIN_NAME}" ]; then
+      info "도메인 미설정. HTTP 전용 모드 (localhost:3002)."
+    else
+      info "포트 80(HTTP), 443(HTTPS)이 방화벽/Security List에서 열려 있어야 합니다."
+    fi
 
     # Slack Webhook (선택)
     read -rp "  Slack Webhook URL (선택, Enter로 건너뛰기): " ALERT_WEBHOOK_URL
@@ -294,11 +298,6 @@ ENVEOF
     printf 'SCALING_SIMULATION_MODE=%s\n' "${scaling_mode}"
   } >> .env.local
 
-  # Cloudflare Tunnel (선택)
-  if [ -n "${CLOUDFLARE_TUNNEL_TOKEN:-}" ]; then
-    printf '\n# Cloudflare Tunnel\nCLOUDFLARE_TUNNEL_TOKEN=%s\n' "${CLOUDFLARE_TUNNEL_TOKEN}" >> .env.local
-  fi
-
   # Slack webhook (선택)
   if [ -n "${ALERT_WEBHOOK_URL:-}" ]; then
     printf '\n# Alert\nALERT_WEBHOOK_URL=%s\n' "${ALERT_WEBHOOK_URL}" >> .env.local
@@ -306,6 +305,22 @@ ENVEOF
 
   chmod 600 .env.local
   log ".env.local 생성 완료 (권한: 600)."
+
+  # Generate Caddyfile for HTTPS (if domain is set)
+  if [ -n "${DOMAIN_NAME:-}" ]; then
+    cat > Caddyfile << CADDYEOF
+${DOMAIN_NAME} {
+    reverse_proxy sentinai:8080
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        Referrer-Policy "strict-origin-when-cross-origin"
+    }
+}
+CADDYEOF
+    log "Caddyfile 생성 완료 (도메인: ${DOMAIN_NAME})."
+  fi
 }
 
 # ============================================================
@@ -314,13 +329,13 @@ ENVEOF
 start_services() {
   cd "${INSTALL_DIR}"
 
-  # Cloudflare Tunnel 토큰이 있으면 tunnel profile 활성화
+  # Caddy HTTPS (production profile) if Caddyfile exists
   local -a compose_args=()
-  local has_tunnel="false"
-  if grep -q "CLOUDFLARE_TUNNEL_TOKEN=." .env.local 2>/dev/null; then
-    compose_args=(--profile tunnel)
-    has_tunnel="true"
-    log "Cloudflare Tunnel 활성화됨."
+  local has_caddy="false"
+  if [ -f Caddyfile ]; then
+    compose_args=(--profile production)
+    has_caddy="true"
+    log "Caddy HTTPS 활성화됨."
   fi
 
   log "Docker 이미지 빌드 중... (첫 빌드 시 5-10분 소요)"
@@ -353,13 +368,17 @@ start_services() {
         public_ip=""
       fi
       local profile_flag=""
-      if [ "${has_tunnel}" = "true" ]; then
-        profile_flag=" --profile tunnel"
-        info "대시보드: Cloudflare Tunnel 경유 (HTTPS)"
+      if [ "${has_caddy}" = "true" ]; then
+        profile_flag=" --profile production"
+        # Extract domain from Caddyfile (first word of first non-comment, non-empty line)
+        local caddy_domain
+        caddy_domain=$(grep -v '^#' Caddyfile 2>/dev/null | grep -v '^\s*$' | head -1 | awk '{print $1}' || echo "")
+        info "대시보드: https://${caddy_domain}/thanos-sepolia"
+        info "Caddy 로그: sudo docker logs sentinai-caddy -f"
       elif [ -n "${public_ip}" ]; then
-        info "대시보드: http://${public_ip}:3002"
+        info "대시보드: http://${public_ip}:3002/thanos-sepolia"
       else
-        info "대시보드: http://localhost:3002"
+        info "대시보드: http://localhost:3002/thanos-sepolia"
       fi
       info "로그 확인: cd ${INSTALL_DIR} && sudo docker compose${profile_flag} logs -f"
       info "서비스 중지: cd ${INSTALL_DIR} && sudo docker compose${profile_flag} down"
@@ -397,7 +416,7 @@ check_imds_hint() {
 main() {
   echo ""
   echo -e "${BOLD}=========================================${NC}"
-  echo -e "${BOLD}  SentinAI EC2 Installer${NC}"
+  echo -e "${BOLD}  SentinAI Installer${NC}"
   echo -e "${BOLD}=========================================${NC}"
   echo ""
 
