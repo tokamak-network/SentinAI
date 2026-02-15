@@ -120,13 +120,18 @@ export interface ScalingConfig {
   serviceName: string;
 }
 
+// Build StatefulSet/Service name from prefix
+// e.g., K8S_STATEFULSET_PREFIX=sepolia-thanos-stack → sepolia-thanos-stack-op-geth
+const stsPrefix = process.env.K8S_STATEFULSET_PREFIX;
+const defaultStsName = stsPrefix ? `${stsPrefix}-op-geth` : 'op-geth';
+
 // Default Scaling Configuration
 export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
   minVcpu: 1,
   maxVcpu: 8,
   cooldownSeconds: parseInt(process.env.SCALING_COOLDOWN_SECONDS ?? (process.env.NODE_ENV === 'development' ? '10' : '300')),
   namespace: process.env.K8S_NAMESPACE || 'default',
-  statefulSetName: process.env.K8S_STATEFULSET_NAME || 'op-geth',
+  statefulSetName: process.env.K8S_STATEFULSET_NAME || defaultStsName,
   containerIndex: 0,
   weights: {
     cpu: 0.3,
@@ -139,7 +144,7 @@ export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
     normal: parseInt(process.env.SCALING_NORMAL_THRESHOLD ?? '70'),
     critical: parseInt(process.env.SCALING_CRITICAL_THRESHOLD ?? '85'),
   },
-  serviceName: 'sepolia-thanos-stack-op-geth',
+  serviceName: process.env.K8S_SERVICE_NAME || defaultStsName,
 };
 
 // Simulation Mode Configuration

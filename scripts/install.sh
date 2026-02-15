@@ -24,6 +24,7 @@
 #     AWS_REGION=ap-northeast-2          # AWS region (auto-detect from EC2 IMDS if omitted)
 #     K8S_NAMESPACE=default              # K8s namespace
 #     K8S_APP_PREFIX=op                  # K8s pod label prefix
+#     K8S_STATEFULSET_PREFIX=            # StatefulSet name prefix (e.g., sepolia-thanos-stack)
 #     L1_RPC_URLS=https://...            # Comma-separated spare L1 RPC endpoints
 #     L1_PROXYD_ENABLED=true             # L1 Proxyd ConfigMap integration
 #     L1_PROXYD_CONFIGMAP_NAME=name      # Proxyd ConfigMap (auto-detected if omitted)
@@ -257,6 +258,7 @@ setup_env() {
     AI_GATEWAY_URL="${AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
     K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
     K8S_APP_PREFIX="${K8S_APP_PREFIX:-op}"
+    K8S_STATEFULSET_PREFIX="${K8S_STATEFULSET_PREFIX:-}"
     # All other vars (AWS_CLUSTER_NAME, L1_RPC_URLS, EOA, etc.)
     # are read directly from the environment — no mapping needed.
 
@@ -323,6 +325,8 @@ setup_env() {
       K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
       read -rp "  K8S_APP_PREFIX [op]: " K8S_APP_PREFIX
       K8S_APP_PREFIX="${K8S_APP_PREFIX:-op}"
+      read -rp "  K8S_STATEFULSET_PREFIX (e.g., sepolia-thanos-stack, press Enter if none): " K8S_STATEFULSET_PREFIX
+      K8S_STATEFULSET_PREFIX="${K8S_STATEFULSET_PREFIX:-}"
 
       # AWS credentials for EKS access
       echo ""
@@ -405,6 +409,7 @@ setup_env() {
   : "${AWS_CLUSTER_NAME:=}"
   : "${K8S_NAMESPACE:=default}"
   : "${K8S_APP_PREFIX:=op}"
+  : "${K8S_STATEFULSET_PREFIX:=}"
   : "${AWS_ACCESS_KEY_ID:=}"
   : "${AWS_SECRET_ACCESS_KEY:=}"
   : "${AWS_REGION:=}"
@@ -444,6 +449,7 @@ ENVEOF
     printf 'AWS_CLUSTER_NAME=%s\n' "${AWS_CLUSTER_NAME:-}"
     printf 'K8S_NAMESPACE=%s\n' "${K8S_NAMESPACE}"
     printf 'K8S_APP_PREFIX=%s\n' "${K8S_APP_PREFIX}"
+    [ -n "${K8S_STATEFULSET_PREFIX}" ] && printf 'K8S_STATEFULSET_PREFIX=%s\n' "${K8S_STATEFULSET_PREFIX}"
     [ -n "${AWS_ACCESS_KEY_ID}" ] && printf 'AWS_ACCESS_KEY_ID=%s\n' "${AWS_ACCESS_KEY_ID}"
     [ -n "${AWS_SECRET_ACCESS_KEY}" ] && printf 'AWS_SECRET_ACCESS_KEY=%s\n' "${AWS_SECRET_ACCESS_KEY}"
     [ -n "${AWS_REGION}" ] && printf 'AWS_REGION=%s\n' "${AWS_REGION}"
