@@ -101,11 +101,11 @@ export async function GET(request: NextRequest) {
     // Return HTML page
     const page = `
       <!DOCTYPE html>
-      <html lang="ko">
+      <html lang="en">
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>SentinAI 일일 리포트 - ${date}</title>
+        <title>SentinAI Daily Report - ${date}</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <style>
           body {
@@ -130,8 +130,8 @@ export async function GET(request: NextRequest) {
             <div class="border-b-2 border-blue-200 pb-6 mb-8">
               <div class="flex items-center justify-between">
                 <div>
-                  <h1 class="text-4xl font-bold text-blue-600 mb-2">📊 SentinAI 일일 리포트</h1>
-                  <p class="text-gray-600">생성일: ${date}</p>
+                  <h1 class="text-4xl font-bold text-blue-600 mb-2">SentinAI Daily Report</h1>
+                  <p class="text-gray-600">Generated: ${date}</p>
                 </div>
               </div>
             </div>
@@ -146,7 +146,7 @@ export async function GET(request: NextRequest) {
               <p>🤖 SentinAI - Optimism L2 Node Monitoring & Auto-Scaling</p>
               <p class="mt-2">
                 <a href="https://sentinai.tokamak.network/thanos-sepolia" class="text-blue-600 hover:underline">
-                  대시보드로 돌아가기
+                  Back to Dashboard
                 </a>
               </p>
             </div>

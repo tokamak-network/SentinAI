@@ -14,7 +14,7 @@ export interface ModelDef {
   modelName: string;
   tier: ModelTier;
   description: string;
-  // 가격 (per 1M tokens)
+  // Pricing (per 1M tokens)
   pricing: {
     inputCost: number;
     outputCost: number;
@@ -138,7 +138,7 @@ export const TEST_MODELS_QWEN_VS_GPT: ModelDef[] = [
  * Preset configurations for benchmarking
  */
 export const BENCHMARK_PRESETS = {
-  // 빠른 테스트 (비용 최소) - All Providers Fast Models
+  // Quick test (minimal cost) - All Providers Fast Models
   'quick': {
     models: [
       'qwen3-coder-flash',
@@ -148,7 +148,7 @@ export const BENCHMARK_PRESETS = {
     description: 'Quick test: Fast models (Qwen/GPT-5.2) × 1 iteration (~5 min)',
   },
 
-  // 표준 테스트 (권장) - All Providers with GPT-5.2
+  // Standard test (recommended) - All Providers with GPT-5.2
   'standard': {
     models: [
       'qwen3-coder-flash',
@@ -162,7 +162,7 @@ export const BENCHMARK_PRESETS = {
     description: 'Standard: Qwen & GPT-5.2 comparison × 1 iteration (~15 min)',
   },
 
-  // 완전 테스트 - All Models (Qwen + GPT + Gemini)
+  // Comprehensive test - All Models (Qwen + GPT + Gemini)
   'comprehensive': {
     models: [
       'qwen3-coder-flash',
@@ -178,7 +178,7 @@ export const BENCHMARK_PRESETS = {
     description: 'Comprehensive: All models (Qwen/GPT/Gemini) × 1 iteration (~30 min)',
   },
 
-  // 비용 최적화 테스트 - Qwen Only (Cheapest)
+  // Cost-focused test - Qwen Only (Cheapest)
   'cost-focused': {
     models: [
       'qwen3-coder-flash',
@@ -188,7 +188,7 @@ export const BENCHMARK_PRESETS = {
     description: 'Cost-focused: Qwen models only (~3 min, lowest cost)',
   },
 
-  // 품질 최적화 테스트 - GPT-5.2 Series
+  // Quality-focused test - GPT-5.2 Series
   'quality-focused': {
     models: [
       'gpt-5.2',
@@ -199,7 +199,7 @@ export const BENCHMARK_PRESETS = {
     description: 'Quality-focused: GPT-5.2 series × 2 iterations (~20 min)',
   },
 
-  // Qwen vs GPT-5.2 비교 (최신 비교)
+  // Qwen vs GPT-5.2 comparison (latest)
   'provider-comparison': {
     models: [
       'qwen3-coder-flash',

@@ -231,16 +231,16 @@ describe('cost-optimizer', () => {
       const recommendations: CostRecommendation[] = [
         {
           type: 'downscale',
-          title: '평균 2 vCPU로 다운스케일',
-          description: '평균 사용량이 2 vCPU 수준',
+          title: 'Downscale to average 2 vCPU',
+          description: 'Average usage is at the 2 vCPU level',
           estimatedSavings: Math.round(currentCost - optimizedCost),
           projectedCost: optimizedCost,
           riskLevel: 'low',
           implementationSteps: [
-            'Max vCPU 2로 설정',
-            '일일 모니터링 진행',
+            'Set max vCPU to 2',
+            'Perform daily monitoring',
           ],
-          riskAssessment: '위험 없음',
+          riskAssessment: 'No risk',
         },
       ];
 

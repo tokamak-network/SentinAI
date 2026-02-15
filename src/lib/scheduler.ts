@@ -101,7 +101,7 @@ export async function initializeScheduler(): Promise<void> {
         if (result.success) {
           console.log(`[Scheduler] Daily report generated: ${result.reportPath}`);
 
-          // Deliver report via Slack (신규 추가)
+          // Deliver report via Slack
           const yesterday = new Date();
           yesterday.setDate(yesterday.getDate() - 1);
           const deliveryResult = await deliverDailyReport(yesterday);

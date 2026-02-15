@@ -39,29 +39,29 @@ export const _testHooks = {
 // Export Functions
 // ============================================================
 
-/** 현재 오케스트레이션 상태 조회 (복사본 반환) */
+/** Get current orchestration state (returns a copy) */
 export function getSwapState(): SwapState {
   return { ...swapState, phaseDurations: { ...swapState.phaseDurations } };
 }
 
-/** 스왑 진행 중 여부 (idle/completed/failed 이외) */
+/** Whether a swap is in progress (any phase other than idle/completed/failed) */
 export function isSwapInProgress(): boolean {
   return !['idle', 'completed', 'failed'].includes(swapState.phase);
 }
 
-/** 상태 초기화 (테스트/디버깅용) */
+/** Reset state (for testing/debugging) */
 export function resetSwapState(): void {
   swapState = { ...INITIAL_SWAP_STATE, phaseDurations: {} };
 }
 
 /**
- * 메인 오케스트레이션: Zero-Downtime Scaling
+ * Main orchestration: Zero-Downtime Scaling
  *
- * 1. Standby Pod 생성 (목표 리소스)
- * 2. Ready 대기 (readinessProbe + RPC L7 체크)
- * 3. 트래픽 전환 (Service selector)
- * 4. 기존 Pod 정리
- * 5. StatefulSet spec 동기화
+ * 1. Create standby Pod (with target resources)
+ * 2. Wait for ready (readinessProbe + RPC L7 check)
+ * 3. Switch traffic (Service selector)
+ * 4. Cleanup old Pod
+ * 5. Sync StatefulSet spec
  */
 export async function zeroDowntimeScale(
   targetVcpu: number,
@@ -184,10 +184,10 @@ function recordPhaseDuration(phase: SwapPhase, startTime: number): void {
 // ============================================================
 
 /**
- * Phase 1: 목표 리소스로 standby Pod 생성
+ * Phase 1: Create standby Pod with target resources
  *
- * 기존 StatefulSet Pod의 spec을 기반으로 리소스만 변경한 독립 Pod을 생성한다.
- * PVC는 emptyDir로 교체 (snap sync).
+ * Creates an independent Pod based on the existing StatefulSet Pod spec with only resources changed.
+ * PVCs are replaced with emptyDir (snap sync).
  */
 async function createStandbyPod(
   targetVcpu: number,
@@ -196,17 +196,17 @@ async function createStandbyPod(
 ): Promise<string> {
   const { namespace, statefulSetName, containerIndex } = config;
 
-  // 1. 기존 active Pod spec 가져오기
+  // 1. Get existing active Pod spec
   const { stdout: podJson } = await runK8sCommand(
     `get pod ${statefulSetName}-0 -n ${namespace} -o json`,
     { timeout: 30000 }
   );
   const podSpec = JSON.parse(podJson);
 
-  // 2. Standby Pod 이름 생성
+  // 2. Generate standby Pod name
   const standbyPodName = `${statefulSetName}-standby-${Date.now()}`;
 
-  // 3. Pod manifest 조립
+  // 3. Assemble Pod manifest
   const manifest = {
     apiVersion: 'v1',
     kind: 'Pod',
@@ -258,10 +258,10 @@ async function createStandbyPod(
 }
 
 /**
- * Phase 2: Pod Ready + RPC L7 체크
+ * Phase 2: Pod Ready + RPC L7 check
  *
- * 10초 간격으로 폴링하며 최대 5분 대기.
- * K8s readinessProbe 통과 + eth_blockNumber RPC 응답 확인.
+ * Polls every 10 seconds with a maximum 5-minute timeout.
+ * Verifies K8s readinessProbe passed + eth_blockNumber RPC response.
  */
 async function waitForReady(
   podName: string,
@@ -274,7 +274,7 @@ async function waitForReady(
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      // 1. Pod Ready 상태 확인
+      // 1. Check Pod Ready status
       const { stdout: readyStatus } = await runK8sCommand(
         `get pod ${podName} -n ${namespace} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'`,
         { timeout: 10000 }
@@ -285,14 +285,14 @@ async function waitForReady(
         continue;
       }
 
-      // 2. Pod IP 가져오기
+      // 2. Get Pod IP
       const { stdout: podIpRaw } = await runK8sCommand(
         `get pod ${podName} -n ${namespace} -o jsonpath='{.status.podIP}'`,
         { timeout: 10000 }
       );
       const podIp = podIpRaw.replace(/'/g, '').trim();
 
-      // 3. RPC L7 체크 (kubectl exec로 localhost 호출)
+      // 3. RPC L7 check (call localhost via kubectl exec)
       const { stdout: rpcResponse } = await runK8sCommand(
         `exec ${podName} -n ${namespace} -- wget -qO- --timeout=5 http://localhost:8545 --post-data='{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'`,
         { timeout: 15000 }
@@ -325,11 +325,11 @@ async function waitForReady(
 }
 
 /**
- * Phase 3: Service selector 변경으로 트래픽 전환
+ * Phase 3: Switch traffic by changing Service selector
  *
- * 1. Service에 slot selector가 없으면 초기 설정
- * 2. Standby Pod label → slot=active
- * 3. Old Pod label → slot=draining (트래픽 즉시 전환)
+ * 1. Initialize slot selector on Service if not present
+ * 2. Standby Pod label -> slot=active
+ * 3. Old Pod label -> slot=draining (traffic switches immediately)
  */
 async function switchTraffic(
   newPodName: string,
@@ -337,7 +337,7 @@ async function switchTraffic(
 ): Promise<TrafficSwitchResult> {
   const { namespace, serviceName, statefulSetName } = config;
 
-  // 1. 현재 Service selector 확인
+  // 1. Check current Service selector
   const { stdout: serviceJson } = await runK8sCommand(
     `get service ${serviceName} -n ${namespace} -o json`,
     { timeout: 10000 }
@@ -345,7 +345,7 @@ async function switchTraffic(
   const service = JSON.parse(serviceJson);
   const previousSelector = { ...service.spec.selector };
 
-  // 2. slot selector가 없으면 초기 설정
+  // 2. Initialize slot selector if not present
   if (!previousSelector.slot) {
     await runK8sCommand(
       `label pod ${statefulSetName}-0 -n ${namespace} slot=active --overwrite`,
@@ -357,13 +357,13 @@ async function switchTraffic(
     );
   }
 
-  // 3. Standby Pod → active
+  // 3. Standby Pod -> active
   await runK8sCommand(
     `label pod ${newPodName} -n ${namespace} slot=active --overwrite`,
     { timeout: 10000 }
   );
 
-  // 4. Old Pod → draining (Service는 slot=active만 선택하므로 트래픽 즉시 전환)
+  // 4. Old Pod -> draining (Service selects only slot=active, so traffic switches immediately)
   await runK8sCommand(
     `label pod ${statefulSetName}-0 -n ${namespace} slot=draining --overwrite`,
     { timeout: 10000 }
@@ -378,14 +378,14 @@ async function switchTraffic(
 }
 
 /**
- * Phase 4: 기존 Pod graceful 종료
+ * Phase 4: Gracefully terminate old Pod
  *
- * 30초 drain 대기 후 삭제.
+ * Wait 30 seconds for drain, then delete.
  */
 async function cleanupOldPod(podName: string, config: ScalingConfig): Promise<void> {
   const { namespace } = config;
 
-  // Drain 대기
+  // Wait for drain
   await _testHooks.sleep(30000);
 
   await runK8sCommand(
@@ -400,10 +400,10 @@ async function cleanupOldPod(podName: string, config: ScalingConfig): Promise<vo
 }
 
 /**
- * Phase 5: StatefulSet spec 동기화
+ * Phase 5: Sync StatefulSet spec
  *
- * Pod를 직접 조작했으므로, StatefulSet의 선언적 spec을 실제 상태와 일치시킨다.
- * updateStrategy: OnDelete 설정 필수 (자동 Pod 교체 방지).
+ * Since the Pod was manipulated directly, sync the StatefulSet's declarative spec with actual state.
+ * Requires updateStrategy: OnDelete (to prevent automatic Pod replacement).
  */
 async function syncStatefulSet(
   targetVcpu: number,
@@ -426,14 +426,14 @@ async function syncStatefulSet(
 }
 
 /**
- * 롤백: standby Pod 삭제 + 기존 Pod label 복원
+ * Rollback: delete standby Pod + restore old Pod labels
  *
- * 트래픽 전환 전 실패 시 기존 Pod에 영향 없음.
+ * If failure occurs before traffic switch, the old Pod is unaffected.
  */
 async function rollback(config: ScalingConfig): Promise<void> {
   const { namespace, statefulSetName } = config;
 
-  // Standby Pod 삭제
+  // Delete standby Pod
   if (swapState.standbyPodName) {
     try {
       await runK8sCommand(
@@ -445,7 +445,7 @@ async function rollback(config: ScalingConfig): Promise<void> {
     }
   }
 
-  // 기존 Pod label 복원
+  // Restore old Pod labels
   try {
     await runK8sCommand(
       `label pod ${statefulSetName}-0 -n ${namespace} slot=active --overwrite`,

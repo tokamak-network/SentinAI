@@ -26,80 +26,80 @@ function buildDailyReportSystemPrompt(): string {
   const plugin = getChainPlugin();
   return `${plugin.aiPrompts.dailyReportContext}
 
-보고서 구조 (정확히 이 형식을 따를 것):
+Report structure (follow this format exactly):
 
-# SentinAI 일일 운영 보고서 — {날짜}
+# SentinAI Daily Operations Report — {date}
 
-## 📊 Executive Summary
-- 운영 상태: [정상/경고/주의/위험]
-- 전체 가용성: [%]
-- 주요 이슈: [있음/없음]
+## Executive Summary
+- Operational status: [Normal/Warning/Caution/Critical]
+- Overall availability: [%]
+- Major issues: [Yes/None]
 
-한 문장 요약: (한 줄)
-
----
-
-## 📈 핵심 지표 (Key Metrics)
-
-| 지표 | 평균 | 최고 | 상태 |
-|------|------|------|------|
-| CPU 사용률 | XX% | XX% | 🟢/🟡/🔴 |
-| TxPool Pending | X | X | 🟢/🟡/🔴 |
-| Gas Used Ratio | XX% | XX% | 🟢/🟡/🔴 |
-| 블록 간격 | X초 | X초 | 🟢/🟡/🔴 |
-
-**분석:**
-- CPU: (분석 내용)
-- TxPool: (분석 내용)
-- Gas: (분석 내용)
-- 블록: (분석 내용)
+One-line summary: (single line)
 
 ---
 
-## ⚙️ 리소스 스케일링 리뷰
+## Key Metrics
 
-**스케일링 이벤트:**
-- (있으면 이벤트 나열, 없으면 "없음")
+| Metric | Average | Peak | Status |
+|--------|---------|------|--------|
+| CPU Usage | XX% | XX% | Normal/Caution/Critical |
+| TxPool Pending | X | X | Normal/Caution/Critical |
+| Gas Used Ratio | XX% | XX% | Normal/Caution/Critical |
+| Block Interval | Xs | Xs | Normal/Caution/Critical |
 
-**현재 리소스 평가:**
-- vCPU 상태: (평가)
-- 메모리 사용: (평가)
-- 권고사항: (있으면 기술)
+**Analysis:**
+- CPU: (analysis details)
+- TxPool: (analysis details)
+- Gas: (analysis details)
+- Block: (analysis details)
 
 ---
 
-## ⚠️ 이상 징후 & 알람
+## Resource Scaling Review
 
-**발견된 이슈:**
+**Scaling events:**
+- (list events if any, otherwise "None")
+
+**Current resource assessment:**
+- vCPU status: (assessment)
+- Memory usage: (assessment)
+- Recommendations: (describe if any)
+
+---
+
+## Anomalies & Alerts
+
+**Issues found:**
 - (Critical: ...)
 - (Warning: ...)
-- (또는 "이상 없음")
+- (or "No anomalies detected")
 
-**영향도:** (High/Medium/Low 또는 "없음")
-
----
-
-## 💡 권고사항 & 내일 예측
-
-**조치사항:**
-1. (우선순위 높음)
-2. (우선순위 중간)
-3. (우선순위 낮음)
-
-**내일 예측:**
-- 트렌드: (상승/하강/안정)
-- 예상 부하: (낮음/중간/높음)
-- 사전 조치: (있으면 기술)
+**Impact:** (High/Medium/Low or "None")
 
 ---
 
-작성 규칙:
-- 한국어로 작성
-- 테이블, 리스트, 이모지로 가시성 높게
-- 데이터에 근거한 객관적 분석
-- 각 섹션은 명확한 헤더와 구분선으로 분리
-- 수치는 구체적으로 (예: "높음" X, "85%" O)
-- 이모지 활용: 🟢정상 🟡주의 🔴위험`;
+## Recommendations & Tomorrow's Forecast
+
+**Action items:**
+1. (High priority)
+2. (Medium priority)
+3. (Low priority)
+
+**Tomorrow's forecast:**
+- Trend: (rising/falling/stable)
+- Expected load: (low/medium/high)
+- Preemptive actions: (describe if any)
+
+---
+
+Writing rules:
+- Write in English
+- Use tables, lists, and status indicators for visibility
+- Provide objective analysis based on data
+- Separate each section with clear headers and dividers
+- Use specific numbers (e.g., not "high", but "85%")
+- Status indicators: Normal, Caution, Critical`;
 }
 
 // ============================================================
@@ -139,10 +139,10 @@ function formatHourlySummaryTable(summaries: HourlySummary[]): string {
   const activeSummaries = summaries.filter(s => s.snapshotCount > 0);
 
   if (activeSummaries.length === 0) {
-    return '(데이터 없음)';
+    return '(No data available)';
   }
 
-  const header = '| 시간 | 평균 CPU | 최대 CPU | 평균 TxPool | Gas 비율 | 블록 간격 | 블록 수 |';
+  const header = '| Time | Avg CPU | Max CPU | Avg TxPool | Gas Ratio | Block Interval | Blocks |';
   const separator = '|------|----------|----------|-------------|----------|-----------|---------|';
   const rows = activeSummaries.map(s =>
     `| ${String(s.hour).padStart(2, '0')}:00 | ${s.avgCpu.toFixed(1)}% | ${s.maxCpu.toFixed(1)}% | ${s.avgTxPool.toFixed(0)} | ${(s.avgGasRatio * 100).toFixed(1)}% | ${s.avgBlockInterval.toFixed(2)}s | ${s.blocksProduced} |`
@@ -153,12 +153,12 @@ function formatHourlySummaryTable(summaries: HourlySummary[]): string {
 
 function summarizeScalingEvents(data: DailyAccumulatedData): string {
   if (data.scalingEvents.length === 0) {
-    return '스케일링 이벤트 없음';
+    return 'No scaling events';
   }
 
   return data.scalingEvents
     .map(e => {
-      const time = new Date(e.timestamp).toLocaleTimeString('ko-KR', {
+      const time = new Date(e.timestamp).toLocaleTimeString('en-US', {
         hour: '2-digit',
         minute: '2-digit',
         hour12: false,
@@ -171,7 +171,7 @@ function summarizeScalingEvents(data: DailyAccumulatedData): string {
 
 function summarizeLogAnalysis(data: DailyAccumulatedData): string {
   if (data.logAnalysisResults.length === 0) {
-    return '로그 이상 없음';
+    return 'No log anomalies';
   }
 
   const critical = data.logAnalysisResults.filter(r => r.severity === 'critical');
@@ -181,7 +181,7 @@ function summarizeLogAnalysis(data: DailyAccumulatedData): string {
   const lines: string[] = [];
 
   for (const entry of [...critical, ...warning]) {
-    const time = new Date(entry.timestamp).toLocaleTimeString('ko-KR', {
+    const time = new Date(entry.timestamp).toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
@@ -192,7 +192,7 @@ function summarizeLogAnalysis(data: DailyAccumulatedData): string {
   }
 
   if (normal.length > 0) {
-    lines.push(`- [NORMAL] ${normal.length}건 (이상 없음)`);
+    lines.push(`- [NORMAL] ${normal.length} entries (no anomalies)`);
   }
 
   return lines.join('\n');
@@ -207,48 +207,48 @@ function buildUserPrompt(data: DailyAccumulatedData): string {
 
   const dataGaps = data.metadata.dataGaps.length > 0
     ? data.metadata.dataGaps.map(g => `- ${g.start} ~ ${g.end}: ${g.reason}`).join('\n')
-    : '없음';
+    : 'None';
 
   const awsCostSection = data.awsCost
-    ? `## AWS 서비스 비용
-- 일일 총 비용: $${data.awsCost.dailyTotal.toFixed(2)}
-- 월간 예상: $${data.awsCost.monthlyProjected.toFixed(2)}
+    ? `## AWS Service Costs
+- Daily total: $${data.awsCost.dailyTotal.toFixed(2)}
+- Monthly projection: $${data.awsCost.monthlyProjected.toFixed(2)}
 
-### 서비스별 상세
+### Service Breakdown
 ${data.awsCost.services.map(s => `- ${s.service}: $${s.dailyCost.toFixed(3)}/day (~$${s.monthlyCost.toFixed(2)}/month) - ${s.description}`).join('\n')}
 `
-    : '(AWS 비용 데이터 없음)';
+    : '(No AWS cost data available)';
 
-  return `# ${data.date} 운영 데이터
+  return `# ${data.date} Operations Data
 
-## 메타데이터
-- 데이터 수집 시작: ${data.startTime}
-- 마지막 스냅샷: ${data.lastSnapshotTime}
-- 데이터 완성도: ${completeness}%
-- 총 스냅샷 수: ${data.snapshots.length}개
+## Metadata
+- Data collection start: ${data.startTime}
+- Last snapshot: ${data.lastSnapshotTime}
+- Data completeness: ${completeness}%
+- Total snapshots: ${data.snapshots.length}
 
-## 전체 통계 (24시간)
-- 평균 CPU: ${overall.avgCpu}%, 최대: ${overall.maxCpu}%
-- 평균 TxPool: ${overall.avgTxPool}, 최대: ${overall.maxTxPool}
-- 평균 Gas 비율: ${overall.avgGasRatio}%
-- 평균 블록 간격: ${overall.avgBlockInterval}초
+## Overall Statistics (24 hours)
+- Avg CPU: ${overall.avgCpu}%, Max: ${overall.maxCpu}%
+- Avg TxPool: ${overall.avgTxPool}, Max: ${overall.maxTxPool}
+- Avg Gas ratio: ${overall.avgGasRatio}%
+- Avg block interval: ${overall.avgBlockInterval}s
 
-## 시간별 상세
+## Hourly Details
 ${hourlyTable}
 
-## 스케일링 이벤트 (${data.scalingEvents.length}건)
+## Scaling Events (${data.scalingEvents.length})
 ${scalingInfo}
 
-## 로그 분석 결과 (${data.logAnalysisResults.length}건)
+## Log Analysis Results (${data.logAnalysisResults.length})
 ${logInfo}
 
-## AWS 비용 분석
+## AWS Cost Analysis
 ${awsCostSection}
 
-## 데이터 갭
+## Data Gaps
 ${dataGaps}
 
-위 데이터를 바탕으로 일일 운영 보고서를 작성해주세요.`;
+Please generate a daily operations report based on the data above.`;
 }
 
 // ============================================================
@@ -262,70 +262,70 @@ ${dataGaps}
 function generateFallbackReport(data: DailyAccumulatedData): string {
   const overall = calculateOverallStats(data.snapshots);
 
-  return `# SentinAI 일일 운영 보고서 — ${data.date}
+  return `# SentinAI Daily Operations Report — ${data.date}
 
-> ⚠️ **주의**: 이 보고서는 AI 분석 없이 수집된 운영 데이터만으로 생성되었습니다.
+> **Note**: This report was generated using collected operations data only, without AI analysis.
 
-## 1. 요약 (Executive Summary)
+## 1. Executive Summary
 
-${data.date} 일일 운영 데이터를 바탕으로 한 자동 보고서입니다. 자세한 분석은 AI provider 복구 후 다시 생성해주세요.
-
----
-
-## 2. 핵심 지표 분석
-
-### 2.1 CPU 사용률
-- 평균: ${overall.avgCpu}%
-- 최대: ${overall.maxCpu}%
-- 데이터 포인트: ${data.snapshots.length}개
-
-### 2.2 트랜잭션 풀
-- 평균 대기: ${overall.avgTxPool}건
-- 최대 대기: ${overall.maxTxPool}건
-
-### 2.3 Gas 사용률
-- 평균: ${overall.avgGasRatio}%
-
-### 2.4 블록 생성
-- 평균 블록 간격: ${overall.avgBlockInterval}초
-- 수집 기간: ${data.startTime} ~ ${data.lastSnapshotTime}
+This is an automated report based on ${data.date} daily operations data. For detailed analysis, please regenerate after the AI provider is restored.
 
 ---
 
-## 3. 시간별 상세
+## 2. Key Metrics Analysis
+
+### 2.1 CPU Usage
+- Average: ${overall.avgCpu}%
+- Peak: ${overall.maxCpu}%
+- Data points: ${data.snapshots.length}
+
+### 2.2 Transaction Pool
+- Average pending: ${overall.avgTxPool}
+- Peak pending: ${overall.maxTxPool}
+
+### 2.3 Gas Usage
+- Average: ${overall.avgGasRatio}%
+
+### 2.4 Block Production
+- Average block interval: ${overall.avgBlockInterval}s
+- Collection period: ${data.startTime} ~ ${data.lastSnapshotTime}
+
+---
+
+## 3. Hourly Details
 
 ${formatHourlySummaryTable(data.hourlySummaries)}
 
 ---
 
-## 4. 리소스 스케일링 리뷰
+## 4. Resource Scaling Review
 
 ${summarizeScalingEvents(data)}
 
 ---
 
-## 5. 로그 분석 결과
+## 5. Log Analysis Results
 
 ${summarizeLogAnalysis(data)}
 
 ---
 
-## 6. AWS 서비스 비용
+## 6. AWS Service Costs
 
-${data.awsCost ? formatAWSCostForReport(data.awsCost) : '(AWS 비용 데이터 없음)'}
-
----
-
-## 7. 데이터 완성도
-
-- 완성도: ${(data.metadata.dataCompleteness * 100).toFixed(1)}%
-- 수집된 스냅샷: ${data.snapshots.length}개
-- 스케일링 이벤트: ${data.scalingEvents.length}건
-- 로그 분석 항목: ${data.logAnalysisResults.length}건
+${data.awsCost ? formatAWSCostForReport(data.awsCost) : '(No AWS cost data available)'}
 
 ---
 
-*이 보고서는 AI 분석 없이 SentinAI에 의해 자동 생성되었습니다. 자세한 분석은 AI provider 복구 후 재생성됩니다.*`;
+## 7. Data Completeness
+
+- Completeness: ${(data.metadata.dataCompleteness * 100).toFixed(1)}%
+- Snapshots collected: ${data.snapshots.length}
+- Scaling events: ${data.scalingEvents.length}
+- Log analysis entries: ${data.logAnalysisResults.length}
+
+---
+
+*This report was auto-generated by SentinAI without AI analysis. Detailed analysis will be available after the AI provider is restored.*`;
 }
 
 // ============================================================
@@ -388,7 +388,7 @@ export async function generateDailyReport(
 
     // Build final markdown with frontmatter
     const reportMarkdown = `---
-title: SentinAI 일일 운영 보고서
+title: SentinAI Daily Operations Report
 date: ${data.date}
 generated: ${generatedAt}
 generator: ${aiResult.model}
@@ -397,7 +397,7 @@ generator: ${aiResult.model}
 ${content}
 
 ---
-*이 보고서는 SentinAI에 의해 자동 생성되었습니다.*
+*This report was auto-generated by SentinAI.*
 `;
 
     // Save to filesystem
@@ -447,7 +447,7 @@ ${content}
     // Generate fallback report using collected data
     const fallbackContent = generateFallbackReport(data);
     const reportMarkdown = `---
-title: SentinAI 일일 운영 보고서 (Fallback)
+title: SentinAI Daily Operations Report (Fallback)
 date: ${data.date}
 generated: ${generatedAt}
 generator: fallback

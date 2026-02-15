@@ -344,11 +344,11 @@ This analysis indicates a serious issue with the consensus layer.`;
     });
 
     it('should handle JSON with unicode characters', () => {
-      const text = '{"message": "안녕하세요", "emoji": "🚀"}';
+      const text = '{"message": "hello world", "emoji": "🚀"}';
 
       const result = parseAIJSON(text);
 
-      expect(result.message).toBe('안녕하세요');
+      expect(result.message).toBe('hello world');
       expect(result.emoji).toBe('🚀');
     });
 

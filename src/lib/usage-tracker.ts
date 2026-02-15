@@ -1,6 +1,6 @@
 /**
  * Usage Tracker Module (Redis-backed)
- * vCPU 사용 패턴을 추적하여 비용 최적화 분석에 활용
+ * Tracks vCPU usage patterns for cost optimization analysis
  */
 
 import {
@@ -11,24 +11,24 @@ import {
 import { getStore } from './redis-store';
 
 /**
- * 환경 변수로 추적 활성화 여부 결정
+ * Determine whether tracking is enabled via environment variable
  */
 function isTrackingEnabled(): boolean {
   return process.env.COST_TRACKING_ENABLED !== 'false';
 }
 
 /**
- * 사용량 데이터 기록
+ * Record usage data
  *
- * @param vcpu - 현재 할당된 vCPU (1, 2, 4, 8 등)
- * @param cpuUtilization - 현재 CPU 사용률 (0-100)
+ * @param vcpu - Currently allocated vCPU (1, 2, 4, 8, etc.)
+ * @param cpuUtilization - Current CPU utilization (0-100)
  */
 export async function recordUsage(vcpu: number, cpuUtilization: number): Promise<void> {
   if (!isTrackingEnabled()) {
     return;
   }
 
-  // 스트레스 테스트 모드의 시뮬레이션 데이터는 제외 (vcpu가 8인 경우)
+  // Exclude stress test mode simulation data (vcpu === 8)
   if (vcpu === 8) {
     return;
   }
@@ -44,10 +44,10 @@ export async function recordUsage(vcpu: number, cpuUtilization: number): Promise
 }
 
 /**
- * 지정된 기간의 사용량 데이터 조회
+ * Retrieve usage data for the specified period
  *
- * @param days - 조회할 기간 (일)
- * @returns 해당 기간의 UsageDataPoint 배열
+ * @param days - Number of days to query
+ * @returns Array of UsageDataPoint for the specified period
  */
 export async function getUsageData(days: number): Promise<UsageDataPoint[]> {
   const store = getStore();
@@ -55,7 +55,7 @@ export async function getUsageData(days: number): Promise<UsageDataPoint[]> {
 }
 
 /**
- * 전체 사용량 데이터 개수 조회 (디버깅용)
+ * Get total usage data count (for debugging)
  */
 export async function getUsageDataCount(): Promise<number> {
   const store = getStore();
@@ -63,7 +63,7 @@ export async function getUsageDataCount(): Promise<number> {
 }
 
 /**
- * 사용량 데이터 초기화 (테스트용)
+ * Clear usage data (for testing)
  */
 export async function clearUsageData(): Promise<void> {
   const store = getStore();
@@ -75,12 +75,12 @@ export async function clearUsageData(): Promise<void> {
 // ============================================================
 
 /**
- * 시간대별 사용 패턴 분석
+ * Analyze usage patterns by time of day
  *
- * 7일 x 24시간 = 168개의 버킷으로 그룹화하여 통계 계산
+ * Groups data into 7 days x 24 hours = 168 buckets for statistical analysis
  *
- * @param days - 분석할 기간 (일), 기본값 7
- * @returns UsagePattern 배열 (최대 168개)
+ * @param days - Analysis period in days, default 7
+ * @returns Array of UsagePattern (up to 168)
  */
 export async function analyzePatterns(days: number = 7): Promise<UsagePattern[]> {
   const data = await getUsageData(days);
@@ -89,7 +89,7 @@ export async function analyzePatterns(days: number = 7): Promise<UsagePattern[]>
     return [];
   }
 
-  // 버킷 초기화
+  // Initialize buckets
   type Bucket = {
     vcpuSum: number;
     vcpuMax: number;
@@ -99,7 +99,7 @@ export async function analyzePatterns(days: number = 7): Promise<UsagePattern[]>
 
   const buckets: Map<string, Bucket> = new Map();
 
-  // 데이터를 버킷에 분류
+  // Distribute data into buckets
   for (const point of data) {
     const date = new Date(point.timestamp);
     const dayOfWeek = date.getDay();
@@ -121,7 +121,7 @@ export async function analyzePatterns(days: number = 7): Promise<UsagePattern[]>
     buckets.set(key, bucket);
   }
 
-  // 버킷을 UsagePattern으로 변환
+  // Convert buckets to UsagePattern
   const patterns: UsagePattern[] = [];
 
   buckets.forEach((bucket, key) => {
@@ -139,7 +139,7 @@ export async function analyzePatterns(days: number = 7): Promise<UsagePattern[]>
     });
   });
 
-  // 정렬: 요일 → 시간 순
+  // Sort: by day of week, then by hour
   patterns.sort((a, b) => {
     if (a.dayOfWeek !== b.dayOfWeek) {
       return a.dayOfWeek - b.dayOfWeek;
@@ -151,9 +151,9 @@ export async function analyzePatterns(days: number = 7): Promise<UsagePattern[]>
 }
 
 /**
- * 24시간 프로파일 생성 (요일 무관)
+ * Generate 24-hour profile (regardless of day of week)
  *
- * @returns 24개의 HourlyProfile
+ * @returns 24 HourlyProfile entries
  */
 export async function getHourlyBreakdown(): Promise<HourlyProfile[]> {
   const data = await getUsageData(7);
@@ -166,7 +166,7 @@ export async function getHourlyBreakdown(): Promise<HourlyProfile[]> {
     }));
   }
 
-  // 시간별 누적
+  // Accumulate by hour
   const hourlyBuckets: Array<{ vcpuSum: number; utilSum: number; count: number }> =
     Array.from({ length: 24 }, () => ({ vcpuSum: 0, utilSum: 0, count: 0 }));
 
@@ -189,10 +189,10 @@ export async function getHourlyBreakdown(): Promise<HourlyProfile[]> {
 }
 
 /**
- * 사용 패턴 요약 통계
+ * Usage pattern summary statistics
  *
- * @param days - 분석 기간
- * @returns 요약 통계
+ * @param days - Analysis period in days
+ * @returns Summary statistics
  */
 export async function getUsageSummary(days: number = 7): Promise<{
   avgVcpu: number;

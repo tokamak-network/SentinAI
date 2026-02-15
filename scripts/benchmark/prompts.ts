@@ -383,83 +383,83 @@ Trace the root cause of this incident.`,
 const DAILY_REPORT: PromptDefinition = {
   id: 'daily-report',
   tier: 'best',
-  description: 'AI-powered Korean daily operation report',
-  systemPrompt: `당신은 Optimism L2 노드 운영 전문가입니다. 제공된 24시간 운영 데이터를 분석하여 한국어로 일일 운영 보고서를 작성합니다.
+  description: 'AI-powered daily operation report',
+  systemPrompt: `You are an Optimism L2 node operations expert. Analyze the provided 24-hour operational data and write a daily operations report.
 
-보고서 구조:
+Report structure:
 
-# SentinAI 일일 운영 보고서 — {날짜}
+# SentinAI Daily Operations Report — {date}
 
-## 1. 요약 (Executive Summary)
-하루 전체 운영 상태를 3-4문장으로 요약합니다.
+## 1. Executive Summary
+Summarize the overall operational status for the day in 3-4 sentences.
 
-## 2. 핵심 지표 분석
-### 2.1 CPU 사용률
-시간대별 패턴, 피크 시간, 평균 부하 분석.
-### 2.2 트랜잭션 풀
-TxPool pending 추이, 비정상적 급증 여부.
-### 2.3 Gas 사용률
-Gas 사용 비율 추이, EVM 연산 부하 분석.
-### 2.4 블록 생성
-블록 간격 추이, 총 블록 수, 체인 건강성 평가.
+## 2. Key Metrics Analysis
+### 2.1 CPU Usage
+Analyze time-based patterns, peak hours, and average load.
+### 2.2 Transaction Pool
+TxPool pending trends, any abnormal spikes.
+### 2.3 Gas Usage
+Gas usage ratio trends, EVM computation load analysis.
+### 2.4 Block Production
+Block interval trends, total block count, chain health assessment.
 
-## 3. 리소스 스케일링 리뷰
-스케일링 이벤트 적절성 평가, vCPU 변경 이력 분석.
-스케일링 이벤트가 없었다면 현재 리소스가 적절한지 평가.
+## 3. Resource Scaling Review
+Evaluate scaling event appropriateness, analyze vCPU change history.
+If no scaling events occurred, assess whether current resources are adequate.
 
-## 4. 이상 징후 및 보안
-로그 분석에서 발견된 warning/critical 이슈 분석.
-이슈가 없었다면 "이상 없음"으로 기록.
+## 4. Anomalies & Security
+Analyze warning/critical issues found in log analysis.
+If no issues were found, record as "No anomalies detected".
 
-## 5. 권고사항
-발견된 이슈에 대한 구체적 조치 제안.
-트렌드 기반 내일 예측 및 사전 조치 권고.
+## 5. Recommendations
+Provide specific action items for discovered issues.
+Trend-based forecast for tomorrow and proactive recommendations.
 
-작성 규칙:
-- 한국어로 작성
-- 마크다운 형식 (헤더, 테이블, 목록 활용)
-- 데이터에 근거한 객관적 분석
-- 데이터 부족 시 해당 섹션에서 명시적으로 언급
-- 권고사항은 Optimism 공식 문서 기반`,
-  userPrompt: `## 일일 운영 데이터 (2026-02-13)
+Writing rules:
+- Write in English
+- Markdown format (use headers, tables, lists)
+- Objective analysis based on data
+- Explicitly mention when data is insufficient for a section
+- Recommendations should be based on official Optimism documentation`,
+  userPrompt: `## Daily Operations Data (2026-02-13)
 
-### 주요 통계
-- 평균 CPU: 52.3%
-- 최대 CPU: 78.5%
-- 평균 TxPool: 156
-- 최대 TxPool: 1,245
-- 평균 Gas Ratio: 74.2%
-- 블록 생성 개수: 612개
-- 평균 블록 간격: 1,423ms
+### Key Statistics
+- Average CPU: 52.3%
+- Peak CPU: 78.5%
+- Average TxPool: 156
+- Peak TxPool: 1,245
+- Average Gas Ratio: 74.2%
+- Blocks produced: 612
+- Average block interval: 1,423ms
 
-### 시간별 요약
-- 00:00-06:00: 저부하 (CPU 32-45%, TxPool 30-60)
-- 06:00-12:00: 정상 (CPU 48-62%, TxPool 120-250)
-- 12:00-18:00: 높은 부하 (CPU 65-78%, TxPool 400-1200)
-- 18:00-24:00: 정상화 (CPU 50-60%, TxPool 180-300)
+### Hourly Summary
+- 00:00-06:00: Low load (CPU 32-45%, TxPool 30-60)
+- 06:00-12:00: Normal (CPU 48-62%, TxPool 120-250)
+- 12:00-18:00: High load (CPU 65-78%, TxPool 400-1200)
+- 18:00-24:00: Normalized (CPU 50-60%, TxPool 180-300)
 
-### 스케일링 이벤트
-- 12:15 UTC: 2vCPU → 4vCPU (gas spike로 인한 TxPool 증가)
-- 15:45 UTC: 4vCPU → 2vCPU (부하 감소)
+### Scaling Events
+- 12:15 UTC: 2vCPU → 4vCPU (TxPool increase due to gas spike)
+- 15:45 UTC: 4vCPU → 2vCPU (load decrease)
 
-### 이상 징후
+### Anomalies
 - 12:00-13:00: L1 gas price spike (150 gwei, normally 45)
-- 14:30: op-batcher batch submission 실패 3회
-- 16:00: 정상화
+- 14:30: op-batcher batch submission failed 3 times
+- 16:00: Normalized
 
-### 비용 분석
-- 2vCPU 운영 시간: 18시간 (총 비용 $0.1676)
-- 4vCPU 운영 시간: 6시간 (총 비용 $0.1115)
-- 일일 총 비용: $0.2791
+### Cost Analysis
+- 2vCPU operating hours: 18h (total cost $0.1676)
+- 4vCPU operating hours: 6h (total cost $0.1115)
+- Daily total cost: $0.2791
 
-보고서를 작성해주세요.`,
+Please generate the report.`,
   expectedOutputType: 'markdown',
   validationFn: (content: string) => {
-    // Markdown validation: must contain headers and Korean text
+    // Markdown validation: must contain headers and summary text
     return (
       content.includes('#') &&
-      /[\u4E00-\u9FFF\uAC00-\uD7AF]/g.test(content) &&
-      content.includes('요약')
+      content.length > 200 &&
+      content.includes('ummary')
     );
   },
 };

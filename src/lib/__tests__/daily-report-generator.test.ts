@@ -74,7 +74,7 @@ describe('daily-report-generator', () => {
   describe('Report Generation', () => {
     it('should generate report successfully with AI', async () => {
       vi.mocked(chatCompletion).mockResolvedValue({
-        content: '# 일일 보고서\n\n정상 운영 중입니다.',
+        content: '# Daily Report\n\nAll systems operating normally.',
         stopReason: 'end_turn',
         model: 'claude-sonnet',
         usage: { promptTokens: 100, completionTokens: 50 },
@@ -263,18 +263,18 @@ describe('daily-report-generator', () => {
   describe('Integration', () => {
     it('should generate complete report with all data', async () => {
       vi.mocked(chatCompletion).mockResolvedValue({
-        content: `# SentinAI 일일 운영 보고서 — 2026-02-10
+        content: `# SentinAI Daily Operations Report — 2026-02-10
 
-## 요약
-시스템이 정상적으로 운영중입니다.
+## Summary
+The system is operating normally.
 
-## 핵심 지표
-- CPU 평균: 45%
-- TxPool 평균: 200
-- 블록 간격: 2.5초
+## Key Metrics
+- CPU Average: 45%
+- TxPool Average: 200
+- Block Interval: 2.5s
 
-## 권고사항
-계속 모니터링하세요.`,
+## Recommendations
+Continue monitoring.`,
         stopReason: 'end_turn',
         model: 'claude-sonnet-4-5',
         usage: { promptTokens: 500, completionTokens: 200 },

@@ -113,7 +113,7 @@ describe('nlops-engine', () => {
       mockFetchCurrentState();
       mockPlanResponse([], 'Hello! How can I help you today?');
 
-      const result = await processCommand('안녕하세요', BASE_URL);
+      const result = await processCommand('hello', BASE_URL);
 
       expect(result.executed).toBe(false);
       expect(result.response).toBe('Hello! How can I help you today?');
@@ -145,7 +145,7 @@ describe('nlops-engine', () => {
         .mockResolvedValueOnce({ ok: true, json: async () => ({ currentVcpu: 1 }) });
       mockGenerateResponse('System is running normally at 1 vCPU with 15% CPU usage.');
 
-      const result = await processCommand('현재 상태 알려줘', BASE_URL);
+      const result = await processCommand('show current status', BASE_URL);
 
       expect(result.executed).toBe(true);
       expect(result.intent).toEqual({ type: 'query', target: 'status' });
@@ -161,7 +161,7 @@ describe('nlops-engine', () => {
       });
       mockGenerateResponse('Current monthly cost is $41.45.');
 
-      const result = await processCommand('비용 확인', BASE_URL);
+      const result = await processCommand('check cost', BASE_URL);
 
       expect(result.executed).toBe(true);
       expect(result.intent).toEqual({ type: 'query', target: 'cost' });
@@ -176,7 +176,7 @@ describe('nlops-engine', () => {
       });
       mockGenerateResponse('No anomalies detected.');
 
-      const result = await processCommand('이상 탐지 결과', BASE_URL);
+      const result = await processCommand('show anomaly detection results', BASE_URL);
 
       expect(result.executed).toBe(true);
       expect(result.intent).toEqual({ type: 'query', target: 'anomalies' });
@@ -191,7 +191,7 @@ describe('nlops-engine', () => {
       });
       mockGenerateResponse('CPU at 25.3%, TxPool has 5 pending transactions.');
 
-      const result = await processCommand('메트릭 조회', BASE_URL);
+      const result = await processCommand('show metrics', BASE_URL);
 
       expect(result.executed).toBe(true);
       expect(result.intent).toEqual({ type: 'query', target: 'metrics' });
@@ -209,7 +209,7 @@ describe('nlops-engine', () => {
       // analyze_logs uses mocked getAllLiveLogs (rejects) -> generateMockLogs -> analyzeLogChunk
       mockGenerateResponse('Logs look healthy. All components operating normally.');
 
-      const result = await processCommand('로그 분석 해줘', BASE_URL);
+      const result = await processCommand('analyze logs', BASE_URL);
 
       expect(result.executed).toBe(true);
       expect(result.intent.type).toBe('analyze');
@@ -224,7 +224,7 @@ describe('nlops-engine', () => {
       });
       mockGenerateResponse('Root cause identified: op-geth component issue.');
 
-      const result = await processCommand('근본 원인 분석해줘', BASE_URL);
+      const result = await processCommand('run root cause analysis', BASE_URL);
 
       expect(result.executed).toBe(true);
       expect(result.intent.type).toBe('rca');
@@ -239,7 +239,7 @@ describe('nlops-engine', () => {
       });
       mockGenerateResponse('Prediction: scaling to 2 vCPU likely needed soon.');
 
-      const result = await processCommand('예측 확인', BASE_URL);
+      const result = await processCommand('check prediction', BASE_URL);
 
       expect(result.executed).toBe(true);
     });
@@ -254,7 +254,7 @@ describe('nlops-engine', () => {
       mockFetchCurrentState();
       mockPlanResponse([{ name: 'scale_node', params: { targetVcpu: 4 } }]);
 
-      const result = await processCommand('4 vCPU로 스케일해줘', BASE_URL);
+      const result = await processCommand('scale to 4 vCPU', BASE_URL);
 
       expect(result.executed).toBe(false);
       expect(result.needsConfirmation).toBe(true);
@@ -265,7 +265,7 @@ describe('nlops-engine', () => {
       mockFetchCurrentState();
       mockPlanResponse([{ name: 'update_config', params: { setting: 'autoScaling', value: false } }]);
 
-      const result = await processCommand('자동 스케일링 꺼줘', BASE_URL);
+      const result = await processCommand('disable auto-scaling', BASE_URL);
 
       expect(result.executed).toBe(false);
       expect(result.needsConfirmation).toBe(true);
@@ -282,7 +282,7 @@ describe('nlops-engine', () => {
       });
       mockGenerateResponse('Scaled to 2 vCPU successfully.');
 
-      const result = await processCommand('2 vCPU로 스케일해줘', BASE_URL, true);
+      const result = await processCommand('scale to 2 vCPU', BASE_URL, true);
 
       expect(result.executed).toBe(true);
       expect(result.intent.type).toBe('scale');
@@ -298,7 +298,7 @@ describe('nlops-engine', () => {
       });
       mockGenerateResponse('Auto-scaling has been disabled.');
 
-      const result = await processCommand('자동 스케일링 꺼줘', BASE_URL, true);
+      const result = await processCommand('disable auto-scaling', BASE_URL, true);
 
       expect(result.executed).toBe(true);
       expect(result.intent.type).toBe('config');
@@ -317,7 +317,7 @@ describe('nlops-engine', () => {
       mockFetchCurrentState();
       mockPlanResponse([{ name: 'update_config', params: { setting: 'autoScaling', value: true } }]);
 
-      const result = await processCommand('자동 스케일링 켜줘', BASE_URL);
+      const result = await processCommand('enable auto-scaling', BASE_URL);
 
       expect(result.confirmationMessage).toContain('Auto-scaling');
     });
@@ -332,7 +332,7 @@ describe('nlops-engine', () => {
       mockFetchCurrentState();
       mockChatCompletion.mockRejectedValueOnce(new Error('AI unavailable'));
 
-      const result = await processCommand('상태 알려줘', BASE_URL);
+      const result = await processCommand('show status', BASE_URL);
 
       // planToolCalls returns empty on failure → treated as no response
       expect(result.intent.type).toBe('unknown');
@@ -347,7 +347,7 @@ describe('nlops-engine', () => {
         .mockRejectedValueOnce(new Error('Network error'));
       mockGenerateResponse('Unable to fetch system data. Please try again.');
 
-      const result = await processCommand('상태', BASE_URL);
+      const result = await processCommand('status', BASE_URL);
 
       expect(result.executed).toBe(true);
       // Tool returned error object but execution completed
@@ -360,7 +360,7 @@ describe('nlops-engine', () => {
         .mockRejectedValueOnce(new Error('Server down'));
       mockPlanResponse([], 'System appears to be unavailable.');
 
-      const result = await processCommand('안녕', BASE_URL);
+      const result = await processCommand('hello', BASE_URL);
 
       expect(result).toBeDefined();
       expect(result.response).toBeDefined();
@@ -380,7 +380,7 @@ describe('nlops-engine', () => {
         .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
       mockGenerateResponse('Status OK.');
 
-      const result = await processCommand('상태', BASE_URL);
+      const result = await processCommand('status', BASE_URL);
 
       expect(result.suggestedFollowUp).toBeDefined();
       expect(result.suggestedFollowUp!.length).toBeGreaterThan(0);
@@ -415,9 +415,9 @@ describe('nlops-engine', () => {
 
     it('should return explain result directly', async () => {
       const intent: NLOpsIntent = { type: 'explain', topic: 'test' };
-      const result = { explanation: '테스트 설명입니다' };
+      const result = { explanation: 'This is a test explanation' };
       const response = await generateResponse(intent, result, true);
-      expect(response).toBe('테스트 설명입니다');
+      expect(response).toBe('This is a test explanation');
     });
 
     it('should return fallback on AI failure', async () => {

@@ -3,34 +3,34 @@
  */
 
 // ============================================================
-// Metric Snapshot (5분 간격)
+// Metric Snapshot (5-minute intervals)
 // ============================================================
 
-/** 5분 간격으로 ring buffer에서 스냅샷한 메트릭 통계 */
+/** Metric statistics snapshot from ring buffer at 5-minute intervals */
 export interface MetricSnapshot {
   /** ISO 8601 timestamp */
   timestamp: string;
-  /** 스냅샷 시점의 ring buffer 데이터 포인트 수 (0-60) */
+  /** Number of ring buffer data points at snapshot time (0-60) */
   dataPointCount: number;
   cpu: { mean: number; min: number; max: number; stdDev: number };
   txPool: { mean: number; min: number; max: number; stdDev: number };
   gasUsedRatio: { mean: number; min: number; max: number; stdDev: number };
   blockInterval: { mean: number; min: number; max: number; stdDev: number };
-  /** 스냅샷 시점의 최신 L2 블록 높이 */
+  /** Latest L2 block height at snapshot time */
   latestBlockHeight: number;
-  /** 스냅샷 시점의 vCPU 설정 */
+  /** vCPU setting at snapshot time */
   currentVcpu: number;
 }
 
 // ============================================================
-// Hourly Summary (시간별 요약)
+// Hourly Summary
 // ============================================================
 
-/** 시간별 집계 요약 (AI 프롬프트용) */
+/** Hourly aggregated summary (for AI prompt) */
 export interface HourlySummary {
-  /** 시간 (0-23) */
+  /** Hour (0-23) */
   hour: number;
-  /** 해당 시간의 스냅샷 수 (최대 12) */
+  /** Number of snapshots in this hour (max 12) */
   snapshotCount: number;
   avgCpu: number;
   maxCpu: number;
@@ -38,9 +38,9 @@ export interface HourlySummary {
   maxTxPool: number;
   avgGasRatio: number;
   avgBlockInterval: number;
-  /** 해당 시간의 추정 블록 생성 수 */
+  /** Estimated number of blocks produced in this hour */
   blocksProduced: number;
-  /** vCPU 변경 이력 */
+  /** vCPU change history */
   vcpuChanges: Array<{ timestamp: string; from: number; to: number }>;
 }
 
@@ -48,7 +48,7 @@ export interface HourlySummary {
 // Log Analysis & Scaling Events
 // ============================================================
 
-/** 로그 분석 결과 엔트리 (analyze-logs API에서 수집) */
+/** Log analysis result entry (collected from analyze-logs API) */
 export interface LogAnalysisEntry {
   timestamp: string;
   severity: 'normal' | 'warning' | 'critical';
@@ -56,7 +56,7 @@ export interface LogAnalysisEntry {
   actionItem: string;
 }
 
-/** 스케일링 이벤트 (scaler API에서 수집) */
+/** Scaling event (collected from scaler API) */
 export interface ScalingEvent {
   timestamp: string;
   fromVcpu: number;
@@ -69,17 +69,17 @@ export interface ScalingEvent {
 // AWS Cost Tracking
 // ============================================================
 
-/** AWS 서비스별 비용 (일일 집계) */
+/** AWS service cost (daily aggregate) */
 export interface AWSServiceCost {
   service: 'EKS' | 'EC2' | 'NAT' | 'CloudWatch' | 'VPC' | 'RDS' | 'S3' | 'Other';
   dailyCost: number;
   monthlyCost: number;
   unit: string; // e.g., "vCPU-hour", "GB", "requests"
-  usageAmount: number; // 당일 사용량
+  usageAmount: number; // Daily usage amount
   description: string;
 }
 
-/** AWS 일일 비용 요약 */
+/** AWS daily cost summary */
 export interface AWSDailyCost {
   date: string;
   dailyTotal: number;
@@ -97,38 +97,38 @@ export interface AWSDailyCost {
 // Daily Accumulated Data
 // ============================================================
 
-/** 24시간 축적 데이터 (보고서 생성의 입력) */
+/** 24-hour accumulated data (input for report generation) */
 export interface DailyAccumulatedData {
-  /** 대상 날짜 (YYYY-MM-DD) */
+  /** Target date (YYYY-MM-DD) */
   date: string;
-  /** 데이터 수집 시작 시간 (ISO 8601) */
+  /** Data collection start time (ISO 8601) */
   startTime: string;
-  /** 마지막 스냅샷 시간 (ISO 8601) */
+  /** Last snapshot time (ISO 8601) */
   lastSnapshotTime: string;
-  /** 5분 간격 스냅샷 (최대 288개) */
+  /** 5-minute interval snapshots (max 288) */
   snapshots: MetricSnapshot[];
-  /** 시간별 요약 (24개) */
+  /** Hourly summaries (24) */
   hourlySummaries: HourlySummary[];
-  /** 로그 분석 결과 */
+  /** Log analysis results */
   logAnalysisResults: LogAnalysisEntry[];
-  /** 스케일링 이벤트 */
+  /** Scaling events */
   scalingEvents: ScalingEvent[];
-  /** AWS 서비스 비용 */
+  /** AWS service costs */
   awsCost?: AWSDailyCost;
-  /** 데이터 품질 메타데이터 */
+  /** Data quality metadata */
   metadata: {
-    /** 예상 대비 실제 수집률 (0-1) */
+    /** Actual collection rate vs expected (0-1) */
     dataCompleteness: number;
-    /** 데이터 수집 갭 (서버 재시작 등) */
+    /** Data collection gaps (server restarts, etc.) */
     dataGaps: Array<{ start: string; end: string; reason: string }>;
   };
 }
 
 // ============================================================
-// Accumulator State (메모리 싱글톤)
+// Accumulator State (In-Memory Singleton)
 // ============================================================
 
-/** 축적기 내부 상태 */
+/** Accumulator internal state */
 export interface AccumulatorState {
   currentDate: string;
   data: DailyAccumulatedData;
@@ -140,32 +140,32 @@ export interface AccumulatorState {
 // API Types
 // ============================================================
 
-/** POST /api/reports/daily 요청 바디 */
+/** POST /api/reports/daily request body */
 export interface DailyReportRequest {
-  /** 대상 날짜 (생략 시 오늘) */
+  /** Target date (defaults to today if omitted) */
   date?: string;
-  /** 기존 보고서 덮어쓰기 */
+  /** Overwrite existing report */
   force?: boolean;
-  /** 디버그 정보 포함 (프롬프트, 토큰 수) */
+  /** Include debug info (prompt, token count) */
   debug?: boolean;
 }
 
-/** POST /api/reports/daily 응답 */
+/** POST /api/reports/daily response */
 export interface DailyReportResponse {
   success: boolean;
-  /** 생성된 보고서 파일 경로 */
+  /** Generated report file path */
   reportPath?: string;
-  /** 보고서 마크다운 내용 */
+  /** Report markdown content */
   reportContent?: string;
   error?: string;
-  /** 디버그 정보 */
+  /** Debug info */
   debug?: {
     promptTokens: number;
     completionTokens: number;
     systemPrompt: string;
     userPrompt: string;
   };
-  /** Fallback 보고서 정보 (AI provider 실패 시) */
+  /** Fallback report info (when AI provider fails) */
   fallback?: {
     enabled: boolean;
     reason: string;

@@ -8,19 +8,19 @@ services:
       - .env.local
     environment:
       - REDIS_URL=redis://redis:6379
-      # 로컬 개발 환경 설정
+      # Local development environment settings
       - NEXT_PUBLIC_API_BASE_URL=http://localhost:3002/thanos-sepolia
       - NEXT_PUBLIC_APP_URL=http://localhost:3002/thanos-sepolia
-      # ALB 프로덕션 배포 시 다음과 같이 변경:
+      # For ALB production deployment, change to:
       # - NEXT_PUBLIC_API_BASE_URL=https://sentinai.tokamak.network/thanos-sepolia
       # - NEXT_PUBLIC_APP_URL=https://sentinai.tokamak.network/thanos-sepolia
-      # 읽기 전용 모드 (공개 대시보드 보호)
+      # Read-only mode (protects public dashboard)
       - NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE=true
     volumes:
       - sentinai-reports:/app/data/reports
-      # Host K8s 클러스터 접근용 (읽기 전용)
+      # Host K8s cluster access (read-only)
       - ~/.kube/config:/home/nextjs/.kube/config:ro
-      # Host AWS 자격증명 접근용 (읽기 전용)
+      # Host AWS credentials access (read-only)
       - ~/.aws:/home/nextjs/.aws:ro
     restart: unless-stopped
     deploy:

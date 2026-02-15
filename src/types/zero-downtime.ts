@@ -1,9 +1,9 @@
 /**
  * Zero-Downtime Scaling Types
- * Parallel Pod Swap 오케스트레이션에 사용되는 타입 정의
+ * Type definitions used for Parallel Pod Swap orchestration
  */
 
-/** 오케스트레이션 단계 */
+/** Orchestration phase */
 export type SwapPhase =
   | 'idle'
   | 'creating_standby'
@@ -15,27 +15,27 @@ export type SwapPhase =
   | 'failed'
   | 'rolling_back';
 
-/** 오케스트레이션 상태 (메모리 싱글톤) */
+/** Orchestration state (in-memory singleton) */
 export interface SwapState {
-  /** 현재 단계 */
+  /** Current phase */
   phase: SwapPhase;
-  /** 시작 시간 */
+  /** Start time */
   startedAt: string | null;
-  /** 완료 시간 */
+  /** Completion time */
   completedAt: string | null;
-  /** standby Pod 이름 */
+  /** Standby Pod name */
   standbyPodName: string | null;
-  /** 목표 vCPU */
+  /** Target vCPU */
   targetVcpu: number;
-  /** 목표 Memory GiB */
+  /** Target Memory GiB */
   targetMemoryGiB: number;
-  /** 에러 메시지 */
+  /** Error message */
   error: string | null;
-  /** 각 단계별 소요 시간 (ms) */
+  /** Duration per phase (ms) */
   phaseDurations: Partial<Record<SwapPhase, number>>;
 }
 
-/** Pod readiness 체크 결과 */
+/** Pod readiness check result */
 export interface ReadinessCheckResult {
   ready: boolean;
   podIp: string | null;
@@ -44,7 +44,7 @@ export interface ReadinessCheckResult {
   checkDurationMs: number;
 }
 
-/** 트래픽 전환 결과 */
+/** Traffic switch result */
 export interface TrafficSwitchResult {
   success: boolean;
   previousSelector: Record<string, string>;
@@ -52,19 +52,19 @@ export interface TrafficSwitchResult {
   serviceName: string;
 }
 
-/** 오케스트레이션 전체 결과 */
+/** Overall orchestration result */
 export interface ZeroDowntimeResult {
   success: boolean;
-  /** 총 소요 시간 (ms) */
+  /** Total duration (ms) */
   totalDurationMs: number;
-  /** 각 단계별 소요 시간 */
+  /** Duration per phase */
   phaseDurations: Partial<Record<SwapPhase, number>>;
-  /** 최종 상태 */
+  /** Final phase */
   finalPhase: SwapPhase;
   error?: string;
 }
 
-/** 초기 SwapState */
+/** Initial SwapState */
 export const INITIAL_SWAP_STATE: SwapState = {
   phase: 'idle',
   startedAt: null,

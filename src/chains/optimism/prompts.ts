@@ -145,7 +145,7 @@ const COST_OPTIMIZER_CONTEXT = `## Infrastructure Context
 // Daily Report Context (from daily-report-generator.ts:24)
 // ============================================================
 
-const DAILY_REPORT_CONTEXT = `당신은 Optimism L2 노드 운영 전문가입니다. 제공된 24시간 운영 데이터를 분석하여 한국어로 일일 운영 보고서를 작성합니다.`;
+const DAILY_REPORT_CONTEXT = `You are an Optimism L2 node operations expert. Analyze the provided 24-hour operational data and write a daily operations report.`;
 
 // ============================================================
 // NLOps Context (from nlops-responder.ts:15-34)

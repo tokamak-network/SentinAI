@@ -1,12 +1,12 @@
 /**
  * Cost Report API
- * GET /api/cost-report - 비용 분석 리포트 생성
+ * GET /api/cost-report - Generate cost analysis report
  */
 
 import { NextResponse } from 'next/server';
 import { generateCostReport } from '@/lib/cost-optimizer';
 
-// 동적 라우트로 설정 (캐싱 비활성화)
+// Set as dynamic route (disable caching)
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const daysParam = url.searchParams.get('days');
 
-    // 기본값 7일, 최대 30일
+    // Default 7 days, max 30 days
     let days = 7;
     if (daysParam) {
       const parsed = parseInt(daysParam, 10);

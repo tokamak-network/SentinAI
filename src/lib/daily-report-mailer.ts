@@ -26,7 +26,7 @@ export interface DeliveryResult {
  * Removes frontmatter and returns first N characters
  */
 function extractSummary(markdown: string | undefined, maxLength: number = 200): string {
-  if (!markdown) return '보고서를 생성할 수 없습니다.';
+  if (!markdown) return 'Unable to generate report.';
 
   // Remove frontmatter (---...---)
   const content = markdown.replace(/^---[\s\S]*?---\n/, '');
@@ -46,11 +46,11 @@ function extractSummary(markdown: string | undefined, maxLength: number = 200): 
 }
 
 /**
- * Format time to Korean locale (KST)
+ * Format time to KST locale string
  */
 function formatTime(isoString: string): string {
   try {
-    return new Date(isoString).toLocaleString('ko-KR', {
+    return new Date(isoString).toLocaleString('en-US', {
       timeZone: 'Asia/Seoul',
       year: 'numeric',
       month: '2-digit',
@@ -96,8 +96,8 @@ function formatDate(date: Date): string {
 function extractStatusEmoji(markdown: string | undefined): string {
   if (!markdown) return '❓';
   const lowerContent = markdown.toLowerCase();
-  if (lowerContent.includes('위험') || lowerContent.includes('critical')) return '🔴';
-  if (lowerContent.includes('주의') || lowerContent.includes('warning')) return '🟡';
+  if (lowerContent.includes('critical')) return '🔴';
+  if (lowerContent.includes('warning') || lowerContent.includes('caution')) return '🟡';
   return '🟢';
 }
 
@@ -117,7 +117,7 @@ function formatDailyReportMessage(reportContent: string, date: string): object {
         type: 'header',
         text: {
           type: 'plain_text',
-          text: `${statusEmoji} SentinAI 일일 운영 보고서`,
+          text: `${statusEmoji} SentinAI Daily Operations Report`,
           emoji: true,
         },
       },
@@ -128,19 +128,19 @@ function formatDailyReportMessage(reportContent: string, date: string): object {
         fields: [
           {
             type: 'mrkdwn',
-            text: `*📅 날짜*\n${date}`,
+            text: `*📅 Date*\n${date}`,
           },
           {
             type: 'mrkdwn',
-            text: `*⏰ 생성 시각*\n${formatTime(new Date().toISOString())}`,
+            text: `*⏰ Generated At*\n${formatTime(new Date().toISOString())}`,
           },
           {
             type: 'mrkdwn',
-            text: '*📍 시스템*\nThanos Sepolia',
+            text: '*📍 System*\nThanos Sepolia',
           },
           {
             type: 'mrkdwn',
-            text: '*🔍 유형*\n24H 자동 분석',
+            text: '*🔍 Type*\n24H Auto Analysis',
           },
         ],
       },
@@ -165,7 +165,7 @@ function formatDailyReportMessage(reportContent: string, date: string): object {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*📊 상세 분석*\n자세한 CPU, TxPool, Gas, 블록 지표는 아래 버튼에서 확인하세요.`,
+          text: `*📊 Detailed Analysis*\nView detailed CPU, TxPool, Gas, and block metrics via the buttons below.`,
         },
       },
 
@@ -177,7 +177,7 @@ function formatDailyReportMessage(reportContent: string, date: string): object {
             type: 'button',
             text: {
               type: 'plain_text',
-              text: '📄 전체 리포트',
+              text: '📄 Full Report',
               emoji: true,
             },
             url: reportUrl,
@@ -188,7 +188,7 @@ function formatDailyReportMessage(reportContent: string, date: string): object {
             type: 'button',
             text: {
               type: 'plain_text',
-              text: '📊 대시보드',
+              text: '📊 Dashboard',
               emoji: true,
             },
             url: dashboardUrl,

@@ -4,21 +4,21 @@
 # Supports: Amazon Linux 2023, Ubuntu 22.04/24.04
 #
 # Usage:
-#   bash scripts/install.sh            # 로컬 실행
-#   curl -sSL <raw-url> | bash         # 원격 실행
+#   bash scripts/install.sh            # Run locally
+#   curl -sSL <raw-url> | bash         # Run remotely
 #
 # Environment overrides:
-#   SENTINAI_DIR=/opt/sentinai         # 설치 경로 (기본: /opt/sentinai)
-#   SENTINAI_BRANCH=main               # Git 브랜치 (기본: main)
+#   SENTINAI_DIR=/opt/sentinai         # Install path (default: /opt/sentinai)
+#   SENTINAI_BRANCH=main               # Git branch (default: main)
 #
 # Non-interactive mode (CI/CD, user-data):
 #   SENTINAI_L2_RPC_URL=https://rpc.example.com
-#   SENTINAI_AI_GATEWAY_URL=https://...  # 선택 (AI Gateway URL, 미설정 시 공식 Gateway 사용)
-#   SENTINAI_AI_PROVIDER=anthropic     # anthropic(기본), openai, gemini
+#   SENTINAI_AI_GATEWAY_URL=https://...  # Optional (AI Gateway URL, uses official Gateway if not set)
+#   SENTINAI_AI_PROVIDER=anthropic     # anthropic (default), openai, gemini
 #   SENTINAI_AI_KEY=sk-ant-...
-#   SENTINAI_CLUSTER_NAME=my-cluster   # 미설정 시 시뮬레이션 모드
-#   SENTINAI_DOMAIN=sentinai.example.com  # 선택 (HTTPS 도메인)
-#   SENTINAI_WEBHOOK_URL=https://...   # 선택
+#   SENTINAI_CLUSTER_NAME=my-cluster   # Simulation mode if not set
+#   SENTINAI_DOMAIN=sentinai.example.com  # Optional (HTTPS domain)
+#   SENTINAI_WEBHOOK_URL=https://...   # Optional
 # ============================================================
 
 set -euo pipefail
@@ -51,7 +51,7 @@ detect_os() {
     OS_ID="${ID}"
     OS_VERSION="${VERSION_ID:-unknown}"
   else
-    err "지원하지 않는 OS입니다. Amazon Linux 2023 또는 Ubuntu 22.04+ 필요."
+    err "Unsupported OS. Amazon Linux 2023 or Ubuntu 22.04+ required."
   fi
   log "OS: ${PRETTY_NAME:-${OS_ID} ${OS_VERSION}}"
 }
@@ -61,11 +61,11 @@ detect_os() {
 # ============================================================
 install_docker() {
   if command -v docker &>/dev/null; then
-    log "Docker 이미 설치됨: $(docker --version | head -1)"
+    log "Docker already installed: $(docker --version | head -1)"
     return
   fi
 
-  log "Docker 설치 중..."
+  log "Installing Docker..."
   case "${OS_ID}" in
     amzn)
       sudo dnf install -y docker
@@ -87,12 +87,12 @@ install_docker() {
       sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
       ;;
     *)
-      err "Docker 자동 설치 미지원: ${OS_ID}. 수동으로 Docker를 설치한 후 다시 실행하세요."
+      err "Automatic Docker installation not supported for: ${OS_ID}. Please install Docker manually and re-run."
       ;;
   esac
 
   sudo usermod -aG docker "${USER}" 2>/dev/null || true
-  log "Docker 설치 완료."
+  log "Docker installation complete."
 }
 
 # ============================================================
@@ -100,11 +100,11 @@ install_docker() {
 # ============================================================
 install_compose() {
   if docker compose version &>/dev/null 2>&1; then
-    log "Docker Compose 이미 설치됨: $(docker compose version 2>/dev/null | head -1)"
+    log "Docker Compose already installed: $(docker compose version 2>/dev/null | head -1)"
     return
   fi
 
-  log "Docker Compose plugin 설치 중..."
+  log "Installing Docker Compose plugin..."
   case "${OS_ID}" in
     amzn)
       sudo mkdir -p /usr/local/lib/docker/cli-plugins
@@ -117,11 +117,11 @@ install_compose() {
       sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
       ;;
     ubuntu|debian)
-      # docker-compose-plugin은 Docker 패키지와 함께 설치됨
-      log "Docker Compose는 Docker 패키지에 포함되어 있습니다."
+      # docker-compose-plugin is installed with the Docker package
+      log "Docker Compose is included in the Docker package."
       ;;
   esac
-  log "Docker Compose 설치 완료."
+  log "Docker Compose installation complete."
 }
 
 # ============================================================
@@ -129,16 +129,16 @@ install_compose() {
 # ============================================================
 install_git() {
   if command -v git &>/dev/null; then
-    log "Git 이미 설치됨: $(git --version)"
+    log "Git already installed: $(git --version)"
     return
   fi
 
-  log "Git 설치 중..."
+  log "Installing Git..."
   case "${OS_ID}" in
     amzn)     sudo dnf install -y git ;;
     ubuntu|debian) sudo apt-get install -y git ;;
   esac
-  log "Git 설치 완료."
+  log "Git installation complete."
 }
 
 # ============================================================
@@ -146,19 +146,19 @@ install_git() {
 # ============================================================
 setup_repo() {
   if [ -d "${INSTALL_DIR}/.git" ]; then
-    log "기존 설치 발견: ${INSTALL_DIR}"
+    log "Existing installation found: ${INSTALL_DIR}"
     cd "${INSTALL_DIR}"
     git fetch origin
     git checkout "${BRANCH}"
     git pull origin "${BRANCH}"
-    log "소스 코드 업데이트 완료."
+    log "Source code update complete."
   else
-    log "저장소 클론 중... (branch: ${BRANCH})"
+    log "Cloning repository... (branch: ${BRANCH})"
     sudo mkdir -p "$(dirname "${INSTALL_DIR}")"
     sudo chown "${USER}":"$(id -gn)" "$(dirname "${INSTALL_DIR}")"
     git clone -b "${BRANCH}" "${SENTINAI_REPO}" "${INSTALL_DIR}"
     cd "${INSTALL_DIR}"
-    log "클론 완료: ${INSTALL_DIR}"
+    log "Clone complete: ${INSTALL_DIR}"
   fi
 }
 
@@ -169,14 +169,14 @@ setup_env() {
   cd "${INSTALL_DIR}"
 
   if [ -f .env.local ]; then
-    log ".env.local 파일이 이미 존재합니다."
+    log ".env.local file already exists."
     if [ -n "${SENTINAI_L2_RPC_URL:-}" ]; then
       cp .env.local ".env.local.bak.$(date +%s)"
-      log "비대화형 모드: 기존 .env.local을 백업 후 덮어씁니다."
+      log "Non-interactive mode: backing up existing .env.local and overwriting."
     else
-      read -rp "  기존 설정을 유지하시겠습니까? (Y/n): " keep_env
+      read -rp "  Keep existing configuration? (Y/n): " keep_env
       if [[ ! "${keep_env}" =~ ^[Nn]$ ]]; then
-        log "기존 .env.local 유지."
+        log "Keeping existing .env.local."
         return
       fi
     fi
@@ -187,24 +187,24 @@ setup_env() {
 
   # --- Partial env var detection: error early ---
   if [ -n "${SENTINAI_L2_RPC_URL:-}" ] && [ -z "${SENTINAI_AI_KEY:-}" ]; then
-    err "비대화형 모드: SENTINAI_L2_RPC_URL이 설정되었지만 SENTINAI_AI_KEY가 누락되었습니다."
+    err "Non-interactive mode: SENTINAI_L2_RPC_URL is set but SENTINAI_AI_KEY is missing."
   fi
   if [ -z "${SENTINAI_L2_RPC_URL:-}" ] && [ -n "${SENTINAI_AI_KEY:-}" ]; then
-    err "비대화형 모드: SENTINAI_AI_KEY가 설정되었지만 SENTINAI_L2_RPC_URL이 누락되었습니다."
+    err "Non-interactive mode: SENTINAI_AI_KEY is set but SENTINAI_L2_RPC_URL is missing."
   fi
 
   # --- Non-interactive mode: use SENTINAI_* environment variables ---
   if [ -n "${SENTINAI_L2_RPC_URL:-}" ] && [ -n "${SENTINAI_AI_KEY:-}" ]; then
-    log "비대화형 모드 감지됨."
+    log "Non-interactive mode detected."
     L2_RPC_URL="${SENTINAI_L2_RPC_URL}"
-    [[ ! "${L2_RPC_URL}" =~ ^https?:// ]] && err "SENTINAI_L2_RPC_URL은 http:// 또는 https://로 시작해야 합니다."
+    [[ ! "${L2_RPC_URL}" =~ ^https?:// ]] && err "SENTINAI_L2_RPC_URL must start with http:// or https://."
 
     ai_key_value="${SENTINAI_AI_KEY}"
     case "${SENTINAI_AI_PROVIDER:-anthropic}" in
       anthropic) ai_key_name="ANTHROPIC_API_KEY" ;;
       openai)    ai_key_name="OPENAI_API_KEY" ;;
       gemini)    ai_key_name="GEMINI_API_KEY" ;;
-      *)         err "지원하지 않는 AI Provider: ${SENTINAI_AI_PROVIDER}. (anthropic, openai, gemini 중 선택)" ;;
+      *)         err "Unsupported AI Provider: ${SENTINAI_AI_PROVIDER}. (choose from: anthropic, openai, gemini)" ;;
     esac
 
     AI_GATEWAY_URL="${SENTINAI_AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
@@ -215,28 +215,28 @@ setup_env() {
   # --- Interactive mode ---
   else
     echo ""
-    echo -e "${BOLD}--- SentinAI 환경 설정 ---${NC}"
+    echo -e "${BOLD}--- SentinAI Environment Setup ---${NC}"
     echo ""
 
-    # L2 RPC URL (필수)
-    read -rp "  L2 RPC URL (필수): " L2_RPC_URL
-    [[ -z "${L2_RPC_URL}" ]] && err "L2_RPC_URL은 필수입니다."
-    [[ ! "${L2_RPC_URL}" =~ ^https?:// ]] && err "L2_RPC_URL은 http:// 또는 https://로 시작해야 합니다."
+    # L2 RPC URL (required)
+    read -rp "  L2 RPC URL (required): " L2_RPC_URL
+    [[ -z "${L2_RPC_URL}" ]] && err "L2_RPC_URL is required."
+    [[ ! "${L2_RPC_URL}" =~ ^https?:// ]] && err "L2_RPC_URL must start with http:// or https://."
 
-    # AI Gateway URL (선택 — 미입력 시 공식 Gateway 사용)
+    # AI Gateway URL (optional -- uses official Gateway if not entered)
     echo ""
-    echo "  AI Gateway URL 설정:"
-    echo "  모든 AI 요청을 Gateway 서버를 통해 라우팅합니다."
+    echo "  AI Gateway URL configuration:"
+    echo "  All AI requests will be routed through the Gateway server."
     read -rp "  AI Gateway URL [https://api.ai.tokamak.network]: " AI_GATEWAY_URL
     AI_GATEWAY_URL="${AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
 
-    # AI Provider (필수)
+    # AI Provider (required)
     echo ""
-    echo "  AI Provider 선택:"
-    echo "    1) Anthropic (권장)"
+    echo "  Select AI Provider:"
+    echo "    1) Anthropic (recommended)"
     echo "    2) OpenAI"
     echo "    3) Gemini"
-    read -rp "  선택 [1]: " ai_choice
+    read -rp "  Choose [1]: " ai_choice
     ai_choice="${ai_choice:-1}"
 
     case "${ai_choice}" in
@@ -256,42 +256,42 @@ setup_env() {
         echo ""
         ;;
     esac
-    [[ -z "${ai_key_value}" ]] && err "AI API Key는 필수입니다."
+    [[ -z "${ai_key_value}" ]] && err "AI API Key is required."
 
     # AWS EKS Cluster Name
     echo ""
-    read -rp "  AWS EKS Cluster Name (K8s 모니터링용, Enter로 건너뛰기): " AWS_CLUSTER_NAME
+    read -rp "  AWS EKS Cluster Name (for K8s monitoring, press Enter to skip): " AWS_CLUSTER_NAME
     if [ -z "${AWS_CLUSTER_NAME}" ]; then
-      warn "AWS_CLUSTER_NAME 미설정. K8s 모니터링 없이 시뮬레이션 모드로 실행됩니다."
+      warn "AWS_CLUSTER_NAME not set. Running in simulation mode without K8s monitoring."
     fi
 
-    # HTTPS Domain (선택 — Caddy auto-certificate)
+    # HTTPS Domain (optional -- Caddy auto-certificate)
     echo ""
-    echo "  HTTPS 도메인 설정 (Caddy가 Let's Encrypt 인증서를 자동 발급합니다):"
-    echo "  서버의 Public IP가 DNS에 등록되어 있어야 합니다."
-    read -rp "  Public Domain (e.g., sentinai.tokamak.network, Enter로 건너뛰기): " DOMAIN_NAME
+    echo "  HTTPS domain setup (Caddy will automatically issue Let's Encrypt certificates):"
+    echo "  The server's public IP must be registered in DNS."
+    read -rp "  Public Domain (e.g., sentinai.tokamak.network, press Enter to skip): " DOMAIN_NAME
     if [ -z "${DOMAIN_NAME}" ]; then
-      info "도메인 미설정. HTTP 전용 모드 (localhost:3002)."
+      info "Domain not set. HTTP-only mode (localhost:3002)."
     else
-      info "포트 80(HTTP), 443(HTTPS)이 방화벽/Security List에서 열려 있어야 합니다."
+      info "Ports 80 (HTTP) and 443 (HTTPS) must be open in the firewall/Security List."
     fi
 
-    # Slack Webhook (선택)
-    read -rp "  Slack Webhook URL (선택, Enter로 건너뛰기): " ALERT_WEBHOOK_URL
+    # Slack Webhook (optional)
+    read -rp "  Slack Webhook URL (optional, press Enter to skip): " ALERT_WEBHOOK_URL
   fi
 
   # Determine SCALING_SIMULATION_MODE based on cluster name
   local scaling_mode="false"
   if [ -z "${AWS_CLUSTER_NAME}" ]; then
     scaling_mode="true"
-    log "EKS 클러스터 미설정 → 시뮬레이션 모드 활성화 (SCALING_SIMULATION_MODE=true)"
+    log "EKS cluster not set -> enabling simulation mode (SCALING_SIMULATION_MODE=true)"
   fi
 
-  # Write .env.local (printf로 안전하게 기록, 변수 확장 방지)
+  # Write .env.local (safely using printf, prevents variable expansion)
   cat > .env.local << 'ENVEOF'
 # SentinAI Configuration
-# L2 Chain RPC (필수)
-# AI Provider (필수)
+# L2 Chain RPC (required)
+# AI Provider (required)
 # Kubernetes Monitoring
 K8S_NAMESPACE=default
 K8S_APP_PREFIX=op
@@ -299,7 +299,7 @@ K8S_APP_PREFIX=op
 COST_TRACKING_ENABLED=true
 ENVEOF
 
-  # 사용자 입력값을 안전하게 기록 (셸 확장 없음)
+  # Safely write user input values (no shell expansion)
   {
     printf 'L2_RPC_URL=%s\n' "${L2_RPC_URL}"
     printf 'AI_GATEWAY_URL=%s\n' "${AI_GATEWAY_URL}"
@@ -308,13 +308,13 @@ ENVEOF
     printf 'SCALING_SIMULATION_MODE=%s\n' "${scaling_mode}"
   } >> .env.local
 
-  # Slack webhook (선택)
+  # Slack webhook (optional)
   if [ -n "${ALERT_WEBHOOK_URL:-}" ]; then
     printf '\n# Alert\nALERT_WEBHOOK_URL=%s\n' "${ALERT_WEBHOOK_URL}" >> .env.local
   fi
 
   chmod 600 .env.local
-  log ".env.local 생성 완료 (권한: 600)."
+  log ".env.local created (permissions: 600)."
 
   # Generate Caddyfile for HTTPS (if domain is set)
   if [ -n "${DOMAIN_NAME:-}" ]; then
@@ -329,7 +329,7 @@ ${DOMAIN_NAME} {
     }
 }
 CADDYEOF
-    log "Caddyfile 생성 완료 (도메인: ${DOMAIN_NAME})."
+    log "Caddyfile created (domain: ${DOMAIN_NAME})."
   fi
 }
 
@@ -345,16 +345,16 @@ start_services() {
   if [ -f Caddyfile ]; then
     compose_args=(--profile production)
     has_caddy="true"
-    log "Caddy HTTPS 활성화됨."
+    log "Caddy HTTPS enabled."
   fi
 
-  log "Docker 이미지 빌드 중... (첫 빌드 시 5-10분 소요)"
+  log "Building Docker image... (first build may take 5-10 minutes)"
   sudo docker compose "${compose_args[@]+"${compose_args[@]}"}" build
 
-  log "서비스 시작 중..."
+  log "Starting services..."
   sudo docker compose "${compose_args[@]+"${compose_args[@]}"}" up -d
 
-  log "서비스 시작 대기 (30초)..."
+  log "Waiting for services to start (30 seconds)..."
   sleep 30
 
   # Health check with retries
@@ -364,10 +364,10 @@ start_services() {
     if curl -sf http://localhost:3002/api/health > /dev/null 2>&1; then
       echo ""
       log "============================================"
-      log "  SentinAI 설치 완료!"
+      log "  SentinAI installation complete!"
       log "============================================"
       echo ""
-      # EC2 Public IP 조회 시도 (IMDSv2)
+      # Attempt to retrieve EC2 Public IP (IMDSv2)
       local public_ip imds_tok
       imds_tok=$(curl -sf -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 30" \
         --connect-timeout 1 http://169.254.169.254/latest/api/token 2>/dev/null || echo "")
@@ -383,39 +383,39 @@ start_services() {
         # Extract domain from Caddyfile (first word of first non-comment, non-empty line)
         local caddy_domain
         caddy_domain=$(grep -v '^#' Caddyfile 2>/dev/null | grep -v '^\s*$' | head -1 | awk '{print $1}' || echo "")
-        info "대시보드: https://${caddy_domain}/thanos-sepolia"
-        info "Caddy 로그: sudo docker logs sentinai-caddy -f"
+        info "Dashboard: https://${caddy_domain}/thanos-sepolia"
+        info "Caddy logs: sudo docker logs sentinai-caddy -f"
       elif [ -n "${public_ip}" ]; then
-        info "대시보드: http://${public_ip}:3002/thanos-sepolia"
+        info "Dashboard: http://${public_ip}:3002/thanos-sepolia"
       else
-        info "대시보드: http://localhost:3002/thanos-sepolia"
+        info "Dashboard: http://localhost:3002/thanos-sepolia"
       fi
-      info "로그 확인: cd ${INSTALL_DIR} && sudo docker compose${profile_flag} logs -f"
-      info "서비스 중지: cd ${INSTALL_DIR} && sudo docker compose${profile_flag} down"
-      info "업데이트:   cd ${INSTALL_DIR} && git pull && sudo docker compose${profile_flag} build && sudo docker compose${profile_flag} up -d"
+      info "View logs: cd ${INSTALL_DIR} && sudo docker compose${profile_flag} logs -f"
+      info "Stop services: cd ${INSTALL_DIR} && sudo docker compose${profile_flag} down"
+      info "Update:   cd ${INSTALL_DIR} && git pull && sudo docker compose${profile_flag} build && sudo docker compose${profile_flag} up -d"
       echo ""
       return
     fi
-    warn "헬스체크 시도 ${i}/${retries}... 10초 후 재시도"
+    warn "Health check attempt ${i}/${retries}... retrying in 10 seconds"
     sleep 10
   done
 
-  warn "헬스체크에 실패했습니다. 로그를 확인하세요:"
+  warn "Health check failed. Check the logs:"
   sudo docker compose "${compose_args[@]+"${compose_args[@]}"}" logs --tail=30 sentinai
 }
 
 # ============================================================
-# Pre-flight: IMDSv2 Hop Limit 안내
+# Pre-flight: IMDSv2 Hop Limit guidance
 # ============================================================
 check_imds_hint() {
-  # EC2 인스턴스인지 확인 (IMDSv2 방식)
+  # Check if running on EC2 instance (IMDSv2 method)
   local imds_token
   imds_token=$(curl -sf -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 30" \
     --connect-timeout 1 http://169.254.169.254/latest/api/token 2>/dev/null || echo "")
   if [ -n "${imds_token}" ]; then
-    info "EC2 인스턴스 감지됨."
-    info "Docker 컨테이너에서 IAM Role을 사용하려면 IMDSv2 hop-limit이 2 이상이어야 합니다."
-    info "설정 명령: aws ec2 modify-instance-metadata-options --instance-id <ID> --http-put-response-hop-limit 2 --http-tokens required"
+    info "EC2 instance detected."
+    info "To use IAM Role from Docker containers, IMDSv2 hop-limit must be 2 or higher."
+    info "Command: aws ec2 modify-instance-metadata-options --instance-id <ID> --http-put-response-hop-limit 2 --http-tokens required"
     echo ""
   fi
 }

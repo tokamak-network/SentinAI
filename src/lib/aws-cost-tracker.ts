@@ -228,8 +228,8 @@ export function formatAWSCostForReport(awsCost: AWSDailyCost): string {
     .map(s => `- **${s.service}**: $${s.dailyCost.toFixed(3)}/day (~$${s.monthlyCost.toFixed(2)}/month)`)
     .join('\n');
 
-  const tableHeader = '| 서비스 | 일일 비용 | 월간 예상 | 사용량 | 설명 |';
-  const tableSeparator = '|--------|----------|----------|--------|------|';
+  const tableHeader = '| Service | Daily Cost | Monthly Projection | Usage | Description |';
+  const tableSeparator = '|---------|------------|---------------------|-------|-------------|';
   const tableRows = awsCost.services
     .map(
       s =>
@@ -237,30 +237,30 @@ export function formatAWSCostForReport(awsCost: AWSDailyCost): string {
     )
     .join('\n');
 
-  return `## AWS 서비스 비용 분석
+  return `## AWS Service Cost Analysis
 
-### 일일 요약
-- **일일 총 비용**: $${awsCost.dailyTotal.toFixed(2)}
-- **월간 예상**: $${awsCost.monthlyProjected.toFixed(2)}
-- **데이터 출처**: ${awsCost.metadata.dataSource}
-- **리전**: ${awsCost.metadata.region}
+### Daily Summary
+- **Daily total cost**: $${awsCost.dailyTotal.toFixed(2)}
+- **Monthly projection**: $${awsCost.monthlyProjected.toFixed(2)}
+- **Data source**: ${awsCost.metadata.dataSource}
+- **Region**: ${awsCost.metadata.region}
 
-### 서비스별 상세
+### Service Breakdown
 
 ${tableHeader}
 ${tableSeparator}
 ${tableRows}
 
-### 주의사항
-- 이 비용은 **예상치**입니다 (실제 AWS 청구서 기준 아님)
-- Reserved Instances, Savings Plans 등 할인 미적용
-- Data Transfer Out (인터넷으로 나가는 데이터)는 별도 비용 발생
-- 추가 서비스 (Route 53, Secret Manager 등) 미포함
+### Notes
+- These costs are **estimates** (not based on actual AWS billing)
+- Discounts such as Reserved Instances and Savings Plans are not applied
+- Data Transfer Out (outbound internet traffic) incurs additional charges
+- Additional services (Route 53, Secrets Manager, etc.) are not included
 
-### 비용 최적화 권고
-1. **Reserved Instances**: EKS + Fargate을 RI로 구매 시 40% 절감
-2. **Savings Plans**: 연 계약으로 추가 10-15% 절감
-3. **NAT Gateway 최소화**: Endpoint를 활용해 데이터 전송 비용 절감
-4. **S3 Lifecycle**: 오래된 로그를 Glacier로 이동해 저장 비용 절감
-5. **CloudWatch 필터**: 불필요한 로그 수집 중단`;
+### Cost Optimization Recommendations
+1. **Reserved Instances**: Save up to 40% by purchasing RIs for EKS + Fargate
+2. **Savings Plans**: Save an additional 10-15% with annual commitments
+3. **NAT Gateway optimization**: Use VPC Endpoints to reduce data transfer costs
+4. **S3 Lifecycle**: Move old logs to Glacier to reduce storage costs
+5. **CloudWatch filters**: Stop collecting unnecessary logs`;
 }

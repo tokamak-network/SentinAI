@@ -497,7 +497,7 @@ export async function processCommand(
       intent: { type: 'unknown', originalInput: userInput },
       executed: false,
       response: directResponse,
-      suggestedFollowUp: ['현재 상태', '로그 분석', '비용 확인'],
+      suggestedFollowUp: ['Current status', 'Log analysis', 'Cost check'],
     };
   }
 
@@ -508,8 +508,8 @@ export async function processCommand(
       return {
         intent: extractIntent(toolCalls, userInput),
         executed: false,
-        response: '⚠️ 읽기 전용 모드에서는 스케일링 및 설정 변경이 불가능합니다.\n\n조회 명령어를 사용하세요:\n- "현재 상태는?"\n- "메트릭 조회"\n- "비용 분석"',
-        suggestedFollowUp: ['현재 상태', '로그 분석', '비용 확인'],
+        response: 'Scaling and configuration changes are not available in read-only mode.\n\nPlease use query commands:\n- "Current status?"\n- "Show metrics"\n- "Cost analysis"',
+        suggestedFollowUp: ['Current status', 'Log analysis', 'Cost check'],
       };
     }
   }
@@ -574,16 +574,16 @@ export async function processCommand(
 }
 
 function generateFollowUps(toolCalls: Array<{ name: string; params: Record<string, unknown> }>): string[] {
-  if (toolCalls.length === 0) return ['현재 상태', '로그 분석', '비용 확인'];
+  if (toolCalls.length === 0) return ['Current status', 'Log analysis', 'Cost check'];
 
   const used = new Set(toolCalls.map((tc) => tc.name));
   const suggestions: string[] = [];
 
-  if (!used.has('get_system_status')) suggestions.push('현재 상태');
-  if (!used.has('analyze_logs')) suggestions.push('로그 분석 해줘');
-  if (!used.has('get_cost_report')) suggestions.push('비용 확인');
-  if (!used.has('get_anomalies')) suggestions.push('이상 탐지');
-  if (!used.has('run_rca')) suggestions.push('근본 원인 분석');
+  if (!used.has('get_system_status')) suggestions.push('Current status');
+  if (!used.has('analyze_logs')) suggestions.push('Analyze logs');
+  if (!used.has('get_cost_report')) suggestions.push('Cost check');
+  if (!used.has('get_anomalies')) suggestions.push('Anomaly detection');
+  if (!used.has('run_rca')) suggestions.push('Root cause analysis');
 
   return suggestions.slice(0, 3);
 }
