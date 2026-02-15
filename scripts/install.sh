@@ -570,6 +570,26 @@ setup_k8s() {
 start_services() {
   cd "${INSTALL_DIR}"
 
+  # Ensure ~/.kube/config exists as a FILE before Docker Compose starts.
+  # If missing, Docker mounts it as a directory, causing:
+  #   "error loading config file: read ~/.kube/config: is a directory"
+  mkdir -p ~/.kube
+  if [ -d ~/.kube/config ]; then
+    rm -rf ~/.kube/config
+    warn "Removed invalid ~/.kube/config directory (was created by Docker)."
+  fi
+  if [ ! -f ~/.kube/config ]; then
+    cat > ~/.kube/config << 'KUBEEOF'
+apiVersion: v1
+kind: Config
+clusters: []
+contexts: []
+users: []
+KUBEEOF
+    chmod 644 ~/.kube/config
+    info "Created placeholder kubeconfig. K8s access will use --server/--token mode."
+  fi
+
   # Caddy HTTPS (production profile) if Caddyfile exists
   local -a compose_args=()
   local has_caddy="false"
