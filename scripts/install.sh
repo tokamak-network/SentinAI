@@ -31,7 +31,6 @@
 #     PROPOSER_EOA_ADDRESS=0x...
 #     TREASURY_PRIVATE_KEY=0x...         # Auto-refill
 #     EOA_BALANCE_CRITICAL_ETH=0.1
-#     REDIS_URL=redis://...              # State persistence (default: redis://localhost:6379)
 #     SCALING_SIMULATION_MODE=false      # true = no real K8s scaling (default: auto)
 #     AUTO_REMEDIATION_ENABLED=true
 #     ALERT_WEBHOOK_URL=https://...      # Slack webhook
@@ -93,7 +92,7 @@ install_docker() {
       sudo apt-get install -y ca-certificates curl
       sudo install -m 0755 -d /etc/apt/keyrings
       curl -fsSL "https://download.docker.com/linux/${OS_ID}/gpg" \
-        | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+        | sudo gpg --dearmor --yes -o /etc/apt/keyrings/docker.gpg
       sudo chmod a+r /etc/apt/keyrings/docker.gpg
       # shellcheck source=/dev/null
       echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
@@ -197,6 +196,7 @@ setup_repo() {
     log "Existing installation found: ${INSTALL_DIR}"
     cd "${INSTALL_DIR}"
     git fetch origin
+    git stash --include-untracked 2>/dev/null || true
     git checkout "${BRANCH}"
     git pull origin "${BRANCH}"
     log "Source code update complete."
@@ -376,11 +376,6 @@ setup_env() {
       EOA_BALANCE_CRITICAL_ETH="${EOA_BALANCE_CRITICAL_ETH:-0.1}"
     fi
 
-    # Redis (optional)
-    echo ""
-    read -rp "  Redis URL [redis://localhost:6379]: " REDIS_URL
-    REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
-
     # Scaling Simulation Mode
     if [ -n "${AWS_CLUSTER_NAME}" ]; then
       echo ""
@@ -432,7 +427,12 @@ setup_env() {
   : "${PROPOSER_EOA_ADDRESS:=}"
   : "${TREASURY_PRIVATE_KEY:=}"
   : "${EOA_BALANCE_CRITICAL_ETH:=0.1}"
-  : "${REDIS_URL:=redis://localhost:6379}"
+  : "${EOA_BALANCE_WARNING_ETH:=}"
+  : "${EOA_REFILL_AMOUNT_ETH:=}"
+  : "${EOA_REFILL_MAX_DAILY_ETH:=}"
+  : "${EOA_REFILL_COOLDOWN_MIN:=}"
+  : "${EOA_GAS_GUARD_GWEI:=}"
+  : "${EOA_TREASURY_MIN_ETH:=}"
   : "${AUTO_REMEDIATION_ENABLED:=}"
   : "${ALERT_WEBHOOK_URL:=}"
   : "${DOMAIN_NAME:=${DOMAIN:-}}"
@@ -492,13 +492,15 @@ ENVEOF
       [ -n "${PROPOSER_EOA_ADDRESS}" ] && printf 'PROPOSER_EOA_ADDRESS=%s\n' "${PROPOSER_EOA_ADDRESS}"
       [ -n "${TREASURY_PRIVATE_KEY}" ] && printf 'TREASURY_PRIVATE_KEY=%s\n' "${TREASURY_PRIVATE_KEY}"
       printf 'EOA_BALANCE_CRITICAL_ETH=%s\n' "${EOA_BALANCE_CRITICAL_ETH:-0.1}"
+      [ -n "${EOA_BALANCE_WARNING_ETH}" ] && printf 'EOA_BALANCE_WARNING_ETH=%s\n' "${EOA_BALANCE_WARNING_ETH}"
+      [ -n "${EOA_REFILL_AMOUNT_ETH}" ] && printf 'EOA_REFILL_AMOUNT_ETH=%s\n' "${EOA_REFILL_AMOUNT_ETH}"
+      [ -n "${EOA_REFILL_MAX_DAILY_ETH}" ] && printf 'EOA_REFILL_MAX_DAILY_ETH=%s\n' "${EOA_REFILL_MAX_DAILY_ETH}"
+      [ -n "${EOA_REFILL_COOLDOWN_MIN}" ] && printf 'EOA_REFILL_COOLDOWN_MIN=%s\n' "${EOA_REFILL_COOLDOWN_MIN}"
+      [ -n "${EOA_GAS_GUARD_GWEI}" ] && printf 'EOA_GAS_GUARD_GWEI=%s\n' "${EOA_GAS_GUARD_GWEI}"
+      [ -n "${EOA_TREASURY_MIN_ETH}" ] && printf 'EOA_TREASURY_MIN_ETH=%s\n' "${EOA_TREASURY_MIN_ETH}"
     fi
 
-    # Redis (optional)
-    if [ -n "${REDIS_URL}" ]; then
-      printf '\n# === State Store ===\n'
-      printf 'REDIS_URL=%s\n' "${REDIS_URL}"
-    fi
+    # Note: REDIS_URL is set by docker-compose.yml (redis://redis:6379)
 
     # Slack webhook (optional)
     if [ -n "${ALERT_WEBHOOK_URL:-}" ]; then
