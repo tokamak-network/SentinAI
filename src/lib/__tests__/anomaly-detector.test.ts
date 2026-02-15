@@ -5,7 +5,7 @@
  * and their integration in the main detectAnomalies() function.
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import {
   calculateZScore,
   detectAnomalies,
@@ -264,8 +264,15 @@ describe('anomaly-detector', () => {
   // ========================================================================
 
   describe('Block Plateau Rule', () => {
+    // Mock Date.now() to prevent timing flakiness between test setup and detection call
+    const fixedNow = 1700000000000;
+
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
     it('should detect block plateau when height unchanged for 120+ seconds', () => {
-      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(fixedNow);
       const baseHeight = 5000;
 
       // Create history with same block height, spaced 30 seconds apart for 5 points
@@ -273,7 +280,7 @@ describe('anomaly-detector', () => {
       for (let i = 0; i < 5; i++) {
         history.push(
           createMetric({
-            timestamp: now - (5 - i) * 30 * 1000, // 30 seconds apart
+            timestamp: fixedNow - (5 - i) * 30 * 1000, // 30 seconds apart
             blockHeight: baseHeight,
           })
         );
@@ -301,14 +308,14 @@ describe('anomaly-detector', () => {
     });
 
     it('should not detect plateau if time window < 120 seconds', () => {
-      const now = Date.now();
+      vi.spyOn(Date, 'now').mockReturnValue(fixedNow);
 
       // Create history with same height, spaced 20 seconds apart (< 120 seconds total)
       const history: MetricDataPoint[] = [];
       for (let i = 0; i < 3; i++) {
         history.push(
           createMetric({
-            timestamp: now - (3 - i) * 20 * 1000,
+            timestamp: fixedNow - (3 - i) * 20 * 1000,
             blockHeight: 5000,
           })
         );
