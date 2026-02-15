@@ -331,12 +331,13 @@ describe('anomaly-detector', () => {
     it('should detect monotonically increasing TxPool for 300+ seconds', () => {
       const now = Date.now();
 
-      // Create monotonically increasing TxPool history (60 seconds apart for 5 points)
+      // Create monotonically increasing TxPool history.
+      // Use 59s spacing to avoid boundary flakiness against 300s window.
       const history: MetricDataPoint[] = [];
       for (let i = 0; i < 5; i++) {
         history.push(
           createMetric({
-            timestamp: now - (5 - i) * 60 * 1000,
+            timestamp: now - (5 - i) * 59 * 1000,
             txPoolPending: 10 + i * 5, // 10, 15, 20, 25, 30
           })
         );
