@@ -251,6 +251,7 @@ setup_env() {
     echo "    1) Anthropic (recommended)"
     echo "    2) OpenAI"
     echo "    3) Gemini"
+    echo "    4) Qwen"
     read -rp "  Choose [1]: " ai_choice
     ai_choice="${ai_choice:-1}"
 
@@ -263,6 +264,11 @@ setup_env() {
       3)
         ai_key_name="GEMINI_API_KEY"
         read -rsp "  Gemini API Key: " ai_key_value
+        echo ""
+        ;;
+      4)
+        ai_key_name="QWEN_API_KEY"
+        read -rsp "  Qwen API Key: " ai_key_value
         echo ""
         ;;
       *)
