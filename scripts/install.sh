@@ -27,7 +27,6 @@
 #     K8S_STATEFULSET_PREFIX=            # StatefulSet name prefix (e.g., sepolia-thanos-stack)
 #     L1_RPC_URLS=https://...            # Comma-separated spare L1 RPC endpoints
 #     L1_PROXYD_ENABLED=true             # L1 Proxyd ConfigMap integration
-#     L1_PROXYD_CONFIGMAP_NAME=name      # Proxyd ConfigMap (auto-detected if omitted)
 #     BATCHER_EOA_ADDRESS=0x...          # EOA balance monitoring
 #     PROPOSER_EOA_ADDRESS=0x...
 #     TREASURY_PRIVATE_KEY=0x...         # Auto-refill
@@ -360,7 +359,6 @@ setup_env() {
       if [[ "${proxyd_choice}" =~ ^[Yy]$ ]]; then
         L1_PROXYD_ENABLED="true"
         info "Proxyd ConfigMap name will be auto-detected at runtime."
-        read -rp "  L1_PROXYD_CONFIGMAP_NAME (press Enter to auto-detect): " L1_PROXYD_CONFIGMAP_NAME
       fi
     fi
 
@@ -415,7 +413,6 @@ setup_env() {
   : "${AWS_REGION:=}"
   : "${L1_RPC_URLS:=}"
   : "${L1_PROXYD_ENABLED:=}"
-  : "${L1_PROXYD_CONFIGMAP_NAME:=}"
   : "${BATCHER_EOA_ADDRESS:=}"
   : "${PROPOSER_EOA_ADDRESS:=}"
   : "${TREASURY_PRIVATE_KEY:=}"
@@ -466,7 +463,6 @@ ENVEOF
       printf 'L1_RPC_URLS=%s\n' "${L1_RPC_URLS}"
       if [ "${L1_PROXYD_ENABLED}" = "true" ]; then
         printf 'L1_PROXYD_ENABLED=true\n'
-        [ -n "${L1_PROXYD_CONFIGMAP_NAME}" ] && printf 'L1_PROXYD_CONFIGMAP_NAME=%s\n' "${L1_PROXYD_CONFIGMAP_NAME}"
       fi
     fi
 
