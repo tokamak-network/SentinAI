@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
             <div class="mt-12 pt-6 border-t border-gray-300 text-center text-sm text-gray-600">
               <p>🤖 SentinAI - Optimism L2 Node Monitoring & Auto-Scaling</p>
               <p class="mt-2">
-                <a href="https://sentinai.tokamak.network/thanos-sepolia" class="text-blue-600 hover:underline">
+                <a href="${process.env.NEXT_PUBLIC_BASE_PATH || '/'}" class="text-blue-600 hover:underline">
                   Back to Dashboard
                 </a>
               </p>

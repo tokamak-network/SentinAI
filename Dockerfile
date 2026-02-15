@@ -16,7 +16,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV NEXT_PUBLIC_BASE_PATH=/thanos-sepolia
+ARG NEXT_PUBLIC_BASE_PATH=
+ENV NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH}
 
 RUN npm run build
 

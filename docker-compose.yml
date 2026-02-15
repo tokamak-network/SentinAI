@@ -1,6 +1,9 @@
 services:
   sentinai:
-    build: .
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-}
     container_name: sentinai
     ports:
       - "3002:8080"
@@ -8,6 +11,7 @@ services:
       - .env.local
     environment:
       - REDIS_URL=redis://redis:6379
+      - NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH:-}
       # Read-only mode (protects public dashboard)
       - NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE=true
     volumes:
@@ -29,7 +33,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/thanos-sepolia/api/health"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080${NEXT_PUBLIC_BASE_PATH}/api/health || exit 1"]
       interval: 30s
       timeout: 10s
       start_period: 10s

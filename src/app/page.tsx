@@ -150,7 +150,7 @@ interface AgentLoopStatus {
 
 // --- Configuration Constants ---
 /** Base path for API fetch calls (must match next.config.ts basePath) */
-const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || '/thanos-sepolia';
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || '';
 
 /** Metrics API polling interval (ms). Adjusted to reduce L1 RPC load (1s → 60s). */
 const METRICS_REFRESH_INTERVAL_MS = 60_000;
@@ -387,7 +387,7 @@ export default function Dashboard() {
 
       const timestamp = Date.now();
       const currentMode = stressModeRef.current; // Use ref for latest access inside async
-      const url = `/api/metrics?t=${timestamp}${currentMode ? '&stress=true' : ''}`;
+      const url = `${BASE_PATH}/api/metrics?t=${timestamp}${currentMode ? '&stress=true' : ''}`;
 
       try {
         const res = await fetch(url, {

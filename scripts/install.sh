@@ -34,6 +34,7 @@
 #     SCALING_SIMULATION_MODE=false      # true = no real K8s scaling (default: auto)
 #     AUTO_REMEDIATION_ENABLED=true
 #     ALERT_WEBHOOK_URL=https://...      # Slack webhook
+#     NEXT_PUBLIC_BASE_PATH=/thanos-sepolia  # URL base path (e.g., /thanos-sepolia)
 #     DOMAIN=sentinai.example.com        # HTTPS domain (Caddy)
 # ============================================================
 
@@ -407,6 +408,13 @@ setup_env() {
       info "Ports 80 (HTTP) and 443 (HTTPS) must be open in the firewall/Security List."
     fi
 
+    # Base path (for multi-chain deployments under a subpath)
+    echo ""
+    echo "  URL base path for the dashboard (e.g., /thanos-sepolia, /titan-mainnet)."
+    echo "  This serves the app at https://domain/<base-path>."
+    read -rp "  Base Path (press Enter for root /): " NEXT_PUBLIC_BASE_PATH
+    NEXT_PUBLIC_BASE_PATH="${NEXT_PUBLIC_BASE_PATH:-}"
+
     # Slack Webhook (optional)
     read -rp "  Slack Webhook URL (optional, press Enter to skip): " ALERT_WEBHOOK_URL
   fi
@@ -436,6 +444,7 @@ setup_env() {
   : "${AUTO_REMEDIATION_ENABLED:=}"
   : "${ALERT_WEBHOOK_URL:=}"
   : "${DOMAIN_NAME:=${DOMAIN:-}}"
+  : "${NEXT_PUBLIC_BASE_PATH:=}"
 
   # Determine SCALING_SIMULATION_MODE (interactive sets it above; non-interactive reads env)
   : "${SCALING_SIMULATION_MODE:=}"
@@ -502,6 +511,12 @@ ENVEOF
 
     # Note: REDIS_URL is set by docker-compose.yml (redis://redis:6379)
 
+    # Base path (optional)
+    if [ -n "${NEXT_PUBLIC_BASE_PATH}" ]; then
+      printf '\n# === Deployment ===\n'
+      printf 'NEXT_PUBLIC_BASE_PATH=%s\n' "${NEXT_PUBLIC_BASE_PATH}"
+    fi
+
     # Slack webhook (optional)
     if [ -n "${ALERT_WEBHOOK_URL:-}" ]; then
       printf '\n# === Alerts ===\n'
@@ -511,6 +526,12 @@ ENVEOF
 
   chmod 600 .env.local
   log ".env.local created (permissions: 600)."
+
+  # Generate .env for Docker Compose variable interpolation (build args + healthcheck)
+  # Note: .env is read by docker-compose.yml for ${VARIABLE} substitution.
+  # This is separate from .env.local which is loaded at runtime via env_file.
+  printf 'NEXT_PUBLIC_BASE_PATH=%s\n' "${NEXT_PUBLIC_BASE_PATH}" > .env
+  log ".env created (Docker Compose build args)."
 
   # Generate Caddyfile and update docker-compose.yml for HTTPS (if domain is set)
   if [ -n "${DOMAIN_NAME:-}" ]; then
@@ -661,7 +682,7 @@ KUBEEOF
   local retries=5
   local i
   for i in $(seq 1 ${retries}); do
-    if curl -sf http://localhost:3002/thanos-sepolia/api/health > /dev/null 2>&1; then
+    if curl -sf "http://localhost:3002${NEXT_PUBLIC_BASE_PATH}/api/health" > /dev/null 2>&1; then
       echo ""
       log "============================================"
       log "  SentinAI installation complete!"
@@ -683,12 +704,12 @@ KUBEEOF
         # Extract domain from Caddyfile (first word of first non-comment, non-empty line)
         local caddy_domain
         caddy_domain=$(grep -v '^#' Caddyfile 2>/dev/null | grep -v '^\s*$' | head -1 | awk '{print $1}' || echo "")
-        info "Dashboard: https://${caddy_domain}/thanos-sepolia"
+        info "Dashboard: https://${caddy_domain}${NEXT_PUBLIC_BASE_PATH}"
         info "Caddy logs: sudo docker logs sentinai-caddy -f"
       elif [ -n "${public_ip}" ]; then
-        info "Dashboard: http://${public_ip}:3002/thanos-sepolia"
+        info "Dashboard: http://${public_ip}:3002${NEXT_PUBLIC_BASE_PATH}"
       else
-        info "Dashboard: http://localhost:3002/thanos-sepolia"
+        info "Dashboard: http://localhost:3002${NEXT_PUBLIC_BASE_PATH}"
       fi
       info "View logs: cd ${INSTALL_DIR} && sudo docker compose${profile_flag} logs -f"
       info "Stop services: cd ${INSTALL_DIR} && sudo docker compose${profile_flag} down"

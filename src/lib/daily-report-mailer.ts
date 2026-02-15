@@ -107,8 +107,10 @@ function extractStatusEmoji(markdown: string | undefined): string {
 function formatDailyReportMessage(reportContent: string, date: string): object {
   const summaryText = extractSummary(reportContent, 300);
   const statusEmoji = extractStatusEmoji(reportContent);
-  const reportUrl = `https://sentinai.tokamak.network/api/reports/daily/view?date=${date}`;
-  const dashboardUrl = `https://sentinai.tokamak.network/thanos-sepolia`;
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
+  const domain = process.env.DOMAIN || 'sentinai.tokamak.network';
+  const reportUrl = `https://${domain}${basePath}/api/reports/daily/view?date=${date}`;
+  const dashboardUrl = `https://${domain}${basePath}`;
 
   return {
     blocks: [
