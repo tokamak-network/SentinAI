@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as dailyAccumulator from '@/lib/daily-accumulator';
+import { getCurrentHourKST } from '@/lib/daily-accumulator';
 import type {
   MetricSnapshot,
   HourlySummary,
@@ -226,7 +227,7 @@ describe('daily-accumulator', () => {
       const snapshot1 = await dailyAccumulator.takeSnapshot();
 
       const data = await dailyAccumulator.getAccumulatedData();
-      const hour = new Date(snapshot1!.timestamp).getHours();
+      const hour = getCurrentHourKST();
       const summary = data!.hourlySummaries[hour];
 
       expect(summary.snapshotCount).toBe(1);
@@ -244,7 +245,7 @@ describe('daily-accumulator', () => {
       await dailyAccumulator.takeSnapshot();
 
       const data = await dailyAccumulator.getAccumulatedData();
-      const hour = new Date().getHours();
+      const hour = getCurrentHourKST();
       const blocksProduced = data!.hourlySummaries[hour].blocksProduced;
 
       // 300 seconds / 2.5 seconds per block = 120 blocks
@@ -358,7 +359,7 @@ describe('daily-accumulator', () => {
       await dailyAccumulator.addScalingEvent(event);
 
       const data = await dailyAccumulator.getAccumulatedData();
-      const hour = new Date(event.timestamp).getHours();
+      const hour = getCurrentHourKST();
       const vcpuChanges = data!.hourlySummaries[hour].vcpuChanges;
 
       expect(vcpuChanges).toHaveLength(1);
@@ -387,7 +388,7 @@ describe('daily-accumulator', () => {
       );
 
       const data = await dailyAccumulator.getAccumulatedData();
-      const hour = new Date().getHours();
+      const hour = getCurrentHourKST();
 
       expect(data!.hourlySummaries[hour].vcpuChanges).toHaveLength(2);
     });
@@ -568,7 +569,7 @@ describe('daily-accumulator', () => {
       await dailyAccumulator.takeSnapshot();
 
       const data = await dailyAccumulator.getAccumulatedData();
-      const hour = new Date().getHours();
+      const hour = getCurrentHourKST();
       const summary = data!.hourlySummaries[hour];
 
       expect(summary.avgCpu).toBe(30);
@@ -611,7 +612,7 @@ describe('daily-accumulator', () => {
       // Should not crash, just not update blocks produced
       expect(snapshot).not.toBeNull();
       const data = await dailyAccumulator.getAccumulatedData();
-      const hour = new Date().getHours();
+      const hour = getCurrentHourKST();
 
       // Blocks produced should remain 0 with zero interval
       expect(data!.hourlySummaries[hour].blocksProduced).toBe(0);
