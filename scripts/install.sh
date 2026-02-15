@@ -17,6 +17,18 @@
 #   SENTINAI_AI_PROVIDER=anthropic     # anthropic (default), openai, gemini
 #   SENTINAI_AI_KEY=sk-ant-...
 #   SENTINAI_CLUSTER_NAME=my-cluster   # Simulation mode if not set
+#   SENTINAI_K8S_NAMESPACE=default     # K8s namespace (default: default)
+#   SENTINAI_K8S_APP_PREFIX=op         # K8s pod label prefix (default: op)
+#   SENTINAI_AWS_PROFILE=my-profile    # Optional (multi-account AWS)
+#   SENTINAI_L1_RPC_URLS=https://...   # Optional (comma-separated spare L1 RPC endpoints)
+#   SENTINAI_L1_PROXYD_ENABLED=true    # Optional (L1 Proxyd ConfigMap integration)
+#   SENTINAI_L1_PROXYD_CONFIGMAP_NAME=proxyd-config  # Optional
+#   SENTINAI_BATCHER_EOA_ADDRESS=0x... # Optional (EOA balance monitoring)
+#   SENTINAI_PROPOSER_EOA_ADDRESS=0x...# Optional
+#   SENTINAI_TREASURY_PRIVATE_KEY=0x...# Optional (auto-refill)
+#   SENTINAI_EOA_BALANCE_CRITICAL_ETH=0.1  # Optional
+#   SENTINAI_REDIS_URL=redis://...     # Optional (state persistence)
+#   SENTINAI_AUTO_REMEDIATION=true     # Optional
 #   SENTINAI_DOMAIN=sentinai.example.com  # Optional (HTTPS domain)
 #   SENTINAI_WEBHOOK_URL=https://...   # Optional
 # ============================================================
@@ -184,8 +196,12 @@ setup_env() {
     fi
   fi
 
-  local L2_RPC_URL="" ai_key_name="" ai_key_value=""
-  local AWS_CLUSTER_NAME="" DOMAIN_NAME="" ALERT_WEBHOOK_URL=""
+  local L2_RPC_URL="" ai_key_name="" ai_key_value="" AI_GATEWAY_URL=""
+  local AWS_CLUSTER_NAME="" K8S_NAMESPACE="default" K8S_APP_PREFIX="op" AWS_PROFILE=""
+  local L1_RPC_URLS="" L1_PROXYD_ENABLED="" L1_PROXYD_CONFIGMAP_NAME=""
+  local BATCHER_EOA_ADDRESS="" PROPOSER_EOA_ADDRESS="" TREASURY_PRIVATE_KEY="" EOA_BALANCE_CRITICAL_ETH=""
+  local REDIS_URL="" AUTO_REMEDIATION_ENABLED=""
+  local DOMAIN_NAME="" ALERT_WEBHOOK_URL=""
 
   # --- Partial env var detection: error early ---
   if [ -n "${SENTINAI_L2_RPC_URL:-}" ] && [ -z "${SENTINAI_AI_KEY:-}" ]; then
@@ -211,6 +227,18 @@ setup_env() {
 
     AI_GATEWAY_URL="${SENTINAI_AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
     AWS_CLUSTER_NAME="${SENTINAI_CLUSTER_NAME:-}"
+    K8S_NAMESPACE="${SENTINAI_K8S_NAMESPACE:-default}"
+    K8S_APP_PREFIX="${SENTINAI_K8S_APP_PREFIX:-op}"
+    AWS_PROFILE="${SENTINAI_AWS_PROFILE:-}"
+    L1_RPC_URLS="${SENTINAI_L1_RPC_URLS:-}"
+    L1_PROXYD_ENABLED="${SENTINAI_L1_PROXYD_ENABLED:-}"
+    L1_PROXYD_CONFIGMAP_NAME="${SENTINAI_L1_PROXYD_CONFIGMAP_NAME:-}"
+    BATCHER_EOA_ADDRESS="${SENTINAI_BATCHER_EOA_ADDRESS:-}"
+    PROPOSER_EOA_ADDRESS="${SENTINAI_PROPOSER_EOA_ADDRESS:-}"
+    TREASURY_PRIVATE_KEY="${SENTINAI_TREASURY_PRIVATE_KEY:-}"
+    EOA_BALANCE_CRITICAL_ETH="${SENTINAI_EOA_BALANCE_CRITICAL_ETH:-}"
+    REDIS_URL="${SENTINAI_REDIS_URL:-}"
+    AUTO_REMEDIATION_ENABLED="${SENTINAI_AUTO_REMEDIATION:-}"
     DOMAIN_NAME="${SENTINAI_DOMAIN:-}"
     ALERT_WEBHOOK_URL="${SENTINAI_WEBHOOK_URL:-}"
 
@@ -265,6 +293,49 @@ setup_env() {
     read -rp "  AWS EKS Cluster Name (for K8s monitoring, press Enter to skip): " AWS_CLUSTER_NAME
     if [ -z "${AWS_CLUSTER_NAME}" ]; then
       warn "AWS_CLUSTER_NAME not set. Running in simulation mode without K8s monitoring."
+    else
+      # K8s namespace and pod prefix (only if cluster is set)
+      read -rp "  K8S_NAMESPACE [default]: " K8S_NAMESPACE
+      K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
+      read -rp "  K8S_APP_PREFIX [op]: " K8S_APP_PREFIX
+      K8S_APP_PREFIX="${K8S_APP_PREFIX:-op}"
+      read -rp "  AWS_PROFILE (press Enter to skip): " AWS_PROFILE
+    fi
+
+    # L1 RPC Failover (optional)
+    echo ""
+    echo -e "  ${BOLD}L1 RPC Failover${NC} (spare endpoints for 429 auto-failover):"
+    read -rp "  L1_RPC_URLS (comma-separated, press Enter to skip): " L1_RPC_URLS
+    if [ -n "${L1_RPC_URLS}" ]; then
+      read -rp "  Enable L1 Proxyd ConfigMap integration? (y/N): " proxyd_choice
+      if [[ "${proxyd_choice}" =~ ^[Yy]$ ]]; then
+        L1_PROXYD_ENABLED="true"
+        read -rp "  L1_PROXYD_CONFIGMAP_NAME [proxyd-config]: " L1_PROXYD_CONFIGMAP_NAME
+        L1_PROXYD_CONFIGMAP_NAME="${L1_PROXYD_CONFIGMAP_NAME:-proxyd-config}"
+      fi
+    fi
+
+    # EOA Balance Monitoring (optional)
+    echo ""
+    echo -e "  ${BOLD}EOA Balance Monitoring${NC} (batcher/proposer L1 ETH balance):"
+    read -rp "  Enable EOA monitoring? (y/N): " eoa_choice
+    if [[ "${eoa_choice}" =~ ^[Yy]$ ]]; then
+      read -rp "  BATCHER_EOA_ADDRESS (0x..., press Enter to skip): " BATCHER_EOA_ADDRESS
+      read -rp "  PROPOSER_EOA_ADDRESS (0x..., press Enter to skip): " PROPOSER_EOA_ADDRESS
+      read -rsp "  TREASURY_PRIVATE_KEY (for auto-refill, press Enter for monitor-only): " TREASURY_PRIVATE_KEY
+      echo ""
+      read -rp "  EOA_BALANCE_CRITICAL_ETH [0.1]: " EOA_BALANCE_CRITICAL_ETH
+      EOA_BALANCE_CRITICAL_ETH="${EOA_BALANCE_CRITICAL_ETH:-0.1}"
+    fi
+
+    # Redis (optional)
+    echo ""
+    read -rp "  Redis URL (for state persistence, press Enter for in-memory): " REDIS_URL
+
+    # Auto-Remediation (optional)
+    read -rp "  Enable auto-remediation? (y/N): " remediation_choice
+    if [[ "${remediation_choice}" =~ ^[Yy]$ ]]; then
+      AUTO_REMEDIATION_ENABLED="true"
     fi
 
     # HTTPS Domain (optional -- Caddy auto-certificate)
@@ -292,28 +363,59 @@ setup_env() {
   # Write .env.local (safely using printf, prevents variable expansion)
   cat > .env.local << 'ENVEOF'
 # SentinAI Configuration
-# L2 Chain RPC (required)
-# AI Provider (required)
-# Kubernetes Monitoring
-K8S_NAMESPACE=default
-K8S_APP_PREFIX=op
-# Scaling
-COST_TRACKING_ENABLED=true
+# Generated by install.sh
 ENVEOF
 
   # Safely write user input values (no shell expansion)
   {
+    printf '\n# === Required ===\n'
     printf 'L2_RPC_URL=%s\n' "${L2_RPC_URL}"
     printf 'AI_GATEWAY_URL=%s\n' "${AI_GATEWAY_URL}"
     printf '%s=%s\n' "${ai_key_name}" "${ai_key_value}"
-    printf 'AWS_CLUSTER_NAME=%s\n' "${AWS_CLUSTER_NAME:-}"
-    printf 'SCALING_SIMULATION_MODE=%s\n' "${scaling_mode}"
-  } >> .env.local
 
-  # Slack webhook (optional)
-  if [ -n "${ALERT_WEBHOOK_URL:-}" ]; then
-    printf '\n# Alert\nALERT_WEBHOOK_URL=%s\n' "${ALERT_WEBHOOK_URL}" >> .env.local
-  fi
+    printf '\n# === K8s Monitoring ===\n'
+    printf 'AWS_CLUSTER_NAME=%s\n' "${AWS_CLUSTER_NAME:-}"
+    printf 'K8S_NAMESPACE=%s\n' "${K8S_NAMESPACE}"
+    printf 'K8S_APP_PREFIX=%s\n' "${K8S_APP_PREFIX}"
+    [ -n "${AWS_PROFILE}" ] && printf 'AWS_PROFILE=%s\n' "${AWS_PROFILE}"
+
+    printf '\n# === Scaling ===\n'
+    printf 'SCALING_SIMULATION_MODE=%s\n' "${scaling_mode}"
+    printf 'COST_TRACKING_ENABLED=true\n'
+    printf 'AGENT_LOOP_ENABLED=true\n'
+    [ "${AUTO_REMEDIATION_ENABLED}" = "true" ] && printf 'AUTO_REMEDIATION_ENABLED=true\n'
+
+    # L1 RPC Failover (optional)
+    if [ -n "${L1_RPC_URLS}" ]; then
+      printf '\n# === L1 RPC Failover ===\n'
+      printf 'L1_RPC_URLS=%s\n' "${L1_RPC_URLS}"
+      if [ "${L1_PROXYD_ENABLED}" = "true" ]; then
+        printf 'L1_PROXYD_ENABLED=true\n'
+        printf 'L1_PROXYD_CONFIGMAP_NAME=%s\n' "${L1_PROXYD_CONFIGMAP_NAME}"
+      fi
+    fi
+
+    # EOA Balance Monitoring (optional)
+    if [ -n "${BATCHER_EOA_ADDRESS}${PROPOSER_EOA_ADDRESS}" ]; then
+      printf '\n# === EOA Balance Monitoring ===\n'
+      [ -n "${BATCHER_EOA_ADDRESS}" ] && printf 'BATCHER_EOA_ADDRESS=%s\n' "${BATCHER_EOA_ADDRESS}"
+      [ -n "${PROPOSER_EOA_ADDRESS}" ] && printf 'PROPOSER_EOA_ADDRESS=%s\n' "${PROPOSER_EOA_ADDRESS}"
+      [ -n "${TREASURY_PRIVATE_KEY}" ] && printf 'TREASURY_PRIVATE_KEY=%s\n' "${TREASURY_PRIVATE_KEY}"
+      printf 'EOA_BALANCE_CRITICAL_ETH=%s\n' "${EOA_BALANCE_CRITICAL_ETH:-0.1}"
+    fi
+
+    # Redis (optional)
+    if [ -n "${REDIS_URL}" ]; then
+      printf '\n# === State Store ===\n'
+      printf 'REDIS_URL=%s\n' "${REDIS_URL}"
+    fi
+
+    # Slack webhook (optional)
+    if [ -n "${ALERT_WEBHOOK_URL:-}" ]; then
+      printf '\n# === Alerts ===\n'
+      printf 'ALERT_WEBHOOK_URL=%s\n' "${ALERT_WEBHOOK_URL}"
+    fi
+  } >> .env.local
 
   chmod 600 .env.local
   log ".env.local created (permissions: 600)."
