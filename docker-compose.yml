@@ -8,9 +8,12 @@ services:
       - .env.local
     environment:
       - REDIS_URL=redis://redis:6379
-      # 공개 대시보드 설정 (Cloudflare Tunnel - HTTPS)
-      - NEXT_PUBLIC_API_BASE_URL=https://sentinai.tokamak.network/thanos-sepolia
-      - NEXT_PUBLIC_APP_URL=https://sentinai.tokamak.network/thanos-sepolia
+      # 로컬 개발 환경 설정
+      - NEXT_PUBLIC_API_BASE_URL=http://localhost:3002/thanos-sepolia
+      - NEXT_PUBLIC_APP_URL=http://localhost:3002/thanos-sepolia
+      # ALB 프로덕션 배포 시 다음과 같이 변경:
+      # - NEXT_PUBLIC_API_BASE_URL=https://sentinai.tokamak.network/thanos-sepolia
+      # - NEXT_PUBLIC_APP_URL=https://sentinai.tokamak.network/thanos-sepolia
       # 읽기 전용 모드 (공개 대시보드 보호)
       - NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE=true
     volumes:
@@ -61,48 +64,36 @@ services:
       timeout: 5s
       retries: 3
 
-  # Cloudflare Tunnel: HTTPS + Access 인증으로 대시보드 공개
-  # 활성화: docker compose --profile tunnel up -d
-  # 사전 설정: https://one.dash.cloudflare.com → Networks → Tunnels
-
-  # 설정 방법:
-  # 1. Named Tunnel 생성: https://one.dash.cloudflare.com/tunnels
-  # 2. 토큰 복사: cloudflared service install <TOKEN>에서 <TOKEN> 부분
-  # 3. CLOUDFLARE_TUNNEL_TOKEN 환경변수 설정
-  # 4. 도메인 설정: Public Hostnames에서 subdomain 추가
-
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: sentinai-tunnel
-
-    # Named Tunnel 설정 (프로덕션)
-    # HTTP/2 프로토콜 사용 (안정성)
-    # Service Token을 사용하여 인증
-    command: tunnel --no-autoupdate --protocol http2 run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-
-    # Quick Tunnel 대체 설정 (개발/테스트용, 임시 URL 생성):
-    # command: tunnel --no-autoupdate --url http://sentinai:8080 --protocol http2
-
-    environment:
-      - CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-      - TUNNEL_CRED_FILE=/root/.cloudflared/cert.json
-
-    volumes:
-      # Named Tunnel 크레덴셜 저장 (선택사항)
-      - ~/.cloudflared:/root/.cloudflared:ro
-
-    depends_on:
-      sentinai:
-        condition: service_healthy
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '0.5'
-          memory: 128M
-        reservations:
-          cpus: '0.1'
-          memory: 32M
+  # ========================================================================
+  # DEPRECATED: Cloudflare Tunnel (DNS 문제로 인해 비활성화)
+  # ========================================================================
+  # 이전: cfargotunnel.com DNS 해석 실패 (Route 53 nameserver 충돌)
+  # 현황: 로컬 개발 환경 (localhost:3002)
+  # 다음: AWS ALB로 마이그레이션 (docs/ec2-alb-deployment-guide.md 참고)
+  #
+  # 활성화가 필요한 경우 (프로덕션, Cloudflare nameserver 사용 시):
+  #
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: sentinai-tunnel
+  #   command: tunnel --no-autoupdate --protocol http2 run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+  #   environment:
+  #     - CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+  #     - TUNNEL_CRED_FILE=/root/.cloudflared/cert.json
+  #   volumes:
+  #     - ~/.cloudflared:/root/.cloudflared:ro
+  #   depends_on:
+  #     sentinai:
+  #       condition: service_healthy
+  #   restart: unless-stopped
+  #   deploy:
+  #     resources:
+  #       limits:
+  #         cpus: '0.5'
+  #         memory: 128M
+  #       reservations:
+  #         cpus: '0.1'
+  #         memory: 32M
 
 volumes:
   sentinai-reports:
