@@ -41,6 +41,11 @@ const skip = (msg) => `${c.yellow}○${c.reset} ${msg}`;
 const info = (msg) => `${c.cyan}ℹ${c.reset} ${msg}`;
 const heading = (msg) => `\n${c.bold}${c.cyan}${msg}${c.reset}`;
 
+/** Signal to navigate back to the previous wizard step */
+class BackSignal extends Error {
+  constructor() { super('BACK'); this.name = 'BackSignal'; }
+}
+
 // ============================================================
 // Readline
 // ============================================================
@@ -54,6 +59,7 @@ function ask(prompt) {
 async function askRequired(prompt, validate) {
   while (true) {
     const answer = await ask(prompt);
+    if (answer === '<' || answer.toLowerCase() === 'back') throw new BackSignal();
     if (!answer) { console.log(`  ${c.red}This field is required.${c.reset}`); continue; }
     if (validate) {
       const err = validate(answer);
@@ -66,12 +72,14 @@ async function askRequired(prompt, validate) {
 async function askOptional(prompt, defaultVal) {
   const suffix = defaultVal ? ` ${c.dim}[${defaultVal}]${c.reset}` : '';
   const answer = await ask(`${prompt}${suffix}: `);
+  if (answer === '<' || answer.toLowerCase() === 'back') throw new BackSignal();
   return answer || defaultVal || '';
 }
 
 async function askYesNo(prompt, defaultNo = true) {
   const suffix = defaultNo ? ` ${c.dim}(y/N)${c.reset}` : ` ${c.dim}(Y/n)${c.reset}`;
   const answer = (await ask(`${prompt}${suffix}: `)).toLowerCase();
+  if (answer === '<' || answer === 'back') throw new BackSignal();
   if (!answer) return !defaultNo;
   return answer === 'y' || answer === 'yes';
 }
@@ -82,6 +90,7 @@ async function askChoice(prompt, options) {
   console.log('');
   while (true) {
     const answer = await ask(`  ▸ Choice (1-${options.length}): `);
+    if (answer === '<' || answer.toLowerCase() === 'back') throw new BackSignal();
     const idx = parseInt(answer, 10) - 1;
     if (idx >= 0 && idx < options.length) return options[idx].value;
     console.log(`  ${c.red}Enter a number between 1 and ${options.length}${c.reset}`);
@@ -368,7 +377,7 @@ function generateEnvFile(config) {
   blank();
 
   // Advanced
-  if (config.REDIS_URL || config.CLOUDFLARE_TUNNEL_TOKEN || config._hasAdvanced) {
+  if (config.REDIS_URL || config._hasAdvanced) {
     section('Advanced');
     if (config.REDIS_URL) val('REDIS_URL', config.REDIS_URL);
     if (config.COST_TRACKING_ENABLED === 'false') val('COST_TRACKING_ENABLED', 'false');
@@ -376,7 +385,6 @@ function generateEnvFile(config) {
     if (config.AUTO_REMEDIATION_ENABLED === 'true') val('AUTO_REMEDIATION_ENABLED', 'true');
     if (config.ANOMALY_DETECTION_ENABLED === 'false') val('ANOMALY_DETECTION_ENABLED', 'false');
     if (config.SCALING_SIMULATION_MODE) val('SCALING_SIMULATION_MODE', config.SCALING_SIMULATION_MODE);
-    if (config.CLOUDFLARE_TUNNEL_TOKEN) val('CLOUDFLARE_TUNNEL_TOKEN', config.CLOUDFLARE_TUNNEL_TOKEN);
     blank();
   }
 
@@ -400,7 +408,6 @@ const WIZARD_KEYS = new Set([
   'TREASURY_PRIVATE_KEY', 'EOA_BALANCE_WARNING_ETH', 'EOA_BALANCE_CRITICAL_ETH',
   'ALERT_WEBHOOK_URL', 'REDIS_URL', 'COST_TRACKING_ENABLED', 'AGENT_LOOP_ENABLED',
   'AUTO_REMEDIATION_ENABLED', 'ANOMALY_DETECTION_ENABLED', 'SCALING_SIMULATION_MODE',
-  'CLOUDFLARE_TUNNEL_TOKEN',
 ]);
 
 function getPreservedLines(envPath) {
@@ -656,9 +663,6 @@ async function stepSummaryAndWrite(config) {
 
     const autoRemediation = await askYesNo('  Enable auto-remediation?');
     if (autoRemediation) config.AUTO_REMEDIATION_ENABLED = 'true';
-
-    const cf = await askOptional('  ▸ CLOUDFLARE_TUNNEL_TOKEN', '');
-    if (cf) config.CLOUDFLARE_TUNNEL_TOKEN = cf;
   }
 
   // Display summary
@@ -843,13 +847,19 @@ async function modifyMode() {
       if (!costTracking) cfg.COST_TRACKING_ENABLED = 'false';
       const autoRemediation = await askYesNo('  Enable auto-remediation?');
       if (autoRemediation) cfg.AUTO_REMEDIATION_ENABLED = 'true';
-      const cf = await askOptional('  ▸ CLOUDFLARE_TUNNEL_TOKEN', cfg.CLOUDFLARE_TUNNEL_TOKEN || '');
-      if (cf) cfg.CLOUDFLARE_TUNNEL_TOKEN = cf;
     },
   };
 
-  await stepMap[section](config);
-  await stepSummaryAndWrite(config);
+  try {
+    await stepMap[section](config);
+    await stepSummaryAndWrite(config);
+  } catch (e) {
+    if (e instanceof BackSignal) {
+      console.log(`\n  ${c.yellow}Cancelled.${c.reset}`);
+    } else {
+      throw e;
+    }
+  }
 }
 
 // ============================================================
@@ -861,6 +871,7 @@ async function main() {
   console.log(`${c.bold}${c.cyan}  ╔════════════════════════════════╗${c.reset}`);
   console.log(`${c.bold}${c.cyan}  ║   SentinAI Setup Wizard v2    ║${c.reset}`);
   console.log(`${c.bold}${c.cyan}  ╚════════════════════════════════╝${c.reset}`);
+  console.log(`  ${c.dim}Type '<' at any prompt to go back to the previous step.${c.reset}`);
   console.log('');
 
   // Handle Ctrl+C gracefully
@@ -892,14 +903,26 @@ async function main() {
 
   // Fresh setup
   const config = {};
+  const steps = [stepL2Rpc, stepAIProvider, stepK8s, stepL1Rpc, stepEOA, stepAlerts, stepSummaryAndWrite];
+  let i = 0;
 
-  await stepL2Rpc(config);
-  await stepAIProvider(config);
-  await stepK8s(config);
-  await stepL1Rpc(config);
-  await stepEOA(config);
-  await stepAlerts(config);
-  await stepSummaryAndWrite(config);
+  while (i < steps.length) {
+    try {
+      await steps[i](config);
+      i++;
+    } catch (e) {
+      if (e instanceof BackSignal) {
+        if (i > 0) {
+          console.log(`\n  ${c.yellow}↩ Back to previous step${c.reset}`);
+          i--;
+        } else {
+          console.log(info('Already at the first step.'));
+        }
+      } else {
+        throw e;
+      }
+    }
+  }
 
   rl.close();
 }
