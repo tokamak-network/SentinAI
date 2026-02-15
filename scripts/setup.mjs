@@ -52,8 +52,39 @@ class BackSignal extends Error {
 
 const rl = createInterface({ input: process.stdin, output: process.stdout });
 
+/**
+ * When stdin closes (piped input exhausted, terminal disconnect, etc.),
+ * pending rl.question() callbacks are never invoked. The Promise hangs
+ * and the process exits silently with code 0 — causing writeFileSync
+ * to never execute.
+ *
+ * Fix: track pending reject and fire it on 'close', so the wizard
+ * surfaces a clear error instead of silently skipping the write step.
+ */
+let rlClosed = false;
+let pendingReject = null;
+
+rl.on('close', () => {
+  rlClosed = true;
+  if (pendingReject) {
+    const reject = pendingReject;
+    pendingReject = null;
+    reject(new Error('INPUT_CLOSED'));
+  }
+});
+
 function ask(prompt) {
-  return new Promise((res) => rl.question(prompt, (a) => res(a.trim())));
+  return new Promise((resolve, reject) => {
+    if (rlClosed) {
+      reject(new Error('INPUT_CLOSED'));
+      return;
+    }
+    pendingReject = reject;
+    rl.question(prompt, (a) => {
+      pendingReject = null;
+      resolve(a.trim());
+    });
+  });
 }
 
 async function askRequired(prompt, validate) {
@@ -928,6 +959,11 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error(`\n${c.red}Error: ${err.message}${c.reset}\n`);
+  if (err.message === 'INPUT_CLOSED') {
+    console.error(`\n${c.yellow}Input stream closed before setup completed.${c.reset}`);
+    console.error(`${c.dim}Run interactively: node scripts/setup.mjs${c.reset}\n`);
+  } else {
+    console.error(`\n${c.red}Error: ${err.message}${c.reset}\n`);
+  }
   process.exit(1);
 });
