@@ -26,7 +26,7 @@
 #     K8S_APP_PREFIX=op                  # K8s pod label prefix
 #     L1_RPC_URLS=https://...            # Comma-separated spare L1 RPC endpoints
 #     L1_PROXYD_ENABLED=true             # L1 Proxyd ConfigMap integration
-#     L1_PROXYD_CONFIGMAP_NAME=proxyd-config
+#     L1_PROXYD_CONFIGMAP_NAME=name      # Proxyd ConfigMap (auto-detected if omitted)
 #     BATCHER_EOA_ADDRESS=0x...          # EOA balance monitoring
 #     PROPOSER_EOA_ADDRESS=0x...
 #     TREASURY_PRIVATE_KEY=0x...         # Auto-refill
@@ -355,29 +355,8 @@ setup_env() {
       read -rp "  Enable L1 Proxyd ConfigMap integration? (y/N): " proxyd_choice
       if [[ "${proxyd_choice}" =~ ^[Yy]$ ]]; then
         L1_PROXYD_ENABLED="true"
-
-        # Auto-detect Proxyd ConfigMap from cluster
-        local _detected_cm=""
-        if [ -n "${AWS_CLUSTER_NAME}" ] && command -v kubectl &>/dev/null; then
-          info "Searching for Proxyd ConfigMap in namespace '${K8S_NAMESPACE}'..."
-          _detected_cm=$(kubectl get configmap -n "${K8S_NAMESPACE}" --no-headers \
-            -o custom-columns=":metadata.name" 2>/dev/null | grep -i proxyd | head -1 || true)
-        fi
-
-        if [ -n "${_detected_cm}" ]; then
-          info "Found: ${_detected_cm}"
-          read -rp "  Use this ConfigMap? (Y/n): " _use_detected
-          if [[ ! "${_use_detected}" =~ ^[Nn]$ ]]; then
-            L1_PROXYD_CONFIGMAP_NAME="${_detected_cm}"
-          else
-            read -rp "  L1_PROXYD_CONFIGMAP_NAME [proxyd-config]: " L1_PROXYD_CONFIGMAP_NAME
-            L1_PROXYD_CONFIGMAP_NAME="${L1_PROXYD_CONFIGMAP_NAME:-proxyd-config}"
-          fi
-        else
-          [ -n "${AWS_CLUSTER_NAME}" ] && warn "Could not auto-detect Proxyd ConfigMap. Enter manually."
-          read -rp "  L1_PROXYD_CONFIGMAP_NAME [proxyd-config]: " L1_PROXYD_CONFIGMAP_NAME
-          L1_PROXYD_CONFIGMAP_NAME="${L1_PROXYD_CONFIGMAP_NAME:-proxyd-config}"
-        fi
+        info "Proxyd ConfigMap name will be auto-detected at runtime."
+        read -rp "  L1_PROXYD_CONFIGMAP_NAME (press Enter to auto-detect): " L1_PROXYD_CONFIGMAP_NAME
       fi
     fi
 
@@ -481,7 +460,7 @@ ENVEOF
       printf 'L1_RPC_URLS=%s\n' "${L1_RPC_URLS}"
       if [ "${L1_PROXYD_ENABLED}" = "true" ]; then
         printf 'L1_PROXYD_ENABLED=true\n'
-        printf 'L1_PROXYD_CONFIGMAP_NAME=%s\n' "${L1_PROXYD_CONFIGMAP_NAME}"
+        [ -n "${L1_PROXYD_CONFIGMAP_NAME}" ] && printf 'L1_PROXYD_CONFIGMAP_NAME=%s\n' "${L1_PROXYD_CONFIGMAP_NAME}"
       fi
     fi
 

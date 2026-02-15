@@ -59,6 +59,47 @@ function getStatefulSetPrefix(): string {
 }
 
 // ============================================================
+// Proxyd ConfigMap Name Resolution
+// ============================================================
+
+let proxydConfigMapNameCache: string | null = null;
+
+/**
+ * Resolve Proxyd ConfigMap name with fallback chain:
+ * 1. L1_PROXYD_CONFIGMAP_NAME env var (explicit)
+ * 2. Auto-detect from cluster (kubectl get configmap, filter "proxyd")
+ * 3. Fallback to 'proxyd-config'
+ */
+export async function resolveProxydConfigMapName(): Promise<string> {
+  if (process.env.L1_PROXYD_CONFIGMAP_NAME) {
+    return process.env.L1_PROXYD_CONFIGMAP_NAME;
+  }
+
+  if (proxydConfigMapNameCache) return proxydConfigMapNameCache;
+
+  try {
+    const namespace = getNamespace();
+    const { stdout } = await runK8sCommand(
+      `get configmap -n ${namespace} --no-headers -o custom-columns=":metadata.name"`,
+      { timeout: 10000 }
+    );
+    const configMaps = stdout.trim().split('\n').filter(Boolean);
+    const proxydCm = configMaps.find(name =>
+      name.toLowerCase().includes('proxyd') && !name.startsWith('kube-')
+    );
+    if (proxydCm) {
+      proxydConfigMapNameCache = proxydCm;
+      console.log(`[L1 Failover] Auto-detected Proxyd ConfigMap: ${proxydCm}`);
+      return proxydCm;
+    }
+  } catch {
+    // kubectl not available or cluster not connected
+  }
+
+  return 'proxyd-config';
+}
+
+// ============================================================
 // Proxyd ConfigMap Support
 // ============================================================
 
@@ -163,7 +204,7 @@ async function applyBackendReplacement(
   backendName: string,
   newUrl: string
 ): Promise<ConfigMapUpdateResult> {
-  const configMapName = process.env.L1_PROXYD_CONFIGMAP_NAME || 'proxyd-config';
+  const configMapName = await resolveProxydConfigMapName();
   const dataKey = process.env.L1_PROXYD_DATA_KEY || 'proxyd-config.toml';
   const namespace = getNamespace();
 
@@ -564,7 +605,7 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
   if (process.env.L1_PROXYD_ENABLED !== 'true') return null;
 
   const state = getState();
-  const configMapName = process.env.L1_PROXYD_CONFIGMAP_NAME || 'proxyd-config';
+  const configMapName = await resolveProxydConfigMapName();
   const dataKey = process.env.L1_PROXYD_DATA_KEY || 'proxyd-config.toml';
   const targetGroup = process.env.L1_PROXYD_UPSTREAM_GROUP || 'main';
   const namespace = getNamespace();
@@ -752,8 +793,9 @@ export async function getL2NodesL1RpcStatus(): Promise<L2NodeL1RpcStatus[]> {
 async function getL2NodesL1RpcFromProxyd(): Promise<L2NodeL1RpcStatus[]> {
   try {
     // 1. Get ConfigMap TOML content
+    const configMapName = await resolveProxydConfigMapName();
     const tomlContent = await getConfigMapToml(
-      process.env.L1_PROXYD_CONFIGMAP_NAME || 'proxyd-config',
+      configMapName,
       process.env.L1_PROXYD_DATA_KEY || 'proxyd-config.toml',
       getNamespace()
     );

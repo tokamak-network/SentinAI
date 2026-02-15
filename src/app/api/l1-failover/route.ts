@@ -3,7 +3,7 @@
  * Returns consolidated L1 RPC failover state for L2 nodes (via Proxyd)
  */
 
-import { getL1FailoverState, getConfigMapToml } from '@/lib/l1-rpc-failover';
+import { getL1FailoverState, getConfigMapToml, resolveProxydConfigMapName } from '@/lib/l1-rpc-failover';
 import { maskUrl } from '@/lib/l1-rpc-failover';
 import { getNamespace } from '@/lib/k8s-config';
 import TOML from '@iarna/toml';
@@ -17,7 +17,7 @@ export async function GET() {
     let proxydActiveUrl = 'unknown';
     try {
       const namespace = getNamespace();
-      const configMapName = process.env.L1_PROXYD_CONFIGMAP_NAME || 'proxyd-config';
+      const configMapName = await resolveProxydConfigMapName();
       const dataKey = process.env.L1_PROXYD_DATA_KEY || 'proxyd-config.toml';
 
       if (process.env.L1_PROXYD_ENABLED === 'true') {
