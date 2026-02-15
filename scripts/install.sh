@@ -12,25 +12,27 @@
 #   SENTINAI_BRANCH=main               # Git branch (default: main)
 #
 # Non-interactive mode (CI/CD, user-data):
-#   SENTINAI_L2_RPC_URL=https://rpc.example.com
-#   SENTINAI_AI_GATEWAY_URL=https://...  # Optional (AI Gateway URL, uses official Gateway if not set)
-#   SENTINAI_AI_PROVIDER=anthropic     # anthropic (default), openai, gemini
-#   SENTINAI_AI_KEY=sk-ant-...
-#   SENTINAI_CLUSTER_NAME=my-cluster   # Simulation mode if not set
-#   SENTINAI_K8S_NAMESPACE=default     # K8s namespace (default: default)
-#   SENTINAI_K8S_APP_PREFIX=op         # K8s pod label prefix (default: op)
-#   SENTINAI_AWS_PROFILE=my-profile    # Optional (multi-account AWS)
-#   SENTINAI_L1_RPC_URLS=https://...   # Optional (comma-separated spare L1 RPC endpoints)
-#   SENTINAI_L1_PROXYD_ENABLED=true    # Optional (L1 Proxyd ConfigMap integration)
-#   SENTINAI_L1_PROXYD_CONFIGMAP_NAME=proxyd-config  # Optional
-#   SENTINAI_BATCHER_EOA_ADDRESS=0x... # Optional (EOA balance monitoring)
-#   SENTINAI_PROPOSER_EOA_ADDRESS=0x...# Optional
-#   SENTINAI_TREASURY_PRIVATE_KEY=0x...# Optional (auto-refill)
-#   SENTINAI_EOA_BALANCE_CRITICAL_ETH=0.1  # Optional
-#   SENTINAI_REDIS_URL=redis://...     # Optional (state persistence)
-#   SENTINAI_AUTO_REMEDIATION=true     # Optional
-#   SENTINAI_DOMAIN=sentinai.example.com  # Optional (HTTPS domain)
-#   SENTINAI_WEBHOOK_URL=https://...   # Optional
+#   Uses the same variable names as .env.local — no prefix needed.
+#   Required:
+#     L2_RPC_URL=https://rpc.example.com
+#     ANTHROPIC_API_KEY=sk-ant-...       # or OPENAI_API_KEY / GEMINI_API_KEY / QWEN_API_KEY
+#   Optional:
+#     AI_GATEWAY_URL=https://...         # AI Gateway (default: official gateway)
+#     AWS_CLUSTER_NAME=my-cluster        # EKS cluster (simulation mode if not set)
+#     K8S_NAMESPACE=default              # K8s namespace
+#     K8S_APP_PREFIX=op                  # K8s pod label prefix
+#     AWS_PROFILE=my-profile             # Multi-account AWS
+#     L1_RPC_URLS=https://...            # Comma-separated spare L1 RPC endpoints
+#     L1_PROXYD_ENABLED=true             # L1 Proxyd ConfigMap integration
+#     L1_PROXYD_CONFIGMAP_NAME=proxyd-config
+#     BATCHER_EOA_ADDRESS=0x...          # EOA balance monitoring
+#     PROPOSER_EOA_ADDRESS=0x...
+#     TREASURY_PRIVATE_KEY=0x...         # Auto-refill
+#     EOA_BALANCE_CRITICAL_ETH=0.1
+#     REDIS_URL=redis://...              # State persistence
+#     AUTO_REMEDIATION_ENABLED=true
+#     ALERT_WEBHOOK_URL=https://...      # Slack webhook
+#     DOMAIN=sentinai.example.com        # HTTPS domain (Caddy)
 # ============================================================
 
 set -euo pipefail
@@ -180,9 +182,27 @@ setup_repo() {
 setup_env() {
   cd "${INSTALL_DIR}"
 
+  # --- Detect non-interactive mode BEFORE local declarations ---
+  # (local would shadow environment variables with the same names)
+  local _ai_key_found=""
+  local ai_key_name="" ai_key_value=""
+  if [ -n "${ANTHROPIC_API_KEY:-}" ]; then
+    ai_key_name="ANTHROPIC_API_KEY"; ai_key_value="${ANTHROPIC_API_KEY}"; _ai_key_found="true"
+  elif [ -n "${OPENAI_API_KEY:-}" ]; then
+    ai_key_name="OPENAI_API_KEY"; ai_key_value="${OPENAI_API_KEY}"; _ai_key_found="true"
+  elif [ -n "${GEMINI_API_KEY:-}" ]; then
+    ai_key_name="GEMINI_API_KEY"; ai_key_value="${GEMINI_API_KEY}"; _ai_key_found="true"
+  elif [ -n "${QWEN_API_KEY:-}" ]; then
+    ai_key_name="QWEN_API_KEY"; ai_key_value="${QWEN_API_KEY}"; _ai_key_found="true"
+  fi
+  local _noninteractive=""
+  if [ -n "${L2_RPC_URL:-}" ] && [ -n "${_ai_key_found}" ]; then
+    _noninteractive="true"
+  fi
+
   if [ -f .env.local ]; then
     log ".env.local file already exists."
-    if [ -n "${SENTINAI_L2_RPC_URL:-}" ]; then
+    if [ -n "${_noninteractive}" ]; then
       cp .env.local ".env.local.bak.$(date +%s)"
       log "Non-interactive mode: backing up existing .env.local and overwriting."
     else
@@ -196,51 +216,16 @@ setup_env() {
     fi
   fi
 
-  local L2_RPC_URL="" ai_key_name="" ai_key_value="" AI_GATEWAY_URL=""
-  local AWS_CLUSTER_NAME="" K8S_NAMESPACE="default" K8S_APP_PREFIX="op" AWS_PROFILE=""
-  local L1_RPC_URLS="" L1_PROXYD_ENABLED="" L1_PROXYD_CONFIGMAP_NAME=""
-  local BATCHER_EOA_ADDRESS="" PROPOSER_EOA_ADDRESS="" TREASURY_PRIVATE_KEY="" EOA_BALANCE_CRITICAL_ETH=""
-  local REDIS_URL="" AUTO_REMEDIATION_ENABLED=""
-  local DOMAIN_NAME="" ALERT_WEBHOOK_URL=""
-
-  # --- Partial env var detection: error early ---
-  if [ -n "${SENTINAI_L2_RPC_URL:-}" ] && [ -z "${SENTINAI_AI_KEY:-}" ]; then
-    err "Non-interactive mode: SENTINAI_L2_RPC_URL is set but SENTINAI_AI_KEY is missing."
-  fi
-  if [ -z "${SENTINAI_L2_RPC_URL:-}" ] && [ -n "${SENTINAI_AI_KEY:-}" ]; then
-    err "Non-interactive mode: SENTINAI_AI_KEY is set but SENTINAI_L2_RPC_URL is missing."
-  fi
-
-  # --- Non-interactive mode: use SENTINAI_* environment variables ---
-  if [ -n "${SENTINAI_L2_RPC_URL:-}" ] && [ -n "${SENTINAI_AI_KEY:-}" ]; then
+  # --- Non-interactive mode: read directly from env vars ---
+  if [ -n "${_noninteractive}" ]; then
     log "Non-interactive mode detected."
-    L2_RPC_URL="${SENTINAI_L2_RPC_URL}"
-    [[ ! "${L2_RPC_URL}" =~ ^https?:// ]] && err "SENTINAI_L2_RPC_URL must start with http:// or https://."
+    [[ ! "${L2_RPC_URL}" =~ ^https?:// ]] && err "L2_RPC_URL must start with http:// or https://."
 
-    ai_key_value="${SENTINAI_AI_KEY}"
-    case "${SENTINAI_AI_PROVIDER:-anthropic}" in
-      anthropic) ai_key_name="ANTHROPIC_API_KEY" ;;
-      openai)    ai_key_name="OPENAI_API_KEY" ;;
-      gemini)    ai_key_name="GEMINI_API_KEY" ;;
-      *)         err "Unsupported AI Provider: ${SENTINAI_AI_PROVIDER}. (choose from: anthropic, openai, gemini)" ;;
-    esac
-
-    AI_GATEWAY_URL="${SENTINAI_AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
-    AWS_CLUSTER_NAME="${SENTINAI_CLUSTER_NAME:-}"
-    K8S_NAMESPACE="${SENTINAI_K8S_NAMESPACE:-default}"
-    K8S_APP_PREFIX="${SENTINAI_K8S_APP_PREFIX:-op}"
-    AWS_PROFILE="${SENTINAI_AWS_PROFILE:-}"
-    L1_RPC_URLS="${SENTINAI_L1_RPC_URLS:-}"
-    L1_PROXYD_ENABLED="${SENTINAI_L1_PROXYD_ENABLED:-}"
-    L1_PROXYD_CONFIGMAP_NAME="${SENTINAI_L1_PROXYD_CONFIGMAP_NAME:-}"
-    BATCHER_EOA_ADDRESS="${SENTINAI_BATCHER_EOA_ADDRESS:-}"
-    PROPOSER_EOA_ADDRESS="${SENTINAI_PROPOSER_EOA_ADDRESS:-}"
-    TREASURY_PRIVATE_KEY="${SENTINAI_TREASURY_PRIVATE_KEY:-}"
-    EOA_BALANCE_CRITICAL_ETH="${SENTINAI_EOA_BALANCE_CRITICAL_ETH:-}"
-    REDIS_URL="${SENTINAI_REDIS_URL:-}"
-    AUTO_REMEDIATION_ENABLED="${SENTINAI_AUTO_REMEDIATION:-}"
-    DOMAIN_NAME="${SENTINAI_DOMAIN:-}"
-    ALERT_WEBHOOK_URL="${SENTINAI_WEBHOOK_URL:-}"
+    AI_GATEWAY_URL="${AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
+    K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
+    K8S_APP_PREFIX="${K8S_APP_PREFIX:-op}"
+    # All other vars (AWS_CLUSTER_NAME, L1_RPC_URLS, EOA, etc.)
+    # are read directly from the environment — no mapping needed.
 
   # --- Interactive mode ---
   else
@@ -352,6 +337,25 @@ setup_env() {
     # Slack Webhook (optional)
     read -rp "  Slack Webhook URL (optional, press Enter to skip): " ALERT_WEBHOOK_URL
   fi
+
+  # --- Defaults for unset optional variables (set -u safety) ---
+  # In non-interactive mode, env vars are preserved (:= only sets if unset/empty).
+  # In interactive mode, read results are preserved. Vars skipped by user get safe defaults.
+  : "${AWS_CLUSTER_NAME:=}"
+  : "${K8S_NAMESPACE:=default}"
+  : "${K8S_APP_PREFIX:=op}"
+  : "${AWS_PROFILE:=}"
+  : "${L1_RPC_URLS:=}"
+  : "${L1_PROXYD_ENABLED:=}"
+  : "${L1_PROXYD_CONFIGMAP_NAME:=}"
+  : "${BATCHER_EOA_ADDRESS:=}"
+  : "${PROPOSER_EOA_ADDRESS:=}"
+  : "${TREASURY_PRIVATE_KEY:=}"
+  : "${EOA_BALANCE_CRITICAL_ETH:=0.1}"
+  : "${REDIS_URL:=}"
+  : "${AUTO_REMEDIATION_ENABLED:=}"
+  : "${ALERT_WEBHOOK_URL:=}"
+  : "${DOMAIN_NAME:=${DOMAIN:-}}"
 
   # Determine SCALING_SIMULATION_MODE based on cluster name
   local scaling_mode="false"
