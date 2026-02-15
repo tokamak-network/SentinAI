@@ -149,6 +149,9 @@ interface AgentLoopStatus {
 }
 
 // --- Configuration Constants ---
+/** Base path for API fetch calls (must match next.config.ts basePath) */
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || '/thanos-sepolia';
+
 /** Metrics API polling interval (ms). Adjusted to reduce L1 RPC load (1s → 60s). */
 const METRICS_REFRESH_INTERVAL_MS = 60_000;
 
@@ -197,7 +200,7 @@ export default function Dashboard() {
     setIsSeeding(true);
     try {
       console.log(`[Dashboard] Starting seed injection for scenario: ${seedScenario}`);
-      const res = await fetch(`/api/metrics/seed?scenario=${seedScenario}`, { method: 'POST' });
+      const res = await fetch(`${BASE_PATH}/api/metrics/seed?scenario=${seedScenario}`, { method: 'POST' });
       const seedRes = await res.json();
       console.log(`[Dashboard] Seed injection response:`, seedRes);
 
@@ -212,7 +215,7 @@ export default function Dashboard() {
 
         for (let i = 0; i < 3; i++) {
           console.log(`[Dashboard] Metrics fetch attempt ${i + 1}/3...`);
-          const metricsRes = await fetch('/api/metrics?t=' + Date.now() + '&_=' + Math.random(), { cache: 'no-store' });
+          const metricsRes = await fetch(`${BASE_PATH}/api/metrics?t=` + Date.now() + '&_=' + Math.random(), { cache: 'no-store' });
           if (metricsRes.ok) {
             metricsData = await metricsRes.json();
             metricsFetched = true;
@@ -248,7 +251,7 @@ export default function Dashboard() {
         }
 
         // Re-fetch scaler to get updated prediction
-        const scalerRes = await fetch('/api/scaler', { cache: 'no-store' });
+        const scalerRes = await fetch(`${BASE_PATH}/api/scaler`, { cache: 'no-store' });
         if (scalerRes.ok) {
           const scalerData: ScalerState = await scalerRes.json();
           setPrediction(scalerData.prediction);
@@ -292,7 +295,7 @@ export default function Dashboard() {
     setIsSending(true);
 
     try {
-      const response = await fetch('/api/nlops', {
+      const response = await fetch(`${BASE_PATH}/api/nlops`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -413,7 +416,7 @@ export default function Dashboard() {
         // Fetch scaler state with prediction (every 10 seconds to avoid overload)
         if (timestamp % 10000 < 1000) {
           try {
-            const scalerRes = await fetch('/api/scaler', {
+            const scalerRes = await fetch(`${BASE_PATH}/api/scaler`, {
               cache: 'no-store',
               signal: controller.signal,
             });
@@ -429,7 +432,7 @@ export default function Dashboard() {
 
         // Fetch L1 Failover status
         try {
-          const l1Response = await fetch('/api/l1-failover', {
+          const l1Response = await fetch(`${BASE_PATH}/api/l1-failover`, {
             cache: 'no-store',
             signal: controller.signal,
           });
@@ -467,7 +470,7 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchAgentLoop = async () => {
       try {
-        const res = await fetch('/api/agent-loop', { cache: 'no-store' });
+        const res = await fetch(`${BASE_PATH}/api/agent-loop`, { cache: 'no-store' });
         if (res.ok) {
           setAgentLoop(await res.json());
         }
@@ -670,7 +673,7 @@ export default function Dashboard() {
                 } else {
                   setCostAnalysisExpanded(true);
                   setCostAnalysisLoading(true);
-                  fetch('/api/cost-report')
+                  fetch(`${BASE_PATH}/api/cost-report`)
                     .then(r => {
                       if (!r.ok) throw new Error(`HTTP ${r.status}`);
                       return r.json();

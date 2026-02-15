@@ -54,7 +54,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<NLOpsResp
 
 function getBaseUrl(request: NextRequest): string {
   const url = new URL(request.url);
-  return `${url.protocol}//${url.host}`;
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '/thanos-sepolia';
+  return `${url.protocol}//${url.host}${basePath}`;
 }
 
 export async function GET(): Promise<NextResponse> {

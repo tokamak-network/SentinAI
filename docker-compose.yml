@@ -8,12 +8,6 @@ services:
       - .env.local
     environment:
       - REDIS_URL=redis://redis:6379
-      # Local development environment settings
-      - NEXT_PUBLIC_API_BASE_URL=http://localhost:3002/thanos-sepolia
-      - NEXT_PUBLIC_APP_URL=http://localhost:3002/thanos-sepolia
-      # For ALB production deployment, change to:
-      # - NEXT_PUBLIC_API_BASE_URL=https://sentinai.tokamak.network/thanos-sepolia
-      # - NEXT_PUBLIC_APP_URL=https://sentinai.tokamak.network/thanos-sepolia
       # Read-only mode (protects public dashboard)
       - NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE=true
     volumes:
@@ -35,7 +29,7 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/thanos-sepolia/api/health"]
       interval: 30s
       timeout: 10s
       start_period: 10s
