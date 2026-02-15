@@ -335,7 +335,7 @@ export async function GET(request: Request) {
         let seedMetricData: Awaited<ReturnType<typeof getRecentMetrics>>[0] | null = null;
 
         // First, try getting metrics from store (works across worker threads)
-        let recentMetrics = await getRecentMetrics();
+        const recentMetrics = await getRecentMetrics();
 
         // Check if we have recent seed-injected metrics (different from live metrics)
         if (recentMetrics && recentMetrics.length > 0) {
