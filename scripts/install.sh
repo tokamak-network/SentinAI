@@ -32,6 +32,7 @@
 #     TREASURY_PRIVATE_KEY=0x...         # Auto-refill
 #     EOA_BALANCE_CRITICAL_ETH=0.1
 #     REDIS_URL=redis://...              # State persistence (default: redis://localhost:6379)
+#     SCALING_SIMULATION_MODE=false      # true = no real K8s scaling (default: auto)
 #     AUTO_REMEDIATION_ENABLED=true
 #     ALERT_WEBHOOK_URL=https://...      # Slack webhook
 #     DOMAIN=sentinai.example.com        # HTTPS domain (Caddy)
@@ -380,6 +381,20 @@ setup_env() {
     read -rp "  Redis URL [redis://localhost:6379]: " REDIS_URL
     REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
 
+    # Scaling Simulation Mode
+    if [ -n "${AWS_CLUSTER_NAME}" ]; then
+      echo ""
+      echo "  Simulation mode disables real K8s scaling (safe for testing)."
+      read -rp "  Enable simulation mode? (y/N): " sim_choice
+      if [[ "${sim_choice}" =~ ^[Yy]$ ]]; then
+        SCALING_SIMULATION_MODE="true"
+      else
+        SCALING_SIMULATION_MODE="false"
+      fi
+    else
+      SCALING_SIMULATION_MODE="true"
+    fi
+
     # Auto-Remediation (optional)
     read -rp "  Enable auto-remediation? (y/N): " remediation_choice
     if [[ "${remediation_choice}" =~ ^[Yy]$ ]]; then
@@ -422,11 +437,15 @@ setup_env() {
   : "${ALERT_WEBHOOK_URL:=}"
   : "${DOMAIN_NAME:=${DOMAIN:-}}"
 
-  # Determine SCALING_SIMULATION_MODE based on cluster name
-  local scaling_mode="false"
-  if [ -z "${AWS_CLUSTER_NAME}" ]; then
-    scaling_mode="true"
-    log "EKS cluster not set -> enabling simulation mode (SCALING_SIMULATION_MODE=true)"
+  # Determine SCALING_SIMULATION_MODE (interactive sets it above; non-interactive reads env)
+  : "${SCALING_SIMULATION_MODE:=}"
+  if [ -z "${SCALING_SIMULATION_MODE}" ]; then
+    if [ -z "${AWS_CLUSTER_NAME}" ]; then
+      SCALING_SIMULATION_MODE="true"
+      log "EKS cluster not set -> enabling simulation mode (SCALING_SIMULATION_MODE=true)"
+    else
+      SCALING_SIMULATION_MODE="false"
+    fi
   fi
 
   # Write .env.local (safely using printf, prevents variable expansion)
@@ -452,7 +471,7 @@ ENVEOF
     [ -n "${AWS_REGION}" ] && printf 'AWS_REGION=%s\n' "${AWS_REGION}"
 
     printf '\n# === Scaling ===\n'
-    printf 'SCALING_SIMULATION_MODE=%s\n' "${scaling_mode}"
+    printf 'SCALING_SIMULATION_MODE=%s\n' "${SCALING_SIMULATION_MODE}"
     printf 'COST_TRACKING_ENABLED=true\n'
     printf 'AGENT_LOOP_ENABLED=true\n'
     [ "${AUTO_REMEDIATION_ENABLED}" = "true" ] && printf 'AUTO_REMEDIATION_ENABLED=true\n'
