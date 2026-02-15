@@ -150,6 +150,31 @@ describe('detection-pipeline', () => {
       expect(result.activeEventId).toBe('prev-event-id');
     });
 
+    it('should pass balances to detectAnomalies when provided', async () => {
+      vi.mocked(detectAnomalies).mockReturnValue([]);
+      const balances = { batcherBalanceEth: 0.3, proposerBalanceEth: 0.009 };
+
+      await runDetectionPipeline(mockDataPoint, balances);
+
+      expect(detectAnomalies).toHaveBeenCalledWith(
+        mockDataPoint,
+        expect.any(Array),
+        balances
+      );
+    });
+
+    it('should work without balances parameter', async () => {
+      vi.mocked(detectAnomalies).mockReturnValue([]);
+
+      await runDetectionPipeline(mockDataPoint);
+
+      expect(detectAnomalies).toHaveBeenCalledWith(
+        mockDataPoint,
+        expect.any(Array),
+        undefined
+      );
+    });
+
     it('should handle detection errors gracefully', async () => {
       vi.mocked(detectAnomalies).mockImplementation(() => {
         throw new Error('Detection engine failed');

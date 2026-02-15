@@ -396,4 +396,33 @@ describe('scheduler', () => {
       expect(status.initialized).toBe(true);
     });
   });
+
+  describe('Daily Report Schedule Override', () => {
+    it('should use DAILY_REPORT_SCHEDULE env var when set', async () => {
+      const consoleSpy = vi.spyOn(console, 'log');
+      process.env.DAILY_REPORT_SCHEDULE = '0 9 * * *';
+
+      await scheduler.initializeScheduler();
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('report: 0 9 * * *')
+      );
+
+      delete process.env.DAILY_REPORT_SCHEDULE;
+      consoleSpy.mockRestore();
+    });
+
+    it('should use default schedule when env var is not set', async () => {
+      const consoleSpy = vi.spyOn(console, 'log');
+      delete process.env.DAILY_REPORT_SCHEDULE;
+
+      await scheduler.initializeScheduler();
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining('report: 55 23 * * *')
+      );
+
+      consoleSpy.mockRestore();
+    });
+  });
 });

@@ -444,7 +444,10 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
     }
 
     // Phase 2: Detect — run anomaly detection pipeline
-    const detection = await runDetectionPipeline(dataPoint);
+    const detection = await runDetectionPipeline(dataPoint, {
+      batcherBalanceEth,
+      proposerBalanceEth,
+    });
 
     // Phase 3+4: Decide & Act — evaluate scaling and auto-execute
     const scaling = await evaluateAndExecuteScaling(dataPoint);

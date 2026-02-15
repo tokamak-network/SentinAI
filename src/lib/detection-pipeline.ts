@@ -44,10 +44,11 @@ export interface DetectionResult {
  * Layer 1 runs synchronously. Layers 2-4 run asynchronously (non-blocking).
  */
 export async function runDetectionPipeline(
-  dataPoint: MetricDataPoint
+  dataPoint: MetricDataPoint,
+  balances?: { batcherBalanceEth?: number; proposerBalanceEth?: number }
 ): Promise<DetectionResult> {
   const history = await getRecentMetrics();
-  const anomalies = detectAnomalies(dataPoint, history);
+  const anomalies = detectAnomalies(dataPoint, history, balances);
 
   if (anomalies.length > 0) {
     console.log(`[Detection] ${anomalies.length} anomalies detected`);

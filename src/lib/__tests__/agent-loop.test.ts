@@ -152,10 +152,14 @@ describe('agent-loop', () => {
       expect(calledWith).toHaveProperty('blockHeight', 1000);
     });
 
-    it('should run detection pipeline', async () => {
+    it('should run detection pipeline with balances parameter', async () => {
       await runAgentCycle();
 
       expect(runDetectionPipeline).toHaveBeenCalledTimes(1);
+      const callArgs = vi.mocked(runDetectionPipeline).mock.calls[0];
+      expect(callArgs).toHaveLength(2);
+      expect(callArgs[1]).toHaveProperty('batcherBalanceEth');
+      expect(callArgs[1]).toHaveProperty('proposerBalanceEth');
     });
 
     it('should not auto-execute scaling when target equals current vCPU', async () => {

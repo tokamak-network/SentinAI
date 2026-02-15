@@ -88,8 +88,9 @@ export async function initializeScheduler(): Promise<void> {
     }
   }, { timezone: 'Asia/Seoul' });
 
-  // Daily report at 23:55 KST
-  reportTask = cron.schedule('55 23 * * *', async () => {
+  // Daily report — configurable via DAILY_REPORT_SCHEDULE env var
+  const reportSchedule = process.env.DAILY_REPORT_SCHEDULE || '55 23 * * *';
+  reportTask = cron.schedule(reportSchedule, async () => {
     if (reportTaskRunning) return;
     reportTaskRunning = true;
     try {
@@ -124,7 +125,7 @@ export async function initializeScheduler(): Promise<void> {
   }, { timezone: 'Asia/Seoul' });
 
   initialized = true;
-  console.log('[Scheduler] Initialized — snapshot: */5 * * * *, report: 55 23 * * * (KST)');
+  console.log(`[Scheduler] Initialized — snapshot: */5 * * * *, report: ${reportSchedule} (KST)`);
 }
 
 /**
