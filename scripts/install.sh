@@ -19,9 +19,11 @@
 #   Optional:
 #     AI_GATEWAY_URL=https://...         # AI Gateway (default: official gateway)
 #     AWS_CLUSTER_NAME=my-cluster        # EKS cluster (simulation mode if not set)
+#     AWS_ACCESS_KEY_ID=AKIAxxxx         # AWS credentials (required if AWS_CLUSTER_NAME is set)
+#     AWS_SECRET_ACCESS_KEY=xxxx         # AWS credentials
+#     AWS_REGION=ap-northeast-2          # AWS region (auto-detect from EC2 IMDS if omitted)
 #     K8S_NAMESPACE=default              # K8s namespace
 #     K8S_APP_PREFIX=op                  # K8s pod label prefix
-#     AWS_PROFILE=my-profile             # Multi-account AWS
 #     L1_RPC_URLS=https://...            # Comma-separated spare L1 RPC endpoints
 #     L1_PROXYD_ENABLED=true             # L1 Proxyd ConfigMap integration
 #     L1_PROXYD_CONFIGMAP_NAME=proxyd-config
@@ -29,7 +31,7 @@
 #     PROPOSER_EOA_ADDRESS=0x...
 #     TREASURY_PRIVATE_KEY=0x...         # Auto-refill
 #     EOA_BALANCE_CRITICAL_ETH=0.1
-#     REDIS_URL=redis://...              # State persistence
+#     REDIS_URL=redis://...              # State persistence (default: redis://localhost:6379)
 #     AUTO_REMEDIATION_ENABLED=true
 #     ALERT_WEBHOOK_URL=https://...      # Slack webhook
 #     DOMAIN=sentinai.example.com        # HTTPS domain (Caddy)
@@ -156,7 +158,38 @@ install_git() {
 }
 
 # ============================================================
-# Step 4: Clone / Update Repository
+# Step 4: AWS CLI
+# ============================================================
+install_aws_cli() {
+  if command -v aws &>/dev/null; then
+    log "AWS CLI already installed: $(aws --version 2>&1 | head -1)"
+    return
+  fi
+
+  log "Installing AWS CLI..."
+  case "${OS_ID}" in
+    amzn)
+      sudo dnf install -y awscli
+      ;;
+    ubuntu|debian)
+      sudo apt-get install -y unzip curl
+      local arch
+      arch=$(uname -m)
+      curl -sSL "https://awscli.amazonaws.com/awscli-exe-linux-${arch}.zip" -o /tmp/awscliv2.zip
+      unzip -qo /tmp/awscliv2.zip -d /tmp
+      sudo /tmp/aws/install
+      rm -rf /tmp/awscliv2.zip /tmp/aws
+      ;;
+    *)
+      warn "Automatic AWS CLI installation not supported for: ${OS_ID}. Please install manually."
+      return
+      ;;
+  esac
+  log "AWS CLI installation complete."
+}
+
+# ============================================================
+# Step 5: Clone / Update Repository
 # ============================================================
 setup_repo() {
   if [ -d "${INSTALL_DIR}/.git" ]; then
@@ -290,7 +323,28 @@ setup_env() {
       K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
       read -rp "  K8S_APP_PREFIX [op]: " K8S_APP_PREFIX
       K8S_APP_PREFIX="${K8S_APP_PREFIX:-op}"
-      read -rp "  AWS_PROFILE (press Enter to skip): " AWS_PROFILE
+
+      # AWS credentials for EKS access
+      echo ""
+      echo -e "  ${BOLD}AWS Credentials${NC} (for EKS cluster access):"
+      read -rp "  AWS Access Key ID: " AWS_ACCESS_KEY_ID
+      read -rsp "  AWS Secret Access Key: " AWS_SECRET_ACCESS_KEY
+      echo ""
+      [[ -z "${AWS_ACCESS_KEY_ID}" || -z "${AWS_SECRET_ACCESS_KEY}" ]] \
+        && err "AWS credentials are required when AWS_CLUSTER_NAME is set."
+
+      # AWS region (auto-detect from IMDS or manual)
+      local _imds_region=""
+      local _imds_tok
+      _imds_tok=$(curl -sf -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 30" \
+        --connect-timeout 1 http://169.254.169.254/latest/api/token 2>/dev/null || echo "")
+      if [ -n "${_imds_tok}" ]; then
+        _imds_region=$(curl -sf -H "X-aws-ec2-metadata-token: ${_imds_tok}" \
+          --connect-timeout 2 http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || echo "")
+      fi
+      local region_default="${_imds_region:-ap-northeast-2}"
+      read -rp "  AWS Region [${region_default}]: " AWS_REGION
+      AWS_REGION="${AWS_REGION:-${region_default}}"
     fi
 
     # L1 RPC Failover (optional)
@@ -301,8 +355,29 @@ setup_env() {
       read -rp "  Enable L1 Proxyd ConfigMap integration? (y/N): " proxyd_choice
       if [[ "${proxyd_choice}" =~ ^[Yy]$ ]]; then
         L1_PROXYD_ENABLED="true"
-        read -rp "  L1_PROXYD_CONFIGMAP_NAME [proxyd-config]: " L1_PROXYD_CONFIGMAP_NAME
-        L1_PROXYD_CONFIGMAP_NAME="${L1_PROXYD_CONFIGMAP_NAME:-proxyd-config}"
+
+        # Auto-detect Proxyd ConfigMap from cluster
+        local _detected_cm=""
+        if [ -n "${AWS_CLUSTER_NAME}" ] && command -v kubectl &>/dev/null; then
+          info "Searching for Proxyd ConfigMap in namespace '${K8S_NAMESPACE}'..."
+          _detected_cm=$(kubectl get configmap -n "${K8S_NAMESPACE}" --no-headers \
+            -o custom-columns=":metadata.name" 2>/dev/null | grep -i proxyd | head -1 || true)
+        fi
+
+        if [ -n "${_detected_cm}" ]; then
+          info "Found: ${_detected_cm}"
+          read -rp "  Use this ConfigMap? (Y/n): " _use_detected
+          if [[ ! "${_use_detected}" =~ ^[Nn]$ ]]; then
+            L1_PROXYD_CONFIGMAP_NAME="${_detected_cm}"
+          else
+            read -rp "  L1_PROXYD_CONFIGMAP_NAME [proxyd-config]: " L1_PROXYD_CONFIGMAP_NAME
+            L1_PROXYD_CONFIGMAP_NAME="${L1_PROXYD_CONFIGMAP_NAME:-proxyd-config}"
+          fi
+        else
+          [ -n "${AWS_CLUSTER_NAME}" ] && warn "Could not auto-detect Proxyd ConfigMap. Enter manually."
+          read -rp "  L1_PROXYD_CONFIGMAP_NAME [proxyd-config]: " L1_PROXYD_CONFIGMAP_NAME
+          L1_PROXYD_CONFIGMAP_NAME="${L1_PROXYD_CONFIGMAP_NAME:-proxyd-config}"
+        fi
       fi
     fi
 
@@ -321,7 +396,8 @@ setup_env() {
 
     # Redis (optional)
     echo ""
-    read -rp "  Redis URL (for state persistence, press Enter for in-memory): " REDIS_URL
+    read -rp "  Redis URL [redis://localhost:6379]: " REDIS_URL
+    REDIS_URL="${REDIS_URL:-redis://localhost:6379}"
 
     # Auto-Remediation (optional)
     read -rp "  Enable auto-remediation? (y/N): " remediation_choice
@@ -350,7 +426,9 @@ setup_env() {
   : "${AWS_CLUSTER_NAME:=}"
   : "${K8S_NAMESPACE:=default}"
   : "${K8S_APP_PREFIX:=op}"
-  : "${AWS_PROFILE:=}"
+  : "${AWS_ACCESS_KEY_ID:=}"
+  : "${AWS_SECRET_ACCESS_KEY:=}"
+  : "${AWS_REGION:=}"
   : "${L1_RPC_URLS:=}"
   : "${L1_PROXYD_ENABLED:=}"
   : "${L1_PROXYD_CONFIGMAP_NAME:=}"
@@ -358,7 +436,7 @@ setup_env() {
   : "${PROPOSER_EOA_ADDRESS:=}"
   : "${TREASURY_PRIVATE_KEY:=}"
   : "${EOA_BALANCE_CRITICAL_ETH:=0.1}"
-  : "${REDIS_URL:=}"
+  : "${REDIS_URL:=redis://localhost:6379}"
   : "${AUTO_REMEDIATION_ENABLED:=}"
   : "${ALERT_WEBHOOK_URL:=}"
   : "${DOMAIN_NAME:=${DOMAIN:-}}"
@@ -387,7 +465,9 @@ ENVEOF
     printf 'AWS_CLUSTER_NAME=%s\n' "${AWS_CLUSTER_NAME:-}"
     printf 'K8S_NAMESPACE=%s\n' "${K8S_NAMESPACE}"
     printf 'K8S_APP_PREFIX=%s\n' "${K8S_APP_PREFIX}"
-    [ -n "${AWS_PROFILE}" ] && printf 'AWS_PROFILE=%s\n' "${AWS_PROFILE}"
+    [ -n "${AWS_ACCESS_KEY_ID}" ] && printf 'AWS_ACCESS_KEY_ID=%s\n' "${AWS_ACCESS_KEY_ID}"
+    [ -n "${AWS_SECRET_ACCESS_KEY}" ] && printf 'AWS_SECRET_ACCESS_KEY=%s\n' "${AWS_SECRET_ACCESS_KEY}"
+    [ -n "${AWS_REGION}" ] && printf 'AWS_REGION=%s\n' "${AWS_REGION}"
 
     printf '\n# === Scaling ===\n'
     printf 'SCALING_SIMULATION_MODE=%s\n' "${scaling_mode}"
@@ -448,7 +528,65 @@ CADDYEOF
 }
 
 # ============================================================
-# Step 6: Build & Start
+# Step 7: Configure K8s Cluster Access
+# ============================================================
+setup_k8s() {
+  [ -z "${AWS_CLUSTER_NAME:-}" ] && return
+  [ -z "${AWS_ACCESS_KEY_ID:-}" ] && {
+    warn "AWS credentials not set. Skipping K8s cluster setup."
+    return
+  }
+
+  log "Setting up K8s cluster access..."
+
+  # Auto-detect region from EC2 IMDS if not set
+  if [ -z "${AWS_REGION:-}" ]; then
+    local imds_token
+    imds_token=$(curl -sf -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 30" \
+      --connect-timeout 1 http://169.254.169.254/latest/api/token 2>/dev/null || echo "")
+    if [ -n "${imds_token}" ]; then
+      AWS_REGION=$(curl -sf -H "X-aws-ec2-metadata-token: ${imds_token}" \
+        --connect-timeout 2 http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || echo "")
+    fi
+  fi
+
+  if [ -z "${AWS_REGION:-}" ]; then
+    warn "AWS_REGION could not be detected. Set AWS_REGION manually."
+    warn "Skipping kubeconfig generation."
+    return
+  fi
+
+  log "Region: ${AWS_REGION}, Cluster: ${AWS_CLUSTER_NAME}"
+
+  # Generate kubeconfig using env var credentials (no --profile needed)
+  if AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+     AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+     AWS_DEFAULT_REGION="${AWS_REGION}" \
+     aws eks update-kubeconfig \
+       --name "${AWS_CLUSTER_NAME}" \
+       --region "${AWS_REGION}" 2>&1; then
+    log "kubeconfig generated: ~/.kube/config"
+  else
+    warn "Failed to generate kubeconfig. Check credentials and cluster name."
+    return
+  fi
+
+  # Fix permissions so Docker container (uid 1001 = nextjs) can read
+  chmod 644 ~/.kube/config
+
+  # Verify cluster access
+  if AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
+     AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+     AWS_DEFAULT_REGION="${AWS_REGION}" \
+     kubectl get nodes --no-headers 2>/dev/null | head -3; then
+    log "K8s cluster access verified."
+  else
+    warn "K8s cluster verification failed. Container may still work with mounted credentials."
+  fi
+}
+
+# ============================================================
+# Step 8: Build & Start
 # ============================================================
 start_services() {
   cd "${INSTALL_DIR}"
@@ -548,9 +686,11 @@ main() {
   install_docker
   install_compose
   install_git
+  install_aws_cli
   check_imds_hint
   setup_repo
   setup_env
+  setup_k8s
   start_services
 }
 
