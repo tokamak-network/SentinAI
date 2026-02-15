@@ -553,6 +553,13 @@ setup_k8s() {
   # Fix permissions so Docker container (uid 1001 = nextjs) can read
   chmod 644 ~/.kube/config
 
+  # Copy to /root/ since "sudo docker compose" resolves ~ as /root/
+  if [ "$HOME" != "/root" ]; then
+    sudo mkdir -p /root/.kube
+    sudo cp ~/.kube/config /root/.kube/config
+    sudo chmod 644 /root/.kube/config
+  fi
+
   # Verify cluster access
   if AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
      AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
@@ -570,24 +577,43 @@ setup_k8s() {
 start_services() {
   cd "${INSTALL_DIR}"
 
-  # Ensure ~/.kube/config exists as a FILE before Docker Compose starts.
-  # If missing, Docker mounts it as a directory, causing:
-  #   "error loading config file: read ~/.kube/config: is a directory"
-  mkdir -p ~/.kube
-  if [ -d ~/.kube/config ]; then
-    rm -rf ~/.kube/config
-    warn "Removed invalid ~/.kube/config directory (was created by Docker)."
-  fi
-  if [ ! -f ~/.kube/config ]; then
-    cat > ~/.kube/config << 'KUBEEOF'
+  # docker-compose.yml mounts ~/.kube/config and ~/.aws as bind mounts.
+  # "sudo docker compose" resolves ~ to /root/, not the current user's home.
+  # If /root/.kube/config doesn't exist, Docker creates it as a DIRECTORY,
+  # causing: "error loading config file: read ~/.kube/config: is a directory"
+  #
+  # Fix: ensure both user and root paths have valid files.
+  local _kube_paths=("$HOME/.kube" "/root/.kube")
+  local _kp
+  for _kp in "${_kube_paths[@]}"; do
+    sudo mkdir -p "${_kp}"
+    if sudo test -d "${_kp}/config"; then
+      sudo rm -rf "${_kp}/config"
+      warn "Removed invalid ${_kp}/config directory (was created by Docker)."
+    fi
+    if ! sudo test -f "${_kp}/config"; then
+      sudo tee "${_kp}/config" > /dev/null << 'KUBEEOF'
 apiVersion: v1
 kind: Config
 clusters: []
 contexts: []
 users: []
 KUBEEOF
-    chmod 644 ~/.kube/config
-    info "Created placeholder kubeconfig. K8s access will use --server/--token mode."
+      sudo chmod 644 "${_kp}/config"
+      info "Created placeholder kubeconfig: ${_kp}/config"
+    fi
+  done
+
+  # Copy real kubeconfig to /root/ if user has one (sudo docker compose reads /root/)
+  if [ -f "$HOME/.kube/config" ] && [ "$HOME" != "/root" ]; then
+    sudo cp "$HOME/.kube/config" /root/.kube/config
+    sudo chmod 644 /root/.kube/config
+  fi
+
+  # Copy AWS credentials to /root/ if user has them
+  if [ -d "$HOME/.aws" ] && [ "$HOME" != "/root" ]; then
+    sudo mkdir -p /root/.aws
+    sudo cp -r "$HOME/.aws/." /root/.aws/ 2>/dev/null || true
   fi
 
   # Caddy HTTPS (production profile) if Caddyfile exists
