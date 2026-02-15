@@ -32,9 +32,8 @@ function generateUUID(): string {
 // Simulation Mode Check
 // ============================================================
 
-async function isSimulationMode(): Promise<boolean> {
-  return process.env.SCALING_SIMULATION_MODE === 'true';
-}
+// Remediation is NOT gated by SCALING_SIMULATION_MODE.
+// Scaling actions within remediation are gated by k8s-scaler's own simulation check.
 
 // ============================================================
 // Pre-Execution Checks
@@ -95,8 +94,6 @@ async function executeActions(
   execution: RemediationExecution,
   config: RemediationConfig
 ): Promise<void> {
-  const simulationMode = await isSimulationMode();
-
   for (const actionResult of actions) {
     const action = actionResult.action;
 
@@ -113,15 +110,6 @@ async function executeActions(
       actionResult.status = 'skipped';
       actionResult.output = 'Guarded action disabled in config';
       actionResult.completedAt = new Date().toISOString();
-      continue;
-    }
-
-    // Simulation mode: Log only
-    if (simulationMode) {
-      actionResult.status = 'success';
-      actionResult.output = `[SIMULATION] Would execute: ${action.type}`;
-      actionResult.completedAt = new Date().toISOString();
-      console.log(`[Remediation] Simulation: ${action.type}`);
       continue;
     }
 

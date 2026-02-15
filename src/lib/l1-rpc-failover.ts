@@ -506,7 +506,7 @@ export async function executeFailover(
       reason,
       k8sUpdated: k8sResult.updated.length > 0,
       k8sComponents: k8sResult.updated,
-      simulated: isSimulationMode(),
+      simulated: false,
     };
 
     // Push to ring buffer
@@ -531,14 +531,6 @@ export async function updateK8sL1Rpc(
   newUrl: string
 ): Promise<K8sUpdateResult> {
   const result: K8sUpdateResult = { updated: [], errors: [] };
-
-  if (isSimulationMode()) {
-    const components = getL1Components();
-    console.log(
-      `[L1 Failover] [SIMULATION] Would update ${components.length} K8s components to ${maskUrl(newUrl)}`
-    );
-    return result;
-  }
 
   if (!hasK8sCluster()) {
     console.log(
@@ -681,17 +673,11 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
 
         const spareUrl = state.spareUrls.shift()!;
 
-        if (isSimulationMode()) {
-          console.log(
-            `[L1 Failover] [SIMULATION] Would replace backend ${backendName}: ${maskUrl(rpcUrl)} → ${maskUrl(spareUrl)}`
-          );
-        } else {
-          const result = await applyBackendReplacement(backendName, spareUrl);
-          if (!result.success) {
-            // Put spare URL back on failure
-            state.spareUrls.unshift(spareUrl);
-            return null;
-          }
+        const result = await applyBackendReplacement(backendName, spareUrl);
+        if (!result.success) {
+          // Put spare URL back on failure
+          state.spareUrls.unshift(spareUrl);
+          return null;
         }
 
         health.replaced = true;
@@ -704,7 +690,7 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
           oldUrl: maskUrl(rpcUrl),
           newUrl: maskUrl(spareUrl),
           reason: `${MAX_CONSECUTIVE_FAILURES_429} consecutive 429 errors (quota exhausted)`,
-          simulated: isSimulationMode(),
+          simulated: false,
         };
 
         state.backendReplacements.push(event);
@@ -754,9 +740,8 @@ export function resetL1FailoverState(): void {
 // Internal Helpers
 // ============================================================
 
-function isSimulationMode(): boolean {
-  return process.env.SCALING_SIMULATION_MODE !== 'false';
-}
+// L1 failover is NOT gated by SCALING_SIMULATION_MODE.
+// Only K8s scaling operations are affected by simulation mode.
 
 function hasK8sCluster(): boolean {
   return !!(process.env.AWS_CLUSTER_NAME || process.env.K8S_API_URL);

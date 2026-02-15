@@ -77,9 +77,8 @@ function getState(): EOAMonitorState {
 // Helpers
 // ============================================================
 
-function isSimulationMode(): boolean {
-  return process.env.SCALING_SIMULATION_MODE !== 'false';
-}
+// EOA refill is NOT gated by SCALING_SIMULATION_MODE.
+// Refill safety is controlled by: TREASURY_PRIVATE_KEY, cooldown, daily limit, gas guard.
 
 function getConfig(overrides?: Partial<EOABalanceConfig>): EOABalanceConfig {
   return { ...DEFAULT_CONFIG, ...overrides };
@@ -277,12 +276,7 @@ export async function canRefill(
     return { allowed: false, reason: 'no-signer' };
   }
 
-  // 2. Simulation mode
-  if (isSimulationMode()) {
-    return { allowed: false, reason: 'simulation' };
-  }
-
-  // 3. Cooldown
+  // 2. Cooldown
   const lastRefill = state.lastRefillTime[targetAddress];
   if (lastRefill && Date.now() - lastRefill < config.cooldownMs) {
     return { allowed: false, reason: 'cooldown' };
@@ -340,23 +334,7 @@ export async function refillEOA(
     return { success: false, reason: 'no-signer' };
   }
 
-  // 2. Simulation mode
-  if (isSimulationMode()) {
-    console.log(`[EOA Monitor] [SIMULATION] Would refill ${role} (${targetAddress}) with ${config.refillAmountEth} ETH`);
-    pushRefillEvent({
-      timestamp: new Date().toISOString(),
-      role,
-      targetAddress,
-      amountEth: config.refillAmountEth,
-      txHash: '0x' + '0'.repeat(64),
-      previousBalanceEth: 0,
-      newBalanceEth: config.refillAmountEth,
-      simulated: true,
-    });
-    return { success: false, reason: 'simulation', refillAmountEth: config.refillAmountEth };
-  }
-
-  // 3. Cooldown
+  // 2. Cooldown
   const lastRefill = state.lastRefillTime[targetAddress];
   if (lastRefill && Date.now() - lastRefill < config.cooldownMs) {
     return { success: false, reason: 'cooldown' };

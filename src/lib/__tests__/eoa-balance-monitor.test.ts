@@ -148,29 +148,18 @@ describe('eoa-balance-monitor', () => {
   });
 
   // ============================
-  // 2. Simulation mode
+  // 2. EOA refill is NOT gated by SCALING_SIMULATION_MODE
   // ============================
-  describe('refillEOA - simulation mode', () => {
-    it('should skip tx execution in simulation mode', async () => {
+  describe('refillEOA - not gated by simulation mode', () => {
+    it('should attempt real refill even in simulation mode', async () => {
       process.env.TREASURY_PRIVATE_KEY = TREASURY_KEY;
       process.env.SCALING_SIMULATION_MODE = 'true';
 
+      // Will proceed to actual tx (may fail due to mock, but not blocked by simulation)
       const result = await refillEOA('https://rpc.test', BATCHER_ADDR, 'batcher', TEST_CONFIG);
 
-      expect(result.success).toBe(false);
-      expect(result.reason).toBe('simulation');
-      expect(mockSendTransaction).not.toHaveBeenCalled();
-    });
-
-    it('should log simulation refill event', async () => {
-      process.env.TREASURY_PRIVATE_KEY = TREASURY_KEY;
-      process.env.SCALING_SIMULATION_MODE = 'true';
-
-      await refillEOA('https://rpc.test', BATCHER_ADDR, 'batcher', TEST_CONFIG);
-
-      const events = getRefillEvents();
-      expect(events).toHaveLength(1);
-      expect(events[0].simulated).toBe(true);
+      // Not blocked by 'simulation' reason
+      expect(result.reason).not.toBe('simulation');
     });
   });
 

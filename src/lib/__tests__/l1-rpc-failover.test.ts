@@ -359,7 +359,7 @@ describe('l1-rpc-failover', () => {
       const events = getFailoverEvents();
       expect(events).toHaveLength(1);
       expect(events[0].reason).toBe('quota exhausted');
-      expect(events[0].simulated).toBe(true);
+      expect(events[0].simulated).toBe(false);
     });
 
     it('should set lastFailoverTime', async () => {
@@ -630,7 +630,7 @@ backends = ["backend1", "backend2"]
 
         expect(replacement).not.toBeNull();
         expect(replacement!.backendName).toBe('backend1');
-        expect(replacement!.simulated).toBe(true);
+        expect(replacement!.simulated).toBe(false);
 
         const state = getL1FailoverState();
         expect(state.backendReplacements).toHaveLength(1);
