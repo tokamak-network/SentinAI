@@ -179,6 +179,8 @@ setup_env() {
         log "Keeping existing .env.local."
         return
       fi
+      cp .env.local ".env.local.bak.$(date +%s)"
+      log "Backed up existing .env.local before overwriting."
     fi
   fi
 
