@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**SentinAI (Autonomous Node Guardian)** — Monitoring and auto-scaling dashboard for L2 networks via modular chain plugins (default: Optimism).
+**SentinAI (Autonomous Node Guardian)** — Monitoring and auto-scaling dashboard for L2 networks via modular chain plugins (default: Thanos).
 
 Real-time web UI with L1/L2 block monitoring, K8s integration, AI-powered log analysis, anomaly detection, root cause analysis, NLOps chat interface, and hybrid auto-scaling engine.
 
@@ -101,7 +101,7 @@ Enabled automatically when `L2_RPC_URL` is set. Override with `AGENT_LOOP_ENABLE
 2. `anomaly-ai-analyzer.ts`: AI semantic analysis (Fast Tier: `qwen3-80b-next`)
 3. `alert-dispatcher.ts`: Slack/Webhook dispatch. Events in `anomaly-event-store.ts` (in-memory).
 
-**RCA Engine** — `rca-engine.ts` traces fault propagation using chain-specific dependency graph (from `ChainPlugin.dependencyGraph`). Example for Optimism:
+**RCA Engine** — `rca-engine.ts` traces fault propagation using chain-specific dependency graph (from `ChainPlugin.dependencyGraph`). Example for Thanos:
 ```
 L1 → op-node → op-geth
            → op-batcher → L1
@@ -110,7 +110,7 @@ L1 → op-node → op-geth
 
 **Chain Plugin System** — Modular abstraction for multi-chain L2 support (`src/chains/`):
 - `ChainPlugin` interface encapsulates all chain-specific knowledge
-- `getChainPlugin()` returns the active plugin (defaults to Optimism)
+- `getChainPlugin()` returns the active plugin (defaults to Thanos)
 - Components, dependency graphs, AI prompts, playbooks, K8s configs, EOA roles — all from plugin
 - Adding new chain = 4 files in `src/chains/<chain>/` (index, components, prompts, playbooks)
 

@@ -1,10 +1,10 @@
 /**
  * Chain Plugin System Tests
- * Validates ChainPlugin interface, OptimismPlugin implementation, and registry behavior
+ * Validates ChainPlugin interface, ThanosPlugin implementation, and registry behavior
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { OptimismPlugin } from '@/chains/optimism';
+import { ThanosPlugin } from '@/chains/thanos';
 import {
   getChainPlugin,
   resetChainRegistry,
@@ -13,11 +13,11 @@ import {
 } from '@/chains/registry';
 import type { ChainPlugin } from '@/chains/types';
 
-describe('OptimismPlugin', () => {
-  let plugin: OptimismPlugin;
+describe('ThanosPlugin', () => {
+  let plugin: ThanosPlugin;
 
   beforeEach(() => {
-    plugin = new OptimismPlugin();
+    plugin = new ThanosPlugin();
   });
 
   // ============================================================
@@ -26,8 +26,8 @@ describe('OptimismPlugin', () => {
 
   describe('properties', () => {
     it('should have correct chain type and display name', () => {
-      expect(plugin.chainType).toBe('optimism');
-      expect(plugin.displayName).toBe('Optimism L2 Rollup');
+      expect(plugin.chainType).toBe('thanos');
+      expect(plugin.displayName).toBe('Thanos L2 Rollup');
     });
 
     it('should define 4 L2 components', () => {
@@ -290,14 +290,14 @@ describe('OptimismPlugin', () => {
       expect(prompts.failurePatterns).toBeTruthy();
     });
 
-    it('should reference Optimism components in RCA prompt', () => {
+    it('should reference OP Stack components in RCA prompt', () => {
       expect(plugin.aiPrompts.rcaSystemPrompt).toContain('op-geth');
       expect(plugin.aiPrompts.rcaSystemPrompt).toContain('op-node');
       expect(plugin.aiPrompts.rcaSystemPrompt).toContain('op-batcher');
       expect(plugin.aiPrompts.rcaSystemPrompt).toContain('op-proposer');
     });
 
-    it('should reference Optimism in anomaly analyzer context', () => {
+    it('should reference chain context in anomaly analyzer', () => {
       expect(plugin.aiPrompts.anomalyAnalyzerContext).toContain('op-node');
       expect(plugin.aiPrompts.anomalyAnalyzerContext).toContain('op-geth');
     });
@@ -313,10 +313,10 @@ describe('ChainRegistry', () => {
     resetChainRegistry();
   });
 
-  it('should lazy-load OptimismPlugin by default', () => {
+  it('should lazy-load ThanosPlugin by default', () => {
     const plugin = getChainPlugin();
     expect(plugin).toBeDefined();
-    expect(plugin.chainType).toBe('optimism');
+    expect(plugin.chainType).toBe('thanos');
   });
 
   it('should return same instance on repeated calls', () => {
@@ -326,7 +326,7 @@ describe('ChainRegistry', () => {
   });
 
   it('should return correct chain type', () => {
-    expect(getChainType()).toBe('optimism');
+    expect(getChainType()).toBe('thanos');
   });
 
   it('should allow registering a custom plugin', () => {
@@ -374,6 +374,6 @@ describe('ChainRegistry', () => {
     resetChainRegistry();
     // Re-registering should work
     const plugin = getChainPlugin();
-    expect(plugin.chainType).toBe('optimism');
+    expect(plugin.chainType).toBe('thanos');
   });
 });

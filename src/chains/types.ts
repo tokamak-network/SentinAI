@@ -93,9 +93,9 @@ export interface ChainAIPrompts {
  * To add a new chain: implement this interface in src/chains/<chain>/index.ts
  */
 export interface ChainPlugin {
-  /** Unique chain type identifier (e.g. 'optimism', 'arbitrum') */
+  /** Unique chain type identifier (e.g. 'thanos', 'arbitrum') */
   readonly chainType: string;
-  /** Human-readable display name (e.g. 'Optimism L2 Rollup') */
+  /** Human-readable display name (e.g. 'Thanos L2 Rollup') */
   readonly displayName: string;
 
   // ---- Component Topology ----
