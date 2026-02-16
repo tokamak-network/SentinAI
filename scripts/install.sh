@@ -19,9 +19,10 @@
 #   Optional:
 #     AI_GATEWAY_URL=https://...         # AI Gateway (default: official gateway)
 #     AWS_CLUSTER_NAME=my-cluster        # EKS cluster (simulation mode if not set)
-#     AWS_ACCESS_KEY_ID=AKIAxxxx         # AWS credentials (required if AWS_CLUSTER_NAME is set)
-#     AWS_SECRET_ACCESS_KEY=xxxx         # AWS credentials
-#     AWS_REGION=ap-northeast-2          # AWS region (auto-detect from EC2 IMDS if omitted)
+#     AWS_PROFILE=my-cluster             # AWS CLI profile (default: same as AWS_CLUSTER_NAME)
+#     AWS_ACCESS_KEY_ID=AKIAxxxx         # AWS keys → stored in ~/.aws/credentials, not .env.local
+#     AWS_SECRET_ACCESS_KEY=xxxx         # (only needed if ~/.aws/credentials doesn't exist yet)
+#     AWS_REGION=ap-northeast-2          # AWS region (auto-detect from profile or EC2 IMDS)
 #     K8S_NAMESPACE=default              # K8s namespace
 #     K8S_APP_PREFIX=op                  # K8s pod label prefix
 #     K8S_STATEFULSET_PREFIX=            # StatefulSet name prefix (e.g., sepolia-thanos-stack)
@@ -58,6 +59,16 @@ log()  { echo -e "${GREEN}[SentinAI]${NC} $*"; }
 warn() { echo -e "${YELLOW}[WARNING]${NC} $*"; }
 err()  { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 info() { echo -e "${CYAN}[INFO]${NC} $*"; }
+
+# Store AWS credentials in ~/.aws/credentials using aws CLI (standard location)
+store_aws_credentials() {
+  local profile="$1" key_id="$2" secret="$3" region="${4:-}"
+  aws configure set aws_access_key_id "${key_id}" --profile "${profile}"
+  aws configure set aws_secret_access_key "${secret}" --profile "${profile}"
+  [ -n "${region}" ] && aws configure set region "${region}" --profile "${profile}"
+  aws configure set output json --profile "${profile}"
+  log "AWS credentials saved to ~/.aws/credentials (profile: ${profile})"
+}
 
 # ============================================================
 # OS Detection
@@ -264,6 +275,14 @@ setup_env() {
     # All other vars (AWS_CLUSTER_NAME, L1_RPC_URLS, EOA, etc.)
     # are read directly from the environment — no mapping needed.
 
+    # Store AWS keys in ~/.aws/credentials (standard location, mounted by Docker)
+    if [ -n "${AWS_CLUSTER_NAME:-}" ] && [ -n "${AWS_ACCESS_KEY_ID:-}" ] && [ -n "${AWS_SECRET_ACCESS_KEY:-}" ]; then
+      AWS_PROFILE="${AWS_PROFILE:-${AWS_CLUSTER_NAME}}"
+      store_aws_credentials "${AWS_PROFILE}" "${AWS_ACCESS_KEY_ID}" "${AWS_SECRET_ACCESS_KEY}" "${AWS_REGION:-}"
+    elif [ -n "${AWS_CLUSTER_NAME:-}" ]; then
+      AWS_PROFILE="${AWS_PROFILE:-${AWS_CLUSTER_NAME}}"
+    fi
+
   # --- Interactive mode ---
   else
     echo ""
@@ -323,34 +342,53 @@ setup_env() {
       warn "AWS_CLUSTER_NAME not set. Running in simulation mode without K8s monitoring."
     else
       # K8s namespace and pod prefix (only if cluster is set)
-      read -rp "  K8S_NAMESPACE [default]: " K8S_NAMESPACE
-      K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
+      read -rp "  K8S_NAMESPACE [${AWS_CLUSTER_NAME}]: " K8S_NAMESPACE
+      K8S_NAMESPACE="${K8S_NAMESPACE:-${AWS_CLUSTER_NAME}}"
       read -rp "  K8S_APP_PREFIX [op]: " K8S_APP_PREFIX
       K8S_APP_PREFIX="${K8S_APP_PREFIX:-op}"
       read -rp "  K8S_STATEFULSET_PREFIX (e.g., sepolia-thanos-stack, press Enter if none): " K8S_STATEFULSET_PREFIX
       K8S_STATEFULSET_PREFIX="${K8S_STATEFULSET_PREFIX:-}"
 
-      # AWS credentials for EKS access
+      # AWS Authentication — credentials stored in ~/.aws/ (standard, mounted by Docker)
       echo ""
-      echo -e "  ${BOLD}AWS Credentials${NC} (for EKS cluster access):"
-      read -rp "  AWS Access Key ID: " AWS_ACCESS_KEY_ID
-      read -rsp "  AWS Secret Access Key: " AWS_SECRET_ACCESS_KEY
-      echo ""
-      [[ -z "${AWS_ACCESS_KEY_ID}" || -z "${AWS_SECRET_ACCESS_KEY}" ]] \
-        && err "AWS credentials are required when AWS_CLUSTER_NAME is set."
-
-      # AWS region (auto-detect from IMDS or manual)
-      local _imds_region=""
-      local _imds_tok
-      _imds_tok=$(curl -sf -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 30" \
-        --connect-timeout 1 http://169.254.169.254/latest/api/token 2>/dev/null || echo "")
-      if [ -n "${_imds_tok}" ]; then
-        _imds_region=$(curl -sf -H "X-aws-ec2-metadata-token: ${_imds_tok}" \
-          --connect-timeout 2 http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || echo "")
+      echo -e "  ${BOLD}AWS Authentication${NC}"
+      if [ -f "$HOME/.aws/credentials" ] && command -v aws &>/dev/null; then
+        echo "  Existing AWS profiles found:"
+        aws configure list-profiles 2>/dev/null | sed 's/^/    /'
+        read -rp "  AWS Profile [${AWS_CLUSTER_NAME}]: " _profile_input
+        AWS_PROFILE="${_profile_input:-${AWS_CLUSTER_NAME}}"
+        # Create profile if it doesn't exist
+        if ! aws configure list-profiles 2>/dev/null | grep -qx "${AWS_PROFILE}"; then
+          warn "Profile '${AWS_PROFILE}' not found. Creating with 'aws configure'..."
+          aws configure --profile "${AWS_PROFILE}"
+        fi
+      else
+        echo "  No AWS credentials found (~/.aws/credentials)."
+        echo "  Setting up AWS CLI profile: ${AWS_CLUSTER_NAME}"
+        echo ""
+        AWS_PROFILE="${AWS_CLUSTER_NAME}"
+        aws configure --profile "${AWS_PROFILE}"
       fi
-      local region_default="${_imds_region:-ap-northeast-2}"
-      read -rp "  AWS Region [${region_default}]: " AWS_REGION
-      AWS_REGION="${AWS_REGION:-${region_default}}"
+
+      # Region auto-detect from profile
+      local _profile_region
+      _profile_region=$(aws configure get region --profile "${AWS_PROFILE}" 2>/dev/null || echo "")
+      if [ -n "${_profile_region}" ]; then
+        AWS_REGION="${_profile_region}"
+        info "Region: ${AWS_REGION} (from profile: ${AWS_PROFILE})"
+      else
+        # Fallback to EC2 IMDS
+        local _imds_region="" _imds_tok
+        _imds_tok=$(curl -sf -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 30" \
+          --connect-timeout 1 http://169.254.169.254/latest/api/token 2>/dev/null || echo "")
+        if [ -n "${_imds_tok}" ]; then
+          _imds_region=$(curl -sf -H "X-aws-ec2-metadata-token: ${_imds_tok}" \
+            --connect-timeout 2 http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || echo "")
+        fi
+        local region_default="${_imds_region:-ap-northeast-2}"
+        read -rp "  AWS Region [${region_default}]: " AWS_REGION
+        AWS_REGION="${AWS_REGION:-${region_default}}"
+      fi
     fi
 
     # L1 RPC Failover (optional)
@@ -433,8 +471,7 @@ setup_env() {
   : "${K8S_NAMESPACE:=default}"
   : "${K8S_APP_PREFIX:=op}"
   : "${K8S_STATEFULSET_PREFIX:=}"
-  : "${AWS_ACCESS_KEY_ID:=}"
-  : "${AWS_SECRET_ACCESS_KEY:=}"
+  : "${AWS_PROFILE:=}"
   : "${AWS_REGION:=}"
   : "${L1_RPC_URLS:=}"
   : "${L1_PROXYD_ENABLED:=}"
@@ -480,12 +517,12 @@ ENVEOF
 
     printf '\n# === K8s Monitoring ===\n'
     printf 'AWS_CLUSTER_NAME=%s\n' "${AWS_CLUSTER_NAME:-}"
+    [ -n "${AWS_PROFILE}" ] && printf 'AWS_PROFILE=%s\n' "${AWS_PROFILE}"
     printf 'K8S_NAMESPACE=%s\n' "${K8S_NAMESPACE}"
     printf 'K8S_APP_PREFIX=%s\n' "${K8S_APP_PREFIX}"
     [ -n "${K8S_STATEFULSET_PREFIX}" ] && printf 'K8S_STATEFULSET_PREFIX=%s\n' "${K8S_STATEFULSET_PREFIX}"
-    [ -n "${AWS_ACCESS_KEY_ID}" ] && printf 'AWS_ACCESS_KEY_ID=%s\n' "${AWS_ACCESS_KEY_ID}"
-    [ -n "${AWS_SECRET_ACCESS_KEY}" ] && printf 'AWS_SECRET_ACCESS_KEY=%s\n' "${AWS_SECRET_ACCESS_KEY}"
     [ -n "${AWS_REGION}" ] && printf 'AWS_REGION=%s\n' "${AWS_REGION}"
+    # AWS credentials: stored in ~/.aws/credentials (mounted by Docker)
 
     printf '\n# === Scaling ===\n'
     printf 'SCALING_SIMULATION_MODE=%s\n' "${SCALING_SIMULATION_MODE}"
@@ -565,14 +602,17 @@ CADDYEOF
 # ============================================================
 setup_k8s() {
   [ -z "${AWS_CLUSTER_NAME:-}" ] && return
-  [ -z "${AWS_ACCESS_KEY_ID:-}" ] && {
-    warn "AWS credentials not set. Skipping K8s cluster setup."
+  [ -z "${AWS_PROFILE:-}" ] && {
+    warn "AWS_PROFILE not set. Skipping K8s cluster setup."
     return
   }
 
-  log "Setting up K8s cluster access..."
+  log "Setting up K8s cluster access (profile: ${AWS_PROFILE})..."
 
-  # Auto-detect region from EC2 IMDS if not set
+  # Auto-detect region from profile, then EC2 IMDS
+  if [ -z "${AWS_REGION:-}" ]; then
+    AWS_REGION=$(aws configure get region --profile "${AWS_PROFILE}" 2>/dev/null || echo "")
+  fi
   if [ -z "${AWS_REGION:-}" ]; then
     local imds_token
     imds_token=$(curl -sf -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 30" \
@@ -589,15 +629,13 @@ setup_k8s() {
     return
   fi
 
-  log "Region: ${AWS_REGION}, Cluster: ${AWS_CLUSTER_NAME}"
+  log "Region: ${AWS_REGION}, Cluster: ${AWS_CLUSTER_NAME}, Profile: ${AWS_PROFILE}"
 
-  # Generate kubeconfig using env var credentials (no --profile needed)
-  if AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
-     AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
-     AWS_DEFAULT_REGION="${AWS_REGION}" \
-     aws eks update-kubeconfig \
+  # Generate kubeconfig using named profile
+  if aws eks update-kubeconfig \
        --name "${AWS_CLUSTER_NAME}" \
-       --region "${AWS_REGION}" 2>&1; then
+       --region "${AWS_REGION}" \
+       --profile "${AWS_PROFILE}" 2>&1; then
     log "kubeconfig generated: ~/.kube/config"
   else
     warn "Failed to generate kubeconfig. Check credentials and cluster name."
@@ -615,10 +653,7 @@ setup_k8s() {
   fi
 
   # Verify cluster access
-  if AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
-     AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
-     AWS_DEFAULT_REGION="${AWS_REGION}" \
-     kubectl get nodes --no-headers 2>/dev/null | head -3; then
+  if kubectl get nodes --no-headers 2>/dev/null | head -3; then
     log "K8s cluster access verified."
   else
     warn "K8s cluster verification failed. Container may still work with mounted credentials."

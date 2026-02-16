@@ -164,6 +164,27 @@ function writeHeaders(extra?: Record<string, string>): Record<string, string> {
   return headers;
 }
 
+/** Component role descriptions for dashboard display */
+const COMPONENT_ROLES: Record<string, string> = {
+  'Execution Client': 'L2 block execution & state',
+  'L2 Client': 'L2 block execution & state',
+  'Consensus Node': 'L1 derivation & sequencing',
+  'Batcher': 'L2 tx batch submission to L1',
+  'Proposer': 'L2 state root proposal to L1',
+};
+
+/** Parse "Fargate (1.0 vCPU / 1792Mi)" into structured resource data */
+function parseResourceSpec(current: string): { platform: string; vcpu: number; memory: string; memoryMiB: number } | null {
+  const match = current.match(/^(.+?)\s*\((\d+\.?\d*)\s*vCPU\s*\/\s*(\d+\.?\d*)(Mi|Gi)\)$/);
+  if (!match) return null;
+  const platform = match[1].trim();
+  const vcpu = parseFloat(match[2]);
+  const memVal = parseFloat(match[3]);
+  const memUnit = match[4];
+  const memoryMiB = memUnit === 'Gi' ? memVal * 1024 : memVal;
+  return { platform, vcpu, memory: `${match[3]}${memUnit}`, memoryMiB };
+}
+
 /** Metrics API polling interval (ms). Adjusted to reduce L1 RPC load (1s → 60s). */
 const METRICS_REFRESH_INTERVAL_MS = 60_000;
 
@@ -833,6 +854,21 @@ export default function Dashboard() {
           const cycles = agentLoop?.recentCycles ? [...agentLoop.recentCycles].reverse() : [];
           const hasScalingAction = cycles.some(c => c.scaling?.executed);
 
+          const getScoreBadge = (score: number) => {
+            const bg = score >= 70 ? 'bg-red-500/20 text-red-400 border-red-500/30'
+              : score >= 30 ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+              : 'bg-green-500/15 text-green-500/80 border-green-500/20';
+            const barColor = score >= 70 ? 'bg-red-400' : score >= 30 ? 'bg-blue-400' : 'bg-green-500/60';
+            return (
+              <span className={`inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded border text-[10px] font-bold font-mono shrink-0 ${bg}`}>
+                <span className="w-6 h-1 rounded-full bg-gray-700 overflow-hidden">
+                  <span className={`block h-full rounded-full ${barColor}`} style={{ width: `${score}%` }} />
+                </span>
+                {score}
+              </span>
+            );
+          };
+
           return (
           <div className="lg:col-span-7 bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col max-h-[320px]">
 
@@ -900,46 +936,47 @@ export default function Dashboard() {
                           cpuMatch ? `CPU${cpuMatch[1]}` : null,
                           gasMatch ? `Gas${gasMatch[1]}` : null,
                         ].filter(Boolean).join(' ');
-                        detail = `${direction} ${scaling.currentVcpu}→${scaling.targetVcpu}vCPU (${reasonSummary}, score:${scaling.score?.toFixed(0) || '?'}/100${metricsStr ? ', ' + metricsStr : ''})`;
+                        detail = `${direction} ${scaling.currentVcpu}→${scaling.targetVcpu}vCPU (${reasonSummary}${metricsStr ? ', ' + metricsStr : ''})`;
                       } else {
-                        detail = `${scaling.currentVcpu}→${scaling.targetVcpu} vCPU (score:${scaling.score?.toFixed(0) || '?'}/100)`;
+                        detail = `${scaling.currentVcpu}→${scaling.targetVcpu} vCPU`;
                       }
                       color = 'text-amber-400';
                       borderColor = 'border-l-2 border-amber-500 pl-2';
                     } else if (scaling && scaling.score >= 70) {
                       event = 'HIGH';
-                      detail = `score:${scaling.score.toFixed(0)}`;
-                      if (scaling.reason.includes('Cooldown')) detail += ' · Cooldown active';
-                      else if (scaling.reason.includes('Already at')) detail += ` · Already at ${scaling.currentVcpu} vCPU`;
+                      detail = '';
+                      if (scaling.reason.includes('Cooldown')) detail = 'Cooldown active';
+                      else if (scaling.reason.includes('Already at')) detail = `Already at ${scaling.currentVcpu} vCPU`;
                       color = 'text-red-400';
                       borderColor = 'border-l-2 border-red-500/50 pl-2';
                     } else if (scaling && scaling.score >= 30) {
                       event = 'NORMAL';
-                      detail = `score:${scaling.score.toFixed(0)}`;
-                      if (scaling.reason.includes('Cooldown')) detail += ' · Cooldown active';
-                      else if (scaling.reason.includes('Already at')) detail += ` · At ${scaling.currentVcpu} vCPU`;
+                      detail = '';
+                      if (scaling.reason.includes('Cooldown')) detail = 'Cooldown active';
+                      else if (scaling.reason.includes('Already at')) detail = `At ${scaling.currentVcpu} vCPU`;
                       color = 'text-blue-400';
                     } else {
                       event = 'IDLE';
-                      detail = `score:${scaling?.score?.toFixed(0) ?? '0'}`;
-                      color = 'text-green-500/70';
+                      detail = '';
+                      color = 'text-green-500/90';
                     }
 
                     return (
-                      <div key={idx} className={`flex items-baseline leading-relaxed ${event === 'IDLE' ? 'opacity-50' : ''} ${borderColor}`}>
+                      <div key={idx} className={`flex items-baseline leading-relaxed ${event === 'IDLE' ? 'opacity-70' : ''} ${borderColor}`}>
                         <span className="text-gray-500 shrink-0 w-[76px] text-right pr-2" suppressHydrationWarning>{time}</span>
                         <span className={`shrink-0 w-[80px] font-bold ${color}`}>{event}</span>
                         {metrics && event !== 'ERROR' && (
-                          <span className="text-gray-500 shrink-0 w-[68px] text-right pr-3">cpu {metrics.cpuUsage.toFixed(1)}%</span>
+                          <span className={`shrink-0 w-[68px] text-right pr-3 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>cpu {metrics.cpuUsage.toFixed(1)}%</span>
                         )}
                         {metrics && event !== 'ERROR' && (
-                          <span className="text-gray-500 shrink-0 w-[52px] text-right pr-3">tx {metrics.txPoolPending}</span>
+                          <span className={`shrink-0 w-[52px] text-right pr-3 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>tx {metrics.txPoolPending}</span>
                         )}
                         {metrics && event !== 'ERROR' && (
-                          <span className="text-gray-500 shrink-0 w-[100px] text-right pr-3">blk {metrics.l2BlockHeight.toLocaleString()}</span>
+                          <span className={`shrink-0 w-[100px] text-right pr-3 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>blk {metrics.l2BlockHeight.toLocaleString()}</span>
                         )}
-                        <span className="text-gray-400 flex-1 pl-1 truncate">
-                          {detail}
+                        <span className="flex items-center gap-1.5 flex-1 pl-1 min-w-0">
+                          {scaling?.score !== undefined && !scaling.executed && getScoreBadge(Math.round(scaling.score))}
+                          {detail && <span className="text-gray-500 truncate">{detail}</span>}
                         </span>
                         {scaling?.executed && <Zap size={12} className="text-amber-500 shrink-0 mt-0.5 ml-1" />}
                       </div>
@@ -993,9 +1030,30 @@ export default function Dashboard() {
 
         {/* Components + Documentation */}
         <div className="lg:col-span-5 bg-white rounded-3xl p-6 shadow-sm border border-gray-200/60">
-          <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-            <Server size={18} className="text-gray-400" /> Components
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-gray-900 flex items-center gap-2">
+              <Server size={18} className="text-gray-400" /> Components
+            </h3>
+            {current?.components && current.components.length > 0 && (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1">
+                  <span className="text-[10px] text-gray-400">vCPU</span>
+                  <span className="text-xs font-bold text-gray-700 font-mono">
+                    {current.components.reduce((sum, c) => sum + (c.rawCpu || 0), 0).toFixed(1)}
+                  </span>
+                </div>
+                <div className="w-px h-3 bg-gray-200" />
+                <div className="flex items-center gap-1">
+                  <span className={`w-1.5 h-1.5 rounded-full ${
+                    current.components.every(c => c.status === 'Running') ? 'bg-green-500' : 'bg-amber-500'
+                  }`} />
+                  <span className="text-[10px] font-bold text-gray-500">
+                    {current.components.filter(c => c.status === 'Running').length}/{current.components.length}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
 
           <div className="space-y-4">
             {current?.components?.map((comp, i) => (
@@ -1028,9 +1086,43 @@ export default function Dashboard() {
                     </div>
                     <p className="text-[10px] text-gray-400 mt-1 pl-1">Instance: {comp.current}</p>
                   </div>
-                ) : (
-                  <p className="text-xs text-gray-400 pl-7">{comp.current} • {comp.status}</p>
-                )}
+                ) : (() => {
+                  const spec = parseResourceSpec(comp.current);
+                  const displayName = comp.name === 'L2 Client' ? 'Execution Client' : comp.name;
+                  const role = COMPONENT_ROLES[displayName] || '';
+                  if (spec) {
+                    const vcpuPercent = Math.min((spec.vcpu / 4) * 100, 100);
+                    const memPercent = Math.min((spec.memoryMiB / (16 * 1024)) * 100, 100);
+                    return (
+                      <div className="pl-7 space-y-1.5">
+                        {role && <p className="text-[10px] text-gray-400 italic">{role}</p>}
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-gray-400 w-8 shrink-0">CPU</span>
+                          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-blue-400 rounded-full" style={{ width: `${vcpuPercent}%` }} />
+                          </div>
+                          <span className="text-[10px] font-mono text-gray-500 w-16 text-right">{spec.vcpu} vCPU</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-gray-400 w-8 shrink-0">MEM</span>
+                          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-violet-400 rounded-full" style={{ width: `${memPercent}%` }} />
+                          </div>
+                          <span className="text-[10px] font-mono text-gray-500 w-16 text-right">{spec.memory}</span>
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                            spec.platform.includes('Fargate') ? 'bg-orange-50 text-orange-500' : 'bg-gray-100 text-gray-500'
+                          }`}>{spec.platform}</span>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+                            comp.status === 'Running' ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'
+                          }`}>{comp.status}</span>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return <p className="text-xs text-gray-400 pl-7">{comp.current} &middot; {comp.status}</p>;
+                })()}
               </div>
             ))}
           </div>
