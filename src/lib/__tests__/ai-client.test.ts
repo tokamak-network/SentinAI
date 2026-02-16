@@ -245,7 +245,7 @@ describe('ai-client', () => {
       expect(result.model).toBe('claude-sonnet-4-5-20250929');
     });
 
-    it('should map Qwen best tier to qwen3-235b', async () => {
+    it('should map Qwen best tier to qwen3-80b-next', async () => {
       process.env.QWEN_API_KEY = 'test';
 
       mockFetch.mockResolvedValueOnce({
@@ -262,7 +262,7 @@ describe('ai-client', () => {
         modelTier: 'best',
       });
 
-      expect(result.model).toBe('qwen3-235b');
+      expect(result.model).toBe('qwen3-80b-next');
     });
 
     it('should map OpenAI best tier to gpt-5.2-codex', async () => {
