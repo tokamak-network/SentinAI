@@ -50,7 +50,7 @@ npm run benchmark -- --output ./my-results                # Custom output direct
 npm run benchmark -- --help                               # Show detailed help
 ```
 
-Compares AI model performance using 5 real-world prompts (Predictive Scaler, Anomaly Analyzer, RCA Engine, Daily Report, NLOps). Generates CSV (raw data) and Markdown (summary) reports in `benchmark-results/`. Requires at least one AI API key set (QWEN_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY).
+Compares AI model performance using 5 real-world prompts (Predictive Scaler, Anomaly Analyzer, RCA Engine, Daily Report, NLOps). Generates Markdown reports in `benchmark-results/`. Requires at least one AI API key set (QWEN_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY).
 
 ## Architecture
 

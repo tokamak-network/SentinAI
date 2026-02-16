@@ -1,58 +1,11 @@
 /**
  * Benchmark Reporter
- * Generates CSV and Markdown reports
+ * Generates Markdown report
  */
 
 import fs from 'fs/promises';
 import path from 'path';
 import type { BenchmarkResult, AggregatedResult } from './types';
-
-/**
- * Generate CSV report
- */
-export async function generateCSVReport(
-  results: BenchmarkResult[],
-  outputDir: string
-): Promise<string> {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-  const filename = `${timestamp}.csv`;
-  const filepath = path.join(outputDir, filename);
-
-  // CSV header
-  const header =
-    'prompt_id,model_id,provider,tier,iteration,latency_ms,tokens_in,tokens_out,cost_usd,accuracy,error\n';
-
-  // CSV rows
-  const rows = results
-    .map(r =>
-      [
-        r.promptId,
-        r.modelId,
-        r.provider,
-        r.tier,
-        r.iteration,
-        r.latencyMs,
-        r.tokensIn,
-        r.tokensOut,
-        r.costUsd.toFixed(6),
-        r.accuracy,
-        r.error ? `"${r.error.replace(/"/g, '""')}"` : '',
-      ].join(',')
-    )
-    .join('\n');
-
-  const content = header + rows;
-
-  // Ensure directory exists
-  try {
-    await fs.mkdir(outputDir, { recursive: true });
-  } catch {
-    // Directory already exists
-  }
-
-  await fs.writeFile(filepath, content, 'utf-8');
-  return filepath;
-}
 
 /**
  * Generate Markdown report

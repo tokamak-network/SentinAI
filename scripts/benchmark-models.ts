@@ -48,7 +48,7 @@ function loadEnvLocal(): void {
 loadEnvLocal();
 import { runAllBenchmarks, aggregateResults } from './benchmark/runner';
 import { printResults } from './benchmark/runner';
-import { generateCSVReport, generateMarkdownReport } from './benchmark/reporter';
+import { generateMarkdownReport } from './benchmark/reporter';
 import { BENCHMARK_PROMPTS } from './benchmark/prompts';
 import { TEST_MODELS_QWEN_VS_GPT, BENCHMARK_PRESETS, getModel, getPresetModels } from './benchmark/models-config';
 
@@ -356,17 +356,15 @@ async function main(): Promise<void> {
   // Print results
   printResults(results, aggregated);
 
-  // Generate reports
-  console.log(`📝 Generating reports...`);
-  const csvPath = await generateCSVReport(results, options.outputDir);
+  // Generate report (Markdown only)
+  console.log(`📝 Generating report...`);
   const mdPath = await generateMarkdownReport(
     results,
     aggregated,
     options.outputDir
   );
 
-  console.log(`✅ Reports generated:`);
-  console.log(`   CSV: ${path.relative(process.cwd(), csvPath)}`);
+  console.log(`✅ Report generated:`);
   console.log(`   Markdown: ${path.relative(process.cwd(), mdPath)}\n`);
 
   process.exit(0);
