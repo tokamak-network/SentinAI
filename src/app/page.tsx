@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import {
   Activity, Server, Zap, ArrowUpRight,
-  CheckCircle2, Shield, Database,
+  CheckCircle2, Shield, Database, Globe,
   ChevronDown,
   Send, Bot, User, RefreshCw, Pause
 } from 'lucide-react';
@@ -434,9 +434,14 @@ export default function Dashboard() {
           </p>
         </div>
         {process.env.NEXT_PUBLIC_NETWORK_NAME && (
-          <div className="ml-auto bg-white rounded-xl px-5 py-3 shadow-sm border border-gray-200/60">
-            <p className="text-[10px] text-gray-400 font-semibold uppercase">Network</p>
-            <p className="text-lg font-bold text-slate-700 whitespace-nowrap">{process.env.NEXT_PUBLIC_NETWORK_NAME}</p>
+          <div className="ml-auto flex items-center gap-3 bg-white rounded-2xl pl-3 pr-5 py-2.5 shadow-sm border border-gray-200/60">
+            <div className="bg-slate-100 p-2 rounded-xl">
+              <Globe size={18} className="text-slate-500" />
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Network</p>
+              <p className="text-sm font-bold text-slate-800 whitespace-nowrap">{process.env.NEXT_PUBLIC_NETWORK_NAME}</p>
+            </div>
           </div>
         )}
       </header>
