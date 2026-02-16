@@ -315,23 +315,22 @@ export class RedisStateStore implements IStateStore {
     const key = this.key(KEYS.anomalyEvents);
     const total = await this.client.llen(key);
 
-    // Get paginated events (newest first)
-    const eventStrings = await this.client.lrange(
-      key,
-      offset,
-      offset + limit - 1
-    );
-    const events = eventStrings
-      .map((str) => {
-        try {
-          return JSON.parse(str) as AnomalyEvent;
-        } catch {
-          return null;
-        }
-      })
-      .filter((e) => e !== null) as AnomalyEvent[];
+    // Compute activeCount from full list (not paginated subset)
+    const allStrings = await this.client.lrange(key, 0, -1);
+    let activeCount = 0;
+    const allEvents: AnomalyEvent[] = [];
+    for (const str of allStrings) {
+      try {
+        const event = JSON.parse(str) as AnomalyEvent;
+        allEvents.push(event);
+        if (event.status === 'active') activeCount++;
+      } catch {
+        // Skip invalid JSON
+      }
+    }
 
-    const activeCount = events.filter((e) => e.status === 'active').length;
+    // Return paginated subset
+    const events = allEvents.slice(offset, offset + limit);
 
     return { events, total, activeCount };
   }

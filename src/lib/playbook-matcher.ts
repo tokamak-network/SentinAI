@@ -102,7 +102,7 @@ function matchesMetricCondition(
  * Check if log pattern matches (placeholder — requires log ingestion)
  */
 function matchesLogPattern(
-  pattern: string,
+  _pattern: string,
   _event: AnomalyEvent
 ): boolean {
   // TODO: Integrate with log ingestion module when available

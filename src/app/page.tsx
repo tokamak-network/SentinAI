@@ -151,6 +151,14 @@ interface AgentLoopStatus {
 // --- Configuration Constants ---
 /** Base path for API fetch calls (must match next.config.ts basePath) */
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || '';
+/** API key for write endpoints (optional, must match SENTINAI_API_KEY on server) */
+const API_KEY = process.env.NEXT_PUBLIC_SENTINAI_API_KEY || '';
+/** Build headers for write (POST/PATCH) API calls */
+function writeHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...extra };
+  if (API_KEY) headers['x-api-key'] = API_KEY;
+  return headers;
+}
 
 /** Metrics API polling interval (ms). Adjusted to reduce L1 RPC load (1s → 60s). */
 const METRICS_REFRESH_INTERVAL_MS = 60_000;
@@ -167,7 +175,7 @@ export default function Dashboard() {
   const [stressMode, setStressMode] = useState(false);
 
   const [prediction, setPrediction] = useState<PredictionInfo | null>(null);
-  const [predictionMeta, setPredictionMeta] = useState<PredictionMeta | null>(null);
+  const [, setPredictionMeta] = useState<PredictionMeta | null>(null);
   const [seedScenario, setSeedScenario] = useState<'stable' | 'rising' | 'spike' | 'falling' | 'live'>('rising');
   const [isSeeding, setIsSeeding] = useState(false);
 
@@ -200,7 +208,7 @@ export default function Dashboard() {
     setIsSeeding(true);
     try {
       console.log(`[Dashboard] Starting seed injection for scenario: ${seedScenario}`);
-      const res = await fetch(`${BASE_PATH}/api/metrics/seed?scenario=${seedScenario}`, { method: 'POST' });
+      const res = await fetch(`${BASE_PATH}/api/metrics/seed?scenario=${seedScenario}`, { method: 'POST', headers: writeHeaders() });
       const seedRes = await res.json();
       console.log(`[Dashboard] Seed injection response:`, seedRes);
 
@@ -297,7 +305,7 @@ export default function Dashboard() {
     try {
       const response = await fetch(`${BASE_PATH}/api/nlops`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: writeHeaders(),
         body: JSON.stringify({
           message: confirmAction ? pendingConfirmation?.originalInput : message.trim(),
           confirmAction,
@@ -1361,14 +1369,4 @@ export default function Dashboard() {
 // --- Sub Components ---
 
 
-function LogBlock({ time, source, level, msg, highlight, color }: { time: string; source: string; level: string; msg: string; highlight?: boolean; color?: string }) {
-  return (
-    <div className={`flex items-start gap-3 font-mono text-xs ${highlight ? 'bg-white/5 -mx-2 px-2 py-1 rounded' : ''}`}>
-      <span className="text-gray-600 shrink-0" suppressHydrationWarning>[{time}]</span>
-      <span className={`shrink-0 font-bold ${level === 'INFO' ? 'text-green-500' : level === 'WARN' ? 'text-yellow-500' : 'text-red-500'}`}>{level}</span>
-      <span className="shrink-0 text-gray-500 w-24">[{source}]</span>
-      <span className={`break-all ${color || 'text-gray-300'}`}>{msg}</span>
-    </div>
-  )
-}
 

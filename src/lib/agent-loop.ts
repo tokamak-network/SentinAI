@@ -79,7 +79,6 @@ let running = false;
 
 /** Ring buffer for recent cycle results (max 20) */
 const cycleHistory: AgentCycleResult[] = [];
-const MAX_CYCLE_HISTORY = 20;
 
 // ============================================================
 // Metrics Collection (Server-side, no HTTP overhead)

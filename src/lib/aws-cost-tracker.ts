@@ -224,10 +224,6 @@ export function calculateDailyAWSCost(
  * Format AWS costs for daily report
  */
 export function formatAWSCostForReport(awsCost: AWSDailyCost): string {
-  const serviceLines = awsCost.services
-    .map(s => `- **${s.service}**: $${s.dailyCost.toFixed(3)}/day (~$${s.monthlyCost.toFixed(2)}/month)`)
-    .join('\n');
-
   const tableHeader = '| Service | Daily Cost | Monthly Projection | Usage | Description |';
   const tableSeparator = '|---------|------------|---------------------|-------|-------------|';
   const tableRows = awsCost.services

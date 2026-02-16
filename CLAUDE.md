@@ -230,6 +230,8 @@ cp .env.local.sample .env.local   # Then edit, or use: npm run setup
 | `ALERT_WEBHOOK_URL` | — | Slack/Webhook URL for anomaly alerts |
 | `COST_TRACKING_ENABLED` | `true` | vCPU usage pattern tracking |
 | `SCALING_SIMULATION_MODE` | `true` | Simulate K8s changes without real patches |
+| `SENTINAI_API_KEY` | — | API key for write endpoint auth (`x-api-key` header). Unset = no auth |
+| `NEXT_PUBLIC_SENTINAI_API_KEY` | — | Client-side API key (must match `SENTINAI_API_KEY` for dashboard writes) |
 | `AGENT_LOOP_ENABLED` | auto | Server-side autonomous loop (auto-enabled if L2_RPC_URL set) |
 | `AUTO_REMEDIATION_ENABLED` | `false` | Layer 4 auto-remediation trigger |
 | `BATCHER_EOA_ADDRESS` | — | Batcher EOA address to monitor |

@@ -17,7 +17,6 @@ import type {
   K8sUpdateResult,
   ConfigMapUpdateResult,
   BackendReplacementEvent,
-  ProxydBackendHealth,
   L2NodeL1RpcStatus,
 } from '@/types/l1-failover';
 

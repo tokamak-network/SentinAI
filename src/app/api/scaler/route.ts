@@ -167,27 +167,23 @@ export async function POST(request: NextRequest) {
     const body: ScalerRequest = await request.json().catch(() => ({}));
     const { targetVcpu: manualTarget, reason: manualReason, dryRun } = body;
 
-    // Extract base URL from request
-    const reqUrl = new URL(request.url);
-    const baseUrl = `${reqUrl.protocol}//${reqUrl.host}`;
-
     let decision;
     let triggeredBy: 'auto' | 'manual' = 'auto';
 
     if (manualTarget !== undefined) {
       // Manual Scaling
       triggeredBy = 'manual';
-      const validTargets: TargetVcpu[] = [1, 2, 4];
+      const validTargets: TargetVcpu[] = [1, 2, 4, 8];
       if (!validTargets.includes(manualTarget as TargetVcpu)) {
         return NextResponse.json(
-          { error: 'Invalid targetVcpu. Must be 1, 2, or 4' },
+          { error: 'Invalid targetVcpu. Must be 1, 2, 4, or 8' },
           { status: 400 }
         );
       }
 
       decision = {
         targetVcpu: manualTarget as TargetVcpu,
-        targetMemoryGiB: (manualTarget * 2) as 2 | 4 | 8,
+        targetMemoryGiB: (manualTarget * 2) as 2 | 4 | 8 | 16,
         reason: manualReason || 'Manual scaling request',
         confidence: 1,
         score: 0,

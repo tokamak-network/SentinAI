@@ -3,7 +3,7 @@ import { getChainPlugin } from '@/chains';
 import { NextResponse } from 'next/server';
 import { recordUsage } from '@/lib/usage-tracker';
 import { getCachedL1BlockNumber } from '@/lib/l1-rpc-cache';
-import { getCurrentVcpu, getActiveScenario } from '@/lib/seed-vcpu-manager';
+import { getCurrentVcpu } from '@/lib/seed-vcpu-manager';
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -334,22 +334,18 @@ export async function GET(request: Request) {
         let usingSeedMetrics = false;
         let seedMetricData: Awaited<ReturnType<typeof getRecentMetrics>>[0] | null = null;
 
-        // First, try getting metrics from store (works across worker threads)
-        const recentMetrics = await getRecentMetrics();
-
-        // Check if we have recent seed-injected metrics (different from live metrics)
-        if (recentMetrics && recentMetrics.length > 0) {
-            const latestMetric = recentMetrics[recentMetrics.length - 1];
-            // If we have injected seed data, use it (seed metrics differ from live K8s metrics)
-            if (latestMetric && latestMetric.cpuUsage !== undefined) {
-                seedMetricData = latestMetric;
-                usingSeedMetrics = true;
-                console.log(`[Metrics API] Using seed metrics from store (detected from metrics data)`);
-            }
-        }
-
+        // Only enter seed path when an active seed scenario exists (not 'live')
         if (activeScenario && activeScenario !== 'live') {
             console.log(`[Metrics API] activeScenario from state store: ${activeScenario}`);
+            const recentMetrics = await getRecentMetrics();
+            if (recentMetrics && recentMetrics.length > 0) {
+                const latestMetric = recentMetrics[recentMetrics.length - 1];
+                if (latestMetric && latestMetric.cpuUsage !== undefined) {
+                    seedMetricData = latestMetric;
+                    usingSeedMetrics = true;
+                    console.log(`[Metrics API] Using seed metrics from store (scenario: ${activeScenario})`);
+                }
+            }
         }
 
         // 4. Metrics (Host Resource - Best Effort) or Seed Data

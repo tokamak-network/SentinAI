@@ -2,8 +2,6 @@
  * Auto-Remediation Engine Type Definitions
  */
 
-import type { AISeverity } from './scaling';
-
 // ============================================================
 // RCA Component Type (re-exported from rca.ts)
 // ============================================================

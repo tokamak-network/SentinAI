@@ -32,15 +32,6 @@ function logK8sWarning(message: string): void {
   }
 }
 
-/**
- * Log errors only in production/configured environments
- */
-function logK8sError(message: string): void {
-  if (!isDevelopmentEnvironment()) {
-    console.error(`[K8s Config] ${message}`);
-  }
-}
-
 // ============================================================
 // Input Validation
 // ============================================================

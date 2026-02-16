@@ -13,9 +13,7 @@ import type {
   AccumulatorState,
   LogAnalysisEntry,
   ScalingEvent,
-  AWSDailyCost,
 } from '@/types/daily-report';
-import { calculateDailyAWSCost } from './aws-cost-tracker';
 
 const MAX_SNAPSHOTS_PER_DAY = 288; // 24 * 60 / 5
 const MIN_SNAPSHOT_GAP_MS = 4 * 60 * 1000; // 4 minutes (dedup guard)
