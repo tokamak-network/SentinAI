@@ -181,10 +181,16 @@ describe('anomaly-detector', () => {
 
   describe('Z-Score Detection (Other Metrics)', () => {
     it('should detect TxPool spike', () => {
-      // Create stable history around 10
-      const history = generateHistory(10, { txPoolPending: 10 });
-      // Spike to 40 (extreme value for Z > 3.0)
-      const current = createMetric({ txPoolPending: 40 });
+      // Deterministic history with known stdDev > 5 (minStdDev threshold)
+      // Values spread around 100 with stdDev ≈ 14
+      const txValues = [85, 90, 95, 100, 105, 110, 115, 90, 95, 105];
+      const now = Date.now();
+      const history = txValues.map((tx, i) => createMetric({
+        timestamp: now - (txValues.length - i) * 10000,
+        txPoolPending: tx,
+      }));
+      // Spike to 200 (extreme value, Z > 3)
+      const current = createMetric({ txPoolPending: 200 });
 
       const anomalies = detectAnomalies(current, history);
       const txAnomaly = anomalies.find(a => a.metric === 'txPoolPending');
@@ -194,10 +200,17 @@ describe('anomaly-detector', () => {
     });
 
     it('should detect gas ratio spike', () => {
-      // Create stable history around 0.5
-      const history = generateHistory(10, { gasUsedRatio: 0.5 });
-      // Spike to 1.5 (extreme value)
-      const current = createMetric({ gasUsedRatio: 1.5 });
+      // Deterministic history with known stdDev > 0.01 (minStdDev threshold)
+      // Values: 0.45, 0.47, 0.49, 0.51, 0.53, 0.55, 0.47, 0.49, 0.51, 0.53
+      // Mean ≈ 0.50, StdDev ≈ 0.03
+      const gasValues = [0.45, 0.47, 0.49, 0.51, 0.53, 0.55, 0.47, 0.49, 0.51, 0.53];
+      const now = Date.now();
+      const history = gasValues.map((g, i) => createMetric({
+        timestamp: now - (gasValues.length - i) * 10000,
+        gasUsedRatio: g,
+      }));
+      // Spike to 0.9 (extreme value, Z > 3)
+      const current = createMetric({ gasUsedRatio: 0.9 });
 
       const anomalies = detectAnomalies(current, history);
       const gasAnomaly = anomalies.find(a => a.metric === 'gasUsedRatio');
@@ -207,10 +220,16 @@ describe('anomaly-detector', () => {
     });
 
     it('should detect block interval spike', () => {
-      // Create stable history around 2
-      const history = generateHistory(10, { blockInterval: 2 });
-      // Spike to 8 (extreme value)
-      const current = createMetric({ blockInterval: 8 });
+      // Deterministic history with known stdDev > 0.3 (minStdDev threshold)
+      // Values spread around 6.0 with stdDev ≈ 0.71
+      const intervalValues = [5.0, 5.5, 6.0, 6.5, 7.0, 5.0, 5.5, 6.0, 6.5, 7.0];
+      const now = Date.now();
+      const history = intervalValues.map((iv, i) => createMetric({
+        timestamp: now - (intervalValues.length - i) * 10000,
+        blockInterval: iv,
+      }));
+      // Spike to 15 (extreme value — 2.5x normal, Z > 3)
+      const current = createMetric({ blockInterval: 15 });
 
       const anomalies = detectAnomalies(current, history);
       const intervalAnomaly = anomalies.find(a => a.metric === 'l2BlockInterval');

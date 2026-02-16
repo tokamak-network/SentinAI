@@ -25,6 +25,19 @@ const TXPOOL_MONOTONIC_SECONDS = 300;
 /** Minimum number of history data points (skip detection if fewer) */
 const MIN_HISTORY_POINTS = 5;
 
+/**
+ * Minimum standard deviation thresholds per metric.
+ * When stdDev is below these values, the metric is considered stable
+ * and Z-Score detection is skipped to prevent false positives from
+ * tiny fluctuations (e.g., CPU oscillating between 0.15 and 0.18).
+ */
+const MIN_STD_DEV: Partial<Record<string, number>> = {
+  cpuUsage: 0.02,        // 2% CPU — below this, variation is noise
+  gasUsedRatio: 0.01,    // 1% gas ratio — near-zero chains produce noise
+  txPoolPending: 5,      // 5 tx — small pool changes are normal
+  l2BlockInterval: 0.3,  // 0.3s — natural jitter in block timing
+};
+
 // ============================================================================
 // Core Functions
 // ============================================================================
@@ -78,6 +91,11 @@ function detectZScoreAnomaly(
 
   const mean = calculateMean(historicalValues);
   const stdDev = calculateStdDev(historicalValues, mean);
+
+  // Skip detection when variance is too low (metric is stable, not anomalous)
+  const minStd = MIN_STD_DEV[metric];
+  if (minStd && stdDev < minStd) return null;
+
   const zScore = calculateZScore(currentValue, mean, stdDev);
 
   // Special-case: for l2BlockInterval, only treat slowdowns (interval increases)
