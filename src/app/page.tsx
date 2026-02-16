@@ -430,7 +430,10 @@ export default function Dashboard() {
             SentinAI
           </h1>
           <p className="text-sm mt-1 font-medium text-gray-500">
-            Autonomous Node Guardian for Optimism L2
+            Autonomous Node Guardian
+            {process.env.NEXT_PUBLIC_NETWORK_NAME && (
+              <span className="text-slate-400"> — {process.env.NEXT_PUBLIC_NETWORK_NAME}</span>
+            )}
           </p>
         </div>
       </header>
