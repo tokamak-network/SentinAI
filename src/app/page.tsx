@@ -431,11 +431,14 @@ export default function Dashboard() {
           </h1>
           <p className="text-sm mt-1 font-medium text-gray-500">
             Autonomous Node Guardian
-            {process.env.NEXT_PUBLIC_NETWORK_NAME && (
-              <span className="text-slate-400"> — {process.env.NEXT_PUBLIC_NETWORK_NAME}</span>
-            )}
           </p>
         </div>
+        {process.env.NEXT_PUBLIC_NETWORK_NAME && (
+          <div className="ml-auto bg-white rounded-xl px-5 py-3 shadow-sm border border-gray-200/60">
+            <p className="text-[10px] text-gray-400 font-semibold uppercase">Network</p>
+            <p className="text-lg font-bold text-slate-700 whitespace-nowrap">{process.env.NEXT_PUBLIC_NETWORK_NAME}</p>
+          </div>
+        )}
       </header>
 
       {/* Read-Only Mode Banner */}
