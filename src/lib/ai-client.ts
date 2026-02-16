@@ -46,7 +46,7 @@ export interface ChatCompletionResult {
 const MODEL_MAP: Record<AIProvider, Record<ModelTier, string>> = {
   qwen: {
     fast: 'qwen3-80b-next',      // Benchmarked: 1.8s, 100% accuracy, $30/mo
-    best: 'qwen3-235b',           // Benchmarked: 11s, 100% accuracy, $60/mo
+    best: 'qwen3-80b-next',       // Benchmarked: 8s, 100% accuracy, $30/mo (faster than 235b)
   },
   anthropic: {
     fast: 'claude-haiku-4-5-20251001',
@@ -287,7 +287,7 @@ async function callOpenAI(
   config: ProviderConfig,
   options: ChatCompletionOptions
 ): Promise<ChatCompletionResult> {
-  const baseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com';
+  const baseUrl = config.baseUrl || process.env.OPENAI_BASE_URL || 'https://api.openai.com';
 
   // Build request body with model-specific handling
   const body: Record<string, any> = {

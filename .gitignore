@@ -14,10 +14,3 @@ data/
 # Playwright
 playwright-report/
 test-results/
-
-# Cloud Run / Docker
-env-vars.yaml
-.env copy.local.260213
-
-# Benchmark results (generated at runtime, not for versioning)
-benchmark-results/
