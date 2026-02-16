@@ -69,6 +69,10 @@ interface ComponentData {
     memReq: string;
     node: string;
   };
+  usage?: {
+    cpuPercent: number;
+    memoryMiB: number;
+  };
 }
 
 interface PredictionFactor {
@@ -1053,22 +1057,20 @@ export default function Dashboard() {
                   )}
                 </div>
 
-                {comp.name === 'L2 Client' && (
+                {comp.usage ? (
                   <div className="pl-7">
                     <div className="flex justify-between text-[10px] text-gray-500 mb-1">
                       <span>Usage</span>
                       <span className="font-mono text-blue-600 font-bold">
-                        {current.metrics.cpuUsage.toFixed(3)}% CPU / {current.metrics.memoryUsage.toFixed(0)} MB
+                        {comp.usage.cpuPercent.toFixed(1)}% CPU / {comp.usage.memoryMiB.toFixed(0)} MB
                       </span>
                     </div>
                     <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${current.metrics.cpuUsage}%` }}></div>
+                      <div className="h-full bg-blue-500 transition-all duration-1000" style={{ width: `${Math.min(comp.usage.cpuPercent, 100)}%` }}></div>
                     </div>
                     <p className="text-[10px] text-gray-400 mt-1 pl-1">Instance: {comp.current}</p>
                   </div>
-                )}
-
-                {comp.name !== 'L2 Client' && (
+                ) : (
                   <p className="text-xs text-gray-400 pl-7">{comp.current} • {comp.status}</p>
                 )}
               </div>

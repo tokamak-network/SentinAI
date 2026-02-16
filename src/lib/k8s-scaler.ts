@@ -74,6 +74,81 @@ export async function getContainerCpuUsage(
 }
 
 /**
+ * Parse CPU string from kubectl top output to millicores.
+ */
+function parseCpuMillicores(cpuStr: string): number {
+  if (cpuStr.endsWith('m')) {
+    return parseFloat(cpuStr);
+  } else if (cpuStr.endsWith('n')) {
+    return parseFloat(cpuStr) / 1_000_000;
+  } else {
+    return parseFloat(cpuStr) * 1000;
+  }
+}
+
+/**
+ * Parse memory string from kubectl top output to MiB.
+ */
+function parseMemoryMiB(memStr: string): number {
+  if (memStr.endsWith('Gi')) {
+    return parseFloat(memStr) * 1024;
+  } else if (memStr.endsWith('Mi')) {
+    return parseFloat(memStr);
+  } else if (memStr.endsWith('Ki')) {
+    return parseFloat(memStr) / 1024;
+  } else {
+    return parseFloat(memStr);
+  }
+}
+
+/**
+ * Get real CPU/memory usage for ALL pods in the namespace via single kubectl top call.
+ * Returns a Map keyed by component suffix (e.g., "op-geth", "op-node").
+ * Requires metrics-server installed in the cluster.
+ */
+export async function getAllContainerUsage(
+  namespace?: string
+): Promise<Map<string, ContainerResourceUsage> | null> {
+  const simConfig = await getStore().getSimulationConfig();
+  if (simConfig.enabled) return null;
+
+  const ns = namespace || (process.env.K8S_NAMESPACE || 'default');
+
+  try {
+    const cmd = `top pods -n ${ns} --no-headers`;
+    const { stdout } = await runK8sCommand(cmd, { timeout: 5000 });
+
+    if (!stdout.trim()) return null;
+
+    const result = new Map<string, ContainerResourceUsage>();
+    const lines = stdout.trim().split('\n');
+
+    for (const line of lines) {
+      const parts = line.trim().split(/\s+/);
+      if (parts.length < 3) continue;
+
+      const podName = parts[0];
+      const cpuMillicores = parseCpuMillicores(parts[1]);
+      const memoryMiB = parseMemoryMiB(parts[2]);
+
+      if (isNaN(cpuMillicores) || isNaN(memoryMiB)) continue;
+
+      // Extract component suffix from pod name
+      // e.g., "sepolia-thanos-stack-op-geth-0" → match "op-geth"
+      // e.g., "op-node-0" → match "op-node"
+      const suffixMatch = podName.match(/(op-(?:geth|node|batcher|proposer))(?:-\d+)?$/);
+      if (suffixMatch) {
+        result.set(suffixMatch[1], { cpuMillicores, memoryMiB });
+      }
+    }
+
+    return result.size > 0 ? result : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check simulation mode status
  */
 export async function isSimulationMode(): Promise<boolean> {

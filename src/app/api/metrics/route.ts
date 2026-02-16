@@ -13,7 +13,7 @@ import { MetricDataPoint } from '@/types/prediction';
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import { getStore } from '@/lib/redis-store';
 import { runDetectionPipeline } from '@/lib/detection-pipeline';
-import { getContainerCpuUsage } from '@/lib/k8s-scaler';
+import { getContainerCpuUsage, getAllContainerUsage } from '@/lib/k8s-scaler';
 import { getActiveL1RpcUrl, getL2NodesL1RpcStatus } from '@/lib/l1-rpc-failover';
 import { getAllBalanceStatus } from '@/lib/eoa-balance-monitor';
 import type { AnomalyResult } from '@/types/anomaly';
@@ -36,7 +36,19 @@ interface ComponentDetail {
         memReq: string;
         node: string;
     };
+    usage?: {
+        cpuPercent: number;
+        memoryMiB: number;
+    };
 }
+
+/** Map display names to K8s component suffixes for usage matching */
+const COMPONENT_SUFFIX_MAP: Record<string, string> = {
+    'L2 Client': 'op-geth',
+    'Consensus Node': 'op-node',
+    'Batcher': 'op-batcher',
+    'Proposer': 'op-proposer',
+};
 
 // Fetch deep details for a specific component
 async function getComponentDetails(labelSelector: string, displayName: string, icon: string, strategy: string = "Static"): Promise<ComponentDetail | null> {
@@ -273,16 +285,33 @@ export async function GET(request: Request) {
         const appPrefix = getAppPrefix();
 
         const startK8s = performance.now();
-        const [l2Client, consensus, batcher, proposer, containerUsage] = await Promise.all([
+        const [l2Client, consensus, batcher, proposer, containerUsage, allUsage] = await Promise.all([
             getComponentDetails(`app=${appPrefix}-geth`, "L2 Client", "cpu", ""),
             getComponentDetails(`app=${appPrefix}-node`, "Consensus Node", "globe", ""),
             getComponentDetails(`app=${appPrefix}-batcher`, "Batcher", "shuffle", ""),
             getComponentDetails(`app=${appPrefix}-proposer`, "Proposer", "shield", ""),
             getContainerCpuUsage(),
+            getAllContainerUsage(),
         ]);
         console.log(`[Timer] K8s Fetch: ${(performance.now() - startK8s).toFixed(2)}ms`);
 
         const components = [l2Client, consensus, batcher, proposer];
+
+        // Inject real CPU/memory usage into each component
+        if (allUsage) {
+            for (const comp of components) {
+                if (!comp) continue;
+                const suffix = COMPONENT_SUFFIX_MAP[comp.name];
+                if (!suffix) continue;
+                const usage = allUsage.get(suffix);
+                if (usage && comp.rawCpu > 0) {
+                    comp.usage = {
+                        cpuPercent: (usage.cpuMillicores / (comp.rawCpu * 1000)) * 100,
+                        memoryMiB: usage.memoryMiB,
+                    };
+                }
+            }
+        }
 
         // 2. Metrics (Chain Data)
         const startRpc = performance.now();
