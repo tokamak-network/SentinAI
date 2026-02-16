@@ -35,6 +35,7 @@
 #     AUTO_REMEDIATION_ENABLED=true
 #     ALERT_WEBHOOK_URL=https://...      # Slack webhook
 #     NEXT_PUBLIC_BASE_PATH=/thanos-sepolia  # URL base path (e.g., /thanos-sepolia)
+#     NEXT_PUBLIC_NETWORK_NAME="Thanos Sepolia"  # Network name in dashboard header
 #     DOMAIN=sentinai.example.com        # HTTPS domain (Caddy)
 # ============================================================
 
@@ -415,6 +416,12 @@ setup_env() {
     read -rp "  Base Path (press Enter for root /): " NEXT_PUBLIC_BASE_PATH
     NEXT_PUBLIC_BASE_PATH="${NEXT_PUBLIC_BASE_PATH:-}"
 
+    # Network name (shown in dashboard header)
+    echo ""
+    echo "  Network name displayed in the dashboard header (e.g., Thanos Sepolia, Titan Mainnet)."
+    read -rp "  Network Name (press Enter for 'Thanos Sepolia'): " NEXT_PUBLIC_NETWORK_NAME
+    NEXT_PUBLIC_NETWORK_NAME="${NEXT_PUBLIC_NETWORK_NAME:-Thanos Sepolia}"
+
     # Slack Webhook (optional)
     read -rp "  Slack Webhook URL (optional, press Enter to skip): " ALERT_WEBHOOK_URL
   fi
@@ -445,6 +452,7 @@ setup_env() {
   : "${ALERT_WEBHOOK_URL:=}"
   : "${DOMAIN_NAME:=${DOMAIN:-}}"
   : "${NEXT_PUBLIC_BASE_PATH:=}"
+  : "${NEXT_PUBLIC_NETWORK_NAME:=Thanos Sepolia}"
 
   # Determine SCALING_SIMULATION_MODE (interactive sets it above; non-interactive reads env)
   : "${SCALING_SIMULATION_MODE:=}"
@@ -511,10 +519,11 @@ ENVEOF
 
     # Note: REDIS_URL is set by docker-compose.yml (redis://redis:6379)
 
-    # Base path (optional)
-    if [ -n "${NEXT_PUBLIC_BASE_PATH}" ]; then
+    # Deployment (optional)
+    if [ -n "${NEXT_PUBLIC_BASE_PATH}" ] || [ -n "${NEXT_PUBLIC_NETWORK_NAME}" ]; then
       printf '\n# === Deployment ===\n'
-      printf 'NEXT_PUBLIC_BASE_PATH=%s\n' "${NEXT_PUBLIC_BASE_PATH}"
+      [ -n "${NEXT_PUBLIC_BASE_PATH}" ] && printf 'NEXT_PUBLIC_BASE_PATH=%s\n' "${NEXT_PUBLIC_BASE_PATH}"
+      [ -n "${NEXT_PUBLIC_NETWORK_NAME}" ] && printf 'NEXT_PUBLIC_NETWORK_NAME=%s\n' "${NEXT_PUBLIC_NETWORK_NAME}"
     fi
 
     # Slack webhook (optional)
@@ -531,6 +540,7 @@ ENVEOF
   # Note: .env is read by docker-compose.yml for ${VARIABLE} substitution.
   # This is separate from .env.local which is loaded at runtime via env_file.
   printf 'NEXT_PUBLIC_BASE_PATH=%s\n' "${NEXT_PUBLIC_BASE_PATH}" > .env
+  printf 'NEXT_PUBLIC_NETWORK_NAME=%s\n' "${NEXT_PUBLIC_NETWORK_NAME}" >> .env
   log ".env created (Docker Compose build args)."
 
   # Generate Caddyfile and update docker-compose.yml for HTTPS (if domain is set)

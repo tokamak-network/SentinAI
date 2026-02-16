@@ -4,6 +4,7 @@ services:
       context: .
       args:
         NEXT_PUBLIC_BASE_PATH: ${NEXT_PUBLIC_BASE_PATH:-}
+        NEXT_PUBLIC_NETWORK_NAME: ${NEXT_PUBLIC_NETWORK_NAME:-Thanos Sepolia}
     container_name: sentinai
     ports:
       - "3002:8080"
