@@ -929,93 +929,150 @@ export default function Dashboard() {
             <div className="flex-1 bg-[#0D1117] p-6 overflow-y-auto font-mono text-xs custom-scrollbar relative">
               <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-[#0D1117] to-transparent pointer-events-none z-10"></div>
 
-              <div className="space-y-1">
-                {cycles.length > 0 ? cycles.map((cycle, idx) => {
-                  const time = new Date(cycle.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                  const isError = cycle.phase === 'error';
-                  const scaling = cycle.scaling;
-                  const metrics = cycle.metrics;
+              <div className="space-y-0.5">
+                {cycles.length > 0 ? (() => {
+                  // Collapse consecutive IDLE events
+                  const collapsed: { type: 'single'; cycle: typeof cycles[0]; idx: number }[] | { type: 'idle-group'; count: number; scoreMin: number; scoreMax: number; firstTime: string; lastTime: string; lastBlock: number }[] = [];
+                  const items: (
+                    | { type: 'single'; cycle: typeof cycles[0]; idx: number }
+                    | { type: 'idle-group'; count: number; scoreMin: number; scoreMax: number; firstTime: string; lastTime: string; lastBlock: number }
+                  )[] = [];
 
-                  // Determine what happened
-                  let event = '';
-                  let detail = '';
-                  let color = 'text-gray-400';
+                  for (let i = 0; i < cycles.length; i++) {
+                    const cycle = cycles[i];
+                    const scaling = cycle.scaling;
+                    const isIdle = !cycle.failover?.triggered && cycle.phase !== 'error' && !scaling?.executed && (!scaling || scaling.score < 30);
 
-                  if (cycle.failover?.triggered) {
-                    event = 'FAILOVER';
-                    detail = `L1 RPC: ${cycle.failover.fromUrl} → ${cycle.failover.toUrl}`;
-                    if (cycle.failover.k8sUpdated) detail += ' (K8s updated)';
-                    color = 'text-purple-400';
-                  } else if (isError) {
-                    event = 'ERROR';
-                    detail = cycle.error || 'Unknown error';
-                    color = 'text-red-400';
-                  } else if (scaling?.executed) {
-                    event = 'SCALED';
-                    // Extract scaling reason and build detail with score context
-                    let reasonSummary = '';
-                    let direction = '';
-                    if (scaling.reason) {
-                      if (scaling.reason.includes('Normal Load')) {
-                        reasonSummary = 'Normal Load';
-                        direction = scaling.targetVcpu > scaling.currentVcpu ? '↑' : scaling.targetVcpu < scaling.currentVcpu ? '↓' : '→';
-                      } else if (scaling.reason.includes('High Load')) {
-                        reasonSummary = 'High Load';
-                        direction = '↑';
-                      } else if (scaling.reason.includes('Critical')) {
-                        reasonSummary = 'Critical Load';
-                        direction = '↑↑';
-                      } else if (scaling.reason.includes('System Idle')) {
-                        reasonSummary = 'System Idle';
-                        direction = '↓';
+                    if (isIdle) {
+                      const prev = items[items.length - 1];
+                      if (prev && prev.type === 'idle-group') {
+                        prev.count++;
+                        if (scaling) {
+                          prev.scoreMin = Math.min(prev.scoreMin, scaling.score);
+                          prev.scoreMax = Math.max(prev.scoreMax, scaling.score);
+                        }
+                        prev.lastTime = cycle.timestamp;
+                        if (cycle.metrics) prev.lastBlock = cycle.metrics.l2BlockHeight;
+                      } else {
+                        items.push({
+                          type: 'idle-group',
+                          count: 1,
+                          scoreMin: scaling?.score ?? 0,
+                          scoreMax: scaling?.score ?? 0,
+                          firstTime: cycle.timestamp,
+                          lastTime: cycle.timestamp,
+                          lastBlock: cycle.metrics?.l2BlockHeight ?? 0,
+                        });
                       }
-                      // Extract metrics from reason
-                      const cpuMatch = scaling.reason.match(/CPU (\d+\.?\d*%)/);
-                      const gasMatch = scaling.reason.match(/Gas (\d+\.?\d*%)/);
-                      const metricsStr = [
-                        cpuMatch ? `CPU${cpuMatch[1]}` : null,
-                        gasMatch ? `Gas${gasMatch[1]}` : null,
-                      ].filter(Boolean).join(' ');
-                      detail = `${direction} ${scaling.currentVcpu}→${scaling.targetVcpu}vCPU (${reasonSummary}, score:${scaling.score?.toFixed(0) || '?'}/100${metricsStr ? ', ' + metricsStr : ''})`;
                     } else {
-                      detail = `${scaling.currentVcpu}→${scaling.targetVcpu} vCPU (score:${scaling.score?.toFixed(0) || '?'}/100)`;
+                      items.push({ type: 'single', cycle, idx: i });
                     }
-                    color = 'text-amber-400';
-                  } else if (scaling && scaling.score >= 70) {
-                    event = 'HIGH';
-                    detail = '';
-                    // Extract skip reason
-                    if (scaling.reason.includes('Cooldown')) detail = 'Cooldown active';
-                    else if (scaling.reason.includes('Already at')) detail = `Already at ${scaling.currentVcpu} vCPU`;
-                    color = 'text-red-400';
-                  } else if (scaling && scaling.score >= 30) {
-                    event = 'NORMAL';
-                    detail = '';
-                    if (scaling.reason.includes('Cooldown')) detail = 'Cooldown active';
-                    else if (scaling.reason.includes('Already at')) detail = `At ${scaling.currentVcpu} vCPU`;
-                    color = 'text-blue-400';
-                  } else {
-                    event = 'IDLE';
-                    detail = '';
-                    color = 'text-green-500/70';
                   }
 
-                  return (
-                    <div key={idx} className="flex items-start gap-0 leading-relaxed">
-                      <span className="text-gray-600 shrink-0 w-[70px]" suppressHydrationWarning>[{time}]</span>
-                      <span className={`shrink-0 w-[60px] font-bold ${color}`}>{event}</span>
-                      <span className="text-gray-400 flex-1">
-                        {detail}
-                        {metrics && event !== 'ERROR' && (
-                          <span className="text-gray-600">
-                            {' '}— cpu:{metrics.cpuUsage.toFixed(3)}% gas:{(metrics.gasUsedRatio * 100).toFixed(0)}% tx:{metrics.txPoolPending}
+                  return items.map((item, i) => {
+                    if (item.type === 'idle-group') {
+                      const time = new Date(item.lastTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                      const scoreRange = item.scoreMin === item.scoreMax
+                        ? `${item.scoreMin.toFixed(0)}`
+                        : `${item.scoreMin.toFixed(0)}~${item.scoreMax.toFixed(0)}`;
+                      return (
+                        <div key={`idle-${i}`} className="flex items-start gap-0 leading-relaxed opacity-50">
+                          <span className="text-gray-500 shrink-0 w-[70px]" suppressHydrationWarning>[{time}]</span>
+                          <span className="shrink-0 w-[72px] font-bold text-green-500/70">
+                            IDLE{item.count > 1 && <span className="text-green-600/50"> ×{item.count}</span>}
                           </span>
-                        )}
-                      </span>
-                      {scaling?.executed && <Zap size={12} className="text-amber-500 shrink-0 mt-0.5 ml-1" />}
-                    </div>
-                  );
-                }) : (
+                          <span className="text-gray-600 flex-1">
+                            score:{scoreRange}
+                            {item.lastBlock > 0 && <span className="ml-2">blk:{item.lastBlock.toLocaleString()}</span>}
+                          </span>
+                        </div>
+                      );
+                    }
+
+                    const { cycle, idx } = item;
+                    const time = new Date(cycle.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    const isError = cycle.phase === 'error';
+                    const scaling = cycle.scaling;
+                    const metrics = cycle.metrics;
+
+                    let event = '';
+                    let detail = '';
+                    let color = 'text-gray-400';
+                    let borderColor = '';
+
+                    if (cycle.failover?.triggered) {
+                      event = 'FAILOVER';
+                      detail = `L1 RPC: ${cycle.failover.fromUrl} → ${cycle.failover.toUrl}`;
+                      if (cycle.failover.k8sUpdated) detail += ' (K8s updated)';
+                      color = 'text-purple-400';
+                      borderColor = 'border-l-2 border-purple-500 pl-2';
+                    } else if (isError) {
+                      event = 'ERROR';
+                      detail = cycle.error || 'Unknown error';
+                      color = 'text-red-400';
+                      borderColor = 'border-l-2 border-red-500 pl-2';
+                    } else if (scaling?.executed) {
+                      event = 'SCALED';
+                      let reasonSummary = '';
+                      let direction = '';
+                      if (scaling.reason) {
+                        if (scaling.reason.includes('Normal Load')) {
+                          reasonSummary = 'Normal Load';
+                          direction = scaling.targetVcpu > scaling.currentVcpu ? '↑' : scaling.targetVcpu < scaling.currentVcpu ? '↓' : '→';
+                        } else if (scaling.reason.includes('High Load')) {
+                          reasonSummary = 'High Load';
+                          direction = '↑';
+                        } else if (scaling.reason.includes('Critical')) {
+                          reasonSummary = 'Critical Load';
+                          direction = '↑↑';
+                        } else if (scaling.reason.includes('System Idle')) {
+                          reasonSummary = 'System Idle';
+                          direction = '↓';
+                        }
+                        const cpuMatch = scaling.reason.match(/CPU (\d+\.?\d*%)/);
+                        const gasMatch = scaling.reason.match(/Gas (\d+\.?\d*%)/);
+                        const metricsStr = [
+                          cpuMatch ? `CPU${cpuMatch[1]}` : null,
+                          gasMatch ? `Gas${gasMatch[1]}` : null,
+                        ].filter(Boolean).join(' ');
+                        detail = `${direction} ${scaling.currentVcpu}→${scaling.targetVcpu}vCPU (${reasonSummary}, score:${scaling.score?.toFixed(0) || '?'}/100${metricsStr ? ', ' + metricsStr : ''})`;
+                      } else {
+                        detail = `${scaling.currentVcpu}→${scaling.targetVcpu} vCPU (score:${scaling.score?.toFixed(0) || '?'}/100)`;
+                      }
+                      color = 'text-amber-400';
+                      borderColor = 'border-l-2 border-amber-500 pl-2';
+                    } else if (scaling && scaling.score >= 70) {
+                      event = 'HIGH';
+                      detail = `score:${scaling.score.toFixed(0)}`;
+                      if (scaling.reason.includes('Cooldown')) detail += ' · Cooldown active';
+                      else if (scaling.reason.includes('Already at')) detail += ` · Already at ${scaling.currentVcpu} vCPU`;
+                      color = 'text-red-400';
+                      borderColor = 'border-l-2 border-red-500/50 pl-2';
+                    } else if (scaling && scaling.score >= 30) {
+                      event = 'NORMAL';
+                      detail = `score:${scaling.score.toFixed(0)}`;
+                      if (scaling.reason.includes('Cooldown')) detail += ' · Cooldown active';
+                      else if (scaling.reason.includes('Already at')) detail += ` · At ${scaling.currentVcpu} vCPU`;
+                      color = 'text-blue-400';
+                    }
+
+                    return (
+                      <div key={idx} className={`flex items-start gap-0 leading-relaxed ${borderColor}`}>
+                        <span className="text-gray-500 shrink-0 w-[70px]" suppressHydrationWarning>[{time}]</span>
+                        <span className={`shrink-0 w-[72px] font-bold ${color}`}>{event}</span>
+                        <span className="text-gray-400 flex-1">
+                          {detail}
+                          {metrics && event !== 'ERROR' && (
+                            <span className="text-gray-500">
+                              {detail ? ' — ' : ''}cpu {metrics.cpuUsage.toFixed(3)}% tx {metrics.txPoolPending} blk {metrics.l2BlockHeight.toLocaleString()}
+                            </span>
+                          )}
+                        </span>
+                        {scaling?.executed && <Zap size={12} className="text-amber-500 shrink-0 mt-0.5 ml-1" />}
+                      </div>
+                    );
+                  });
+                })() : (
                   <div className="flex items-center justify-center gap-3 py-8 text-gray-500">
                     {agentLoop?.scheduler.agentLoopEnabled ? (
                       <>
@@ -1238,129 +1295,6 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Row 3: Simulation Zone (Bottom) */}
-      <div className="mt-24 mb-6">
-        <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="font-bold text-gray-900 text-lg">Simulation Zone</h3>
-            <span className={`text-white text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
-              prediction?.recommendedAction === 'scale_up'
-                ? 'bg-indigo-500'
-                : prediction?.recommendedAction === 'scale_down'
-                ? 'bg-green-500'
-                : 'bg-blue-500'
-            }`}>
-              {prediction?.recommendedAction === 'scale_up' ? 'Scale Up' :
-               prediction?.recommendedAction === 'scale_down' ? 'Scale Down' : 'Stable'}
-            </span>
-          </div>
-
-          {/* Stress Mode Toggle - Disabled */}
-          <div className="mb-3">
-            <button
-              disabled
-              onClick={() => {
-                if (!stressMode) {
-                  preStressVcpuRef.current = current?.metrics.gethVcpu || 1;
-                }
-                setStressMode(!stressMode);
-              }}
-              className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all opacity-50 cursor-not-allowed bg-gray-100 text-gray-400 border border-gray-200`}
-            >
-              {stressMode ? <Zap size={16} fill="currentColor" className="animate-pulse" /> : <Zap size={16} />}
-              Stress Mode Disabled
-            </button>
-          </div>
-
-          {/* vCPU Summary Row */}
-          {stressMode ? (
-            <div className="flex items-center gap-3 mb-3" data-testid="current-vcpu">
-              <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-xl font-bold text-gray-900">{preStressVcpuRef.current} vCPU</span>
-              </div>
-              <ArrowUpRight size={20} className="shrink-0 text-red-500" />
-              <div className="flex-1 h-8 rounded-lg flex items-center justify-center bg-red-100 border border-red-200">
-                <span className="text-lg font-bold text-red-600">8 vCPU</span>
-              </div>
-              <span className="text-[10px] text-red-400 shrink-0 font-semibold">STRESS</span>
-            </div>
-          ) : prediction ? (
-            <div className="flex items-center gap-3 mb-3" data-testid="current-vcpu">
-              <div className="flex-1 h-8 bg-gray-100 rounded-lg flex items-center justify-center">
-                <span className="text-xl font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
-              </div>
-              <ArrowUpRight size={20} className={`shrink-0 ${
-                prediction.trend === 'rising' ? 'text-indigo-500' :
-                prediction.trend === 'falling' ? 'text-green-500 rotate-180' :
-                'text-gray-400 rotate-45'
-              }`} />
-              <div className={`flex-1 h-8 rounded-lg flex items-center justify-center ${
-                prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
-                  ? 'bg-indigo-100 border border-indigo-200'
-                  : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
-                  ? 'bg-green-100 border border-green-200'
-                  : 'bg-blue-100 border border-blue-200'
-              }`}>
-                <span className={`text-xl font-bold ${
-                  prediction.predictedVcpu > (current?.metrics.gethVcpu || 1)
-                    ? 'text-indigo-600'
-                    : prediction.predictedVcpu < (current?.metrics.gethVcpu || 1)
-                    ? 'text-green-600'
-                    : 'text-blue-600'
-                }`}>{prediction.predictedVcpu} vCPU</span>
-              </div>
-              <span className="text-[10px] text-gray-400 shrink-0">
-                {(prediction.confidence * 100).toFixed(0)}%
-              </span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 mb-3" data-testid="current-vcpu">
-              <span className="text-lg font-bold text-gray-900">{current?.metrics.gethVcpu || 1} vCPU</span>
-              <span className="text-xs text-gray-400">/ {(current?.metrics.gethVcpu || 1) * 2} GiB</span>
-            </div>
-          )}
-
-          {/* Seed Test Data (Dev Only) */}
-          {process.env.NODE_ENV !== 'production' && process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE !== 'true' && <div className="mb-3 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
-            <div className="flex items-center gap-2">
-              <Database size={14} className="text-indigo-600 shrink-0" />
-              <select
-                value={seedScenario}
-                onChange={(e) => setSeedScenario(e.target.value as typeof seedScenario)}
-                className="flex-1 text-xs bg-white border border-indigo-200 rounded-lg px-2 py-1.5 text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-400"
-              >
-                <option value="stable">Stable</option>
-                <option value="rising">Rising</option>
-                <option value="spike">Spike</option>
-                <option value="falling">Falling</option>
-                <option value="live">Live</option>
-              </select>
-              <button onClick={seedPredictionData} disabled={isSeeding}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${isSeeding ? 'bg-indigo-300 text-white cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}>
-                {isSeeding ? '...' : 'Seed'}
-              </button>
-            </div>
-          </div>}
-
-          {/* AI Insight */}
-          <div className="p-3 bg-gray-50 rounded-xl border border-gray-100">
-            <div className="flex items-start gap-2">
-              <Zap size={14} className="text-blue-500 mt-0.5 shrink-0" />
-              <p className="text-xs text-gray-600 leading-relaxed">
-                {prediction ? (
-                  prediction.reasoning.includes('AI unavailable')
-                    ? prediction.reasoning.replace(/\s*\(AI unavailable\)/, '').replace('Fallback prediction based on simple', 'Prediction based on')
-                    : prediction.reasoning
-                ) : current?.cost.isPeakMode ? (
-                  `Scaling up to handle traffic spike, current cost: $${current?.cost.opGethMonthlyCost?.toFixed(0) || '166'}/mo.`
-                ) : (
-                  <>Running at {current?.metrics.gethVcpu || 1} vCPU, estimated savings: <span className="text-green-600 font-bold">${current?.cost.monthlySaving?.toFixed(0) || '124'}/mo</span></>
-                )}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
 
     </div>
   );
