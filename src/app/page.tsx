@@ -172,12 +172,9 @@ export default function Dashboard() {
   const [, setDataHistory] = useState<{ name: string; cpu: number; gethVcpu: number; gethMemGiB: number; saving: number; cost: number }[]>([]);
   const [current, setCurrent] = useState<MetricData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [stressMode, setStressMode] = useState(false);
 
   const [prediction, setPrediction] = useState<PredictionInfo | null>(null);
   const [, setPredictionMeta] = useState<PredictionMeta | null>(null);
-  const [seedScenario, setSeedScenario] = useState<'stable' | 'rising' | 'spike' | 'falling' | 'live'>('rising');
-  const [isSeeding, setIsSeeding] = useState(false);
 
   // --- L1 RPC Failover State ---
   const [l1Failover, setL1Failover] = useState<L1FailoverStatus | null>(null);
@@ -202,78 +199,6 @@ export default function Dashboard() {
   const [costAnalysisExpanded, setCostAnalysisExpanded] = useState(false);
   const [costAnalysisData, setCostAnalysisData] = useState<CostReport | null>(null);
   const [costAnalysisLoading, setCostAnalysisLoading] = useState(false);
-
-  // Seed prediction data for testing
-  const seedPredictionData = async () => {
-    setIsSeeding(true);
-    try {
-      console.log(`[Dashboard] Starting seed injection for scenario: ${seedScenario}`);
-      const res = await fetch(`${BASE_PATH}/api/metrics/seed?scenario=${seedScenario}`, { method: 'POST', headers: writeHeaders() });
-      const seedRes = await res.json();
-      console.log(`[Dashboard] Seed injection response:`, seedRes);
-
-      if (res.ok) {
-        // Wait a moment for seed data to be processed
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Immediately fetch updated metrics after seed injection
-        console.log(`[Dashboard] Fetching metrics after seed injection...`);
-        let metricsData: any = null;
-        let metricsFetched = false;
-
-        for (let i = 0; i < 3; i++) {
-          console.log(`[Dashboard] Metrics fetch attempt ${i + 1}/3...`);
-          const metricsRes = await fetch(`${BASE_PATH}/api/metrics?t=` + Date.now() + '&_=' + Math.random(), { cache: 'no-store' });
-          if (metricsRes.ok) {
-            metricsData = await metricsRes.json();
-            metricsFetched = true;
-            console.log(`[Dashboard] Metrics received:`, {
-              cpuUsage: metricsData?.metrics?.cpuUsage,
-              gethVcpu: metricsData?.metrics?.gethVcpu,
-              gethMemGiB: metricsData?.metrics?.gethMemGiB,
-              source: (metricsData?.metrics as any)?.source,
-              cpuSource: (metricsData?.metrics as any)?.cpuSource,
-            });
-            setCurrent(metricsData);
-
-            // Update data history
-            const point = {
-              name: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-              cpu: metricsData.metrics.cpuUsage,
-              gethVcpu: metricsData.metrics.gethVcpu,
-              gethMemGiB: metricsData.metrics.gethMemGiB,
-              saving: metricsData.cost.monthlySaving,
-              cost: metricsData.cost.monthlyEstimated,
-            };
-            setDataHistory(prev => [...prev.slice(-20), point]);
-            console.log(`[Dashboard] State updated with new metrics`);
-            break;
-          } else {
-            console.error(`[Dashboard] Metrics fetch attempt ${i + 1} failed:`, metricsRes.status);
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-        }
-
-        if (!metricsFetched) {
-          console.error(`[Dashboard] Failed to fetch metrics after seed injection`);
-        }
-
-        // Re-fetch scaler to get updated prediction
-        const scalerRes = await fetch(`${BASE_PATH}/api/scaler`, { cache: 'no-store' });
-        if (scalerRes.ok) {
-          const scalerData: ScalerState = await scalerRes.json();
-          setPrediction(scalerData.prediction);
-          setPredictionMeta(scalerData.predictionMeta);
-        }
-      } else {
-        console.error(`[Dashboard] Seed injection failed:`, res.status, seedRes);
-      }
-    } catch (e) {
-      console.error('Seed failed:', e);
-    } finally {
-      setIsSeeding(false);
-    }
-  };
 
   // --- NLOps Chat Handlers ---
 
@@ -373,29 +298,21 @@ export default function Dashboard() {
     }
   };
 
-  // Track current stressMode for async operations
-  const stressModeRef = useRef(stressMode);
   // Track active abort controller to cancel pending requests
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    stressModeRef.current = stressMode;
-    // Clear history when mode changes
-    setDataHistory([]);
-
-    // Cancel any pending request from previous mode
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-
     const fetchData = async () => {
-      // Create new controller for this request
+      // Cancel any pending request
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
       const timestamp = Date.now();
-      const currentMode = stressModeRef.current; // Use ref for latest access inside async
-      const url = `${BASE_PATH}/api/metrics?t=${timestamp}${currentMode ? '&stress=true' : ''}`;
+      const url = `${BASE_PATH}/api/metrics?t=${timestamp}`;
 
       try {
         const res = await fetch(url, {
@@ -403,11 +320,6 @@ export default function Dashboard() {
           signal: controller.signal
         });
         const data = await res.json();
-
-        // Skip if stressMode changed during request (Double check)
-        if (currentMode !== stressModeRef.current) {
-          return;
-        }
 
         setCurrent(data);
 
@@ -463,16 +375,14 @@ export default function Dashboard() {
     };
 
     fetchData();
-    // Use faster refresh interval when seed scenario is active for better vCPU/MEM visualization
-    const refreshInterval = seedScenario !== 'live' ? 5_000 : METRICS_REFRESH_INTERVAL_MS;
-    const interval = setInterval(fetchData, refreshInterval);
+    const interval = setInterval(fetchData, METRICS_REFRESH_INTERVAL_MS);
     return () => {
       clearInterval(interval);
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, [stressMode, seedScenario]);
+  }, []);
 
   // --- Agent Loop polling (every 5s) ---
   useEffect(() => {
