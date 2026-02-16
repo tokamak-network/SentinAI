@@ -43,7 +43,6 @@ import {
   getL1Components,
   replaceBackendInToml,
   checkProxydBackends,
-  probeBackend,
 } from '../l1-rpc-failover';
 
 describe('l1-rpc-failover', () => {

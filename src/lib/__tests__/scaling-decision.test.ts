@@ -387,6 +387,21 @@ describe('scaling-decision', () => {
       expect(decision.reason).toContain('High Load Detected');
     });
 
+    it('should make critical decision (8 vCPU, 16GiB)', () => {
+      const metrics = createMetrics({
+        cpuUsage: 100,
+        gasUsedRatio: 1,
+        txPoolPending: 300,
+        aiSeverity: 'critical',
+      });
+
+      const decision = makeScalingDecision(metrics);
+
+      expect(decision.targetVcpu).toBe(8);
+      expect(decision.targetMemoryGiB).toBe(16);
+      expect(decision.reason).toContain('CRITICAL');
+    });
+
     it('should calculate memory correctly (2 * vCPU GiB)', () => {
       const metrics1 = createMetrics({
         cpuUsage: 10,
@@ -402,11 +417,18 @@ describe('scaling-decision', () => {
         cpuUsage: 100,
         gasUsedRatio: 1,
         txPoolPending: 300,
-      }); // Score: 100 → 4 vCPU
+      }); // Score: 80 → 4 vCPU (without AI)
+      const metrics8 = createMetrics({
+        cpuUsage: 100,
+        gasUsedRatio: 1,
+        txPoolPending: 300,
+        aiSeverity: 'critical',
+      }); // Score: 100 → 8 vCPU
 
       expect(makeScalingDecision(metrics1).targetMemoryGiB).toBe(2);
       expect(makeScalingDecision(metrics2).targetMemoryGiB).toBe(4);
       expect(makeScalingDecision(metrics4).targetMemoryGiB).toBe(8);
+      expect(makeScalingDecision(metrics8).targetMemoryGiB).toBe(16);
     });
 
     it('should use custom config when provided', () => {

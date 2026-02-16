@@ -5,7 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as usageTracker from '@/lib/usage-tracker';
-import type { UsageDataPoint, UsagePattern } from '@/types/cost';
+import type { UsageDataPoint } from '@/types/cost';
 
 // Mock redis-store
 vi.mock('@/lib/redis-store', () => {
@@ -27,21 +27,6 @@ vi.mock('@/lib/redis-store', () => {
     }),
   };
 });
-
-/**
- * Helper: Create usage data point
- */
-function createUsagePoint(
-  vcpu: number,
-  cpuUtilization: number,
-  daysAgo: number = 0
-): UsageDataPoint {
-  return {
-    timestamp: Date.now() - daysAgo * 24 * 60 * 60 * 1000,
-    vcpu,
-    cpuUtilization,
-  };
-}
 
 describe('usage-tracker', () => {
   beforeEach(async () => {
@@ -88,16 +73,9 @@ describe('usage-tracker', () => {
 
   describe('Retrieving Usage Data', () => {
     it('should retrieve usage data for last N days', async () => {
-      const now = Date.now();
-
       // Record data across different days
       // Manually create points with different timestamps
       for (let i = 0; i < 5; i++) {
-        const point: UsageDataPoint = {
-          timestamp: now - i * 24 * 60 * 60 * 1000, // 0, 1, 2, 3, 4 days ago
-          vcpu: 2,
-          cpuUtilization: 50,
-        };
         // We need to call the internal store directly since recordUsage filters
         // For this test, we'll work within the mock
         await usageTracker.recordUsage(2, 50);
@@ -129,9 +107,6 @@ describe('usage-tracker', () => {
     it('should analyze usage patterns by day and hour', async () => {
       // Record data for specific day/hour combinations
       // Create multiple points for same day/hour to test aggregation
-      const now = new Date();
-      const mockDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 9, 0, 0);
-
       // Record 3 data points for Monday 9am
       for (let i = 0; i < 3; i++) {
         await usageTracker.recordUsage(2, 50 + i * 10); // 50, 60, 70

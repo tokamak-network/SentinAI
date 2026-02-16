@@ -5,8 +5,7 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as predictiveScaler from '@/lib/predictive-scaler';
-import { PredictionResult, MetricDataPoint } from '@/types/prediction';
-import { TargetVcpu } from '@/types/scaling';
+import { PredictionResult } from '@/types/prediction';
 
 // Mock dependencies
 vi.mock('@/lib/ai-client', () => ({
@@ -144,17 +143,6 @@ describe('predictive-scaler', () => {
     });
 
     it('should return cached prediction when within cooldown', async () => {
-      const cached: PredictionResult = {
-        predictedVcpu: 4,
-        confidence: 0.8,
-        trend: 'rising',
-        reasoning: 'Cached prediction',
-        recommendedAction: 'scale_up',
-        generatedAt: new Date().toISOString(),
-        predictionWindow: 'next 5 minutes',
-        factors: [],
-      };
-
       vi.mocked(chatCompletion).mockResolvedValue({
         content: createValidAIResponse(),
         stopReason: 'end_turn',

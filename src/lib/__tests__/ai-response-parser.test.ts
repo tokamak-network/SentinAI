@@ -269,7 +269,7 @@ describe('ai-response-parser', () => {
 
     it('should preserve types through parsing', () => {
       const text = '{"count": 42, "ratio": 0.5, "active": true}';
-      const typeCheck = (obj: unknown): boolean => true;
+      const typeCheck = (): boolean => true;
 
       const result = parseAIJSONTyped(text, typeCheck);
 

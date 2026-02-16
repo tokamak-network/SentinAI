@@ -60,6 +60,7 @@ export class MixedWorkloadScenario extends BaseScenario {
    * Not used in this scenario (delegated to FastTierScenario + BestTierScenario)
    */
   generateTestData(_count: number): TestDataPair[] {
+    void _count;
     return [];
   }
 

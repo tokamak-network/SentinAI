@@ -168,7 +168,7 @@ describe('prediction-tracker', () => {
       const prediction2 = createPrediction({ predictedVcpu: 4 });
 
       await predictionTracker.recordPrediction(prediction1);
-      const id2 = await predictionTracker.recordPrediction(prediction2);
+      await predictionTracker.recordPrediction(prediction2);
 
       const success = await predictionTracker.recordActualForRecent(4);
 
@@ -392,7 +392,7 @@ describe('prediction-tracker', () => {
     it('should handle prediction with high confidence', async () => {
       const prediction = createPrediction({ confidence: 0.99 });
 
-      const id = await predictionTracker.recordPrediction(prediction);
+      await predictionTracker.recordPrediction(prediction);
       const records = await predictionTracker.getPredictionRecords(1);
 
       expect(records[0].prediction.confidence).toBe(0.99);
@@ -401,7 +401,7 @@ describe('prediction-tracker', () => {
     it('should handle prediction with low confidence', async () => {
       const prediction = createPrediction({ confidence: 0.1 });
 
-      const id = await predictionTracker.recordPrediction(prediction);
+      await predictionTracker.recordPrediction(prediction);
       const records = await predictionTracker.getPredictionRecords(1);
 
       expect(records[0].prediction.confidence).toBe(0.1);

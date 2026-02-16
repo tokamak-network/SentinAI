@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef } from 'react';
 import {
-  Activity, Server, Zap, ArrowUpRight,
-  CheckCircle2, Shield, Database, Globe,
+  Activity, Server, Zap,
+  CheckCircle2, Shield, Globe,
   ChevronDown,
   Send, Bot, User, RefreshCw, Pause
 } from 'lucide-react';
@@ -177,7 +177,7 @@ export default function Dashboard() {
   const [current, setCurrent] = useState<MetricData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const [prediction, setPrediction] = useState<PredictionInfo | null>(null);
+  const [, setPrediction] = useState<PredictionInfo | null>(null);
   const [, setPredictionMeta] = useState<PredictionMeta | null>(null);
 
   // --- L1 RPC Failover State ---
@@ -194,7 +194,6 @@ export default function Dashboard() {
     intent: NLOpsIntent;
   } | null>(null);
   const chatMessagesEndRef = useRef<HTMLDivElement>(null);
-  const preStressVcpuRef = useRef(1);
 
   // --- Agent Loop State ---
   const [agentLoop, setAgentLoop] = useState<AgentLoopStatus | null>(null);
@@ -855,66 +854,7 @@ export default function Dashboard() {
               <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-[#0D1117] to-transparent pointer-events-none z-10"></div>
 
               <div className="space-y-0.5">
-                {cycles.length > 0 ? (() => {
-                  // Collapse consecutive IDLE events
-                  const collapsed: { type: 'single'; cycle: typeof cycles[0]; idx: number }[] | { type: 'idle-group'; count: number; scoreMin: number; scoreMax: number; firstTime: string; lastTime: string; lastBlock: number }[] = [];
-                  const items: (
-                    | { type: 'single'; cycle: typeof cycles[0]; idx: number }
-                    | { type: 'idle-group'; count: number; scoreMin: number; scoreMax: number; firstTime: string; lastTime: string; lastBlock: number }
-                  )[] = [];
-
-                  for (let i = 0; i < cycles.length; i++) {
-                    const cycle = cycles[i];
-                    const scaling = cycle.scaling;
-                    const isIdle = !cycle.failover?.triggered && cycle.phase !== 'error' && !scaling?.executed && (!scaling || scaling.score < 30);
-
-                    if (isIdle) {
-                      const prev = items[items.length - 1];
-                      if (prev && prev.type === 'idle-group') {
-                        prev.count++;
-                        if (scaling) {
-                          prev.scoreMin = Math.min(prev.scoreMin, scaling.score);
-                          prev.scoreMax = Math.max(prev.scoreMax, scaling.score);
-                        }
-                        prev.lastTime = cycle.timestamp;
-                        if (cycle.metrics) prev.lastBlock = cycle.metrics.l2BlockHeight;
-                      } else {
-                        items.push({
-                          type: 'idle-group',
-                          count: 1,
-                          scoreMin: scaling?.score ?? 0,
-                          scoreMax: scaling?.score ?? 0,
-                          firstTime: cycle.timestamp,
-                          lastTime: cycle.timestamp,
-                          lastBlock: cycle.metrics?.l2BlockHeight ?? 0,
-                        });
-                      }
-                    } else {
-                      items.push({ type: 'single', cycle, idx: i });
-                    }
-                  }
-
-                  return items.map((item, i) => {
-                    if (item.type === 'idle-group') {
-                      const time = new Date(item.lastTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                      const scoreRange = item.scoreMin === item.scoreMax
-                        ? `${item.scoreMin.toFixed(0)}`
-                        : `${item.scoreMin.toFixed(0)}~${item.scoreMax.toFixed(0)}`;
-                      return (
-                        <div key={`idle-${i}`} className="flex items-start gap-0 leading-relaxed opacity-50">
-                          <span className="text-gray-500 shrink-0 w-[70px]" suppressHydrationWarning>[{time}]</span>
-                          <span className="shrink-0 w-[72px] font-bold text-green-500/70">
-                            IDLE{item.count > 1 && <span className="text-green-600/50"> ×{item.count}</span>}
-                          </span>
-                          <span className="text-gray-600 flex-1">
-                            score:{scoreRange}
-                            {item.lastBlock > 0 && <span className="ml-2">blk:{item.lastBlock.toLocaleString()}</span>}
-                          </span>
-                        </div>
-                      );
-                    }
-
-                    const { cycle, idx } = item;
+                {cycles.length > 0 ? cycles.map((cycle, idx) => {
                     const time = new Date(cycle.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                     const isError = cycle.phase === 'error';
                     const scaling = cycle.scaling;
@@ -979,25 +919,32 @@ export default function Dashboard() {
                       if (scaling.reason.includes('Cooldown')) detail += ' · Cooldown active';
                       else if (scaling.reason.includes('Already at')) detail += ` · At ${scaling.currentVcpu} vCPU`;
                       color = 'text-blue-400';
+                    } else {
+                      event = 'IDLE';
+                      detail = `score:${scaling?.score?.toFixed(0) ?? '0'}`;
+                      color = 'text-green-500/70';
                     }
 
                     return (
-                      <div key={idx} className={`flex items-start gap-0 leading-relaxed ${borderColor}`}>
-                        <span className="text-gray-500 shrink-0 w-[70px]" suppressHydrationWarning>[{time}]</span>
-                        <span className={`shrink-0 w-[72px] font-bold ${color}`}>{event}</span>
-                        <span className="text-gray-400 flex-1">
+                      <div key={idx} className={`flex items-baseline leading-relaxed ${event === 'IDLE' ? 'opacity-50' : ''} ${borderColor}`}>
+                        <span className="text-gray-500 shrink-0 w-[76px] text-right pr-2" suppressHydrationWarning>{time}</span>
+                        <span className={`shrink-0 w-[80px] font-bold ${color}`}>{event}</span>
+                        {metrics && event !== 'ERROR' && (
+                          <span className="text-gray-500 shrink-0 w-[68px] text-right pr-3">cpu {metrics.cpuUsage.toFixed(1)}%</span>
+                        )}
+                        {metrics && event !== 'ERROR' && (
+                          <span className="text-gray-500 shrink-0 w-[52px] text-right pr-3">tx {metrics.txPoolPending}</span>
+                        )}
+                        {metrics && event !== 'ERROR' && (
+                          <span className="text-gray-500 shrink-0 w-[100px] text-right pr-3">blk {metrics.l2BlockHeight.toLocaleString()}</span>
+                        )}
+                        <span className="text-gray-400 flex-1 pl-1 truncate">
                           {detail}
-                          {metrics && event !== 'ERROR' && (
-                            <span className="text-gray-500">
-                              {detail ? ' — ' : ''}cpu {metrics.cpuUsage.toFixed(3)}% tx {metrics.txPoolPending} blk {metrics.l2BlockHeight.toLocaleString()}
-                            </span>
-                          )}
                         </span>
                         {scaling?.executed && <Zap size={12} className="text-amber-500 shrink-0 mt-0.5 ml-1" />}
                       </div>
                     );
-                  });
-                })() : (
+                  }) : (
                   <div className="flex items-center justify-center gap-3 py-8 text-gray-500">
                     {agentLoop?.scheduler.agentLoopEnabled ? (
                       <>
@@ -1224,6 +1171,5 @@ export default function Dashboard() {
 }
 
 // --- Sub Components ---
-
 
 

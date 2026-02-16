@@ -5,15 +5,13 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as rcaEngine from '@/lib/rca-engine';
-import type { AnomalyResult, AnomalyMetric } from '@/types/anomaly';
+import type { AnomalyResult } from '@/types/anomaly';
 import type { RCAComponent } from '@/types/rca';
 
 // Mock the AI client
 vi.mock('@/lib/ai-client', () => ({
   chatCompletion: vi.fn(),
 }));
-
-const { chatCompletion } = await import('@/lib/ai-client');
 
 /**
  * Helper: Create test anomaly result
@@ -150,10 +148,6 @@ describe('rca-engine', () => {
       const timeline = rcaEngine.buildTimeline(anomalies, logs);
 
       expect(timeline.length).toBeGreaterThan(0);
-      // Should contain both anomaly and log events
-      const hasAnomalyEvent = timeline.some(e => 'metric' in e || e.description.includes('spike'));
-      const hasLogEvents = timeline.some(e => e.type === 'error' || e.type === 'warning');
-
       expect(timeline).toBeDefined();
     });
 
@@ -172,10 +166,6 @@ describe('rca-engine', () => {
 
       // Get timeline for last 5 minutes (default)
       const timeline = rcaEngine.buildTimeline(anomalies, logs, 5);
-
-      // Old event should be filtered out
-      const timewindowStart = now - 5 * 60000;
-      const validEvents = timeline.filter(e => e.timestamp >= timewindowStart);
 
       // If events are filtered, valid count should be less than all events
       expect(timeline.length >= 0).toBe(true);

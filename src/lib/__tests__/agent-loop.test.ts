@@ -115,7 +115,7 @@ vi.stubGlobal('fetch', mockFetch);
 import { runAgentCycle, isAgentRunning, resetAgentState } from '@/lib/agent-loop';
 import { runDetectionPipeline } from '@/lib/detection-pipeline';
 import { makeScalingDecision } from '@/lib/scaling-decision';
-import { scaleOpGeth, isAutoScalingEnabled, checkCooldown, getCurrentVcpu } from '@/lib/k8s-scaler';
+import { scaleOpGeth, isAutoScalingEnabled, checkCooldown } from '@/lib/k8s-scaler';
 
 describe('agent-loop', () => {
   beforeEach(() => {

@@ -7,9 +7,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as dailyAccumulator from '@/lib/daily-accumulator';
 import { getCurrentHourKST } from '@/lib/daily-accumulator';
 import type {
-  MetricSnapshot,
-  HourlySummary,
-  DailyAccumulatedData,
   AccumulatorState,
   LogAnalysisEntry,
   ScalingEvent,
@@ -224,7 +221,7 @@ describe('daily-accumulator', () => {
 
     it('should update hourly summary with snapshot data', async () => {
       await dailyAccumulator.initializeAccumulator();
-      const snapshot1 = await dailyAccumulator.takeSnapshot();
+      await dailyAccumulator.takeSnapshot();
 
       const data = await dailyAccumulator.getAccumulatedData();
       const hour = getCurrentHourKST();

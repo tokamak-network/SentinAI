@@ -16,10 +16,12 @@ import { runDetectionPipeline } from '@/lib/detection-pipeline';
 import { getContainerCpuUsage, getAllContainerUsage } from '@/lib/k8s-scaler';
 import { getActiveL1RpcUrl, getL2NodesL1RpcStatus } from '@/lib/l1-rpc-failover';
 import { getAllBalanceStatus } from '@/lib/eoa-balance-monitor';
+import { resolveBlockInterval } from '@/lib/block-interval';
 import type { AnomalyResult } from '@/types/anomaly';
 
 // Whether anomaly detection is enabled (default: enabled)
 const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'false';
+const RPC_TIMEOUT_MS = 15_000;
 
 // Block interval tracking moved to state store (Redis or InMemory)
 
@@ -336,7 +338,10 @@ export async function GET(request: Request) {
 
         // Get actual TxPool pending count via txpool_status RPC
         let txPoolPending = 0;
+        let txPoolTimeoutId: ReturnType<typeof setTimeout> | null = null;
         try {
+            const controller = new AbortController();
+            txPoolTimeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
             const txPoolResponse = await fetch(rpcUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -346,6 +351,7 @@ export async function GET(request: Request) {
                     params: [],
                     id: 1,
                 }),
+                signal: controller.signal,
             });
             const txPoolData = await txPoolResponse.json();
             if (txPoolData.result?.pending) {
@@ -354,6 +360,10 @@ export async function GET(request: Request) {
         } catch {
             // Fallback: use current block tx count if txpool_status not supported
             txPoolPending = block.transactions.length;
+        } finally {
+            if (txPoolTimeoutId) {
+                clearTimeout(txPoolTimeoutId);
+            }
         }
         console.log(`[Timer] RPC Fetch: ${(performance.now() - startRpc).toFixed(2)}ms`);
 
@@ -481,19 +491,14 @@ export async function GET(request: Request) {
 
         // Calculate block interval and push to metrics store
         const now = Date.now();
-        blockInterval = 2.0; // Reset to default (will be updated if new block detected)
-
         const lastBlock = await getStore().getLastBlock();
-        if (lastBlock.height !== null && lastBlock.time !== null) {
-          const lastHeight = BigInt(lastBlock.height);
-          const lastTime = Number(lastBlock.time);
-          if (blockNumber > lastHeight) {
-            // New block detected, calculate interval
-            const timeDiff = (now - lastTime) / 1000; // Convert to seconds
-            const blockDiff = Number(blockNumber - lastHeight);
-            blockInterval = timeDiff / blockDiff;
-          }
-        }
+        blockInterval = resolveBlockInterval({
+          currentBlockHeight: blockNumber,
+          lastBlockHeight: lastBlock.height,
+          lastBlockTime: lastBlock.time,
+          nowMs: now,
+          seedBlockInterval: usingSeedMetrics ? blockInterval : undefined,
+        });
 
         // Update tracking in store
         await getStore().setLastBlock(String(blockNumber), String(now));
@@ -530,6 +535,7 @@ export async function GET(request: Request) {
           }
         }
 
+        const responseSource = usingSeedMetrics ? 'SEED_SCENARIO' : 'REAL_K8S_CONFIG';
         const response = NextResponse.json({
             timestamp: new Date().toISOString(),
             metrics: {
@@ -542,7 +548,7 @@ export async function GET(request: Request) {
                 gethMemGiB: currentVcpu * 2,
                 syncLag: 0,
                 cpuSource,
-                source: "REAL_K8S_CONFIG"
+                source: responseSource,
             },
             components,
             cost: {

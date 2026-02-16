@@ -34,11 +34,11 @@ export const config = {
 /**
  * Routes exempt from API key authentication (internal/automated endpoints)
  */
-const AUTH_EXEMPT_ROUTES = [
+const AUTH_EXEMPT_ROUTES = new Set([
   '/api/health',
   '/api/agent-loop',
   '/api/metrics/seed',
-];
+]);
 
 /**
  * Main middleware function
@@ -48,7 +48,7 @@ export function middleware(request: NextRequest) {
   const method = request.method;
 
   // Always allow exempt routes (health checks, internal automation)
-  if (AUTH_EXEMPT_ROUTES.some(route => pathname.startsWith(route))) {
+  if (AUTH_EXEMPT_ROUTES.has(pathname)) {
     return NextResponse.next();
   }
 

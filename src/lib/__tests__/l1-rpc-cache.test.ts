@@ -79,7 +79,6 @@ describe('L1 RPC Cache', () => {
 
     it('should not cache failed fetches', async () => {
       const fetchFn = vi.fn();
-      const successFn = vi.fn(async () => BigInt(99999));
 
       // First call: fail
       fetchFn.mockRejectedValueOnce(new Error('Network error'));

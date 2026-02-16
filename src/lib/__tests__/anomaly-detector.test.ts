@@ -5,7 +5,7 @@
  * and their integration in the main detectAnomalies() function.
  */
 
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   calculateZScore,
   detectAnomalies,
@@ -517,9 +517,3 @@ describe('anomaly-detector', () => {
     });
   });
 });
-
-// ============================================================================
-// Constants for Z-Score Threshold (used in tests)
-// ============================================================================
-
-const Z_SCORE_THRESHOLD = 3.0;

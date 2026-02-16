@@ -5,7 +5,7 @@
 
 import chalk from 'chalk';
 import { chatCompletion } from '@/lib/ai-client';
-import type { AIProvider, ModelTier } from '@/lib/ai-client';
+import type { AIProvider } from '@/lib/ai-client';
 import type { BenchmarkResult, AggregatedResult } from './types';
 import type { ModelDef } from './models-config';
 import { BENCHMARK_PROMPTS } from './prompts';

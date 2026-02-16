@@ -77,7 +77,6 @@ export async function generateMarkdownReport(
   const successful = results.filter(r => !r.error);
   const failed = results.filter(r => !!r.error);
   const totalCost = results.reduce((a, r) => a + r.costUsd, 0);
-  const avgAccuracy = results.filter(r => r.accuracy === 1).length / results.length;
   const duration = new Date().toLocaleString();
 
   // Unique providers and models

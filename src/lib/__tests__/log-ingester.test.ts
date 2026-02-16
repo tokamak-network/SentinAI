@@ -93,7 +93,7 @@ describe('log-ingester', () => {
         .mockResolvedValueOnce({ stdout: 'pod-name', stderr: '' })
         .mockResolvedValueOnce({ stdout: 'log content', stderr: '' });
 
-      const result = await getLiveLogs();
+      await getLiveLogs();
 
       expect(runK8sCommand).toHaveBeenCalled();
     });

@@ -1,6 +1,6 @@
 import { BaseScenario } from './base';
 import type { LLMClientWrapper } from '../models/client-wrapper';
-import type { InvokeResult, TestLoad } from '../types';
+import type { InvokeResult } from '../types';
 
 /**
  * Fast-Tier Scenario: Log Analysis + Anomaly Detection

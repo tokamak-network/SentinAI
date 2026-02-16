@@ -26,7 +26,7 @@ import { predictScaling } from '@/lib/predictive-scaler';
 import { analyzeLogChunk } from '@/lib/ai-analyzer';
 import { getAllLiveLogs } from '@/lib/log-ingester';
 import { addScalingEvent } from '@/lib/daily-accumulator';
-import { DEFAULT_SCALING_CONFIG, type TargetVcpu } from '@/types/scaling';
+import { DEFAULT_SCALING_CONFIG, type TargetVcpu, type TargetMemoryGiB } from '@/types/scaling';
 import { DEFAULT_PREDICTION_CONFIG } from '@/types/prediction';
 import type { MetricDataPoint } from '@/types/prediction';
 import type { ScalingMetrics } from '@/types/scaling';
@@ -351,7 +351,7 @@ async function evaluateAndExecuteScaling(
   }
 
   // Execute scaling
-  const targetMemoryGiB = (finalTarget * 2) as 2 | 4 | 8;
+  const targetMemoryGiB = (finalTarget * 2) as TargetMemoryGiB;
   const scaleResult = await scaleOpGeth(finalTarget, targetMemoryGiB, DEFAULT_SCALING_CONFIG);
 
   if (scaleResult.success && scaleResult.previousVcpu !== scaleResult.currentVcpu) {

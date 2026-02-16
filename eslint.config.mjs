@@ -1,6 +1,6 @@
-import { defineConfig, globalIgnores } from "eslint/config";
-import nextVitals from "eslint-config-next/core-web-vitals";
-import nextTs from "eslint-config-next/typescript";
+import { defineConfig, globalIgnores } from 'eslint/config';
+import nextVitals from 'eslint-config-next/core-web-vitals';
+import nextTs from 'eslint-config-next/typescript';
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -8,25 +8,30 @@ const eslintConfig = defineConfig([
   {
     rules: {
       // Too noisy for current codebase; keep velocity and enforce via gradual cleanup.
-      "@typescript-eslint/no-explicit-any": "off",
+      '@typescript-eslint/no-explicit-any': 'off',
     },
   },
   {
-    files: ["scripts/**/*.js", "demo/**/*.js"],
+    files: ['scripts/**/*.js', 'demo/**/*.js'],
     rules: {
-      "@typescript-eslint/no-require-imports": "off",
+      '@typescript-eslint/no-require-imports': 'off',
     },
   },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:
-    ".next/**",
-    "out/**",
-    "build/**",
-    "next-env.d.ts",
+    '.next/**',
+    'out/**',
+    'build/**',
+    'next-env.d.ts',
+    // Additional generated/artifact paths
+    'coverage/**',
+    'dist/**',
+    'node_modules/**',
+    '.turbo/**',
     // Non-production assets/scripts
-    "demo/**",
-    "src/app/v2/**",
+    'demo/**',
+    'src/app/v2/**',
   ]),
 ]);
 

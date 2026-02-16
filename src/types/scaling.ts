@@ -16,11 +16,12 @@ export interface ScalingMetrics {
 
 // Scaling Target vCPU Value
 export type TargetVcpu = 1 | 2 | 4 | 8;
+export type TargetMemoryGiB = 2 | 4 | 8 | 16;
 
 // Scaling Decision Result
 export interface ScalingDecision {
   targetVcpu: TargetVcpu;
-  targetMemoryGiB: 2 | 4 | 8 | 16;  // vCPU * 2
+  targetMemoryGiB: TargetMemoryGiB;  // vCPU * 2
   reason: string;
   confidence: number;  // 0-1
   score: number;       // 0-100

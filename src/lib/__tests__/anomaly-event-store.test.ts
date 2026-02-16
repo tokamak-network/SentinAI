@@ -337,7 +337,7 @@ describe('anomaly-event-store', () => {
       const event1 = await anomalyStore.createOrUpdateEvent([
         createAnomaly({ metric: 'cpuUsage' }),
       ]);
-      const event2 = await anomalyStore.createOrUpdateEvent([
+      await anomalyStore.createOrUpdateEvent([
         createAnomaly({ metric: 'txPoolPending' }),
       ]);
 

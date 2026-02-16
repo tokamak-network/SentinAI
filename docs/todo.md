@@ -2,6 +2,12 @@
 
 ## Current Status
 
+### In Progress (2026-02-16 Refresh Audit)
+- [x] **Codebase Refresh Audit P0-P2 진행 완료** (`docs/todo/codebase-audit-2026-02-16-refresh.md`)
+  - P0: Seed `blockInterval` 덮어쓰기 수정 + 8 vCPU 메모리 타입 정합(16GiB) ✅
+  - P1: `/api/metrics` txpool 타임아웃 + source 메타데이터 정확화 ✅
+  - P2: 미들웨어 경로 매칭 강화 + 운영 코드 lint warning 정리 + ESLint ignore 현대화 ✅
+
 ### Completed (2026-02-16)
 - [x] **Proposal 1-8 fully implemented (100%)**
 - [x] Unit Tests 719 (100% passing, 31 files, Vitest)

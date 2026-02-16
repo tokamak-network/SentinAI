@@ -105,6 +105,9 @@ function matchesLogPattern(
   _pattern: string,
   _event: AnomalyEvent
 ): boolean {
+  void _pattern;
+  void _event;
+
   // TODO: Integrate with log ingestion module when available
   // For now, return false as logs are not yet ingested into events
   return false;

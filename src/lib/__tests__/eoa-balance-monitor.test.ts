@@ -57,7 +57,6 @@ import {
   refillEOA,
   resetDailyCounter,
   resetEOAMonitorState,
-  getRefillEvents,
   getEOAConfig,
 } from '../eoa-balance-monitor';
 

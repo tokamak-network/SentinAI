@@ -94,6 +94,8 @@ export async function getEOAAddressWithAutoDetect(
   role: EOARole,
   _l1RpcUrl?: string  // Ignored - kept for backward compatibility
 ): Promise<`0x${string}` | null> {
+  void _l1RpcUrl;
+
   // Priority 1: Manual EOA address
   const manualEOA = getEOAFromEnv(role);
   if (manualEOA) {
@@ -128,6 +130,9 @@ export async function detectOrUseManualEOA(
   _l1RpcUrl?: string,  // Ignored - kept for backward compatibility
   _networkKey?: string  // Ignored - kept for backward compatibility
 ): Promise<DetectionResult> {
+  void _l1RpcUrl;
+  void _networkKey;
+
   // Try to get batcher and proposer EOAs
   const batcherEOA = await getEOAAddressWithAutoDetect('batcher');
   const proposerEOA = await getEOAAddressWithAutoDetect('proposer');

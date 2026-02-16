@@ -28,6 +28,7 @@ import {
   ScalerResponse,
   ScalingMetrics,
   TargetVcpu,
+  TargetMemoryGiB,
   DEFAULT_SCALING_CONFIG,
 } from '@/types/scaling';
 import { predictScaling, getLastPrediction, getNextPredictionIn } from '@/lib/predictive-scaler';
@@ -101,7 +102,7 @@ export async function GET() {
     if (currentVcpu !== state.currentVcpu) {
       await updateScalingState({
         currentVcpu,
-        currentMemoryGiB: (currentVcpu * 2) as 2 | 4 | 8,
+        currentMemoryGiB: (currentVcpu * 2) as TargetMemoryGiB,
       });
     }
 
@@ -183,7 +184,7 @@ export async function POST(request: NextRequest) {
 
       decision = {
         targetVcpu: manualTarget as TargetVcpu,
-        targetMemoryGiB: (manualTarget * 2) as 2 | 4 | 8 | 16,
+        targetMemoryGiB: (manualTarget * 2) as TargetMemoryGiB,
         reason: manualReason || 'Manual scaling request',
         confidence: 1,
         score: 0,
@@ -234,7 +235,7 @@ export async function POST(request: NextRequest) {
         // Preemptive scaling based on prediction
         decision = {
           targetVcpu: prediction.predictedVcpu,
-          targetMemoryGiB: (prediction.predictedVcpu * 2) as 2 | 4 | 8,
+          targetMemoryGiB: (prediction.predictedVcpu * 2) as TargetMemoryGiB,
           reason: `[Predictive] ${prediction.reasoning} (Confidence: ${(prediction.confidence * 100).toFixed(0)}%)`,
           confidence: prediction.confidence,
           score: reactiveDecision.score,

@@ -7,6 +7,7 @@ import {
   ScalingMetrics,
   ScalingDecision,
   TargetVcpu,
+  TargetMemoryGiB,
   AISeverity,
   ScalingConfig,
   DEFAULT_SCALING_CONFIG,
@@ -146,7 +147,7 @@ export function makeScalingDecision(
 ): ScalingDecision {
   const { score, breakdown } = calculateScalingScore(metrics, config);
   const targetVcpu = determineTargetVcpu(score, config);
-  const targetMemoryGiB = (targetVcpu * 2) as 2 | 4 | 8;
+  const targetMemoryGiB = (targetVcpu * 2) as TargetMemoryGiB;
   const reason = generateReason(score, targetVcpu, breakdown, metrics);
   const confidence = calculateConfidence(metrics);
 

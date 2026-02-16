@@ -7,9 +7,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { InMemoryStateStore } from '@/lib/redis-store';
 import type {
   MetricDataPoint,
-  ScalingState,
   ScalingHistoryEntry,
-  SimulationConfig,
   PredictionResult,
 } from '@/types/prediction';
 import type { AnomalyEvent, AlertConfig, UsageDataPoint, AccumulatorState, PredictionRecord } from '@/types/daily-report';
@@ -275,8 +273,6 @@ describe('redis-store (InMemoryStateStore)', () => {
     });
 
     it('should handle partial simulation config updates', async () => {
-      const original = await store.getSimulationConfig();
-
       await store.setSimulationConfig({ mockCurrentVcpu: 8 });
 
       const updated = await store.getSimulationConfig();
