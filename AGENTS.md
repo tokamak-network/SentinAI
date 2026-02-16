@@ -16,7 +16,7 @@
 - `npm run test`: run Vitest in watch mode.
 - `npm run test:run`: run Vitest once (CI-friendly).
 - `npm run test:coverage`: generate coverage reports.
-- `npm run setup`: interactive `.env.local` setup wizard.
+
 
 ## Coding Style & Naming Conventions
 - Use TypeScript and React function components; keep logic in `src/lib` and UI in `src/components`.
@@ -78,4 +78,4 @@ No model override needed; tier-based selection works automatically.
 
 ## Security & Configuration Tips
 - Keep secrets in `.env.local`; never commit API keys.
-- Required config is documented in `ENV_GUIDE.md`. Use `npm run setup` to generate `.env.local`.
+- Required config is documented in `ENV_GUIDE.md`. Copy `.env.local.sample` and edit, or use `scripts/install.sh` for EC2 deployment.

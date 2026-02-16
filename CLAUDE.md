@@ -16,7 +16,7 @@ npm run dev          # Dev server on port 3002
 npm run build        # Production build (Turbopack)
 npm run start        # Production server
 npm run lint         # ESLint check
-npm run setup        # Interactive .env.local setup wizard
+
 ```
 
 ### Testing (Vitest)
@@ -187,7 +187,7 @@ Browser UI testing guide: `docs/verification/dashboard-ui-testing-guide.md`
 ## Environment Variables
 
 ```bash
-cp .env.local.sample .env.local   # Then edit, or use: npm run setup
+cp .env.local.sample .env.local   # Then edit
 ```
 
 ### Required

@@ -7,7 +7,7 @@ A Next.js dashboard for monitoring and auto-scaling Optimism-based L2 networks.
 
 ```bash
 npm install
-npm run setup    # Interactive setup wizard for .env.local
+cp .env.local.sample .env.local  # Edit with your settings
 npm run dev
 ```
 
@@ -70,15 +70,12 @@ SentinAI uses **tier-based AI models** via a custom AI Gateway to audit network 
 
 ## Environment Variables
 
-Interactive setup (recommended):
-```bash
-npm run setup
-```
-
-Or copy the sample and configure manually:
+Copy the sample and configure:
 ```bash
 cp .env.local.sample .env.local
 ```
+
+For EC2 deployment, use `bash scripts/install.sh` which handles everything.
 
 **Minimum required (3 variables for full functionality):**
 ```bash

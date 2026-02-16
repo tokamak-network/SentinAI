@@ -239,8 +239,8 @@ Error: No AI API key configured
 # .env.local 확인
 cat .env.local | grep API_KEY
 
-# 또는 대화형 설정
-npm run setup
+# 또는 EC2 배포 시
+bash scripts/install.sh
 ```
 
 ---

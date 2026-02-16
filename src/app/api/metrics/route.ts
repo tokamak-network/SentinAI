@@ -13,7 +13,7 @@ import { MetricDataPoint } from '@/types/prediction';
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import { getStore } from '@/lib/redis-store';
 import { runDetectionPipeline } from '@/lib/detection-pipeline';
-import { getContainerCpuUsage, getAllContainerUsage } from '@/lib/k8s-scaler';
+import { getContainerCpuUsage, getAllContainerUsage, getAllContainerUsageViaKubelet } from '@/lib/k8s-scaler';
 import { getActiveL1RpcUrl, getL2NodesL1RpcStatus } from '@/lib/l1-rpc-failover';
 import { getAllBalanceStatus } from '@/lib/eoa-balance-monitor';
 import { resolveBlockInterval } from '@/lib/block-interval';
@@ -33,6 +33,7 @@ interface ComponentDetail {
     status: string;
     icon: string;
     rawCpu: number;
+    nodeName?: string;
     metrics?: {
         cpuReq: string;
         memReq: string;
@@ -149,6 +150,7 @@ async function getComponentDetails(labelSelector: string, displayName: string, i
             status: statusDisp,
             icon,
             rawCpu,
+            nodeName,
             metrics: {
                 cpuReq: cpuDisp,
                 memReq: memDisp,
@@ -299,13 +301,27 @@ export async function GET(request: Request) {
 
         const components = [l2Client, consensus, batcher, proposer];
 
+        // Fallback: kubelet proxy when metrics-server is unavailable
+        let resolvedUsage = allUsage;
+        if (!resolvedUsage) {
+            const nodeMap = new Map<string, string>();
+            for (const comp of components) {
+                if (!comp) continue;
+                const suffix = COMPONENT_SUFFIX_MAP[comp.name];
+                if (suffix && comp.nodeName) nodeMap.set(suffix, comp.nodeName);
+            }
+            if (nodeMap.size > 0) {
+                resolvedUsage = await getAllContainerUsageViaKubelet(nodeMap);
+            }
+        }
+
         // Inject real CPU/memory usage into each component
-        if (allUsage) {
+        if (resolvedUsage) {
             for (const comp of components) {
                 if (!comp) continue;
                 const suffix = COMPONENT_SUFFIX_MAP[comp.name];
                 if (!suffix) continue;
-                const usage = allUsage.get(suffix);
+                const usage = resolvedUsage.get(suffix);
                 if (usage && comp.rawCpu > 0) {
                     comp.usage = {
                         cpuPercent: (usage.cpuMillicores / (comp.rawCpu * 1000)) * 100,

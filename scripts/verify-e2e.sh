@@ -157,7 +157,7 @@ if should_run 0; then
     set +a
   else
     fail ".env.local not found"
-    echo -e "  ${RED}  Run: npm run setup${NC}"
+    echo -e "  ${RED}  Copy .env.local.sample to .env.local and configure.${NC}"
     exit 1
   fi
 

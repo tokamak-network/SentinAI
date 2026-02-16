@@ -149,6 +149,58 @@ export async function getAllContainerUsage(
 }
 
 /**
+ * Fallback: Get container usage via kubelet /stats/summary (no metrics-server needed).
+ * Queries each node's kubelet proxy endpoint in parallel.
+ * Works on EKS Fargate where each pod runs on its own virtual node.
+ *
+ * @param nodeMap Map of component suffix → node name (e.g., "op-geth" → "fargate-ip-...")
+ */
+export async function getAllContainerUsageViaKubelet(
+  nodeMap: Map<string, string>,
+): Promise<Map<string, ContainerResourceUsage> | null> {
+  const simConfig = await getStore().getSimulationConfig();
+  if (simConfig.enabled) return null;
+  if (nodeMap.size === 0) return null;
+
+  try {
+    const result = new Map<string, ContainerResourceUsage>();
+
+    // Query each node's kubelet in parallel
+    const entries = Array.from(nodeMap.entries());
+    const results = await Promise.allSettled(
+      entries.map(async ([suffix, nodeName]) => {
+        const cmd = `get --raw "/api/v1/nodes/${nodeName}/proxy/stats/summary"`;
+        const { stdout } = await runK8sCommand(cmd, { timeout: 10000 });
+        const stats = JSON.parse(stdout);
+
+        // Find the first pod's first container (Fargate: 1 pod per node)
+        const pod = stats.pods?.[0];
+        const container = pod?.containers?.[0];
+        if (!container) return null;
+
+        const cpuMillicores = (container.cpu?.usageNanoCores ?? 0) / 1_000_000;
+        const memoryMiB = (container.memory?.workingSetBytes ?? 0) / (1024 * 1024);
+
+        return { suffix, cpuMillicores, memoryMiB };
+      })
+    );
+
+    for (const res of results) {
+      if (res.status === 'fulfilled' && res.value) {
+        result.set(res.value.suffix, {
+          cpuMillicores: res.value.cpuMillicores,
+          memoryMiB: res.value.memoryMiB,
+        });
+      }
+    }
+
+    return result.size > 0 ? result : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Check simulation mode status
  */
 export async function isSimulationMode(): Promise<boolean> {
