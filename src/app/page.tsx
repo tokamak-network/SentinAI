@@ -109,6 +109,33 @@ interface ScalerState {
   predictionMeta: PredictionMeta;
 }
 
+interface AnomalyEventData {
+  id: string;
+  timestamp: number;
+  status: 'active' | 'resolved' | 'acknowledged';
+  deepAnalysis?: {
+    severity: string;
+    anomalyType: string;
+    predictedImpact: string;
+    suggestedActions: string[];
+    relatedComponents: string[];
+  };
+}
+
+interface DetectionInfo {
+  anomalies: {
+    isAnomaly: boolean;
+    metric: string;
+    value: number;
+    zScore: number;
+    direction: 'spike' | 'drop' | 'plateau';
+    description: string;
+    rule: string;
+  }[];
+  activeEventId?: string;
+  deepAnalysisTriggered: boolean;
+}
+
 interface AgentCycleData {
   timestamp: string;
   phase: 'observe' | 'detect' | 'decide' | 'act' | 'complete' | 'error';
@@ -119,7 +146,7 @@ interface AgentCycleData {
     txPoolPending: number;
     gasUsedRatio: number;
   } | null;
-  detection: unknown;
+  detection: DetectionInfo | null;
   scaling: {
     score: number;
     currentVcpu: number;
@@ -203,6 +230,9 @@ export default function Dashboard() {
 
   // --- L1 RPC Failover State ---
   const [l1Failover, setL1Failover] = useState<L1FailoverStatus | null>(null);
+
+  // --- Anomaly Events State ---
+  const [anomalyEvents, setAnomalyEvents] = useState<AnomalyEventData[]>([]);
 
   // --- NLOps Chat State ---
   const [chatOpen, setChatOpen] = useState(false);
@@ -425,7 +455,21 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-
+  // --- Anomaly Events polling (with agent loop) ---
+  useEffect(() => {
+    const fetchAnomalies = async () => {
+      try {
+        const res = await fetch(`${BASE_PATH}/api/anomalies`, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          setAnomalyEvents(data.events || []);
+        }
+      } catch { /* ignore */ }
+    };
+    fetchAnomalies();
+    const interval = setInterval(fetchAnomalies, AGENT_LOOP_REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
 
   if (isLoading) return (
     <div className="flex h-screen w-full items-center justify-center bg-gray-50 text-blue-600">
@@ -869,8 +913,16 @@ export default function Dashboard() {
             );
           };
 
+          // Anomaly detection summary for status bar
+          const anomalyCycles = cycles.filter(c => {
+            const det = c.detection;
+            return det && det.anomalies?.some(a => a.isAnomaly);
+          });
+          const lastDeepTriggered = cycles.find(c => c.detection?.deepAnalysisTriggered);
+          const hasActiveEvent = cycles.some(c => c.detection?.activeEventId);
+
           return (
-          <div className="lg:col-span-7 bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col max-h-[320px]">
+          <div className="lg:col-span-7 bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col">
 
             {/* Terminal Header */}
             <div className="bg-[#25282D] px-6 py-4 flex items-center justify-between shrink-0">
@@ -889,9 +941,11 @@ export default function Dashboard() {
             <div className="flex-1 bg-[#0D1117] p-6 overflow-y-auto font-mono text-xs custom-scrollbar relative">
               <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-[#0D1117] to-transparent pointer-events-none z-10"></div>
 
-              <div className="space-y-0.5">
+              <div className="space-y-1">
                 {cycles.length > 0 ? cycles.map((cycle, idx) => {
-                    const time = new Date(cycle.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                    const d = new Date(cycle.timestamp);
+                    const date = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+                    const time = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
                     const isError = cycle.phase === 'error';
                     const scaling = cycle.scaling;
                     const metrics = cycle.metrics;
@@ -962,20 +1016,73 @@ export default function Dashboard() {
                     }
 
                     return (
-                      <div key={idx} className={`flex items-baseline leading-relaxed ${event === 'IDLE' ? 'opacity-70' : ''} ${borderColor}`}>
-                        <span className="text-gray-500 shrink-0 w-[76px] text-right pr-2" suppressHydrationWarning>{time}</span>
-                        <span className={`shrink-0 w-[80px] font-bold ${color}`}>{event}</span>
+                      <div key={idx} className={`flex items-center leading-relaxed whitespace-nowrap ${event === 'IDLE' ? 'opacity-70' : ''} ${borderColor}`}>
+                        <span className="text-gray-600 shrink-0 w-[110px] text-right pr-2 tabular-nums" suppressHydrationWarning>
+                          <span className="text-gray-700">{date}</span> {time}
+                        </span>
+                        <span className={`shrink-0 w-[64px] font-bold ${color}`}>{event}</span>
                         {metrics && event !== 'ERROR' && (
-                          <span className={`shrink-0 w-[68px] text-right pr-3 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>cpu {metrics.cpuUsage.toFixed(1)}%</span>
+                          <span className={`shrink-0 w-[72px] text-right pr-4 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>cpu {metrics.cpuUsage.toFixed(1)}%</span>
                         )}
                         {metrics && event !== 'ERROR' && (
-                          <span className={`shrink-0 w-[52px] text-right pr-3 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>tx {metrics.txPoolPending}</span>
+                          <span className={`shrink-0 w-[64px] text-right pr-4 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>txpool {metrics.txPoolPending}</span>
                         )}
                         {metrics && event !== 'ERROR' && (
-                          <span className={`shrink-0 w-[100px] text-right pr-3 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>blk {metrics.l2BlockHeight.toLocaleString()}</span>
+                          <span className={`shrink-0 w-[72px] text-right pr-4 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>gas {(metrics.gasUsedRatio * 100).toFixed(1)}%</span>
                         )}
+                        {metrics && event !== 'ERROR' && (() => {
+                          const prevCycle = idx > 0 ? cycles[idx - 1] : null;
+                          const blockDelta = prevCycle?.metrics
+                            ? metrics.l2BlockHeight - prevCycle.metrics.l2BlockHeight : null;
+                          return (
+                            <span className={`shrink-0 w-[120px] text-right pr-2 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>
+                              {metrics.l2BlockHeight.toLocaleString()}
+                              {blockDelta !== null && blockDelta > 0 && (
+                                <span className="text-green-500/60 ml-1">+{blockDelta}</span>
+                              )}
+                            </span>
+                          );
+                        })()}
                         <span className="flex items-center gap-1.5 flex-1 pl-1 min-w-0">
                           {scaling?.score !== undefined && !scaling.executed && getScoreBadge(Math.round(scaling.score))}
+                          {(() => {
+                            const detected = cycle.detection?.anomalies?.filter(a => a.isAnomaly) || [];
+                            const eventId = cycle.detection?.activeEventId;
+                            const aiResult = eventId ? anomalyEvents.find(e => e.id === eventId)?.deepAnalysis : null;
+                            if (detected.length > 0) {
+                              const summary = detected.map(a => {
+                                const name = a.metric.replace('Usage', '').replace('Pending', '').replace('UsedRatio', '');
+                                const dir = a.direction === 'spike' ? '↑' : a.direction === 'drop' ? '↓' : '~';
+                                return `${name}${dir}`;
+                              }).join(' ');
+                              return (
+                                <>
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/25 text-[10px] font-bold font-mono text-amber-400 shrink-0">
+                                    ⚠ {summary}
+                                  </span>
+                                  {aiResult ? (
+                                    <span className="inline-flex items-center gap-1 text-[10px] truncate">
+                                      <span className={`px-1 py-0.5 rounded font-bold shrink-0 ${
+                                        aiResult.severity === 'critical' ? 'bg-red-500/20 text-red-400' :
+                                        aiResult.severity === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                                        aiResult.severity === 'medium' ? 'bg-amber-500/20 text-amber-400' :
+                                        'bg-blue-500/20 text-blue-400'
+                                      }`}>{aiResult.severity}</span>
+                                      <span className="text-purple-400/80 truncate">{aiResult.predictedImpact}</span>
+                                    </span>
+                                  ) : cycle.detection?.deepAnalysisTriggered ? (
+                                    <span className="text-[10px] text-purple-400 font-mono shrink-0">AI analyzing...</span>
+                                  ) : (
+                                    <span className="text-amber-500/70 text-[10px] truncate">{detected[0].description}</span>
+                                  )}
+                                </>
+                              );
+                            }
+                            if (cycle.detection?.deepAnalysisTriggered) {
+                              return <span className="text-[10px] text-purple-400 font-mono shrink-0">AI▸</span>;
+                            }
+                            return null;
+                          })()}
                           {detail && <span className="text-gray-500 truncate">{detail}</span>}
                         </span>
                         {scaling?.executed && <Zap size={12} className="text-amber-500 shrink-0 mt-0.5 ml-1" />}
@@ -1006,23 +1113,28 @@ export default function Dashboard() {
             </div>
 
             {/* Status Bar */}
-            <div className="bg-[#25282D] px-6 py-3 border-t border-gray-800 flex items-center justify-between shrink-0">
-              <div className={`flex items-center gap-2 text-xs font-bold ${
+            <div className="bg-[#25282D] px-4 py-2.5 border-t border-gray-800 flex items-center gap-4 shrink-0 text-[10px] font-mono">
+              <div className={`flex items-center gap-1.5 font-bold shrink-0 ${
                 hasScalingAction ? 'text-amber-400' : 'text-green-400'
               }`}>
-                <div className={`w-2 h-2 rounded-full ${
+                <div className={`w-1.5 h-1.5 rounded-full ${
                   hasScalingAction ? 'bg-amber-500' :
                   agentLoop?.scheduler.agentLoopEnabled ? 'bg-green-500' : 'bg-gray-500'
                 }`} />
-                {hasScalingAction
-                  ? `SCALING EXECUTED`
-                  : agentLoop?.scheduler.agentLoopEnabled
-                  ? 'MONITORING ACTIVE'
-                  : 'DISABLED'}
+                {hasScalingAction ? 'SCALED' : agentLoop?.scheduler.agentLoopEnabled ? 'ACTIVE' : 'OFF'}
               </div>
-              <span className="text-[10px] text-gray-500">
-                {cycles.length > 0 ? `${cycles.filter(c => c.scaling?.score && c.scaling.score >= 30).length}/${cycles.length} elevated` : ''}
-              </span>
+              <span className="text-gray-700">|</span>
+              <div className="flex items-center gap-1.5 text-gray-500">
+                <span>{cycles.length} cycles</span>
+                <span className="text-gray-700">·</span>
+                {anomalyCycles.length > 0 ? (
+                  <span className="text-amber-400 font-bold">{anomalyCycles.length} anomal{anomalyCycles.length === 1 ? 'y' : 'ies'}</span>
+                ) : (
+                  <span>no anomalies</span>
+                )}
+                {lastDeepTriggered && <span className="text-purple-400 font-bold">· AI</span>}
+                {hasActiveEvent && <span className="text-red-400 font-bold">· event active</span>}
+              </div>
             </div>
           </div>
           );
