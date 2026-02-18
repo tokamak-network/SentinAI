@@ -32,6 +32,9 @@
 #     PROPOSER_EOA_ADDRESS=0x...
 #     TREASURY_PRIVATE_KEY=0x...         # Auto-refill
 #     EOA_BALANCE_CRITICAL_ETH=0.1
+#     ORCHESTRATOR_TYPE=docker            # 'k8s' (default) or 'docker' for Docker Compose L2
+#     DOCKER_COMPOSE_FILE=docker-compose.yml  # L2 Docker Compose file (docker mode only)
+#     DOCKER_COMPOSE_PROJECT=my-l2        # Docker Compose project name (docker mode only)
 #     SCALING_SIMULATION_MODE=false      # true = no real K8s scaling (default: auto)
 #     AUTO_REMEDIATION_ENABLED=true
 #     ALERT_WEBHOOK_URL=https://...      # Slack webhook
@@ -269,9 +272,12 @@ setup_env() {
     [[ ! "${L2_RPC_URL}" =~ ^https?:// ]] && err "L2_RPC_URL must start with http:// or https://."
 
     AI_GATEWAY_URL="${AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
+    ORCHESTRATOR_TYPE="${ORCHESTRATOR_TYPE:-k8s}"
     K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
     K8S_APP_PREFIX="${K8S_APP_PREFIX:-op}"
     K8S_STATEFULSET_PREFIX="${K8S_STATEFULSET_PREFIX:-}"
+    DOCKER_COMPOSE_FILE="${DOCKER_COMPOSE_FILE:-docker-compose.yml}"
+    DOCKER_COMPOSE_PROJECT="${DOCKER_COMPOSE_PROJECT:-}"
     # All other vars (AWS_CLUSTER_NAME, L1_RPC_URLS, EOA, etc.)
     # are read directly from the environment — no mapping needed.
 
@@ -335,6 +341,41 @@ setup_env() {
     esac
     [[ -z "${ai_key_value}" ]] && err "AI API Key is required."
 
+    # Container Orchestrator
+    echo ""
+    echo -e "  ${BOLD}Container Orchestrator${NC}:"
+    echo "    1) Kubernetes — AWS EKS (default)"
+    echo "    2) Kubernetes — Local (minikube, kind, k3s, etc.)"
+    echo "    3) Docker Compose — local L2 node"
+    read -rp "  Choose [1]: " orch_choice
+    case "${orch_choice}" in
+      2) ORCHESTRATOR_TYPE="k8s"; _k8s_deploy="local" ;;
+      3) ORCHESTRATOR_TYPE="docker" ;;
+      *) ORCHESTRATOR_TYPE="k8s"; _k8s_deploy="eks" ;;
+    esac
+
+    if [ "${ORCHESTRATOR_TYPE}" = "docker" ]; then
+      # Docker Compose L2 node settings
+      echo ""
+      echo -e "  ${BOLD}Docker Compose L2 Node${NC}:"
+      echo "  Path to the L2 node's docker-compose.yml file."
+      read -rp "  Docker Compose file [docker-compose.yml]: " DOCKER_COMPOSE_FILE
+      DOCKER_COMPOSE_FILE="${DOCKER_COMPOSE_FILE:-docker-compose.yml}"
+      read -rp "  Docker Compose project name (press Enter for auto-detect): " DOCKER_COMPOSE_PROJECT
+      DOCKER_COMPOSE_PROJECT="${DOCKER_COMPOSE_PROJECT:-}"
+    elif [ "${_k8s_deploy}" = "local" ]; then
+      # Local K8s — uses existing kubeconfig, no AWS setup needed
+      echo ""
+      echo -e "  ${BOLD}Local Kubernetes${NC}:"
+      info "Using existing kubeconfig (~/.kube/config)."
+      read -rp "  K8S_NAMESPACE [default]: " K8S_NAMESPACE
+      K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
+      read -rp "  K8S_APP_PREFIX [op]: " K8S_APP_PREFIX
+      K8S_APP_PREFIX="${K8S_APP_PREFIX:-op}"
+      read -rp "  K8S_STATEFULSET_PREFIX (press Enter if none): " K8S_STATEFULSET_PREFIX
+      K8S_STATEFULSET_PREFIX="${K8S_STATEFULSET_PREFIX:-}"
+    else
+
     # AWS EKS Cluster Name
     echo ""
     read -rp "  AWS EKS Cluster Name (for K8s monitoring, press Enter to skip): " AWS_CLUSTER_NAME
@@ -390,12 +431,13 @@ setup_env() {
         AWS_REGION="${AWS_REGION:-${region_default}}"
       fi
     fi
+    fi  # end orchestrator type branch
 
     # L1 RPC Failover (optional)
     echo ""
     echo -e "  ${BOLD}L1 RPC Failover${NC} (spare endpoints for 429 auto-failover):"
     read -rp "  L1_RPC_URLS (comma-separated, press Enter to skip): " L1_RPC_URLS
-    if [ -n "${L1_RPC_URLS}" ]; then
+    if [ -n "${L1_RPC_URLS}" ] && [ "${ORCHESTRATOR_TYPE}" != "docker" ]; then
       read -rp "  Enable L1 Proxyd ConfigMap integration? (y/N): " proxyd_choice
       if [[ "${proxyd_choice}" =~ ^[Yy]$ ]]; then
         L1_PROXYD_ENABLED="true"
@@ -417,7 +459,9 @@ setup_env() {
     fi
 
     # Scaling Simulation Mode
-    if [ -n "${AWS_CLUSTER_NAME}" ]; then
+    if [ "${ORCHESTRATOR_TYPE}" = "docker" ]; then
+      SCALING_SIMULATION_MODE="false"
+    elif [ -n "${AWS_CLUSTER_NAME}" ] || [ "${_k8s_deploy:-}" = "local" ]; then
       echo ""
       echo "  Simulation mode disables real K8s scaling (safe for testing)."
       read -rp "  Enable simulation mode? (y/N): " sim_choice
@@ -467,6 +511,9 @@ setup_env() {
   # --- Defaults for unset optional variables (set -u safety) ---
   # In non-interactive mode, env vars are preserved (:= only sets if unset/empty).
   # In interactive mode, read results are preserved. Vars skipped by user get safe defaults.
+  : "${ORCHESTRATOR_TYPE:=k8s}"
+  : "${DOCKER_COMPOSE_FILE:=docker-compose.yml}"
+  : "${DOCKER_COMPOSE_PROJECT:=}"
   : "${AWS_CLUSTER_NAME:=}"
   : "${K8S_NAMESPACE:=default}"
   : "${K8S_APP_PREFIX:=op}"
@@ -515,14 +562,21 @@ ENVEOF
     printf 'AI_GATEWAY_URL=%s\n' "${AI_GATEWAY_URL}"
     printf '%s=%s\n' "${ai_key_name}" "${ai_key_value}"
 
-    printf '\n# === K8s Monitoring ===\n'
-    printf 'AWS_CLUSTER_NAME=%s\n' "${AWS_CLUSTER_NAME:-}"
-    [ -n "${AWS_PROFILE}" ] && printf 'AWS_PROFILE=%s\n' "${AWS_PROFILE}"
-    printf 'K8S_NAMESPACE=%s\n' "${K8S_NAMESPACE}"
-    printf 'K8S_APP_PREFIX=%s\n' "${K8S_APP_PREFIX}"
-    [ -n "${K8S_STATEFULSET_PREFIX}" ] && printf 'K8S_STATEFULSET_PREFIX=%s\n' "${K8S_STATEFULSET_PREFIX}"
-    [ -n "${AWS_REGION}" ] && printf 'AWS_REGION=%s\n' "${AWS_REGION}"
-    # AWS credentials: stored in ~/.aws/credentials (mounted by Docker)
+    if [ "${ORCHESTRATOR_TYPE}" = "docker" ]; then
+      printf '\n# === Container Orchestrator ===\n'
+      printf 'ORCHESTRATOR_TYPE=docker\n'
+      printf 'DOCKER_COMPOSE_FILE=%s\n' "${DOCKER_COMPOSE_FILE}"
+      [ -n "${DOCKER_COMPOSE_PROJECT}" ] && printf 'DOCKER_COMPOSE_PROJECT=%s\n' "${DOCKER_COMPOSE_PROJECT}"
+    else
+      printf '\n# === K8s Monitoring ===\n'
+      printf 'AWS_CLUSTER_NAME=%s\n' "${AWS_CLUSTER_NAME:-}"
+      [ -n "${AWS_PROFILE}" ] && printf 'AWS_PROFILE=%s\n' "${AWS_PROFILE}"
+      printf 'K8S_NAMESPACE=%s\n' "${K8S_NAMESPACE}"
+      printf 'K8S_APP_PREFIX=%s\n' "${K8S_APP_PREFIX}"
+      [ -n "${K8S_STATEFULSET_PREFIX}" ] && printf 'K8S_STATEFULSET_PREFIX=%s\n' "${K8S_STATEFULSET_PREFIX}"
+      [ -n "${AWS_REGION}" ] && printf 'AWS_REGION=%s\n' "${AWS_REGION}"
+      # AWS credentials: stored in ~/.aws/credentials (mounted by Docker)
+    fi
 
     printf '\n# === Scaling ===\n'
     printf 'SCALING_SIMULATION_MODE=%s\n' "${SCALING_SIMULATION_MODE}"
@@ -601,7 +655,8 @@ CADDYEOF
 # Step 7: Configure K8s Cluster Access
 # ============================================================
 setup_k8s() {
-  [ -z "${AWS_CLUSTER_NAME:-}" ] && return
+  [ "${ORCHESTRATOR_TYPE:-}" = "docker" ] && return
+  [ -z "${AWS_CLUSTER_NAME:-}" ] && { info "Skipping EKS kubeconfig (local K8s or no cluster)."; return; }
   [ -z "${AWS_PROFILE:-}" ] && {
     warn "AWS_PROFILE not set. Skipping K8s cluster setup."
     return
