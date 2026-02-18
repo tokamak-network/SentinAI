@@ -60,8 +60,8 @@ export function calculateScalingScore(
  * Tiers:
  *   score < idle (30)      → 1 vCPU (IDLE)
  *   idle <= score < normal (70) → 2 vCPU (NORMAL)
- *   normal <= score < critical (85) → 4 vCPU (HIGH)
- *   score >= critical (85) → 8 vCPU (CRITICAL/EMERGENCY)
+ *   normal <= score < critical (77) → 4 vCPU (HIGH)
+ *   score >= critical (77) → 8 vCPU (CRITICAL/EMERGENCY)
  */
 export function determineTargetVcpu(
   score: number,
@@ -82,6 +82,11 @@ export function determineTargetVcpu(
 
 /**
  * Generate scaling decision reasoning
+ * Format: "MainReason, Detail1, Detail2 (Score: XX.X)"
+ * Examples:
+ *   - "System Idle, CPU 0.1%, Low TxPool (Score: 5.0)"
+ *   - "Normal Load, CPU 35.5%, Gas 42.3% (Score: 35.2)"
+ *   - "High Load, CPU 75.2%, TxPool 150 (Score: 72.1)"
  */
 export function generateReason(
   score: number,
@@ -90,28 +95,33 @@ export function generateReason(
   metrics: ScalingMetrics
 ): string {
   const parts: string[] = [];
+  let mainReason = '';
 
   if (targetVcpu === 1) {
-    parts.push('System Idle');
-    if (breakdown.cpuScore < 20) parts.push(`CPU ${metrics.cpuUsage.toFixed(1)}% Low`);
-    if (breakdown.txPoolScore < 10) parts.push('Low TxPool Pending');
+    mainReason = 'System Idle';
+    if (breakdown.cpuScore < 20) parts.push(`CPU ${metrics.cpuUsage.toFixed(1)}%`);
+    if (breakdown.txPoolScore < 10) parts.push('Low TxPool');
   } else if (targetVcpu === 2) {
-    parts.push('Normal Load Detected');
+    mainReason = 'Normal Load';
     if (breakdown.cpuScore >= 30) parts.push(`CPU ${metrics.cpuUsage.toFixed(1)}%`);
-    if (breakdown.gasScore >= 30) parts.push(`Gas Usage ${(metrics.gasUsedRatio * 100).toFixed(1)}%`);
+    if (breakdown.gasScore >= 30) parts.push(`Gas ${(metrics.gasUsedRatio * 100).toFixed(1)}%`);
   } else if (targetVcpu === 4) {
-    parts.push('High Load Detected');
-    if (breakdown.cpuScore >= 60) parts.push(`CPU ${metrics.cpuUsage.toFixed(1)}% High`);
-    if (breakdown.txPoolScore >= 50) parts.push(`TxPool ${metrics.txPoolPending} Pending`);
-    if (breakdown.aiScore >= 66) parts.push('AI Warning: High Severity');
+    mainReason = 'High Load';
+    if (breakdown.cpuScore >= 60) parts.push(`CPU ${metrics.cpuUsage.toFixed(1)}%`);
+    if (breakdown.txPoolScore >= 50) parts.push(`TxPool ${metrics.txPoolPending}`);
+    if (breakdown.aiScore >= 66) parts.push('AI Warning');
   } else if (targetVcpu === 8) {
-    parts.push('🚨 CRITICAL: Emergency Scaling');
-    if (breakdown.cpuScore >= 90) parts.push(`CPU ${metrics.cpuUsage.toFixed(1)}% Critical`);
-    if (breakdown.txPoolScore >= 80) parts.push(`TxPool ${metrics.txPoolPending} Saturated`);
-    if (breakdown.aiScore >= 90) parts.push('AI Alert: Critical Severity');
+    mainReason = 'Critical Load';
+    if (breakdown.cpuScore >= 90) parts.push(`CPU ${metrics.cpuUsage.toFixed(1)}%`);
+    if (breakdown.txPoolScore >= 80) parts.push(`TxPool ${metrics.txPoolPending}`);
+    if (breakdown.aiScore >= 90) parts.push('AI Critical');
+  } else {
+    mainReason = 'Unknown';
   }
 
-  return parts.join(', ') + ` (Score: ${score.toFixed(1)})`;
+  // Build reason: main reason + metrics details + score
+  const detailsStr = parts.length > 0 ? `, ${parts.join(', ')}` : '';
+  return `${mainReason}${detailsStr} (Score: ${score.toFixed(1)})`;
 }
 
 /**

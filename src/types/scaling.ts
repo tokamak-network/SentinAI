@@ -143,7 +143,7 @@ export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
   thresholds: {
     idle: parseInt(process.env.SCALING_IDLE_THRESHOLD ?? '30'),
     normal: parseInt(process.env.SCALING_NORMAL_THRESHOLD ?? '70'),
-    critical: parseInt(process.env.SCALING_CRITICAL_THRESHOLD ?? '85'),
+    critical: parseInt(process.env.SCALING_CRITICAL_THRESHOLD ?? '77'),
   },
   serviceName: process.env.K8S_SERVICE_NAME || defaultStsName,
 };
