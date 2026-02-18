@@ -125,6 +125,11 @@ export interface ChainPlugin {
   /** Balance metric names for anomaly detection (e.g. ['batcherBalance']) */
   readonly balanceMetrics: string[];
 
+  // ---- Block Production ----
+
+  /** Expected block production interval in seconds (e.g., 2.0 for OP Stack) */
+  readonly expectedBlockIntervalSeconds: number;
+
   // ---- viem Chain ----
 
   /** L1 chain configuration for viem */

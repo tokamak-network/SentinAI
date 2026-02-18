@@ -1,4 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('@/chains', () => ({
+  getChainPlugin: () => ({ expectedBlockIntervalSeconds: 2.0 }),
+}));
+
 import { resolveBlockInterval } from '@/lib/block-interval';
 
 describe('block-interval', () => {

@@ -47,6 +47,9 @@ export class ThanosPlugin implements ChainPlugin {
   readonly eoaConfigs: EOAConfig[] = EOA_CONFIGS;
   readonly balanceMetrics: string[] = BALANCE_METRICS;
 
+  // Block Production
+  readonly expectedBlockIntervalSeconds = 2.0;
+
   // viem Chain
   readonly l1Chain: Chain = sepolia;
   readonly l2Chain: Chain = mainnet;

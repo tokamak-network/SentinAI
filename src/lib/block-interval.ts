@@ -2,7 +2,15 @@
  * Block interval calculation helpers.
  */
 
-const DEFAULT_BLOCK_INTERVAL_SECONDS = 2.0;
+import { getChainPlugin } from '@/chains';
+
+function getDefaultBlockInterval(): number {
+  try {
+    return getChainPlugin().expectedBlockIntervalSeconds;
+  } catch {
+    return 2.0;
+  }
+}
 
 export interface BlockIntervalParams {
   currentBlockHeight: bigint;
@@ -34,24 +42,24 @@ export function resolveBlockInterval({
   }
 
   if (lastBlockHeight === null || lastBlockTime === null) {
-    return DEFAULT_BLOCK_INTERVAL_SECONDS;
+    return getDefaultBlockInterval();
   }
 
   const parsedLastTime = Number(lastBlockTime);
   if (!Number.isFinite(parsedLastTime)) {
-    return DEFAULT_BLOCK_INTERVAL_SECONDS;
+    return getDefaultBlockInterval();
   }
 
   const lastHeight = BigInt(lastBlockHeight);
   if (currentBlockHeight <= lastHeight) {
-    return DEFAULT_BLOCK_INTERVAL_SECONDS;
+    return getDefaultBlockInterval();
   }
 
   const timeDiffSec = (nowMs - parsedLastTime) / 1000;
   const blockDiff = Number(currentBlockHeight - lastHeight);
 
   if (!Number.isFinite(timeDiffSec) || timeDiffSec <= 0 || blockDiff <= 0) {
-    return DEFAULT_BLOCK_INTERVAL_SECONDS;
+    return getDefaultBlockInterval();
   }
 
   return timeDiffSec / blockDiff;
