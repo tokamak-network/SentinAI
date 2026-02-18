@@ -43,6 +43,10 @@ const ALERT_COOLDOWN_TTL = 10 * 60; // 10 minutes
 // P3 Constants
 const PREDICTION_MAX = 100;
 
+// Agent Cycle History Constants
+const AGENT_CYCLE_HISTORY_MAX = 500;
+const AGENT_CYCLE_HISTORY_DEFAULT_LIMIT = 50;
+
 // Redis key names (appended to keyPrefix)
 const KEYS = {
   metricsBuffer: 'metrics:buffer',
@@ -662,19 +666,22 @@ export class RedisStateStore implements IStateStore {
 
   async pushAgentCycleResult(result: any): Promise<void> {
     const key = this.key(KEYS.agentCycleHistory);
-    const maxSize = 20;
     await this.client.rpush(key, JSON.stringify(result));
-    // Keep only last 20 cycles
     const len = await this.client.llen(key);
-    if (len > maxSize) {
-      await this.client.ltrim(key, len - maxSize, -1);
+    if (len > AGENT_CYCLE_HISTORY_MAX) {
+      await this.client.ltrim(key, len - AGENT_CYCLE_HISTORY_MAX, -1);
     }
   }
 
-  async getAgentCycleHistory(limit: number = 20): Promise<any[]> {
+  async getAgentCycleHistory(limit: number = AGENT_CYCLE_HISTORY_DEFAULT_LIMIT): Promise<any[]> {
     const key = this.key(KEYS.agentCycleHistory);
     const records = await this.client.lrange(key, -limit, -1);
     return records.map((r) => JSON.parse(r));
+  }
+
+  async getAgentCycleCount(): Promise<number> {
+    const key = this.key(KEYS.agentCycleHistory);
+    return this.client.llen(key);
   }
 
   async getLastAgentCycleResult(): Promise<any | null> {
@@ -878,13 +885,17 @@ export class InMemoryStateStore implements IStateStore {
 
   async pushAgentCycleResult(result: any): Promise<void> {
     this.agentCycleHistory.push(result);
-    if (this.agentCycleHistory.length > 20) {
-      this.agentCycleHistory = this.agentCycleHistory.slice(-20);
+    if (this.agentCycleHistory.length > AGENT_CYCLE_HISTORY_MAX) {
+      this.agentCycleHistory = this.agentCycleHistory.slice(-AGENT_CYCLE_HISTORY_MAX);
     }
   }
 
-  async getAgentCycleHistory(limit: number = 20): Promise<any[]> {
+  async getAgentCycleHistory(limit: number = AGENT_CYCLE_HISTORY_DEFAULT_LIMIT): Promise<any[]> {
     return [...this.agentCycleHistory.slice(-limit)];
+  }
+
+  async getAgentCycleCount(): Promise<number> {
+    return this.agentCycleHistory.length;
   }
 
   async getLastAgentCycleResult(): Promise<any | null> {

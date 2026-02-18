@@ -171,6 +171,7 @@ interface AgentLoopStatus {
   };
   lastCycle: AgentCycleData | null;
   recentCycles: AgentCycleData[];
+  totalCycles?: number;
   config: {
     intervalSeconds: number;
     autoScalingEnabled: boolean;
@@ -248,6 +249,7 @@ export default function Dashboard() {
 
   // --- Agent Loop State ---
   const [agentLoop, setAgentLoop] = useState<AgentLoopStatus | null>(null);
+  const [showFullHistory, setShowFullHistory] = useState(false);
 
   // --- Cost Analysis State ---
   const [costAnalysisExpanded, setCostAnalysisExpanded] = useState(false);
@@ -438,11 +440,12 @@ export default function Dashboard() {
     };
   }, []);
 
-  // --- Agent Loop polling (every 5s) ---
+  // --- Agent Loop polling (every 30s) ---
   useEffect(() => {
     const fetchAgentLoop = async () => {
       try {
-        const res = await fetch(`${BASE_PATH}/api/agent-loop`, { cache: 'no-store' });
+        const limit = showFullHistory ? 500 : 50;
+        const res = await fetch(`${BASE_PATH}/api/agent-loop?limit=${limit}`, { cache: 'no-store' });
         if (res.ok) {
           setAgentLoop(await res.json());
         }
@@ -453,7 +456,7 @@ export default function Dashboard() {
     fetchAgentLoop();
     const interval = setInterval(fetchAgentLoop, AGENT_LOOP_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, []);
+  }, [showFullHistory]);
 
   // --- Anomaly Events polling (with agent loop) ---
   useEffect(() => {
@@ -932,7 +935,23 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center gap-3">
                 {cycles.length > 0 && (
-                  <span className="text-[10px] text-gray-500 font-mono">{cycles.length} cycles</span>
+                  <span className="text-[10px] text-gray-500 font-mono">
+                    {cycles.length}{agentLoop?.totalCycles && agentLoop.totalCycles > cycles.length
+                      ? ` / ${agentLoop.totalCycles}`
+                      : ''} cycles
+                  </span>
+                )}
+                {agentLoop?.totalCycles && agentLoop.totalCycles > 50 && (
+                  <button
+                    onClick={() => setShowFullHistory(prev => !prev)}
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
+                      showFullHistory
+                        ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                        : 'bg-gray-700/30 text-gray-500 border-gray-700 hover:text-gray-400 hover:border-gray-600'
+                    }`}
+                  >
+                    {showFullHistory ? 'Recent' : 'Full History'}
+                  </button>
                 )}
                 <span className="text-xs text-gray-500 font-mono">30s interval</span>
               </div>
@@ -971,24 +990,37 @@ export default function Dashboard() {
                       let reasonSummary = '';
                       let direction = '';
                       if (scaling.reason) {
-                        if (scaling.reason.includes('Normal Load')) {
+                        // Extract main reason (before comma or parenthesis)
+                        const reasonMatch = scaling.reason.match(/^(\[[\w\s]+\]\s*)?([^,(]+)/);
+                        const cleanReason = reasonMatch ? reasonMatch[2].trim() : scaling.reason;
+
+                        // Determine load level and direction
+                        if (cleanReason.includes('Normal Load')) {
                           reasonSummary = 'Normal Load';
                           direction = scaling.targetVcpu > scaling.currentVcpu ? '↑' : scaling.targetVcpu < scaling.currentVcpu ? '↓' : '→';
-                        } else if (scaling.reason.includes('High Load')) {
+                        } else if (cleanReason.includes('High Load')) {
                           reasonSummary = 'High Load';
                           direction = '↑';
-                        } else if (scaling.reason.includes('Critical')) {
+                        } else if (cleanReason.includes('Critical Load')) {
                           reasonSummary = 'Critical Load';
                           direction = '↑↑';
-                        } else if (scaling.reason.includes('System Idle')) {
+                        } else if (cleanReason.includes('System Idle')) {
                           reasonSummary = 'System Idle';
                           direction = '↓';
+                        } else {
+                          // Fallback: use the cleaned reason as-is
+                          reasonSummary = cleanReason.length > 20 ? cleanReason.substring(0, 17) + '...' : cleanReason;
+                          direction = scaling.targetVcpu > scaling.currentVcpu ? '↑' : scaling.targetVcpu < scaling.currentVcpu ? '↓' : '→';
                         }
-                        const cpuMatch = scaling.reason.match(/CPU (\d+\.?\d*%)/);
-                        const gasMatch = scaling.reason.match(/Gas (\d+\.?\d*%)/);
+
+                        // Extract metrics (CPU, Gas, TxPool)
+                        const cpuMatch = scaling.reason.match(/CPU\s+([\d.]+)%/);
+                        const gasMatch = scaling.reason.match(/Gas\s+([\d.]+)%/);
+                        const txPoolMatch = scaling.reason.match(/TxPool\s+(\d+)/);
                         const metricsStr = [
                           cpuMatch ? `CPU${cpuMatch[1]}` : null,
                           gasMatch ? `Gas${gasMatch[1]}` : null,
+                          txPoolMatch ? `TxPool${txPoolMatch[1]}` : null,
                         ].filter(Boolean).join(' ');
                         detail = `${direction} ${scaling.currentVcpu}→${scaling.targetVcpu}vCPU (${reasonSummary}${metricsStr ? ', ' + metricsStr : ''})`;
                       } else {
@@ -1125,7 +1157,11 @@ export default function Dashboard() {
               </div>
               <span className="text-gray-700">|</span>
               <div className="flex items-center gap-1.5 text-gray-500">
-                <span>{cycles.length} cycles</span>
+                <span>
+                  {cycles.length}{agentLoop?.totalCycles && agentLoop.totalCycles > cycles.length
+                    ? <span className="text-gray-600"> / {agentLoop.totalCycles}</span>
+                    : null} cycles
+                </span>
                 <span className="text-gray-700">·</span>
                 {anomalyCycles.length > 0 ? (
                   <span className="text-amber-400 font-bold">{anomalyCycles.length} anomal{anomalyCycles.length === 1 ? 'y' : 'ies'}</span>

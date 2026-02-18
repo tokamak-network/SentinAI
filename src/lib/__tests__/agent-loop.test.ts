@@ -85,6 +85,7 @@ vi.mock('@/lib/k8s-scaler', () => ({
     message: 'Scaled successfully',
   }),
   getCurrentVcpu: vi.fn().mockResolvedValue(1),
+  getContainerCpuUsage: vi.fn().mockResolvedValue(null),
   isAutoScalingEnabled: vi.fn().mockResolvedValue(true),
   checkCooldown: vi.fn().mockResolvedValue({ inCooldown: false, remainingSeconds: 0 }),
   addScalingHistory: vi.fn().mockResolvedValue(undefined),

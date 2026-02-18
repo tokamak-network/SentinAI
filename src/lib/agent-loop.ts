@@ -18,6 +18,7 @@ import {
 import {
   scaleOpGeth,
   getCurrentVcpu,
+  getContainerCpuUsage,
   isAutoScalingEnabled,
   checkCooldown,
   addScalingHistory,
@@ -77,8 +78,6 @@ export interface AgentCycleResult {
 
 let running = false;
 
-/** Ring buffer for recent cycle results (max 20) */
-const cycleHistory: AgentCycleResult[] = [];
 
 // ============================================================
 // Metrics Collection (Server-side, no HTTP overhead)
@@ -228,7 +227,19 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
   const gasUsed = Number(block.gasUsed);
   const gasLimit = Number(block.gasLimit);
   const gasUsedRatio = gasLimit > 0 ? gasUsed / gasLimit : 0;
-  const cpuUsage = gasUsedRatio * 100; // EVM load as CPU proxy
+
+  // Get current vCPU from K8s state (needed for CPU % calculation)
+  const currentVcpu = await getCurrentVcpu();
+
+  // CPU usage: prefer real container CPU, fall back to EVM load proxy
+  let cpuUsage: number;
+  const containerCpu = await getContainerCpuUsage();
+  if (containerCpu && currentVcpu > 0) {
+    const requestMillicores = currentVcpu * 1000;
+    cpuUsage = (containerCpu.cpuMillicores / requestMillicores) * 100;
+  } else {
+    cpuUsage = gasUsedRatio * 100;
+  }
 
   // Block interval
   const now = Date.now();
@@ -244,9 +255,6 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     }
   }
   await getStore().setLastBlock(String(blockNumber), String(now));
-
-  // Get current vCPU from K8s state
-  const currentVcpu = await getCurrentVcpu();
 
   const dataPoint: MetricDataPoint = {
     timestamp: new Date().toISOString(),
@@ -492,7 +500,6 @@ export function isAgentRunning(): boolean {
  */
 export function resetAgentState(): void {
   running = false;
-  cycleHistory.length = 0;
 }
 
 // ============================================================
@@ -507,9 +514,17 @@ async function pushCycleResult(result: AgentCycleResult): Promise<void> {
 /**
  * Get recent cycle results (newest last)
  */
-export async function getAgentCycleHistory(): Promise<AgentCycleResult[]> {
+export async function getAgentCycleHistory(limit?: number): Promise<AgentCycleResult[]> {
   const store = getStore();
-  return store.getAgentCycleHistory();
+  return store.getAgentCycleHistory(limit);
+}
+
+/**
+ * Get total number of stored cycle results
+ */
+export async function getAgentCycleCount(): Promise<number> {
+  const store = getStore();
+  return store.getAgentCycleCount();
 }
 
 /**

@@ -59,6 +59,7 @@ export interface IStateStore {
   // --- Agent Cycle History (Cross-Worker Persistence) ---
   pushAgentCycleResult(result: any): Promise<void>;
   getAgentCycleHistory(limit?: number): Promise<any[]>;
+  getAgentCycleCount(): Promise<number>;
   getLastAgentCycleResult(): Promise<any | null>;
   clearAgentCycleHistory(): Promise<void>;
 

@@ -1,22 +1,29 @@
 /**
  * Agent Loop Status API
  * GET /api/agent-loop — Returns agent loop status, cycle history, and config
+ * Query params:
+ *   limit: number of cycles to return (default 50, max 500)
  */
 
 import { NextResponse } from 'next/server';
 import { getSchedulerStatus } from '@/lib/scheduler';
-import { getAgentCycleHistory, getLastCycleResult } from '@/lib/agent-loop';
+import { getAgentCycleHistory, getAgentCycleCount, getLastCycleResult } from '@/lib/agent-loop';
 import { isAutoScalingEnabled, isSimulationMode, checkCooldown } from '@/lib/k8s-scaler';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const [scheduler, autoScaling, simulation, cooldown, lastCycle, recentCycles] = await Promise.all([
+    const url = new URL(request.url);
+    const limitParam = parseInt(url.searchParams.get('limit') || '50', 10);
+    const limit = Math.min(Math.max(1, limitParam), 500);
+
+    const [scheduler, autoScaling, simulation, cooldown, lastCycle, recentCycles, totalCycles] = await Promise.all([
       Promise.resolve(getSchedulerStatus()),
       isAutoScalingEnabled(),
       isSimulationMode(),
       checkCooldown(),
       getLastCycleResult(),
-      getAgentCycleHistory(),
+      getAgentCycleHistory(limit),
+      getAgentCycleCount(),
     ]);
 
     return NextResponse.json({
@@ -27,6 +34,7 @@ export async function GET() {
       },
       lastCycle,
       recentCycles,
+      totalCycles,
       config: {
         intervalSeconds: 30,
         autoScalingEnabled: autoScaling,
