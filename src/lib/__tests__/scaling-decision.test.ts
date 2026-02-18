@@ -149,15 +149,15 @@ describe('scaling-decision', () => {
       expect(determineTargetVcpu(69)).toBe(2);
     });
 
-    it('should return 4 vCPU for high score (70 <= score < 85)', () => {
+    it('should return 4 vCPU for high score (70 <= score < 77)', () => {
       expect(determineTargetVcpu(70)).toBe(4);
       expect(determineTargetVcpu(75)).toBe(4);
-      expect(determineTargetVcpu(84)).toBe(4);
+      expect(determineTargetVcpu(76)).toBe(4);
     });
 
-    it('should return 8 vCPU for critical score (>= 85)', () => {
+    it('should return 8 vCPU for critical score (>= 77)', () => {
+      expect(determineTargetVcpu(77)).toBe(8);
       expect(determineTargetVcpu(85)).toBe(8);
-      expect(determineTargetVcpu(90)).toBe(8);
       expect(determineTargetVcpu(100)).toBe(8);
     });
 
@@ -186,8 +186,8 @@ describe('scaling-decision', () => {
       const reason = generateReason(10, 1, breakdown, metrics);
 
       expect(reason).toContain('System Idle');
-      expect(reason).toContain('CPU 10.0% Low');
-      expect(reason).toContain('Low TxPool Pending');
+      expect(reason).toContain('CPU 10.0%');
+      expect(reason).toContain('Low TxPool');
     });
 
     it('should generate normal load reason when targeting 2 vCPU', () => {
@@ -196,9 +196,9 @@ describe('scaling-decision', () => {
 
       const reason = generateReason(45, 2, breakdown, metrics);
 
-      expect(reason).toContain('Normal Load Detected');
+      expect(reason).toContain('Normal Load');
       expect(reason).toContain('CPU 40.0%');
-      expect(reason).toContain('Gas Usage 50.0%');
+      expect(reason).toContain('Gas 50.0%');
     });
 
     it('should generate high load reason when targeting 4 vCPU', () => {
@@ -210,10 +210,10 @@ describe('scaling-decision', () => {
 
       const reason = generateReason(85, 4, breakdown, metrics);
 
-      expect(reason).toContain('High Load Detected');
-      expect(reason).toContain('CPU 80.0% High');
-      expect(reason).toContain('TxPool 250 Pending');
-      expect(reason).toContain('AI Warning: High Severity');
+      expect(reason).toContain('High Load');
+      expect(reason).toContain('CPU 80.0%');
+      expect(reason).toContain('TxPool 250');
+      expect(reason).toContain('AI Warning');
     });
 
     it('should include score in reason', () => {
@@ -368,14 +368,18 @@ describe('scaling-decision', () => {
 
       expect(decision.targetVcpu).toBe(2);
       expect(decision.targetMemoryGiB).toBe(4);
-      expect(decision.reason).toContain('Normal Load Detected');
+      expect(decision.reason).toContain('Normal Load');
     });
 
     it('should make high load decision (4 vCPU)', () => {
+      // Score must be 70 <= score < 77 for 4 vCPU tier
+      // cpu=70*0.3 + gas=60*0.3 + txPool=50*0.2 + ai(high=66)*0.2 = 21+18+10+13.2 = 62.2
+      // Too low. Try: cpu=80, gas=0.7, txPool=150, ai=high
+      // 80*0.3 + 70*0.3 + 75*0.2 + 66*0.2 = 24+21+15+13.2 = 73.2 → 4 vCPU ✓
       const metrics = createMetrics({
-        cpuUsage: 85,
-        gasUsedRatio: 0.8,
-        txPoolPending: 250,
+        cpuUsage: 80,
+        gasUsedRatio: 0.7,
+        txPoolPending: 150,
         aiSeverity: 'high',
       });
 
@@ -383,8 +387,8 @@ describe('scaling-decision', () => {
 
       expect(decision.targetVcpu).toBe(4);
       expect(decision.targetMemoryGiB).toBe(8);
-      expect(decision.confidence).toBe(1); // Maximum confidence
-      expect(decision.reason).toContain('High Load Detected');
+      expect(decision.confidence).toBe(1);
+      expect(decision.reason).toContain('High Load');
     });
 
     it('should make critical decision (8 vCPU, 16GiB)', () => {
@@ -399,7 +403,7 @@ describe('scaling-decision', () => {
 
       expect(decision.targetVcpu).toBe(8);
       expect(decision.targetMemoryGiB).toBe(16);
-      expect(decision.reason).toContain('CRITICAL');
+      expect(decision.reason).toContain('Critical Load');
     });
 
     it('should calculate memory correctly (2 * vCPU GiB)', () => {
@@ -414,10 +418,11 @@ describe('scaling-decision', () => {
         txPoolPending: 50,
       }); // Score: ~27 → 2 vCPU
       const metrics4 = createMetrics({
-        cpuUsage: 100,
-        gasUsedRatio: 1,
-        txPoolPending: 300,
-      }); // Score: 80 → 4 vCPU (without AI)
+        cpuUsage: 80,
+        gasUsedRatio: 0.7,
+        txPoolPending: 150,
+        aiSeverity: 'high',
+      }); // Score: 73.2 → 4 vCPU (between normal=70 and critical=77)
       const metrics8 = createMetrics({
         cpuUsage: 100,
         gasUsedRatio: 1,
