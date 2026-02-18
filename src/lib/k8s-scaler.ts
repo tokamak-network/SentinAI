@@ -16,6 +16,13 @@ import {
 import { runK8sCommand } from '@/lib/k8s-config';
 import { zeroDowntimeScale } from '@/lib/zero-downtime-scaler';
 import { getStore } from '@/lib/redis-store';
+import { isDockerMode } from '@/lib/docker-config';
+import {
+  getDockerContainerMetrics,
+  getAllDockerContainerMetrics,
+  getDockerCurrentCpuCores,
+  scaleDockerContainer,
+} from '@/lib/docker-orchestrator';
 
 export interface ContainerResourceUsage {
   cpuMillicores: number;
@@ -32,6 +39,7 @@ export async function getContainerCpuUsage(
 ): Promise<ContainerResourceUsage | null> {
   const simConfig = await getStore().getSimulationConfig();
   if (simConfig.enabled) return null;
+  if (isDockerMode()) return getDockerContainerMetrics('op-geth');
 
   try {
     const { namespace, statefulSetName } = config;
@@ -111,6 +119,7 @@ export async function getAllContainerUsage(
 ): Promise<Map<string, ContainerResourceUsage> | null> {
   const simConfig = await getStore().getSimulationConfig();
   if (simConfig.enabled) return null;
+  if (isDockerMode()) return getAllDockerContainerMetrics();
 
   const ns = namespace || (process.env.K8S_NAMESPACE || 'default');
 
@@ -248,6 +257,11 @@ export async function getCurrentVcpu(
   if (simConfig.enabled) {
     const state = await getStore().getScalingState();
     return state.currentVcpu;
+  }
+
+  // Docker mode: Read from container inspect
+  if (isDockerMode()) {
+    return getDockerCurrentCpuCores('op-geth');
   }
 
   try {
@@ -435,6 +449,29 @@ export async function scaleOpGeth(
   }
 
   try {
+    // Docker mode: Use docker update instead of kubectl patch
+    if (isDockerMode()) {
+      await scaleDockerContainer('op-geth', targetVcpu, targetMemoryGiB);
+
+      const previousVcpu = state.currentVcpu;
+      const previousMemoryGiB = state.currentMemoryGiB;
+      await store.updateScalingState({
+        currentVcpu: targetVcpu,
+        currentMemoryGiB: targetMemoryGiB,
+        lastScalingTime: timestamp,
+      });
+
+      return {
+        success: true,
+        previousVcpu,
+        currentVcpu: targetVcpu,
+        previousMemoryGiB,
+        currentMemoryGiB: targetMemoryGiB,
+        timestamp,
+        message: `[Docker] Scaled from ${previousVcpu} to ${targetVcpu} vCPU via docker update`,
+      };
+    }
+
     // Execute kubectl patch command (legacy rolling update)
     const patchJson = JSON.stringify([
       {

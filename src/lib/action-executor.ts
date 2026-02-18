@@ -8,6 +8,13 @@ import type { ScalingConfig } from '@/types/scaling';
 import { scaleOpGeth } from '@/lib/k8s-scaler';
 import { zeroDowntimeScale } from '@/lib/zero-downtime-scaler';
 import { runK8sCommand } from '@/lib/k8s-config';
+import { isDockerMode } from '@/lib/docker-config';
+import {
+  getDockerContainerLogs,
+  execInDocker,
+  inspectDockerContainer,
+  restartDockerContainer,
+} from '@/lib/docker-orchestrator';
 import { getActiveL1RpcUrl, healthCheckEndpoint, getL1FailoverState, maskUrl } from '@/lib/l1-rpc-failover';
 import { checkBalance, refillEOA, getAllBalanceStatus } from '@/lib/eoa-balance-monitor';
 import type { EOARole } from '@/types/eoa-balance';
@@ -56,7 +63,14 @@ async function executeCollectLogs(
   action: RemediationAction,
   config: ScalingConfig
 ): Promise<string> {
-  const podName = getPodName(action.target || 'op-geth', config);
+  const target = action.target || 'op-geth';
+
+  if (isDockerMode()) {
+    const logs = await getDockerContainerLogs(target, 100);
+    return `Collected ${logs.split('\n').length} log lines from ${target}`;
+  }
+
+  const podName = getPodName(target, config);
   const { namespace } = config;
 
   try {
@@ -78,7 +92,28 @@ async function executeHealthCheck(
   action: RemediationAction,
   config: ScalingConfig
 ): Promise<string> {
-  const podName = getPodName(action.target || 'op-geth', config);
+  const target = action.target || 'op-geth';
+
+  if (isDockerMode()) {
+    try {
+      // RPC check for op-geth
+      if (target === 'op-geth') {
+        const rpcResponse = await execInDocker(target,
+          'wget -qO- --timeout=5 http://localhost:8545 --post-data=\'{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}\''
+        );
+        const parsed = JSON.parse(rpcResponse);
+        const blockNumber = parseInt(parsed.result, 16);
+        return `Health check: ${target} is Running, RPC responsive (block #${blockNumber})`;
+      }
+      // General check: container is running if exec succeeds
+      await execInDocker(target, 'echo ok');
+      return `Health check: ${target} is Running`;
+    } catch {
+      return `Health check: ${target} is NOT responsive`;
+    }
+  }
+
+  const podName = getPodName(target, config);
   const { namespace } = config;
 
   try {
@@ -137,7 +172,14 @@ async function executeDescribePod(
   action: RemediationAction,
   config: ScalingConfig
 ): Promise<string> {
-  const podName = getPodName(action.target || 'op-geth', config);
+  const target = action.target || 'op-geth';
+
+  if (isDockerMode()) {
+    const output = await inspectDockerContainer(target);
+    return `Container inspection:\n${output.substring(0, 500)}...`;
+  }
+
+  const podName = getPodName(target, config);
   const { namespace } = config;
 
   try {
@@ -159,7 +201,14 @@ async function executeRestartPod(
   action: RemediationAction,
   config: ScalingConfig
 ): Promise<string> {
-  const podName = getPodName(action.target || 'op-geth', config);
+  const target = action.target || 'op-geth';
+
+  if (isDockerMode()) {
+    await restartDockerContainer(target);
+    return `Restarted ${target} via docker compose restart`;
+  }
+
+  const podName = getPodName(target, config);
   const { namespace } = config;
 
   try {

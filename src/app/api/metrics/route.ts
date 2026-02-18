@@ -14,6 +14,8 @@ import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import { getStore } from '@/lib/redis-store';
 import { runDetectionPipeline } from '@/lib/detection-pipeline';
 import { getContainerCpuUsage, getAllContainerUsage, getAllContainerUsageViaKubelet } from '@/lib/k8s-scaler';
+import { isDockerMode } from '@/lib/docker-config';
+import { getDockerComponentDetails } from '@/lib/docker-orchestrator';
 import { getActiveL1RpcUrl, getL2NodesL1RpcStatus } from '@/lib/l1-rpc-failover';
 import { getAllBalanceStatus } from '@/lib/eoa-balance-monitor';
 import { resolveBlockInterval } from '@/lib/block-interval';
@@ -289,11 +291,17 @@ export async function GET(request: Request) {
         const appPrefix = getAppPrefix();
 
         const startK8s = performance.now();
+        const dockerMode = isDockerMode();
+        const fetchDetails = (label: string, service: string, display: string, icon: string, strategy: string = "") =>
+            dockerMode
+                ? getDockerComponentDetails(service, display, icon, strategy)
+                : getComponentDetails(label, display, icon, strategy);
+
         const [l2Client, consensus, batcher, proposer, containerUsage, allUsage] = await Promise.all([
-            getComponentDetails(`app=${appPrefix}-geth`, "L2 Client", "cpu", ""),
-            getComponentDetails(`app=${appPrefix}-node`, "Consensus Node", "globe", ""),
-            getComponentDetails(`app=${appPrefix}-batcher`, "Batcher", "shuffle", ""),
-            getComponentDetails(`app=${appPrefix}-proposer`, "Proposer", "shield", ""),
+            fetchDetails(`app=${appPrefix}-geth`, "op-geth", "L2 Client", "cpu", ""),
+            fetchDetails(`app=${appPrefix}-node`, "op-node", "Consensus Node", "globe", ""),
+            fetchDetails(`app=${appPrefix}-batcher`, "op-batcher", "Batcher", "shuffle", ""),
+            fetchDetails(`app=${appPrefix}-proposer`, "op-proposer", "Proposer", "shield", ""),
             getContainerCpuUsage(),
             getAllContainerUsage(),
         ]);
@@ -551,6 +559,11 @@ export async function GET(request: Request) {
           }
         }
 
+        // Compute sync lag: seconds since latest L2 block beyond expected interval
+        const expectedInterval = getChainPlugin().expectedBlockIntervalSeconds;
+        const blockAge = Math.floor(Date.now() / 1000) - Number(block.timestamp);
+        const syncLag = Math.max(0, blockAge - expectedInterval);
+
         const responseSource = usingSeedMetrics ? 'SEED_SCENARIO' : 'REAL_K8S_CONFIG';
         const response = NextResponse.json({
             timestamp: new Date().toISOString(),
@@ -559,10 +572,11 @@ export async function GET(request: Request) {
                 blockHeight: Number(blockNumber),
                 txPoolCount: effectiveTx,
                 cpuUsage: Number(effectiveCpu.toFixed(2)),
+                // Real memory from container metrics; fallback: vCPU * 2 GiB (Fargate memory formula)
                 memoryUsage: containerUsage ? Math.round(containerUsage.memoryMiB) : currentVcpu * 2 * 1024,
                 gethVcpu: currentVcpu,
                 gethMemGiB: currentVcpu * 2,
-                syncLag: 0,
+                syncLag,
                 cpuSource,
                 source: responseSource,
             },

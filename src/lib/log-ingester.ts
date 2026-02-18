@@ -35,6 +35,8 @@ export function generateMockLogs(mode: 'normal' | 'attack' = 'normal'): Record<s
 }
 
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
+import { isDockerMode } from '@/lib/docker-config';
+import { getDockerContainerLogs } from '@/lib/docker-orchestrator';
 
 // Fetch logs from ALL components
 export async function getAllLiveLogs(namespace?: string): Promise<Record<string, string>> {
@@ -48,10 +50,17 @@ export async function getAllLiveLogs(namespace?: string): Promise<Record<string,
     return results;
 }
 
-// Real K8s Logic using kubectl
+// Real K8s Logic using kubectl (or Docker fallback)
 export async function getLiveLogs(namespace?: string, labelSelector?: string): Promise<string> {
-    const ns = namespace || getNamespace();
     const label = labelSelector || `app=${getAppPrefix()}-geth`;
+
+    // Docker mode: use docker compose logs instead of kubectl
+    if (isDockerMode()) {
+        const component = label.split('=')[1] || 'op-geth';
+        return getDockerContainerLogs(component, 50);
+    }
+
+    const ns = namespace || getNamespace();
     try {
         // 1. Find Pod Name
         const { stdout: podName } = await runK8sCommand(

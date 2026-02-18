@@ -9,6 +9,8 @@ import { createPublicClient, http } from 'viem';
 import { getChainPlugin } from '@/chains';
 import TOML from '@iarna/toml';
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
+import { isDockerMode } from '@/lib/docker-config';
+import { setDockerEnvAndRecreate } from '@/lib/docker-orchestrator';
 import type {
   L1RpcEndpoint,
   FailoverEvent,
@@ -530,6 +532,26 @@ export async function updateK8sL1Rpc(
   newUrl: string
 ): Promise<K8sUpdateResult> {
   const result: K8sUpdateResult = { updated: [], errors: [] };
+
+  // Docker mode: update .env and recreate services
+  if (isDockerMode()) {
+    const components = getL1Components();
+    for (const comp of components) {
+      try {
+        if (comp.envVarName) {
+          await setDockerEnvAndRecreate(comp.statefulSetName || comp.envVarName, {
+            [comp.envVarName]: newUrl,
+          });
+          result.updated.push(comp.statefulSetName || comp.envVarName);
+          console.log(`[L1 Failover] Docker: Updated ${comp.envVarName}`);
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        result.errors.push(`${comp.statefulSetName}: ${msg}`);
+      }
+    }
+    return result;
+  }
 
   if (!hasK8sCluster()) {
     console.log(
