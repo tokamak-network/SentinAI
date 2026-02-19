@@ -18,6 +18,13 @@ function isReadOnlyMode(): boolean {
 }
 
 /**
+ * Allow scaler write APIs in read-only mode for controlled verification.
+ */
+function allowScalerWriteInReadOnlyMode(): boolean {
+  return process.env.SENTINAI_ALLOW_SCALER_WRITE_IN_READONLY === 'true';
+}
+
+/**
  * Get configured API key (undefined = auth disabled)
  */
 function getApiKey(): string | undefined {
@@ -78,6 +85,10 @@ export function middleware(request: NextRequest) {
         '/api/rca',               // RCA analysis (read-only)
         '/api/nlops',             // NLOps chat (dangerous commands filtered in handler)
       ];
+
+      if (allowScalerWriteInReadOnlyMode()) {
+        safeEndpoints.push('/api/scaler');
+      }
 
       if (safeEndpoints.some(endpoint => pathname === endpoint)) {
         return NextResponse.next();

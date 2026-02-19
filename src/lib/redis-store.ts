@@ -29,6 +29,7 @@ import { PredictionRecord } from '@/types/prediction';
 const METRICS_BUFFER_MAX = 60;
 const SCALING_HISTORY_MAX = 50;
 const PREDICTION_TTL_SECONDS = 300; // 5 minutes
+const SEED_SCENARIO_TTL_SECONDS = parseInt(process.env.SEED_SCENARIO_TTL_SECONDS || '80', 10);
 
 // P1 Constants
 const ANOMALY_EVENTS_MAX = 100;
@@ -299,8 +300,8 @@ export class RedisStateStore implements IStateStore {
   async setSeedScenario(scenario: string | null): Promise<void> {
     const key = this.key(KEYS.seedScenario);
     if (scenario) {
-      // Keep seed scenario for 20 seconds (auto-cleanup after testing)
-      await this.client.setex(key, 20, scenario);
+      // Keep seed scenario long enough for at least one agent-loop cycle in dev verification.
+      await this.client.setex(key, SEED_SCENARIO_TTL_SECONDS, scenario);
     } else {
       await this.client.del(key);
     }
@@ -871,11 +872,11 @@ export class InMemoryStateStore implements IStateStore {
 
     if (scenario) {
       this.seedScenario = scenario;
-      // Auto-clear after 20 seconds
+      // Auto-clear after configured TTL
       this.seedScenarioTimeout = setTimeout(() => {
         this.seedScenario = null;
         this.seedScenarioTimeout = null;
-      }, 20_000);
+      }, SEED_SCENARIO_TTL_SECONDS * 1000);
     } else {
       this.seedScenario = null;
     }

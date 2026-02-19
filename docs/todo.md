@@ -87,6 +87,9 @@
 - [x] 대시보드 Row 2 카드 높이 고정 (`Activity Log`, `Components`)
 - [x] `Activity Log` 과거 로그 탐색 슬라이더 추가 (로그 누적 시 구간 이동)
 - [x] `Components` 카드 내부 스크롤 적용 (카드 외곽 높이 유지)
+- [x] 검증 경로 보강: read-only 모드에서 스케일러 쓰기 허용 옵션 추가 (`SENTINAI_ALLOW_SCALER_WRITE_IN_READONLY`)
+- [x] seed 시나리오 TTL 정합화 (Redis/InMemory `setSeedScenario` 기본 80초)
+- [x] Agent Loop 스케일링 판단 시 seed `currentVcpu` 대신 실제 런타임 vCPU 사용
 
 ---
 

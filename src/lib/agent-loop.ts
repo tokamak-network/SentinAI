@@ -288,8 +288,11 @@ async function evaluateAndExecuteScaling(
   dataPoint: MetricDataPoint
 ): Promise<AgentCycleResult['scaling']> {
   const autoScaling = await isAutoScalingEnabled();
-  // Use vCPU from dataPoint (already set to seed vCPU if seed is active)
-  const currentVcpu = dataPoint.currentVcpu || await getCurrentVcpu();
+  // Seed metrics may include synthetic currentVcpu (e.g., 8 in spike scenario).
+  // For execution decisions, always use actual runtime vCPU when seed data is active.
+  const currentVcpu = dataPoint.seedTtlExpiry
+    ? await getCurrentVcpu()
+    : (dataPoint.currentVcpu || await getCurrentVcpu());
   const cooldown = await checkCooldown();
 
   // AI analysis for severity (best-effort)
