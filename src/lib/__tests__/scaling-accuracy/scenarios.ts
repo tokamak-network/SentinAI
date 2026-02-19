@@ -11,7 +11,7 @@
  */
 
 import type { ScalingScenario } from './types';
-import type { MetricDataPoint } from '@/types/prediction';
+import type { MetricDataPoint, PredictionResult } from '@/types/prediction';
 
 function makePoint(
   offsetSeconds: number,
@@ -126,10 +126,94 @@ export const SUSTAINED_CRITICAL: ScalingScenario = {
   ],
 };
 
-/** All scenarios for full backtesting */
+/** All reactive-only scenarios for full backtesting */
 export const ALL_SCENARIOS: ScalingScenario[] = [
   IDLE_TO_SPIKE,
   GRADUAL_RISE,
   OSCILLATING,
   SUSTAINED_CRITICAL,
+];
+
+// ==================== Predictive Scenarios ====================
+
+/** Helper: create a mock PredictionResult */
+export function makePrediction(
+  predictedVcpu: 1 | 2 | 4,
+  confidence: number,
+  action: 'scale_up' | 'scale_down' | 'maintain',
+  trend: 'rising' | 'falling' | 'stable' = 'stable',
+): PredictionResult {
+  return {
+    predictedVcpu,
+    confidence,
+    trend,
+    reasoning: `Mock prediction: ${action} to ${predictedVcpu} vCPU`,
+    recommendedAction: action,
+    generatedAt: new Date().toISOString(),
+    predictionWindow: 'next 5 minutes',
+    factors: [{ name: 'test', impact: confidence, description: 'test factor' }],
+  };
+}
+
+// ---- Predictive Scenario 1: Spike Rescue ----
+// Prediction compensates for reactive under-scaling during sudden spike.
+// Key: "Spike begins" reactive=2 vCPU (score=65), prediction overrides to 4 vCPU.
+
+export const PREDICTIVE_SPIKE_RESCUE: ScalingScenario = {
+  name: 'predictive_spike_rescue',
+  description: 'Prediction rescues under-scaling during sudden spike',
+  steps: [
+    // Idle — no prediction needed
+    { offsetSeconds: 0,   metrics: makePoint(0,   10, 20,  0.05), expectedVcpu: 1, label: 'Idle baseline' },
+    // Idle — AI detects no trend
+    { offsetSeconds: 30,  metrics: makePoint(30,  12, 25,  0.06), expectedVcpu: 1, label: 'Idle',
+      mockPrediction: makePrediction(1, 0.80, 'maintain', 'stable') },
+    // Spike begins — reactive=2 (score=65), prediction overrides to 4
+    { offsetSeconds: 60,  metrics: makePoint(60,  80, 180, 0.85), expectedVcpu: 4, label: 'Spike begins',
+      mockPrediction: makePrediction(4, 0.88, 'scale_up', 'rising') },
+    // Peak — reactive=4, prediction also says 4 (no override needed)
+    { offsetSeconds: 90,  metrics: makePoint(90,  92, 300, 0.95), expectedVcpu: 4, label: 'Peak spike',
+      mockPrediction: makePrediction(4, 0.82, 'maintain', 'rising') },
+    // Sustained — reactive=8, no prediction override (only scale_up overrides)
+    { offsetSeconds: 120, metrics: makePoint(120, 95, 350, 0.98), expectedVcpu: 8, label: 'Sustained peak',
+      mockPrediction: makePrediction(4, 0.75, 'maintain', 'stable') },
+    // Critical — reactive=8, prediction confirms
+    { offsetSeconds: 150, metrics: makePoint(150, 98, 400, 0.99), expectedVcpu: 8, label: 'Critical' },
+    // Recovery — reactive=2, prediction says scale_down (ignored: not scale_up)
+    { offsetSeconds: 180, metrics: makePoint(180, 40, 50,  0.30), expectedVcpu: 2, label: 'Recovery',
+      mockPrediction: makePrediction(1, 0.90, 'scale_down', 'falling') },
+    // Post-spike — back to idle
+    { offsetSeconds: 210, metrics: makePoint(210, 8,  10,  0.05), expectedVcpu: 1, label: 'Post-spike idle' },
+  ],
+};
+
+// ---- Predictive Scenario 2: False Alarm ----
+// AI recommends scale_up but confidence is too low — should be ignored.
+// All steps should match reactive-only result.
+
+export const PREDICTIVE_FALSE_ALARM: ScalingScenario = {
+  name: 'predictive_false_alarm',
+  description: 'Low-confidence predictions correctly ignored',
+  steps: [
+    // Normal load — AI says scale_up but confidence=0.55 (below 0.7 threshold)
+    { offsetSeconds: 0,   metrics: makePoint(0,   40, 80,  0.40), expectedVcpu: 2, label: 'Normal load',
+      mockPrediction: makePrediction(4, 0.55, 'scale_up', 'rising') },
+    // Brief spike — confidence=0.65, still below threshold
+    { offsetSeconds: 60,  metrics: makePoint(60,  55, 120, 0.55), expectedVcpu: 2, label: 'Brief spike',
+      mockPrediction: makePrediction(4, 0.65, 'scale_up', 'rising') },
+    // Load drops — prediction says maintain
+    { offsetSeconds: 120, metrics: makePoint(120, 35, 60,  0.35), expectedVcpu: 2, label: 'Settling',
+      mockPrediction: makePrediction(2, 0.80, 'maintain', 'falling') },
+    // Back to low — no prediction
+    { offsetSeconds: 180, metrics: makePoint(180, 15, 30,  0.15), expectedVcpu: 1, label: 'Low load' },
+    // Low again — prediction says scale_up but predictedVcpu <= reactive (no override)
+    { offsetSeconds: 240, metrics: makePoint(240, 45, 90,  0.45), expectedVcpu: 2, label: 'Moderate',
+      mockPrediction: makePrediction(2, 0.85, 'scale_up', 'rising') },
+  ],
+};
+
+/** All predictive scenarios */
+export const ALL_PREDICTIVE_SCENARIOS: ScalingScenario[] = [
+  PREDICTIVE_SPIKE_RESCUE,
+  PREDICTIVE_FALSE_ALARM,
 ];

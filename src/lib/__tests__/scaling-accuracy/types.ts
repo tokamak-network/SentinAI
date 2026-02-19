@@ -2,7 +2,7 @@
  * Scaling Accuracy Testing Framework — Type Definitions
  */
 
-import type { MetricDataPoint } from '@/types/prediction';
+import type { MetricDataPoint, PredictionResult } from '@/types/prediction';
 import type { ScalingDecision, TargetVcpu } from '@/types/scaling';
 
 /** A single step in a test scenario */
@@ -15,6 +15,8 @@ export interface ScenarioStep {
   expectedVcpu: TargetVcpu;
   /** Human-readable label */
   label: string;
+  /** Optional: mock prediction for predictive scaling test */
+  mockPrediction?: PredictionResult | null;
 }
 
 /** A complete metric sequence scenario */
@@ -49,4 +51,18 @@ export interface AccuracySummary {
   scenarios: BacktestResult[];
   overallAccuracy: number;
   recommendations: string[];
+}
+
+/** Predictive backtest result with override statistics */
+export interface PredictiveBacktestResult extends BacktestResult {
+  /** Accuracy using reactive only */
+  reactiveAccuracy: number;
+  /** Accuracy using reactive + predictive override */
+  combinedAccuracy: number;
+  /** Number of overrides triggered */
+  overrideCount: number;
+  /** Overrides that improved accuracy (wrong → correct) */
+  helpfulOverrides: number;
+  /** Overrides that worsened accuracy (correct → wrong) */
+  harmfulOverrides: number;
 }

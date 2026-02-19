@@ -11,13 +11,16 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { backtestScenario, runAllBacktests, analyzeResult } from './evaluator';
+import { backtestScenario, runAllBacktests, backtestPredictiveScenario } from './evaluator';
 import {
   IDLE_TO_SPIKE,
   GRADUAL_RISE,
   OSCILLATING,
   SUSTAINED_CRITICAL,
   ALL_SCENARIOS,
+  PREDICTIVE_SPIKE_RESCUE,
+  PREDICTIVE_FALSE_ALARM,
+  ALL_PREDICTIVE_SCENARIOS,
 } from './scenarios';
 
 // ===== Scenario: Idle to Spike =====
@@ -219,5 +222,100 @@ describe('Boundary value verification', () => {
       }],
     });
     expect(result.correctDecisions).toBe(1);
+  });
+});
+
+// ==================== Predictive Scaling Tests ====================
+
+// ===== Predictive: Spike Rescue =====
+describe('Predictive: spike_rescue', () => {
+  const result = backtestPredictiveScenario(PREDICTIVE_SPIKE_RESCUE);
+
+  it('should report reactive vs combined accuracy', () => {
+    console.log(`\n  === PREDICTIVE: spike_rescue ===`);
+    console.log(`  Reactive accuracy:  ${result.reactiveAccuracy.toFixed(1)}%`);
+    console.log(`  Combined accuracy:  ${result.combinedAccuracy.toFixed(1)}%`);
+    console.log(`  Overrides: ${result.overrideCount} (helpful=${result.helpfulOverrides}, harmful=${result.harmfulOverrides})`);
+    for (const s of result.stepDecisions) {
+      const mark = s.correct ? 'OK' : s.vcpuDelta > 0 ? 'OVER' : 'UNDER';
+      console.log(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu}`);
+    }
+    expect(result.combinedAccuracy).toBeGreaterThanOrEqual(50);
+  });
+
+  it('should improve accuracy over reactive-only via prediction override', () => {
+    expect(result.combinedAccuracy).toBeGreaterThanOrEqual(result.reactiveAccuracy);
+  });
+
+  it('should trigger override at "Spike begins"', () => {
+    const spikeStep = result.stepDecisions.find(s => s.step.label === 'Spike begins');
+    expect(spikeStep?.decision.targetVcpu).toBe(4);
+  });
+
+  it('should have at least 1 helpful override', () => {
+    expect(result.helpfulOverrides).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should not apply scale_down override at Recovery', () => {
+    const recoveryStep = result.stepDecisions.find(s => s.step.label === 'Recovery');
+    // scale_down prediction (1 vCPU, conf=0.9) should be ignored because action≠scale_up
+    // Reactive gives 1 vCPU (score=26 < idle threshold 30), so final stays at 1
+    expect(recoveryStep?.decision.targetVcpu).toBe(1);
+  });
+});
+
+// ===== Predictive: False Alarm =====
+describe('Predictive: false_alarm', () => {
+  const result = backtestPredictiveScenario(PREDICTIVE_FALSE_ALARM);
+
+  it('should report reactive vs combined accuracy', () => {
+    console.log(`\n  === PREDICTIVE: false_alarm ===`);
+    console.log(`  Reactive accuracy:  ${result.reactiveAccuracy.toFixed(1)}%`);
+    console.log(`  Combined accuracy:  ${result.combinedAccuracy.toFixed(1)}%`);
+    console.log(`  Overrides: ${result.overrideCount} (helpful=${result.helpfulOverrides}, harmful=${result.harmfulOverrides})`);
+    for (const s of result.stepDecisions) {
+      const mark = s.correct ? 'OK' : s.vcpuDelta > 0 ? 'OVER' : 'UNDER';
+      console.log(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu}`);
+    }
+    expect(result.combinedAccuracy).toBeGreaterThanOrEqual(50);
+  });
+
+  it('should trigger zero overrides (all predictions below threshold or not scale_up)', () => {
+    expect(result.overrideCount).toBe(0);
+  });
+
+  it('should have identical reactive and combined accuracy', () => {
+    expect(result.combinedAccuracy).toBe(result.reactiveAccuracy);
+  });
+
+  it('should have zero harmful overrides', () => {
+    expect(result.harmfulOverrides).toBe(0);
+  });
+});
+
+// ===== Predictive Override Summary =====
+describe('Predictive override summary', () => {
+  const results = ALL_PREDICTIVE_SCENARIOS.map(backtestPredictiveScenario);
+
+  it('should produce results for all predictive scenarios', () => {
+    expect(results).toHaveLength(2);
+  });
+
+  it('should report combined predictive accuracy', () => {
+    const totalSteps = results.reduce((sum, r) => sum + r.totalSteps, 0);
+    const totalCorrect = results.reduce((sum, r) => sum + r.correctDecisions, 0);
+    const totalOverrides = results.reduce((sum, r) => sum + r.overrideCount, 0);
+    const totalHelpful = results.reduce((sum, r) => sum + r.helpfulOverrides, 0);
+    const totalHarmful = results.reduce((sum, r) => sum + r.harmfulOverrides, 0);
+
+    console.log(`\n  === PREDICTIVE OVERRIDE SUMMARY ===`);
+    console.log(`  Total accuracy: ${((totalCorrect / totalSteps) * 100).toFixed(1)}%`);
+    console.log(`  Total overrides: ${totalOverrides} (helpful=${totalHelpful}, harmful=${totalHarmful})`);
+    for (const r of results) {
+      console.log(`  ${r.scenario}: reactive=${r.reactiveAccuracy.toFixed(1)}% → combined=${r.combinedAccuracy.toFixed(1)}% (overrides=${r.overrideCount})`);
+    }
+
+    // Predictive should not make things worse overall
+    expect(totalHarmful).toBe(0);
   });
 });
