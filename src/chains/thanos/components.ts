@@ -13,7 +13,7 @@ import type {
 // Component Names
 // ============================================================
 
-export const OP_COMPONENTS = ['op-geth', 'op-node', 'op-batcher', 'op-proposer'] as const;
+export const OP_COMPONENTS = ['op-geth', 'op-node', 'op-batcher', 'op-proposer', 'op-challenger'] as const;
 export type OptimismComponent = (typeof OP_COMPONENTS)[number];
 
 export const META_COMPONENTS = ['l1', 'system'] as const;
@@ -29,7 +29,7 @@ export const DEPENDENCY_GRAPH: Record<string, ComponentDependency> = {
   },
   'op-node': {
     dependsOn: ['l1'],
-    feeds: ['op-geth', 'op-batcher', 'op-proposer'],
+    feeds: ['op-geth', 'op-batcher', 'op-proposer', 'op-challenger'],
   },
   'op-batcher': {
     dependsOn: ['op-node', 'l1'],
@@ -39,13 +39,17 @@ export const DEPENDENCY_GRAPH: Record<string, ComponentDependency> = {
     dependsOn: ['op-node', 'l1'],
     feeds: [],
   },
+  'op-challenger': {
+    dependsOn: ['op-node', 'l1'],
+    feeds: [],
+  },
   'l1': {
     dependsOn: [],
-    feeds: ['op-node', 'op-batcher', 'op-proposer'],
+    feeds: ['op-node', 'op-batcher', 'op-proposer', 'op-challenger'],
   },
   'system': {
     dependsOn: [],
-    feeds: ['op-geth', 'op-node', 'op-batcher', 'op-proposer'],
+    feeds: ['op-geth', 'op-node', 'op-batcher', 'op-proposer', 'op-challenger'],
   },
 };
 
@@ -62,6 +66,8 @@ export const COMPONENT_ALIASES: Record<string, string> = {
   'batcher': 'op-batcher',
   'op-proposer': 'op-proposer',
   'proposer': 'op-proposer',
+  'op-challenger': 'op-challenger',
+  'challenger': 'op-challenger',
   'l1': 'l1',
   'system': 'system',
 };
@@ -98,6 +104,13 @@ export const K8S_COMPONENTS: K8sComponentConfig[] = [
     l1RpcEnvVar: 'OP_PROPOSER_L1_ETH_RPC',
     isPrimaryExecution: false,
   },
+  {
+    component: 'op-challenger',
+    labelSuffix: 'challenger',
+    statefulSetSuffix: 'op-challenger',
+    l1RpcEnvVar: 'OP_CHALLENGER_L1_ETH_RPC',
+    isPrimaryExecution: false,
+  },
 ];
 
 // ============================================================
@@ -115,7 +128,12 @@ export const EOA_CONFIGS: EOAConfig[] = [
     addressEnvVar: 'PROPOSER_EOA_ADDRESS',
     displayName: 'Proposer',
   },
+  {
+    role: 'challenger',
+    addressEnvVar: 'CHALLENGER_EOA_ADDRESS',
+    displayName: 'Challenger',
+  },
 ];
 
 /** Balance metrics for anomaly detection */
-export const BALANCE_METRICS = ['batcherBalance', 'proposerBalance'];
+export const BALANCE_METRICS = ['batcherBalance', 'proposerBalance', 'challengerBalance'];

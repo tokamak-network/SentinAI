@@ -222,4 +222,177 @@ export const THANOS_PLAYBOOKS: Playbook[] = [
     ],
     maxAttempts: 0, // Immediate escalation
   },
+
+  // Playbook 8: Challenger EOA Balance Low (Phase 1)
+  {
+    name: 'challenger-balance-low',
+    description: 'Challenger EOA balance below warning threshold',
+    trigger: {
+      component: 'op-challenger',
+      indicators: [
+        { type: 'metric', condition: 'challengerBalance < warning' },
+      ],
+    },
+    actions: [
+      {
+        type: 'escalate_operator',
+        safetyLevel: 'safe',
+        params: { urgency: 'medium', message: 'Challenger EOA balance low. Refill recommended.' },
+      },
+    ],
+    maxAttempts: 0, // Alert only
+  },
+
+  // Playbook 9: Challenger EOA Balance Critical (Phase 1)
+  {
+    name: 'challenger-balance-critical',
+    description: 'Challenger EOA balance critically low — auto-refill for dispute game participation',
+    trigger: {
+      component: 'op-challenger',
+      indicators: [
+        { type: 'metric', condition: 'challengerBalance < critical' },
+      ],
+    },
+    actions: [
+      {
+        type: 'check_treasury_balance',
+        safetyLevel: 'safe',
+      },
+      {
+        type: 'check_l1_gas_price',
+        safetyLevel: 'safe',
+      },
+      {
+        type: 'refill_eoa',
+        safetyLevel: 'guarded',
+        params: { role: 'challenger', amount: '1.0' },
+        waitAfterMs: 30000,
+      },
+      {
+        type: 'verify_balance_restored',
+        safetyLevel: 'safe',
+        params: { role: 'challenger' },
+      },
+    ],
+    fallback: [
+      {
+        type: 'escalate_operator',
+        safetyLevel: 'safe',
+        params: { urgency: 'critical', message: 'Challenger EOA refill failed. Cannot participate in dispute games — security risk!' },
+      },
+    ],
+    maxAttempts: 1,
+  },
+
+  // Playbook 10: op-challenger Component Failure (Phase 1)
+  {
+    name: 'op-challenger-failure',
+    description: 'op-challenger pod crash or proof generation failure',
+    trigger: {
+      component: 'op-challenger',
+      indicators: [
+        { type: 'log_pattern', condition: 'proof generation failed|panic|fatal error' },
+        { type: 'metric', condition: 'pod restart count > 3' },
+      ],
+    },
+    actions: [
+      {
+        type: 'collect_logs',
+        safetyLevel: 'safe',
+        target: 'op-challenger',
+        params: { lines: 500 },
+      },
+      {
+        type: 'escalate_operator',
+        safetyLevel: 'safe',
+        params: { urgency: 'critical', message: 'op-challenger failure detected. Dispute resolution compromised.' },
+      },
+    ],
+    maxAttempts: 0, // Manual intervention required
+  },
+
+  // Playbook 11: Dispute Game Deadline Approaching (Phase 2)
+  {
+    name: 'dispute-game-deadline-near',
+    description: 'Dispute game deadline approaching — requires immediate action',
+    trigger: {
+      component: 'op-challenger',
+      indicators: [
+        { type: 'metric', condition: 'gameDeadlineProximity < 1h' },
+      ],
+    },
+    actions: [
+      {
+        type: 'escalate_operator',
+        safetyLevel: 'safe',
+        params: { urgency: 'critical', message: 'Dispute game deadline < 1 hour. Immediate review required.' },
+      },
+      {
+        type: 'collect_logs',
+        safetyLevel: 'safe',
+        target: 'op-challenger',
+        params: { lines: 200 },
+      },
+    ],
+    maxAttempts: 0, // Alert only
+  },
+
+  // Playbook 12: Unclaimed Bond Alert (Phase 2)
+  {
+    name: 'unclaimed-bond-alert',
+    description: 'Bond from resolved game not claimed after 24h',
+    trigger: {
+      component: 'op-challenger',
+      indicators: [
+        { type: 'metric', condition: 'unclaimedBonds > 0 && unclaimedAge > 24h' },
+      ],
+    },
+    actions: [
+      {
+        type: 'claim_bond',
+        safetyLevel: 'guarded',
+        params: { auto: true },
+      },
+      {
+        type: 'escalate_operator',
+        safetyLevel: 'safe',
+        params: { urgency: 'medium', message: 'Auto-claiming unclaimed bonds from resolved games.' },
+      },
+    ],
+    fallback: [
+      {
+        type: 'escalate_operator',
+        safetyLevel: 'safe',
+        params: { urgency: 'high', message: 'Bond claim failed. Manual intervention required.' },
+      },
+    ],
+    maxAttempts: 2,
+  },
+
+  // Playbook 13: Proof Generation Timeout (Phase 2)
+  {
+    name: 'proof-generation-timeout',
+    description: 'Fault proof generation taking too long or stalled',
+    trigger: {
+      component: 'op-challenger',
+      indicators: [
+        { type: 'metric', condition: 'proofGenerationLatency > 300s' },
+        { type: 'log_pattern', condition: 'proof generation timeout|MIPS execution stalled' },
+      ],
+    },
+    actions: [
+      {
+        type: 'collect_logs',
+        safetyLevel: 'safe',
+        target: 'op-challenger',
+        params: { lines: 500 },
+      },
+      {
+        type: 'escalate_operator',
+        safetyLevel: 'safe',
+        params: { urgency: 'high', message: 'Proof generation timeout. Check op-program logs and game deadline.' },
+      },
+    ],
+    maxAttempts: 0, // Requires manual investigation
+  },
 ];

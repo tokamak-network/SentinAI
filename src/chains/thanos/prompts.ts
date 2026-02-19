@@ -39,10 +39,18 @@ const RCA_SYSTEM_PROMPT = `You are performing Root Cause Analysis (RCA) for a Th
    - Depends on op-node for state data and L1 for submission
    - If proposer fails: withdrawals delayed, but L2 continues operating
 
+6. **op-challenger (Fault Proof / Dispute Game)**
+   - Monitors state root proposals on L1
+   - Participates in dispute games to challenge invalid proposals
+   - Generates fault proofs via MIPS execution (op-program)
+   - Depends on op-node for L2 state verification and L1 for game participation
+   - If challenger fails: SECURITY RISK — invalid proposals may be accepted
+
 == Component Dependency Graph ==
 L1 -> op-node -> op-geth
                 -> op-batcher -> L1
                 -> op-proposer -> L1
+                -> op-challenger -> L1
 
 == Common Thanos Failure Patterns ==
 
@@ -51,6 +59,9 @@ L1 -> op-node -> op-geth
 3. **op-geth Crash / OOM**: CPU/Memory anomalies, connection refused errors
 4. **Batcher Backlog**: txpool monotonically increasing, no batch submissions
 5. **Network Partition / P2P Issues**: Peer disconnections, gossip failures
+6. **Challenger EOA Low Balance**: Cannot participate in dispute games, bond deposit fails — SECURITY CRITICAL
+7. **Proof Generation Timeout**: op-program MIPS execution stalls, game deadline missed
+8. **Dispute Game Deadline Missed**: Invalid proposal accepted, withdrawal security compromised
 
 == Your Task ==
 

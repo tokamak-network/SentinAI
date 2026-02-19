@@ -77,6 +77,9 @@ export class ThanosPlugin implements ChainPlugin {
     if (metric.includes('proposer') || metric === 'proposerBalance') {
       return 'op-proposer';
     }
+    if (metric.includes('challenger') || metric === 'challengerBalance') {
+      return 'op-challenger';
+    }
     return 'system';
   }
 
