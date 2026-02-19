@@ -894,7 +894,7 @@ export default function Dashboard() {
       </div>
 
       {/* Row 2: Operations */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-4 lg:auto-rows-fr">
 
         {/* Activity Log */}
         {(() => {
@@ -925,7 +925,7 @@ export default function Dashboard() {
           const hasActiveEvent = cycles.some(c => c.detection?.activeEventId);
 
           return (
-          <div className="lg:col-span-7 bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col">
+          <div className="lg:col-span-7 bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col h-[34rem] lg:h-[38rem]">
 
             {/* Terminal Header */}
             <div className="bg-[#25282D] px-6 py-4 flex items-center justify-between shrink-0">
@@ -1047,77 +1047,70 @@ export default function Dashboard() {
                       color = 'text-green-500/90';
                     }
 
+                    const detected = cycle.detection?.anomalies?.filter(a => a.isAnomaly) || [];
+                    const eventId = cycle.detection?.activeEventId;
+                    const aiResult = eventId ? anomalyEvents.find(e => e.id === eventId)?.deepAnalysis : null;
+                    const anomalySummary = detected.map(a => {
+                      const name = a.metric.replace('Usage', '').replace('Pending', '').replace('UsedRatio', '');
+                      const dir = a.direction === 'spike' ? '↑' : a.direction === 'drop' ? '↓' : '~';
+                      return `${name}${dir}`;
+                    }).join(' ');
+
                     return (
-                      <div key={idx} className={`flex items-center leading-relaxed whitespace-nowrap ${event === 'IDLE' ? 'opacity-70' : ''} ${borderColor}`}>
-                        <span className="text-gray-600 shrink-0 w-[110px] text-right pr-2 tabular-nums" suppressHydrationWarning>
-                          <span className="text-gray-700">{date}</span> {time}
-                        </span>
-                        <span className={`shrink-0 w-[64px] font-bold ${color}`}>{event}</span>
-                        {metrics && event !== 'ERROR' && (
-                          <span className={`shrink-0 w-[72px] text-right pr-4 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>cpu {metrics.cpuUsage.toFixed(1)}%</span>
-                        )}
-                        {metrics && event !== 'ERROR' && (
-                          <span className={`shrink-0 w-[64px] text-right pr-4 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>txpool {metrics.txPoolPending}</span>
-                        )}
-                        {metrics && event !== 'ERROR' && (
-                          <span className={`shrink-0 w-[72px] text-right pr-4 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>gas {(metrics.gasUsedRatio * 100).toFixed(1)}%</span>
-                        )}
-                        {metrics && event !== 'ERROR' && (() => {
-                          const prevCycle = idx > 0 ? cycles[idx - 1] : null;
-                          const blockDelta = prevCycle?.metrics
-                            ? metrics.l2BlockHeight - prevCycle.metrics.l2BlockHeight : null;
-                          return (
-                            <span className={`shrink-0 w-[120px] text-right pr-2 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>
-                              {metrics.l2BlockHeight.toLocaleString()}
-                              {blockDelta !== null && blockDelta > 0 && (
-                                <span className="text-green-500/60 ml-1">+{blockDelta}</span>
-                              )}
-                            </span>
-                          );
-                        })()}
-                        <span className="flex items-center gap-1.5 flex-1 pl-1 min-w-0">
-                          {scaling?.score !== undefined && !scaling.executed && getScoreBadge(Math.round(scaling.score))}
-                          {(() => {
-                            const detected = cycle.detection?.anomalies?.filter(a => a.isAnomaly) || [];
-                            const eventId = cycle.detection?.activeEventId;
-                            const aiResult = eventId ? anomalyEvents.find(e => e.id === eventId)?.deepAnalysis : null;
-                            if (detected.length > 0) {
-                              const summary = detected.map(a => {
-                                const name = a.metric.replace('Usage', '').replace('Pending', '').replace('UsedRatio', '');
-                                const dir = a.direction === 'spike' ? '↑' : a.direction === 'drop' ? '↓' : '~';
-                                return `${name}${dir}`;
-                              }).join(' ');
-                              return (
-                                <>
-                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/25 text-[10px] font-bold font-mono text-amber-400 shrink-0">
-                                    ⚠ {summary}
+                      <div key={idx} className={`flex flex-col gap-2 leading-relaxed ${event === 'IDLE' ? 'opacity-70' : ''} ${borderColor}`}>
+                        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 min-w-0">
+                          <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-900/40 border border-gray-800 text-gray-500 text-[10px] tabular-nums shrink-0" suppressHydrationWarning>
+                            <span className="text-gray-700">{date}</span> {time}
+                          </span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded border border-current/20 bg-black/10 font-bold text-[10px] tracking-wide shrink-0 ${color}`}>{event}</span>
+                          {metrics && event !== 'ERROR' && (
+                            <>
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded bg-gray-800/40 text-[10px] shrink-0 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>cpu {metrics.cpuUsage.toFixed(1)}%</span>
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded bg-gray-800/40 text-[10px] shrink-0 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>tx {metrics.txPoolPending}</span>
+                              <span className={`inline-flex items-center px-1.5 py-0.5 rounded bg-gray-800/40 text-[10px] shrink-0 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>gas {(metrics.gasUsedRatio * 100).toFixed(1)}%</span>
+                              {(() => {
+                                const prevCycle = idx > 0 ? cycles[idx - 1] : null;
+                                const blockDelta = prevCycle?.metrics ? metrics.l2BlockHeight - prevCycle.metrics.l2BlockHeight : null;
+                                return (
+                                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded bg-gray-800/40 text-[10px] ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'} shrink-0`}>
+                                    {metrics.l2BlockHeight.toLocaleString()}
+                                    {blockDelta !== null && blockDelta > 0 && (
+                                      <span className="text-green-500/60 ml-1">+{blockDelta}</span>
+                                    )}
                                   </span>
-                                  {aiResult ? (
-                                    <span className="inline-flex items-center gap-1 text-[10px] truncate">
-                                      <span className={`px-1 py-0.5 rounded font-bold shrink-0 ${
-                                        aiResult.severity === 'critical' ? 'bg-red-500/20 text-red-400' :
-                                        aiResult.severity === 'high' ? 'bg-orange-500/20 text-orange-400' :
-                                        aiResult.severity === 'medium' ? 'bg-amber-500/20 text-amber-400' :
-                                        'bg-blue-500/20 text-blue-400'
-                                      }`}>{aiResult.severity}</span>
-                                      <span className="text-purple-400/80 truncate">{aiResult.predictedImpact}</span>
-                                    </span>
-                                  ) : cycle.detection?.deepAnalysisTriggered ? (
-                                    <span className="text-[10px] text-purple-400 font-mono shrink-0">AI analyzing...</span>
-                                  ) : (
-                                    <span className="text-amber-500/70 text-[10px] truncate">{detected[0].description}</span>
-                                  )}
-                                </>
-                              );
-                            }
-                            if (cycle.detection?.deepAnalysisTriggered) {
-                              return <span className="text-[10px] text-purple-400 font-mono shrink-0">AI▸</span>;
-                            }
-                            return null;
-                          })()}
-                          {detail && <span className="text-gray-500 truncate">{detail}</span>}
-                        </span>
-                        {scaling?.executed && <Zap size={12} className="text-amber-500 shrink-0 mt-0.5 ml-1" />}
+                                );
+                              })()}
+                            </>
+                          )}
+                          {scaling?.score !== undefined && !scaling.executed && getScoreBadge(Math.round(scaling.score))}
+                          {detected.length > 0 && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/25 text-[10px] font-bold font-mono text-amber-400 shrink-0">
+                              ⚠ {anomalySummary}
+                            </span>
+                          )}
+                          {aiResult && (
+                            <span className="inline-flex items-center gap-1 text-[10px] min-w-0 px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20">
+                              <span className={`px-1 py-0.5 rounded font-bold shrink-0 ${
+                                aiResult.severity === 'critical' ? 'bg-red-500/20 text-red-400' :
+                                aiResult.severity === 'high' ? 'bg-orange-500/20 text-orange-400' :
+                                aiResult.severity === 'medium' ? 'bg-amber-500/20 text-amber-400' :
+                                'bg-blue-500/20 text-blue-400'
+                              }`}>{aiResult.severity}</span>
+                              <span className="text-purple-400/80 break-words">{aiResult.predictedImpact}</span>
+                            </span>
+                          )}
+                          {!aiResult && cycle.detection?.deepAnalysisTriggered && (
+                            <span className="text-[10px] text-purple-400 font-mono shrink-0">AI analyzing...</span>
+                          )}
+                          {!aiResult && !cycle.detection?.deepAnalysisTriggered && detected.length > 0 && (
+                            <span className="text-amber-500/70 text-[10px] break-words">{detected[0].description}</span>
+                          )}
+                          {!detected.length && cycle.detection?.deepAnalysisTriggered && (
+                            <span className="text-[10px] text-purple-400 font-mono shrink-0">AI▸</span>
+                          )}
+                          {scaling?.executed && <Zap size={12} className="text-amber-500 shrink-0" />}
+                        </div>
+                        {detail && <div className="text-gray-500 break-words text-[11px] pl-0.5">{detail}</div>}
                       </div>
                     );
                   }) : (
@@ -1177,8 +1170,8 @@ export default function Dashboard() {
         })()}
 
         {/* Components + Documentation */}
-        <div className="lg:col-span-5 bg-white rounded-3xl p-6 shadow-sm border border-gray-200/60">
-          <div className="flex items-center justify-between mb-4">
+        <div className="lg:col-span-5 bg-white rounded-3xl p-6 shadow-sm border border-gray-200/60 flex flex-col h-[34rem] lg:h-[38rem]">
+          <div className="flex items-center justify-between mb-4 shrink-0">
             <h3 className="font-bold text-gray-900 flex items-center gap-2">
               <Server size={18} className="text-gray-400" /> Components
             </h3>
@@ -1411,5 +1404,3 @@ export default function Dashboard() {
 }
 
 // --- Sub Components ---
-
-

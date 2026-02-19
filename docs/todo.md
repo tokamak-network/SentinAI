@@ -82,4 +82,12 @@
 
 ---
 
-**Updated:** 2026-02-16
+## Recent Changes (2026-02-19)
+
+- [x] 대시보드 Row 2 카드 높이 고정 (`Activity Log`, `Components`)
+- [x] `Activity Log` 과거 로그 탐색 슬라이더 추가 (로그 누적 시 구간 이동)
+- [x] `Components` 카드 내부 스크롤 적용 (카드 외곽 높이 유지)
+
+---
+
+**Updated:** 2026-02-19
