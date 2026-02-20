@@ -33,6 +33,7 @@ export type RemediationActionType =
   | 'scale_down'
   | 'zero_downtime_swap'
   | 'refill_eoa'
+  | 'claim_bond'
   // Manual
   | 'config_change'
   | 'rollback_deployment'

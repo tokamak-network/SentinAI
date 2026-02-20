@@ -70,7 +70,7 @@ export class BondManager {
    * Assumes 5-10 concurrent games possible
    */
   calculateRequiredBalance(bondPerGame: bigint = parseEther('0.08')): bigint {
-    const maxConcurrentGames = 10n;
+    const maxConcurrentGames = BigInt(10);
     const gasReserve = parseEther('0.2'); // Gas for claims/disputes
     return bondPerGame * maxConcurrentGames + gasReserve;
   }
@@ -86,8 +86,8 @@ export class BondManager {
     // - Calculate claimable amounts
 
     return {
-      totalBondsLocked: 0n,
-      unclaimedBonds: 0n,
+      totalBondsLocked: BigInt(0),
+      unclaimedBonds: BigInt(0),
       availableForClaim: [],
       estimatedRequiredBalance: this.calculateRequiredBalance(),
     };
@@ -147,7 +147,7 @@ export class BondManager {
     if (!this.challengerAddress) {
       return {
         sufficient: false,
-        currentBalance: 0n,
+        currentBalance: BigInt(0),
         required: this.calculateRequiredBalance(),
       };
     }

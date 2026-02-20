@@ -153,7 +153,7 @@ export class DisputeGameMonitor {
     
     return {
       activeGames: activeGames.length,
-      totalBondsLocked: activeGames.reduce((sum, g) => sum + g.bond, 0n),
+      totalBondsLocked: activeGames.reduce((sum, g) => sum + g.bond, BigInt(0)),
       gamesNearDeadline: activeGames.filter(g => {
         const now = Math.floor(Date.now() / 1000);
         return (g.deadline - now) < 86400; // < 24h
