@@ -189,11 +189,12 @@ describe('log-ingester', () => {
 
       const result = await getAllLiveLogs();
 
-      expect(Object.keys(result)).toHaveLength(4);
+      expect(Object.keys(result)).toHaveLength(5);
       expect(result['op-geth']).toContain('geth');
       expect(result['op-node']).toContain('node');
       expect(result['op-batcher']).toContain('batcher');
       expect(result['op-proposer']).toContain('proposer');
+      expect(result['op-challenger']).toContain('challenger');
     });
 
     it('should handle partial failures gracefully', async () => {

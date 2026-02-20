@@ -30,8 +30,8 @@ describe('ThanosPlugin', () => {
       expect(plugin.displayName).toBe('Thanos L2 Rollup');
     });
 
-    it('should define 4 L2 components', () => {
-      expect(plugin.components).toEqual(['op-geth', 'op-node', 'op-batcher', 'op-proposer']);
+    it('should define 5 L2 components', () => {
+      expect(plugin.components).toEqual(['op-geth', 'op-node', 'op-batcher', 'op-proposer', 'op-challenger']);
     });
 
     it('should define 2 meta-components', () => {
@@ -43,11 +43,11 @@ describe('ThanosPlugin', () => {
     });
 
     it('should define batcher and proposer EOA roles', () => {
-      expect(plugin.eoaRoles).toEqual(['batcher', 'proposer']);
+      expect(plugin.eoaRoles).toEqual(['batcher', 'proposer', 'challenger']);
     });
 
     it('should define balance metrics', () => {
-      expect(plugin.balanceMetrics).toEqual(['batcherBalance', 'proposerBalance']);
+      expect(plugin.balanceMetrics).toEqual(['batcherBalance', 'proposerBalance', 'challengerBalance']);
     });
 
     it('should have l1Chain and l2Chain defined', () => {
@@ -199,8 +199,8 @@ describe('ThanosPlugin', () => {
   // ============================================================
 
   describe('k8sComponents', () => {
-    it('should define 4 K8s components', () => {
-      expect(plugin.k8sComponents).toHaveLength(4);
+    it('should define 5 K8s components', () => {
+      expect(plugin.k8sComponents).toHaveLength(5);
     });
 
     it('should have exactly one primary execution component', () => {
@@ -227,11 +227,12 @@ describe('ThanosPlugin', () => {
   // ============================================================
 
   describe('eoaConfigs', () => {
-    it('should define configs for batcher and proposer', () => {
-      expect(plugin.eoaConfigs).toHaveLength(2);
+    it('should define configs for batcher, proposer, and challenger', () => {
+      expect(plugin.eoaConfigs).toHaveLength(3);
       const roles = plugin.eoaConfigs.map(c => c.role);
       expect(roles).toContain('batcher');
       expect(roles).toContain('proposer');
+      expect(roles).toContain('challenger');
     });
 
     it('should have env var names for each role', () => {

@@ -409,9 +409,9 @@ describe('l1-rpc-failover', () => {
 
       const result = await updateK8sL1Rpc('https://new-rpc.io');
 
-      expect(result.updated).toHaveLength(3);
+      expect(result.updated).toHaveLength(4);
       expect(result.errors).toHaveLength(0);
-      expect(mockRunK8sCommand).toHaveBeenCalledTimes(3);
+      expect(mockRunK8sCommand).toHaveBeenCalledTimes(4);
 
       // Verify command patterns
       const calls = mockRunK8sCommand.mock.calls;
@@ -433,7 +433,7 @@ describe('l1-rpc-failover', () => {
 
       const result = await updateK8sL1Rpc('https://new-rpc.io');
 
-      expect(result.updated).toHaveLength(2);
+      expect(result.updated).toHaveLength(3);
       expect(result.errors).toHaveLength(1);
       expect(result.errors[0]).toContain('batcher not found');
     });
@@ -516,7 +516,7 @@ describe('l1-rpc-failover', () => {
 
         const components = getL1Components();
 
-        expect(components).toHaveLength(3);
+        expect(components).toHaveLength(4);
         expect(components.every((c) => c.type === 'statefulset')).toBe(true);
         expect(components[0].statefulSetName).toBe('test-stack-op-node');
       });
