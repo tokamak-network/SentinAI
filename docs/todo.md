@@ -2,6 +2,20 @@
 
 ## Current Status
 
+### In Progress (2026-02-20 Optimism Plugin Integration)
+- [x] `docs/todo/optimism-tutorial-integration.md` 기반 요구사항 확인
+- [x] `src/chains/optimism` 체인 플러그인 구현 (튜토리얼 OP Stack용)
+- [x] `CHAIN_TYPE` 기반 플러그인 자동 로딩 확장 (`optimism`, `my-l2` alias)
+- [x] 체인 레지스트리 테스트 보강 (`CHAIN_TYPE=optimism|my-l2`)
+- [x] `.env.local.sample`에 Optimism 플러그인 환경 변수 문서화
+- [x] lint 및 테스트 실행으로 회귀 검증 (chain-plugin 통과, tsc 전체 실패는 기존 테스트 타입 불일치 이슈)
+
+### In Progress (2026-02-20 Optimism Metrics Smoke + Installer)
+- [x] `CHAIN_TYPE=optimism` 기준 실제 `/api/metrics` 호출 스모크 테스트 스크립트 추가
+- [x] npm 실행 커맨드 추가 (`smoke:metrics:optimism`)
+- [x] `install.sh`에 체인 플러그인 선택 및 Optimism 메타데이터 설정 반영
+- [x] 스모크/스크립트 문법 검증
+
 ### In Progress (2026-02-16 Refresh Audit)
 - [x] **Codebase Refresh Audit P0-P2 진행 완료** (`docs/todo/codebase-audit-2026-02-16-refresh.md`)
   - P0: Seed `blockInterval` 덮어쓰기 수정 + 8 vCPU 메모리 타입 정합(16GiB) ✅
@@ -90,6 +104,19 @@
 - [x] 검증 경로 보강: read-only 모드에서 스케일러 쓰기 허용 옵션 추가 (`SENTINAI_ALLOW_SCALER_WRITE_IN_READONLY`)
 - [x] seed 시나리오 TTL 정합화 (Redis/InMemory `setSeedScenario` 기본 80초)
 - [x] Agent Loop 스케일링 판단 시 seed `currentVcpu` 대신 실제 런타임 vCPU 사용
+
+---
+
+## Review (2026-02-20 Optimism Plugin Integration)
+
+- 표준 OP Stack 튜토리얼 배포를 위해 `OptimismPlugin` 추가 및 Thanos 공통 구성 재사용으로 변경 범위를 최소화함
+- 레지스트리에서 `CHAIN_TYPE`를 해석해 `optimism`/`my-l2`를 자동 매핑하도록 확장함
+- 테스트에서 `CHAIN_TYPE`별 로딩 경로를 검증해 기본값(thanos) 회귀를 방지함
+
+## Review (2026-02-20 Optimism Metrics Smoke + Installer)
+
+- dev 서버를 실제로 띄운 뒤 `/api/metrics?stress=true`를 호출해 Optimism 모드 API 응답을 검증하는 스모크 테스트를 추가함
+- 설치 스크립트에서 `CHAIN_TYPE`를 입력/검증/저장하고, Optimism 선택 시 `L2_CHAIN_*`, `L1_CHAIN` 기본값까지 함께 구성하도록 확장함
 
 ---
 

@@ -1,21 +1,40 @@
 /**
  * Chain Plugin Registry
  * Global singleton registry for the active chain plugin.
- * Loads ThanosPlugin as default when CHAIN_TYPE is unset.
+ * Loads chain plugin from CHAIN_TYPE, defaults to ThanosPlugin.
  */
 
 import type { ChainPlugin } from './types';
 import { ThanosPlugin } from './thanos';
+import { OptimismPlugin } from './optimism';
 
 let activePlugin: ChainPlugin | null = null;
 
+function resolvePluginFromEnv(): ChainPlugin {
+  const chainType = process.env.CHAIN_TYPE?.trim().toLowerCase();
+
+  switch (chainType) {
+    case undefined:
+    case '':
+    case 'thanos':
+      return new ThanosPlugin();
+    case 'optimism':
+    case 'op-stack':
+    case 'my-l2':
+      return new OptimismPlugin();
+    default:
+      console.warn(`[ChainRegistry] Unknown CHAIN_TYPE "${chainType}", falling back to thanos`);
+      return new ThanosPlugin();
+  }
+}
+
 /**
  * Get the currently active chain plugin.
- * Auto-loads ThanosPlugin if no plugin has been registered.
+ * Auto-loads from CHAIN_TYPE if no plugin has been registered.
  */
 export function getChainPlugin(): ChainPlugin {
   if (!activePlugin) {
-    activePlugin = new ThanosPlugin();
+    activePlugin = resolvePluginFromEnv();
     console.log(`[ChainRegistry] Auto-loaded default: ${activePlugin.displayName}`);
   }
   return activePlugin;

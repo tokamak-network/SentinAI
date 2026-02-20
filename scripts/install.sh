@@ -17,6 +17,7 @@
 #     L2_RPC_URL=https://rpc.example.com
 #     ANTHROPIC_API_KEY=sk-ant-...       # or OPENAI_API_KEY / GEMINI_API_KEY / QWEN_API_KEY
 #   Optional:
+#     CHAIN_TYPE=thanos                  # thanos | optimism | my-l2 | op-stack
 #     AI_GATEWAY_URL=https://...         # AI Gateway (default: official gateway)
 #     AWS_CLUSTER_NAME=my-cluster        # EKS cluster (simulation mode if not set)
 #     AWS_PROFILE=my-cluster             # AWS CLI profile (default: same as AWS_CLUSTER_NAME)
@@ -271,6 +272,12 @@ setup_env() {
     log "Non-interactive mode detected."
     [[ ! "${L2_RPC_URL}" =~ ^https?:// ]] && err "L2_RPC_URL must start with http:// or https://."
 
+    CHAIN_TYPE="${CHAIN_TYPE:-thanos}"
+    case "${CHAIN_TYPE}" in
+      thanos|optimism|my-l2|op-stack) ;;
+      *) err "CHAIN_TYPE must be one of: thanos, optimism, my-l2, op-stack" ;;
+    esac
+
     AI_GATEWAY_URL="${AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
     ORCHESTRATOR_TYPE="${ORCHESTRATOR_TYPE:-k8s}"
     K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
@@ -340,6 +347,34 @@ setup_env() {
         ;;
     esac
     [[ -z "${ai_key_value}" ]] && err "AI API Key is required."
+
+    # Chain plugin
+    echo ""
+    echo -e "  ${BOLD}Chain Plugin${NC}:"
+    echo "    1) Thanos (default)"
+    echo "    2) Optimism Tutorial (OP Stack)"
+    read -rp "  Choose [1]: " chain_choice
+    case "${chain_choice}" in
+      2) CHAIN_TYPE="optimism" ;;
+      *) CHAIN_TYPE="thanos" ;;
+    esac
+
+    if [ "${CHAIN_TYPE}" = "optimism" ]; then
+      echo ""
+      echo -e "  ${BOLD}Optimism Tutorial Chain Metadata${NC} (optional):"
+      read -rp "  L2_CHAIN_ID [42069]: " L2_CHAIN_ID
+      L2_CHAIN_ID="${L2_CHAIN_ID:-42069}"
+      read -rp "  L2_CHAIN_NAME [Optimism Tutorial L2]: " L2_CHAIN_NAME
+      L2_CHAIN_NAME="${L2_CHAIN_NAME:-Optimism Tutorial L2}"
+      read -rp "  L2_NETWORK_SLUG [optimism-tutorial-l2]: " L2_NETWORK_SLUG
+      L2_NETWORK_SLUG="${L2_NETWORK_SLUG:-optimism-tutorial-l2}"
+      read -rp "  L2_EXPLORER_URL [http://localhost:4000]: " L2_EXPLORER_URL
+      L2_EXPLORER_URL="${L2_EXPLORER_URL:-http://localhost:4000}"
+      read -rp "  L2_IS_TESTNET [true]: " L2_IS_TESTNET
+      L2_IS_TESTNET="${L2_IS_TESTNET:-true}"
+      read -rp "  L1_CHAIN (sepolia/mainnet) [sepolia]: " L1_CHAIN
+      L1_CHAIN="${L1_CHAIN:-sepolia}"
+    fi
 
     # Container Orchestrator
     echo ""
@@ -501,8 +536,12 @@ setup_env() {
     # Network name (shown in dashboard header)
     echo ""
     echo "  Network name displayed in the dashboard header (e.g., Thanos Sepolia, Titan Mainnet)."
-    read -rp "  Network Name (press Enter for 'Thanos Sepolia'): " NEXT_PUBLIC_NETWORK_NAME
-    NEXT_PUBLIC_NETWORK_NAME="${NEXT_PUBLIC_NETWORK_NAME:-Thanos Sepolia}"
+    local network_name_default="Thanos Sepolia"
+    if [ "${CHAIN_TYPE:-thanos}" = "optimism" ]; then
+      network_name_default="Optimism Tutorial L2"
+    fi
+    read -rp "  Network Name (press Enter for '${network_name_default}'): " NEXT_PUBLIC_NETWORK_NAME
+    NEXT_PUBLIC_NETWORK_NAME="${NEXT_PUBLIC_NETWORK_NAME:-${network_name_default}}"
 
     # Slack Webhook (optional)
     read -rp "  Slack Webhook URL (optional, press Enter to skip): " ALERT_WEBHOOK_URL
@@ -512,6 +551,13 @@ setup_env() {
   # In non-interactive mode, env vars are preserved (:= only sets if unset/empty).
   # In interactive mode, read results are preserved. Vars skipped by user get safe defaults.
   : "${ORCHESTRATOR_TYPE:=k8s}"
+  : "${CHAIN_TYPE:=thanos}"
+  : "${L2_CHAIN_ID:=}"
+  : "${L2_CHAIN_NAME:=}"
+  : "${L2_NETWORK_SLUG:=}"
+  : "${L2_EXPLORER_URL:=}"
+  : "${L2_IS_TESTNET:=}"
+  : "${L1_CHAIN:=}"
   : "${DOCKER_COMPOSE_FILE:=docker-compose.yml}"
   : "${DOCKER_COMPOSE_PROJECT:=}"
   : "${AWS_CLUSTER_NAME:=}"
@@ -536,7 +582,20 @@ setup_env() {
   : "${ALERT_WEBHOOK_URL:=}"
   : "${DOMAIN_NAME:=${DOMAIN:-}}"
   : "${NEXT_PUBLIC_BASE_PATH:=}"
-  : "${NEXT_PUBLIC_NETWORK_NAME:=Thanos Sepolia}"
+  : "${NEXT_PUBLIC_NETWORK_NAME:=}"
+
+  # Chain-specific defaults
+  if [ "${CHAIN_TYPE}" = "optimism" ] || [ "${CHAIN_TYPE}" = "my-l2" ] || [ "${CHAIN_TYPE}" = "op-stack" ]; then
+    : "${L2_CHAIN_ID:=42069}"
+    : "${L2_CHAIN_NAME:=Optimism Tutorial L2}"
+    : "${L2_NETWORK_SLUG:=optimism-tutorial-l2}"
+    : "${L2_EXPLORER_URL:=http://localhost:4000}"
+    : "${L2_IS_TESTNET:=true}"
+    : "${L1_CHAIN:=sepolia}"
+    : "${NEXT_PUBLIC_NETWORK_NAME:=Optimism Tutorial L2}"
+  else
+    : "${NEXT_PUBLIC_NETWORK_NAME:=Thanos Sepolia}"
+  fi
 
   # Determine SCALING_SIMULATION_MODE (interactive sets it above; non-interactive reads env)
   : "${SCALING_SIMULATION_MODE:=}"
@@ -561,6 +620,15 @@ ENVEOF
     printf 'L2_RPC_URL=%s\n' "${L2_RPC_URL}"
     printf 'AI_GATEWAY_URL=%s\n' "${AI_GATEWAY_URL}"
     printf '%s=%s\n' "${ai_key_name}" "${ai_key_value}"
+
+    printf '\n# === Chain Plugin ===\n'
+    printf 'CHAIN_TYPE=%s\n' "${CHAIN_TYPE}"
+    [ -n "${L2_CHAIN_ID}" ] && printf 'L2_CHAIN_ID=%s\n' "${L2_CHAIN_ID}"
+    [ -n "${L2_CHAIN_NAME}" ] && printf 'L2_CHAIN_NAME=%s\n' "${L2_CHAIN_NAME}"
+    [ -n "${L2_NETWORK_SLUG}" ] && printf 'L2_NETWORK_SLUG=%s\n' "${L2_NETWORK_SLUG}"
+    [ -n "${L2_EXPLORER_URL}" ] && printf 'L2_EXPLORER_URL=%s\n' "${L2_EXPLORER_URL}"
+    [ -n "${L2_IS_TESTNET}" ] && printf 'L2_IS_TESTNET=%s\n' "${L2_IS_TESTNET}"
+    [ -n "${L1_CHAIN}" ] && printf 'L1_CHAIN=%s\n' "${L1_CHAIN}"
 
     if [ "${ORCHESTRATOR_TYPE}" = "docker" ]; then
       printf '\n# === Container Orchestrator ===\n'

@@ -5,6 +5,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ThanosPlugin } from '@/chains/thanos';
+import { OptimismPlugin } from '@/chains/optimism';
 import {
   getChainPlugin,
   resetChainRegistry,
@@ -311,6 +312,7 @@ describe('ThanosPlugin', () => {
 
 describe('ChainRegistry', () => {
   beforeEach(() => {
+    delete process.env.CHAIN_TYPE;
     resetChainRegistry();
   });
 
@@ -347,6 +349,7 @@ describe('ChainRegistry', () => {
       eoaRoles: [],
       eoaConfigs: [],
       balanceMetrics: [],
+      expectedBlockIntervalSeconds: 2,
       l1Chain: {} as never,
       l2Chain: {} as never,
       aiPrompts: {
@@ -376,5 +379,23 @@ describe('ChainRegistry', () => {
     // Re-registering should work
     const plugin = getChainPlugin();
     expect(plugin.chainType).toBe('thanos');
+  });
+
+  it('should load OptimismPlugin when CHAIN_TYPE is optimism', () => {
+    process.env.CHAIN_TYPE = 'optimism';
+    resetChainRegistry();
+
+    const plugin = getChainPlugin();
+    expect(plugin.chainType).toBe('optimism');
+    expect(plugin).toBeInstanceOf(OptimismPlugin);
+  });
+
+  it('should map CHAIN_TYPE=my-l2 to OptimismPlugin', () => {
+    process.env.CHAIN_TYPE = 'my-l2';
+    resetChainRegistry();
+
+    const plugin = getChainPlugin();
+    expect(plugin.chainType).toBe('optimism');
+    expect(plugin).toBeInstanceOf(OptimismPlugin);
   });
 });
