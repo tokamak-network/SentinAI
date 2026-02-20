@@ -169,33 +169,38 @@ export async function checkBalance(
 export async function getAllBalanceStatus(
   l1RpcUrl?: string
 ): Promise<EOABalanceStatus> {
+  const plugin = getChainPlugin();
   const rpcUrl = l1RpcUrl || getActiveL1RpcUrl();
   const config = getConfig();
   const state = getState();
   const treasuryKey = getTreasuryKey();
 
-  let batcher: BalanceCheckResult | null = null;
-  let proposer: BalanceCheckResult | null = null;
-  let challenger: BalanceCheckResult | null = null;
   let treasury: BalanceCheckResult | null = null;
+  const roleResults: Record<string, BalanceCheckResult | null> = Object.fromEntries(
+    plugin.eoaRoles.map(role => [role, null])
+  );
+  const roleAddresses: Record<string, `0x${string}` | null> = Object.fromEntries(
+    plugin.eoaRoles.map(role => [role, getEOAAddress(role)])
+  );
 
-  // Try environment variables first, then auto-detect if needed
-  let batcherAddr = getEOAAddress('batcher');
-  let proposerAddr = getEOAAddress('proposer');
-  const challengerAddr = getEOAAddress('challenger');
+  // Try environment variables first, then auto-detect if needed for known OP roles
+  let batcherAddr = roleAddresses['batcher'] || null;
+  let proposerAddr = roleAddresses['proposer'] || null;
 
   // If not in env, attempt auto-detection from L1 transactions
-  if (!batcherAddr || !proposerAddr) {
+  if ((plugin.eoaRoles.includes('batcher') && !batcherAddr) || (plugin.eoaRoles.includes('proposer') && !proposerAddr)) {
     try {
       const detectedBatcher = !batcherAddr ? await getEOAAddressWithAutoDetect('batcher', rpcUrl) : null;
       const detectedProposer = !proposerAddr ? await getEOAAddressWithAutoDetect('proposer', rpcUrl) : null;
 
       if (detectedBatcher) {
         batcherAddr = detectedBatcher;
+        roleAddresses.batcher = detectedBatcher;
         console.info(`[EOA Monitor] Auto-detected batcher: ${batcherAddr}`);
       }
       if (detectedProposer) {
         proposerAddr = detectedProposer;
+        roleAddresses.proposer = detectedProposer;
         console.info(`[EOA Monitor] Auto-detected proposer: ${proposerAddr}`);
       }
     } catch (err) {
@@ -207,43 +212,15 @@ export async function getAllBalanceStatus(
     const client = createL1Client(rpcUrl);
     const promises: Promise<void>[] = [];
 
-    if (batcherAddr) {
+    for (const role of plugin.eoaRoles) {
+      const address = roleAddresses[role];
+      if (!address) continue;
       promises.push(
-        getCachedEOABalance(batcherAddr, () => client.getBalance({ address: batcherAddr })).then(bal => {
+        getCachedEOABalance(address, () => client.getBalance({ address })).then(bal => {
           const eth = parseFloat(formatEther(bal));
-          batcher = {
-            address: batcherAddr,
-            role: 'batcher',
-            balanceEth: eth,
-            level: classifyBalance(eth, config),
-            timestamp: new Date().toISOString(),
-          };
-        })
-      );
-    }
-
-    if (proposerAddr) {
-      promises.push(
-        getCachedEOABalance(proposerAddr, () => client.getBalance({ address: proposerAddr })).then(bal => {
-          const eth = parseFloat(formatEther(bal));
-          proposer = {
-            address: proposerAddr,
-            role: 'proposer',
-            balanceEth: eth,
-            level: classifyBalance(eth, config),
-            timestamp: new Date().toISOString(),
-          };
-        })
-      );
-    }
-
-    if (challengerAddr) {
-      promises.push(
-        getCachedEOABalance(challengerAddr, () => client.getBalance({ address: challengerAddr })).then(bal => {
-          const eth = parseFloat(formatEther(bal));
-          challenger = {
-            address: challengerAddr,
-            role: 'challenger',
+          roleResults[role] = {
+            address,
+            role,
             balanceEth: eth,
             level: classifyBalance(eth, config),
             timestamp: new Date().toISOString(),
@@ -259,7 +236,7 @@ export async function getAllBalanceStatus(
           const eth = parseFloat(formatEther(bal));
           treasury = {
             address: account.address,
-            role: 'batcher', // Treasury doesn't have a role, reuse type
+            role: 'treasury',
             balanceEth: eth,
             level: classifyBalance(eth, config),
             timestamp: new Date().toISOString(),
@@ -274,9 +251,10 @@ export async function getAllBalanceStatus(
   }
 
   return {
-    batcher,
-    proposer,
-    challenger,
+    roles: roleResults,
+    batcher: roleResults.batcher || null,
+    proposer: roleResults.proposer || null,
+    challenger: roleResults.challenger || null,
     treasury,
     dailyRefillTotalEth: state.dailyRefillTotalEth,
     dailyRefillRemainingEth: Math.max(0, config.maxDailyRefillEth - state.dailyRefillTotalEth),

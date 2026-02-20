@@ -30,6 +30,7 @@ const RPC_TIMEOUT_MS = 15_000;
 // Block interval tracking moved to state store (Redis or InMemory)
 
 interface ComponentDetail {
+    component: string;
     name: string;
     type: string;
     strategy: string;
@@ -49,14 +50,42 @@ interface ComponentDetail {
     };
 }
 
-/** Map display names to K8s component suffixes for usage matching */
-const COMPONENT_SUFFIX_MAP: Record<string, string> = {
-    'L2 Client': 'op-geth',
-    'Consensus Node': 'op-node',
-    'Batcher': 'op-batcher',
-    'Proposer': 'op-proposer',
-    'Challenger': 'op-challenger',
-};
+interface ComponentVisualConfig {
+    displayName: string;
+    icon: string;
+    strategy: string;
+}
+
+function toTitleCase(value: string): string {
+    return value
+        .split(/[-_\s]+/)
+        .filter(Boolean)
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(' ');
+}
+
+function getComponentVisual(component: string): ComponentVisualConfig {
+    const normalized = component.toLowerCase();
+    if (normalized === 'op-geth' || normalized === 'zksync-server') {
+        return { displayName: 'Execution Client', icon: 'cpu', strategy: 'cpu' };
+    }
+    if (normalized === 'op-node') {
+        return { displayName: 'Consensus Node', icon: 'globe', strategy: 'sync' };
+    }
+    if (normalized.includes('batcher')) {
+        return { displayName: 'Batcher', icon: 'shuffle', strategy: 'batch' };
+    }
+    if (normalized.includes('proposer')) {
+        return { displayName: 'Proposer', icon: 'shield', strategy: 'proposal' };
+    }
+    if (normalized.includes('challenger')) {
+        return { displayName: 'Challenger', icon: 'shield', strategy: 'fault-proof' };
+    }
+    if (normalized.includes('prover')) {
+        return { displayName: 'Prover', icon: 'shield', strategy: 'proof' };
+    }
+    return { displayName: toTitleCase(component), icon: 'server', strategy: 'static' };
+}
 
 async function getDisputeGameStatus(l1RpcUrl: string) {
     const enabled = process.env.FAULT_PROOF_ENABLED === 'true';
@@ -118,7 +147,7 @@ async function getDisputeGameStatus(l1RpcUrl: string) {
 }
 
 // Fetch deep details for a specific component
-async function getComponentDetails(labelSelector: string, displayName: string, icon: string, strategy: string = "Static"): Promise<ComponentDetail | null> {
+async function getComponentDetails(component: string, labelSelector: string, displayName: string, icon: string, strategy: string = "Static"): Promise<ComponentDetail | null> {
     const namespace = getNamespace();
     try {
         // 1. Get Pod Info (JSON)
@@ -130,6 +159,7 @@ async function getComponentDetails(labelSelector: string, displayName: string, i
 
         if (!podData.items || podData.items.length === 0) {
             return {
+                component,
                 name: displayName,
                 type: "Stateless",
                 strategy,
@@ -207,6 +237,7 @@ async function getComponentDetails(labelSelector: string, displayName: string, i
             : `${instanceInfo} (${cpuDisp} / ${memDisp})`;
 
         return {
+            component,
             name: displayName,
             type: "Stateful", // simplified for UI
             strategy,
@@ -228,6 +259,7 @@ async function getComponentDetails(labelSelector: string, displayName: string, i
             console.error(`Failed to fetch ${displayName}:`, e);
         }
         return {
+            component,
             name: displayName,
             type: "Unknown",
             strategy,
@@ -242,6 +274,7 @@ async function getComponentDetails(labelSelector: string, displayName: string, i
 // --- Main Handler ---
 
 export async function GET(request: Request) {
+    const plugin = getChainPlugin();
     // 0. Simulation Mode Check (Fast Path) - Bypass real K8s/RPC calls for instant feedback
     const url = new URL(request.url);
     const isStressTest = url.searchParams.get('stress') === 'true';
@@ -275,8 +308,8 @@ export async function GET(request: Request) {
             const rpcUrl = process.env.L2_RPC_URL;
             const l1RpcUrl = getActiveL1RpcUrl();
             if (rpcUrl) {
-                const l2Client = createPublicClient({ chain: getChainPlugin().l2Chain, transport: http(rpcUrl) });
-                const l1Client = createPublicClient({ chain: getChainPlugin().l1Chain, transport: http(l1RpcUrl) });
+                const l2Client = createPublicClient({ chain: plugin.l2Chain, transport: http(rpcUrl) });
+                const l1Client = createPublicClient({ chain: plugin.l1Chain, transport: http(l1RpcUrl) });
                 const [l2Block, l1Block] = await Promise.all([
                     l2Client.getBlockNumber(),
                     getCachedL1BlockNumber(() => l1Client.getBlockNumber()),
@@ -291,8 +324,36 @@ export async function GET(request: Request) {
             realL2Block = 6200000 + Math.floor(now / 2000) % 10000;
         }
 
-        return NextResponse.json({
+        const simulatedComponents = plugin.k8sComponents.map((component, index) => {
+            const visual = getComponentVisual(component.component);
+            const isPrimary = component.component === plugin.primaryExecutionClient;
+            const cpu = isPrimary ? 8 : Math.max(0.5, 2 - (index * 0.3));
+            const memory = isPrimary ? 16 : Math.max(1, cpu * 2);
+            return {
+                component: component.component,
+                name: visual.displayName,
+                type: 'Stateful',
+                strategy: visual.strategy,
+                current: isPrimary ? 'Fargate (8.0 vCPU / 16Gi) • Scaling Up' : `Fargate (${cpu.toFixed(1)} vCPU / ${memory.toFixed(0)}Gi)`,
+                status: isPrimary ? 'Scaling Up' : 'Running',
+                icon: visual.icon,
+                rawCpu: cpu,
+                metrics: {
+                    cpuReq: `${cpu.toFixed(1)} vCPU`,
+                    memReq: `${memory.toFixed(0)}Gi`,
+                    node: `fargate-sim-${index + 1}`,
+                },
+            };
+        });
+
+        const stressPayload = {
             timestamp: new Date().toISOString(),
+            chain: {
+                type: plugin.chainType,
+                displayName: plugin.displayName,
+                mode: plugin.chainMode,
+                capabilities: plugin.capabilities,
+            },
             stressMode: true,
             metrics: {
                 l1BlockHeight: realL1Block,
@@ -305,34 +366,7 @@ export async function GET(request: Request) {
                 syncLag: 0,
                 source: "SIMULATED_FAST_PATH"
             },
-            components: [
-                {
-                    name: "L2 Client", type: "Stateful", strategy: "cpu",
-                    current: "Fargate (8.0 vCPU / 16Gi) • Scaling Up",
-                    status: "Scaling Up", icon: "cpu", rawCpu: 8,
-                    metrics: { cpuReq: "8.0 vCPU", memReq: "16Gi", node: "fargate-sim-ap-ne-2" }
-                },
-                {
-                    name: "Consensus Node", type: "Stateful", strategy: "globe",
-                    current: "Running (Standard Node)", status: "Running", icon: "globe", rawCpu: 2,
-                    metrics: { cpuReq: "2.0 vCPU", memReq: "4Gi", node: "ip-10-0-1-50.ap-northeast-2" }
-                },
-                {
-                    name: "Batcher", type: "Stateful", strategy: "shuffle",
-                    current: "Running (Standard Node)", status: "Running", icon: "shuffle", rawCpu: 1,
-                    metrics: { cpuReq: "1.0 vCPU", memReq: "2Gi", node: "ip-10-0-1-51.ap-northeast-2" }
-                },
-                {
-                    name: "Proposer", type: "Stateful", strategy: "shield",
-                    current: "Running (Standard Node)", status: "Running", icon: "shield", rawCpu: 0.5,
-                    metrics: { cpuReq: "0.5 vCPU", memReq: "1Gi", node: "ip-10-0-1-52.ap-northeast-2" }
-                },
-                {
-                    name: "Challenger", type: "Stateful", strategy: "sword",
-                    current: "Running (Standard Node)", status: "Running", icon: "sword", rawCpu: 0.5,
-                    metrics: { cpuReq: "0.5 vCPU", memReq: "1Gi", node: "ip-10-0-1-53.ap-northeast-2" }
-                }
-            ],
+            components: simulatedComponents,
             cost: {
                 hourlyRate: Number(currentHourlyCost.toFixed(3)),
                 opGethMonthlyCost: Number(opGethMonthlyCost.toFixed(2)),
@@ -358,8 +392,33 @@ export async function GET(request: Request) {
                 l1Healthy: null,
                 l1ResponseTimeMs: null,
             },
-            disputeGames: await getDisputeGameStatus(getActiveL1RpcUrl())
-        }, {
+            ...(plugin.capabilities.disputeGameMonitoring
+                ? { disputeGames: await getDisputeGameStatus(getActiveL1RpcUrl()) }
+                : {}),
+            ...(plugin.capabilities.proofMonitoring
+                ? {
+                    proof: {
+                        enabled: true,
+                        queueDepth: 0,
+                        generationLagSec: 0,
+                        verificationLagSec: 0,
+                    },
+                }
+                : {}),
+            ...(plugin.capabilities.settlementMonitoring
+                ? {
+                    settlement: {
+                        enabled: true,
+                        layer: process.env.ZK_SETTLEMENT_LAYER || 'l1',
+                        finalityMode: process.env.ZK_FINALITY_MODE || 'confirmed',
+                        postingLagSec: 0,
+                        healthy: true,
+                    },
+                }
+                : {}),
+        };
+
+        return NextResponse.json(stressPayload, {
             headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
         });
     }
@@ -373,32 +432,38 @@ export async function GET(request: Request) {
 
         const startK8s = performance.now();
         const dockerMode = isDockerMode();
-        const fetchDetails = (label: string, service: string, display: string, icon: string, strategy: string = "") =>
+        const fetchDetails = (component: string, label: string, service: string, display: string, icon: string, strategy: string = "") =>
             dockerMode
-                ? getDockerComponentDetails(service, display, icon, strategy)
-                : getComponentDetails(label, display, icon, strategy);
+                ? getDockerComponentDetails(service, display, icon, strategy).then(detail => detail ? { component, ...detail } : null)
+                : getComponentDetails(component, label, display, icon, strategy);
 
-        const [l2Client, consensus, batcher, proposer, challenger, containerUsage, allUsage] = await Promise.all([
-            fetchDetails(`app=${appPrefix}-geth`, "op-geth", "L2 Client", "cpu", ""),
-            fetchDetails(`app=${appPrefix}-node`, "op-node", "Consensus Node", "globe", ""),
-            fetchDetails(`app=${appPrefix}-batcher`, "op-batcher", "Batcher", "shuffle", ""),
-            fetchDetails(`app=${appPrefix}-proposer`, "op-proposer", "Proposer", "shield", ""),
-            fetchDetails(`app=${appPrefix}-challenger`, "op-challenger", "Challenger", "sword", ""),
+        const componentPromises = plugin.k8sComponents.map((config) => {
+            const visual = getComponentVisual(config.component);
+            return fetchDetails(
+                config.component,
+                `app=${appPrefix}-${config.labelSuffix}`,
+                config.component,
+                visual.displayName,
+                visual.icon,
+                visual.strategy
+            );
+        });
+
+        const [fetchedComponents, containerUsage, allUsage] = await Promise.all([
+            Promise.all(componentPromises),
             getContainerCpuUsage(),
             getAllContainerUsage(),
         ]);
         console.info(`[Timer] K8s Fetch: ${(performance.now() - startK8s).toFixed(2)}ms`);
 
-        const components = [l2Client, consensus, batcher, proposer, challenger];
+        const components = fetchedComponents.filter((component): component is ComponentDetail => Boolean(component));
 
         // Fallback: kubelet proxy when metrics-server is unavailable
         let resolvedUsage = allUsage;
         if (!resolvedUsage) {
             const nodeMap = new Map<string, string>();
             for (const comp of components) {
-                if (!comp) continue;
-                const suffix = COMPONENT_SUFFIX_MAP[comp.name];
-                if (suffix && comp.nodeName) nodeMap.set(suffix, comp.nodeName);
+                if (comp.nodeName) nodeMap.set(comp.component, comp.nodeName);
             }
             if (nodeMap.size > 0) {
                 resolvedUsage = await getAllContainerUsageViaKubelet(nodeMap);
@@ -408,10 +473,7 @@ export async function GET(request: Request) {
         // Inject real CPU/memory usage into each component
         if (resolvedUsage) {
             for (const comp of components) {
-                if (!comp) continue;
-                const suffix = COMPONENT_SUFFIX_MAP[comp.name];
-                if (!suffix) continue;
-                const usage = resolvedUsage.get(suffix);
+                const usage = resolvedUsage.get(comp.component);
                 if (usage && comp.rawCpu > 0) {
                     comp.usage = {
                         cpuPercent: (usage.cpuMillicores / (comp.rawCpu * 1000)) * 100,
@@ -432,15 +494,15 @@ export async function GET(request: Request) {
         }
         const l1RpcUrl = getActiveL1RpcUrl();
 
-        const l2RpcClient = createPublicClient({ chain: getChainPlugin().l2Chain, transport: http(rpcUrl) });
-        const l1RpcClient = createPublicClient({ chain: getChainPlugin().l1Chain, transport: http(l1RpcUrl) });
+        const l2RpcClient = createPublicClient({ chain: plugin.l2Chain, transport: http(rpcUrl) });
+        const l1RpcClient = createPublicClient({ chain: plugin.l1Chain, transport: http(l1RpcUrl) });
 
         // Fetch L2 block details and L1 block number in parallel (1 less RPC call)
         const [block, l1BlockNumber, derivationLagStatus, l1HealthStatus] = await Promise.all([
             l2RpcClient.getBlock({ blockTag: 'latest' }),
             getCachedL1BlockNumber(() => l1RpcClient.getBlockNumber()),
             checkDerivationLag(rpcUrl),
-            isL1Healthy(l1RpcUrl, getChainPlugin().l1Chain),
+            isL1Healthy(l1RpcUrl, plugin.l1Chain),
         ]);
         const blockNumber = block.number;
 
@@ -520,7 +582,8 @@ export async function GET(request: Request) {
             // Use real container CPU if available, otherwise fallback to EVM load
             realCpu = evmLoad;
             if (containerUsage) {
-                const requestMillicores = (l2Client?.rawCpu || 1) * 1000;
+                const primaryComponent = components.find(c => c.component === plugin.primaryExecutionClient);
+                const requestMillicores = (primaryComponent?.rawCpu || 1) * 1000;
                 realCpu = (containerUsage.cpuMillicores / requestMillicores) * 100;
                 cpuSource = 'container';
             }
@@ -531,7 +594,8 @@ export async function GET(request: Request) {
         const isStressTest = url.searchParams.get('stress') === 'true';
 
         let effectiveCpu = realCpu;
-        let currentVcpu: number = l2Client ? (l2Client.rawCpu || 1) : 1;
+        const primaryComponent = components.find(c => c.component === plugin.primaryExecutionClient);
+        let currentVcpu: number = primaryComponent ? (primaryComponent.rawCpu || 1) : 1;
 
         // Apply seed scenario vCPU progression if active (before stress mode)
         // Use seed data's vCPU directly (works across worker threads)
@@ -644,13 +708,21 @@ export async function GET(request: Request) {
         }
 
         // Compute sync lag: seconds since latest L2 block beyond expected interval
-        const expectedInterval = getChainPlugin().expectedBlockIntervalSeconds;
+        const expectedInterval = plugin.expectedBlockIntervalSeconds;
         const blockAge = Math.floor(Date.now() / 1000) - Number(block.timestamp);
         const syncLag = Math.max(0, blockAge - expectedInterval);
+        const settlementLayer = process.env.ZK_SETTLEMENT_LAYER || 'l1';
+        const finalityMode = process.env.ZK_FINALITY_MODE || 'confirmed';
 
         const responseSource = usingSeedMetrics ? 'SEED_SCENARIO' : 'REAL_K8S_CONFIG';
         const response = NextResponse.json({
             timestamp: new Date().toISOString(),
+            chain: {
+                type: plugin.chainType,
+                displayName: plugin.displayName,
+                mode: plugin.chainMode,
+                capabilities: plugin.capabilities,
+            },
             metrics: {
                 l1BlockHeight: Number(l1BlockNumber),
                 blockHeight: Number(blockNumber),
@@ -685,25 +757,62 @@ export async function GET(request: Request) {
             },
             // === L2 Nodes L1 RPC Status ===
             l2NodesL1Rpc: isStressTest
-                ? getChainPlugin().k8sComponents
+                ? plugin.k8sComponents
                     .filter(c => c.l1RpcEnvVar)
                     .map(c => ({ component: c.component, l1RpcUrl: 'https://l1-rpc.mock***', healthy: true }))
                 : await getL2NodesL1RpcStatus(),
             // === EOA Balance Status ===
-            eoaBalances: await (async () => {
-                try {
-                    const status = await getAllBalanceStatus();
-                    return {
-                        batcher: status.batcher ? { address: status.batcher.address, balanceEth: status.batcher.balanceEth, level: status.batcher.level } : null,
-                        proposer: status.proposer ? { address: status.proposer.address, balanceEth: status.proposer.balanceEth, level: status.proposer.level } : null,
-                        challenger: status.challenger ? { address: status.challenger.address, balanceEth: status.challenger.balanceEth, level: status.challenger.level } : null,
-                        signerAvailable: status.signerAvailable,
-                    };
-                } catch {
-                    return { batcher: null, proposer: null, challenger: null, signerAvailable: false };
+            ...(plugin.capabilities.eoaBalanceMonitoring
+                ? {
+                    eoaBalances: await (async () => {
+                        try {
+                            const status = await getAllBalanceStatus();
+                            const roles = Object.fromEntries(
+                                plugin.eoaRoles.map((role) => {
+                                    const found = status.roles[role];
+                                    return [
+                                        role,
+                                        found ? { address: found.address, balanceEth: found.balanceEth, level: found.level } : null,
+                                    ];
+                                })
+                            );
+                            return {
+                                roles,
+                                signerAvailable: status.signerAvailable,
+                            };
+                        } catch {
+                            return {
+                                roles: Object.fromEntries(plugin.eoaRoles.map(role => [role, null])),
+                                signerAvailable: false,
+                            };
+                        }
+                    })(),
                 }
-            })(),
-            disputeGames: await getDisputeGameStatus(l1RpcUrl),
+                : {}),
+            ...(plugin.capabilities.disputeGameMonitoring
+                ? { disputeGames: await getDisputeGameStatus(l1RpcUrl) }
+                : {}),
+            ...(plugin.capabilities.proofMonitoring
+                ? {
+                    proof: {
+                        enabled: true,
+                        queueDepth: 0,
+                        generationLagSec: Math.max(0, syncLag),
+                        verificationLagSec: Math.max(0, Math.floor(syncLag / 2)),
+                    },
+                }
+                : {}),
+            ...(plugin.capabilities.settlementMonitoring
+                ? {
+                    settlement: {
+                        enabled: true,
+                        layer: settlementLayer,
+                        finalityMode,
+                        postingLagSec: Math.max(0, syncLag),
+                        healthy: l1HealthStatus.healthy,
+                    },
+                }
+                : {}),
             // === Anomaly Detection Fields ===
             anomalies: detectedAnomalies,
             activeAnomalyEventId,

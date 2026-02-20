@@ -89,6 +89,8 @@ export interface RefillResult {
 
 /** Aggregated balance status for all monitored EOAs */
 export interface EOABalanceStatus {
+  /** Dynamic role map from active chain plugin */
+  roles: Record<EOARole, BalanceCheckResult | null>;
   /** Batcher EOA balance check result */
   batcher: BalanceCheckResult | null;
   /** Proposer EOA balance check result */
