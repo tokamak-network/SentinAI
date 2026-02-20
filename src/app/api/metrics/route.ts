@@ -1,4 +1,4 @@
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, formatEther, http } from 'viem';
 import { getChainPlugin } from '@/chains';
 import { NextResponse } from 'next/server';
 import { recordUsage } from '@/lib/usage-tracker';
@@ -18,6 +18,7 @@ import { isDockerMode } from '@/lib/docker-config';
 import { getDockerComponentDetails } from '@/lib/docker-orchestrator';
 import { getActiveL1RpcUrl, getL2NodesL1RpcStatus } from '@/lib/l1-rpc-failover';
 import { getAllBalanceStatus } from '@/lib/eoa-balance-monitor';
+import { getDisputeGameMonitor } from '@/lib/dispute-game-monitor';
 import { resolveBlockInterval } from '@/lib/block-interval';
 import type { AnomalyResult } from '@/types/anomaly';
 
@@ -53,7 +54,67 @@ const COMPONENT_SUFFIX_MAP: Record<string, string> = {
     'Consensus Node': 'op-node',
     'Batcher': 'op-batcher',
     'Proposer': 'op-proposer',
+    'Challenger': 'op-challenger',
 };
+
+async function getDisputeGameStatus(l1RpcUrl: string) {
+    const enabled = process.env.FAULT_PROOF_ENABLED === 'true';
+    if (!enabled) {
+        return {
+            enabled: false,
+            activeGames: 0,
+            gamesNearDeadline: 0,
+            claimableBonds: 0,
+            totalBondsLockedEth: 0,
+            challengerConfigured: false,
+            factoryConfigured: false,
+            lastCheckedAt: new Date().toISOString(),
+        };
+    }
+
+    try {
+        const factoryAddress = process.env.DISPUTE_GAME_FACTORY_ADDRESS as `0x${string}` | undefined;
+        const challengerAddress = process.env.CHALLENGER_EOA_ADDRESS as `0x${string}` | undefined;
+        const monitor = getDisputeGameMonitor(
+            getChainPlugin().l1Chain,
+            l1RpcUrl,
+            factoryAddress,
+            challengerAddress
+        );
+
+        const [stats, deadlineAlerts, claimableAlerts] = await Promise.all([
+            monitor.getStatistics(),
+            monitor.checkDeadlines(24),
+            monitor.checkClaimableBonds(),
+        ]);
+
+        return {
+            enabled: true,
+            activeGames: stats.activeGames,
+            gamesNearDeadline: deadlineAlerts.length > 0
+                ? deadlineAlerts.length
+                : stats.gamesNearDeadline,
+            claimableBonds: claimableAlerts.length,
+            totalBondsLockedEth: Number(formatEther(stats.totalBondsLocked)),
+            challengerConfigured: Boolean(challengerAddress),
+            factoryConfigured: Boolean(factoryAddress),
+            lastCheckedAt: new Date().toISOString(),
+        };
+    } catch (error) {
+        console.warn('[Metrics API] Failed to fetch dispute game status:', error instanceof Error ? error.message : error);
+        return {
+            enabled: true,
+            activeGames: 0,
+            gamesNearDeadline: 0,
+            claimableBonds: 0,
+            totalBondsLockedEth: 0,
+            challengerConfigured: Boolean(process.env.CHALLENGER_EOA_ADDRESS),
+            factoryConfigured: Boolean(process.env.DISPUTE_GAME_FACTORY_ADDRESS),
+            lastCheckedAt: new Date().toISOString(),
+            error: 'failed-to-fetch',
+        };
+    }
+}
 
 // Fetch deep details for a specific component
 async function getComponentDetails(labelSelector: string, displayName: string, icon: string, strategy: string = "Static"): Promise<ComponentDetail | null> {
@@ -264,6 +325,11 @@ export async function GET(request: Request) {
                     name: "Proposer", type: "Stateful", strategy: "shield",
                     current: "Running (Standard Node)", status: "Running", icon: "shield", rawCpu: 0.5,
                     metrics: { cpuReq: "0.5 vCPU", memReq: "1Gi", node: "ip-10-0-1-52.ap-northeast-2" }
+                },
+                {
+                    name: "Challenger", type: "Stateful", strategy: "sword",
+                    current: "Running (Standard Node)", status: "Running", icon: "sword", rawCpu: 0.5,
+                    metrics: { cpuReq: "0.5 vCPU", memReq: "1Gi", node: "ip-10-0-1-53.ap-northeast-2" }
                 }
             ],
             cost: {
@@ -277,7 +343,8 @@ export async function GET(request: Request) {
                 monthlyEstimated: Number(opGethMonthlyCost.toFixed(2)),
                 monthlySaving: Number(currentSaving.toFixed(2)),
             },
-            status: "healthy"
+            status: "healthy",
+            disputeGames: await getDisputeGameStatus(getActiveL1RpcUrl())
         }, {
             headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
         });
@@ -297,17 +364,18 @@ export async function GET(request: Request) {
                 ? getDockerComponentDetails(service, display, icon, strategy)
                 : getComponentDetails(label, display, icon, strategy);
 
-        const [l2Client, consensus, batcher, proposer, containerUsage, allUsage] = await Promise.all([
+        const [l2Client, consensus, batcher, proposer, challenger, containerUsage, allUsage] = await Promise.all([
             fetchDetails(`app=${appPrefix}-geth`, "op-geth", "L2 Client", "cpu", ""),
             fetchDetails(`app=${appPrefix}-node`, "op-node", "Consensus Node", "globe", ""),
             fetchDetails(`app=${appPrefix}-batcher`, "op-batcher", "Batcher", "shuffle", ""),
             fetchDetails(`app=${appPrefix}-proposer`, "op-proposer", "Proposer", "shield", ""),
+            fetchDetails(`app=${appPrefix}-challenger`, "op-challenger", "Challenger", "sword", ""),
             getContainerCpuUsage(),
             getAllContainerUsage(),
         ]);
         console.log(`[Timer] K8s Fetch: ${(performance.now() - startK8s).toFixed(2)}ms`);
 
-        const components = [l2Client, consensus, batcher, proposer];
+        const components = [l2Client, consensus, batcher, proposer, challenger];
 
         // Fallback: kubelet proxy when metrics-server is unavailable
         let resolvedUsage = allUsage;
@@ -607,12 +675,14 @@ export async function GET(request: Request) {
                     return {
                         batcher: status.batcher ? { address: status.batcher.address, balanceEth: status.batcher.balanceEth, level: status.batcher.level } : null,
                         proposer: status.proposer ? { address: status.proposer.address, balanceEth: status.proposer.balanceEth, level: status.proposer.level } : null,
+                        challenger: status.challenger ? { address: status.challenger.address, balanceEth: status.challenger.balanceEth, level: status.challenger.level } : null,
                         signerAvailable: status.signerAvailable,
                     };
                 } catch {
-                    return { batcher: null, proposer: null, signerAvailable: false };
+                    return { batcher: null, proposer: null, challenger: null, signerAvailable: false };
                 }
             })(),
+            disputeGames: await getDisputeGameStatus(l1RpcUrl),
             // === Anomaly Detection Fields ===
             anomalies: detectedAnomalies,
             activeAnomalyEventId,
