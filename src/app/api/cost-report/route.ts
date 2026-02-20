@@ -23,12 +23,12 @@ export async function GET(request: Request) {
       }
     }
 
-    console.log(`[Cost Report API] Generating report for ${days} days`);
+    console.info(`[Cost Report API] Generating report for ${days} days`);
     const startTime = Date.now();
 
     const report = await generateCostReport(days);
 
-    console.log(`[Cost Report API] Report generated in ${Date.now() - startTime}ms`);
+    console.info(`[Cost Report API] Report generated in ${Date.now() - startTime}ms`);
 
     return NextResponse.json(report, {
       headers: {

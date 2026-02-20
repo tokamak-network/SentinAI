@@ -227,7 +227,7 @@ export async function predictScaling(
   // Check minimum data points
   const dataPointCount = await getMetricsCount();
   if (dataPointCount < config.minDataPoints) {
-    console.log(`Insufficient data for prediction: ${dataPointCount}/${config.minDataPoints} points`);
+    console.info(`Insufficient data for prediction: ${dataPointCount}/${config.minDataPoints} points`);
     return null;
   }
 
@@ -235,7 +235,7 @@ export async function predictScaling(
   const userPrompt = await buildUserPrompt(currentVcpu);
 
   try {
-    console.log('[Predictive Scaler] Requesting prediction from AI provider...');
+    console.info('[Predictive Scaler] Requesting prediction from AI provider...');
 
     const aiResult = await chatCompletion({
       systemPrompt,

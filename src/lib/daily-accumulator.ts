@@ -87,7 +87,7 @@ export async function initializeAccumulator(): Promise<void> {
   };
 
   await store.setDailyAccumulatorState(today, newState);
-  console.log(`[Daily Accumulator] Initialized for ${today}`);
+  console.info(`[Daily Accumulator] Initialized for ${today}`);
 }
 
 /**
@@ -122,7 +122,7 @@ export async function takeSnapshot(): Promise<MetricSnapshot | null> {
 
   // No data in ring buffer
   if (stats.count === 0) {
-    console.log('[Daily Accumulator] Ring buffer empty, skipping snapshot');
+    console.info('[Daily Accumulator] Ring buffer empty, skipping snapshot');
     return null;
   }
 
@@ -190,7 +190,7 @@ export async function takeSnapshot(): Promise<MetricSnapshot | null> {
   // Persist state to store
   await store.setDailyAccumulatorState(today, state);
 
-  console.log(`[Daily Accumulator] Snapshot #${state.data.snapshots.length} taken (${stats.count} data points)`);
+  console.info(`[Daily Accumulator] Snapshot #${state.data.snapshots.length} taken (${stats.count} data points)`);
 
   return snapshot;
 }

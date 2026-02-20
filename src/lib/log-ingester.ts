@@ -74,7 +74,7 @@ export async function getLiveLogs(namespace?: string, labelSelector?: string): P
         }
 
         const cleanPodName = podName.trim();
-        console.log(`[LogIngester] Tailing logs from: ${cleanPodName}`);
+        console.info(`[LogIngester] Tailing logs from: ${cleanPodName}`);
 
         // 2. Fetch Logs (Tail)
         const { stdout: logs, stderr: logsErr } = await runK8sCommand(

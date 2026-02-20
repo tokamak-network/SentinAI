@@ -35,7 +35,7 @@ function resolvePluginFromEnv(): ChainPlugin {
 export function getChainPlugin(): ChainPlugin {
   if (!activePlugin) {
     activePlugin = resolvePluginFromEnv();
-    console.log(`[ChainRegistry] Auto-loaded default: ${activePlugin.displayName}`);
+    console.info(`[ChainRegistry] Auto-loaded default: ${activePlugin.displayName}`);
   }
   return activePlugin;
 }
@@ -46,7 +46,7 @@ export function getChainPlugin(): ChainPlugin {
  */
 export function registerChainPlugin(plugin: ChainPlugin): void {
   activePlugin = plugin;
-  console.log(`[ChainRegistry] Registered: ${plugin.displayName} (${plugin.chainType})`);
+  console.info(`[ChainRegistry] Registered: ${plugin.displayName} (${plugin.chainType})`);
 }
 
 /**

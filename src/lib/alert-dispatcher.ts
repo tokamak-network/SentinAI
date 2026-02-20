@@ -186,19 +186,19 @@ export async function dispatchAlert(
 
   // 1. Check if alerts are enabled
   if (!config.enabled) {
-    console.log('[AlertDispatcher] Alerts disabled, skipping');
+    console.info('[AlertDispatcher] Alerts disabled, skipping');
     return null;
   }
 
   // 2. Check severity level
   if (!(await shouldNotifyForSeverity(analysis.severity))) {
-    console.log(`[AlertDispatcher] Severity ${analysis.severity} not in notify list, skipping`);
+    console.info(`[AlertDispatcher] Severity ${analysis.severity} not in notify list, skipping`);
     return null;
   }
 
   // 3. Check cooldown
   if (await isInCooldown(analysis.anomalyType)) {
-    console.log(`[AlertDispatcher] Anomaly type ${analysis.anomalyType} in cooldown, skipping`);
+    console.info(`[AlertDispatcher] Anomaly type ${analysis.anomalyType} in cooldown, skipping`);
     return null;
   }
 
@@ -229,7 +229,7 @@ export async function dispatchAlert(
       }
 
       record.success = true;
-      console.log(`[AlertDispatcher] Alert sent to Slack: ${analysis.severity} ${analysis.anomalyType}`);
+      console.info(`[AlertDispatcher] Alert sent to Slack: ${analysis.severity} ${analysis.anomalyType}`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       record.error = errorMessage;
@@ -238,7 +238,7 @@ export async function dispatchAlert(
   } else {
     // Dashboard-only alert
     record.success = true;
-    console.log(`[AlertDispatcher] Dashboard alert recorded: ${analysis.severity} ${analysis.anomalyType}`);
+    console.info(`[AlertDispatcher] Dashboard alert recorded: ${analysis.severity} ${analysis.anomalyType}`);
   }
 
   // 6. Update state

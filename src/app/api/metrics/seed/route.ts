@@ -196,15 +196,15 @@ export async function POST(request: NextRequest) {
 
   // Store active seed scenario in state store (works across worker threads)
   await getStore().setSeedScenario(scenario);
-  console.log(`[Seed API] Set active seed scenario in store: ${scenario}`);
+  console.info(`[Seed API] Set active seed scenario in store: ${scenario}`);
 
   const dataPoints = generateScenarioData(scenario);
   for (const point of dataPoints) {
     await pushMetric(point);
   }
 
-  console.log(`[Seed API] Injected ${dataPoints.length} data points for scenario: ${scenario}`);
-  console.log(`[Seed API] Seed scenario persisted to state store`);
+  console.info(`[Seed API] Injected ${dataPoints.length} data points for scenario: ${scenario}`);
+  console.info(`[Seed API] Seed scenario persisted to state store`);
 
   // Schedule automatic cleanup after TTL expires
   if (seedTimeoutHandle) {
@@ -217,13 +217,13 @@ export async function POST(request: NextRequest) {
       await resetPredictionState();
       await getStore().setSeedScenario(null);
       clearVcpuProfile();
-      console.log(`[Seed API] TTL expired (${SEED_TTL_SECONDS}s): Cleared seed data, switched to live metrics`);
+      console.info(`[Seed API] TTL expired (${SEED_TTL_SECONDS}s): Cleared seed data, switched to live metrics`);
     } catch (error) {
       console.error('[Seed API] Error clearing seed data on TTL:', error);
     }
   }, SEED_TTL_SECONDS * 1000);
 
-  console.log(`[Seed API] Scheduled automatic cleanup in ${SEED_TTL_SECONDS}s`);
+  console.info(`[Seed API] Scheduled automatic cleanup in ${SEED_TTL_SECONDS}s`);
 
   return NextResponse.json({
     success: true,

@@ -51,7 +51,7 @@ export async function analyzeLogChunk(logs: Record<string, string> | string): Pr
     }
 
     try {
-        console.log('[AI Analyzer] Sending request to AI provider...');
+        console.info('[AI Analyzer] Sending request to AI provider...');
 
         const result = await chatCompletion({
             systemPrompt,

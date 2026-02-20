@@ -10,6 +10,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "prod:gate:tier1": "bash scripts/prod-gate-tier1.sh",
+    "prod:gate:tier2": "bash scripts/prod-gate-tier2.sh",
     "verify": "bash scripts/verify-e2e.sh",
     "benchmark": "npx tsx scripts/benchmark-models.ts",
     "smoke:metrics:optimism": "bash scripts/smoke-optimism-metrics.sh"

@@ -372,7 +372,7 @@ export async function generateDailyReport(
   const userPrompt = buildUserPrompt(data);
 
   try {
-    console.log('[Daily Report] Requesting report from AI provider...');
+    console.info('[Daily Report] Requesting report from AI provider...');
 
     const aiResult = await chatCompletion({
       systemPrompt,
@@ -408,7 +408,7 @@ ${content}
       const filePath = path.join(dir, `${data.date}.md`);
       await fs.writeFile(filePath, reportMarkdown, 'utf-8');
       reportPath = filePath;
-      console.log(`[Daily Report] Saved to ${filePath}`);
+      console.info(`[Daily Report] Saved to ${filePath}`);
     } catch (fsError) {
       const msg = fsError instanceof Error ? fsError.message : 'Unknown FS error';
       console.error(`[Daily Report] Failed to save file: ${msg}`);
@@ -442,7 +442,7 @@ ${content}
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Daily Report] AI provider error:', errorMessage);
-    console.log('[Daily Report] Generating fallback report with collected data...');
+    console.info('[Daily Report] Generating fallback report with collected data...');
 
     // Generate fallback report using collected data
     const fallbackContent = generateFallbackReport(data);
@@ -465,7 +465,7 @@ ${fallbackContent}
       const filePath = path.join(dir, `${data.date}.md`);
       await fs.writeFile(filePath, reportMarkdown, 'utf-8');
       reportPath = filePath;
-      console.log(`[Daily Report] Fallback report saved to ${filePath}`);
+      console.info(`[Daily Report] Fallback report saved to ${filePath}`);
     } catch (fsError) {
       const msg = fsError instanceof Error ? fsError.message : 'Unknown FS error';
       console.error(`[Daily Report] Failed to save fallback report: ${msg}`);

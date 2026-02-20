@@ -51,7 +51,7 @@ export async function runDetectionPipeline(
   const anomalies = detectAnomalies(dataPoint, history, balances);
 
   if (anomalies.length > 0) {
-    console.log(`[Detection] ${anomalies.length} anomalies detected`);
+    console.info(`[Detection] ${anomalies.length} anomalies detected`);
 
     const event = await createOrUpdateEvent(anomalies);
 

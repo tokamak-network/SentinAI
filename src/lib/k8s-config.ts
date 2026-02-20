@@ -119,7 +119,7 @@ async function resolveAwsRegion(): Promise<string | undefined> {
     const region = stdout.trim();
     if (region) {
       regionCache = region;
-      console.log(`[K8s Config] Auto-detected AWS region: ${region}`);
+      console.info(`[K8s Config] Auto-detected AWS region: ${region}`);
       return regionCache;
     }
   } catch {
@@ -169,7 +169,7 @@ async function resolveK8sApiUrl(): Promise<string | undefined> {
 
     if (endpoint && endpoint !== 'None') {
       apiUrlCache = endpoint;
-      console.log(`[K8s Config] Auto-detected API URL: ${endpoint} (${Date.now() - startTime}ms)`);
+      console.info(`[K8s Config] Auto-detected API URL: ${endpoint} (${Date.now() - startTime}ms)`);
       return apiUrlCache;
     }
   } catch (e) {
@@ -217,7 +217,7 @@ async function getK8sToken(): Promise<string | undefined> {
 
     const startTime = Date.now();
     const { stdout } = await execFileAsync('aws', args, { timeout: 10000 });
-    console.log(`[K8s Config] Token generated (${Date.now() - startTime}ms)`);
+    console.info(`[K8s Config] Token generated (${Date.now() - startTime}ms)`);
 
     const tokenData = JSON.parse(stdout);
     const token = tokenData.status.token;
@@ -302,12 +302,12 @@ export async function runK8sCommand(
     const result = await execAsync(fullCmd, {
       timeout: options?.timeout ?? 10000,
     });
-    console.log(`[K8s Config] kubectl (${Date.now() - startTime}ms): ${command.substring(0, 40)}...`);
+    console.info(`[K8s Config] kubectl (${Date.now() - startTime}ms): ${command.substring(0, 40)}...`);
     return result;
   } catch (e) {
     // Only log kubectl failures in production/configured environments
     if (!isDevelopmentEnvironment()) {
-      console.log(`[K8s Config] kubectl failed (${Date.now() - startTime}ms): ${command}`);
+      console.info(`[K8s Config] kubectl failed (${Date.now() - startTime}ms): ${command}`);
     }
     throw e;
   }

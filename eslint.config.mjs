@@ -32,6 +32,8 @@ const eslintConfig = defineConfig([
     // Non-production assets/scripts
     'demo/**',
     'src/app/v2/**',
+    'external/**',
+    'docs/**',
   ]),
 ]);
 

@@ -192,11 +192,11 @@ export async function getAllBalanceStatus(
 
       if (detectedBatcher) {
         batcherAddr = detectedBatcher;
-        console.log(`[EOA Monitor] Auto-detected batcher: ${batcherAddr}`);
+        console.info(`[EOA Monitor] Auto-detected batcher: ${batcherAddr}`);
       }
       if (detectedProposer) {
         proposerAddr = detectedProposer;
-        console.log(`[EOA Monitor] Auto-detected proposer: ${proposerAddr}`);
+        console.info(`[EOA Monitor] Auto-detected proposer: ${proposerAddr}`);
       }
     } catch (err) {
       console.warn('[EOA Monitor] Auto-detection failed, continuing with available addresses:', err instanceof Error ? err.message : err);
@@ -418,7 +418,7 @@ export async function refillEOA(
       value: refillAmount,
     });
 
-    console.log(`[EOA Monitor] Refill tx sent: ${hash} (${role} ${targetAddress}, ${config.refillAmountEth} ETH)`);
+    console.info(`[EOA Monitor] Refill tx sent: ${hash} (${role} ${targetAddress}, ${config.refillAmountEth} ETH)`);
 
     // 9. Wait for receipt
     const receipt = await client.waitForTransactionReceipt({
@@ -461,7 +461,7 @@ export async function refillEOA(
       simulated: false,
     });
 
-    console.log(`[EOA Monitor] Refill confirmed: ${role} ${previousBalanceEth.toFixed(4)} → ${newBalanceEth.toFixed(4)} ETH (tx: ${hash})`);
+    console.info(`[EOA Monitor] Refill confirmed: ${role} ${previousBalanceEth.toFixed(4)} → ${newBalanceEth.toFixed(4)} ETH (tx: ${hash})`);
 
     return {
       success: true,

@@ -106,7 +106,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     const recentMetrics = await getRecentMetrics(1);
     if (recentMetrics && recentMetrics.length > 0) {
       const seedMetric = recentMetrics[0];
-      console.log(`[AgentLoop] Using seed metrics (${activeSeedScenario}): CPU=${seedMetric.cpuUsage.toFixed(1)}%, TxPool=${seedMetric.txPoolPending}, vCPU=${seedMetric.currentVcpu}`);
+      console.info(`[AgentLoop] Using seed metrics (${activeSeedScenario}): CPU=${seedMetric.cpuUsage.toFixed(1)}%, TxPool=${seedMetric.txPoolPending}, vCPU=${seedMetric.currentVcpu}`);
       return {
         dataPoint: seedMetric,
         l1BlockHeight: 0, // Seed metrics don't include L1
@@ -152,7 +152,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
           toUrl: newUrl,
           k8sUpdated: true,
         };
-        console.log(`[AgentLoop] L1 RPC failover success: ${newUrl}`);
+        console.info(`[AgentLoop] L1 RPC failover success: ${newUrl}`);
       } catch {
         // Retry also failed — continue without L1
         console.error('[AgentLoop] L1 RPC retry after failover also failed');
@@ -330,7 +330,7 @@ async function evaluateAndExecuteScaling(
       ) {
         finalTarget = clampToValidVcpu(prediction.predictedVcpu);
         finalReason = `[Predictive] ${prediction.reasoning} (Confidence: ${(prediction.confidence * 100).toFixed(0)}%)`;
-        console.log(`[AgentLoop] Predictive override: ${currentVcpu} → ${finalTarget} vCPU`);
+        console.info(`[AgentLoop] Predictive override: ${currentVcpu} → ${finalTarget} vCPU`);
       }
     } catch {
       // Prediction failure is non-fatal
@@ -387,7 +387,7 @@ async function evaluateAndExecuteScaling(
       reason: finalReason,
     });
 
-    console.log(`[AgentLoop] Scaling executed: ${scaleResult.previousVcpu} → ${scaleResult.currentVcpu} vCPU`);
+    console.info(`[AgentLoop] Scaling executed: ${scaleResult.previousVcpu} → ${scaleResult.currentVcpu} vCPU`);
   }
 
   return result;
@@ -415,7 +415,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
   running = true;
   const timestamp = new Date().toISOString();
 
-  console.log('[Agent Loop] Starting cycle...');
+  console.info('[Agent Loop] Starting cycle...');
 
   try {
     // Phase 1: Observe — collect metrics from RPC
@@ -447,7 +447,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
     try {
       const replacement = await checkProxydBackends();
       if (replacement) {
-        console.log(`[AgentLoop] Proxyd backend replaced: ${replacement.backendName} → ${replacement.newUrl}`);
+        console.info(`[AgentLoop] Proxyd backend replaced: ${replacement.backendName} → ${replacement.newUrl}`);
       }
     } catch {
       // Non-blocking — continue cycle
@@ -471,7 +471,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       failover,
     };
     await pushCycleResult(result);
-    console.log(`[Agent Loop] Cycle complete: score=${scaling?.score}, L2=${metricsResult.l2BlockHeight}`);
+    console.info(`[Agent Loop] Cycle complete: score=${scaling?.score}, L2=${metricsResult.l2BlockHeight}`);
     return result;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';

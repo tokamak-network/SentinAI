@@ -192,13 +192,13 @@ export async function analyzeAnomalies(
   if (analysisCache &&
       analysisCache.anomalyHash === anomalyHash &&
       now - analysisCache.timestamp < ANALYSIS_CACHE_TTL_MS) {
-    console.log('[AnomalyAIAnalyzer] Returning cached analysis');
+    console.info('[AnomalyAIAnalyzer] Returning cached analysis');
     return analysisCache.result;
   }
 
   // 2. Rate limiting: return cached result or default response if interval not met
   if (now - lastAICallTime < MIN_AI_CALL_INTERVAL_MS) {
-    console.log('[AnomalyAIAnalyzer] Rate limited, returning cached or default');
+    console.info('[AnomalyAIAnalyzer] Rate limited, returning cached or default');
     if (analysisCache) {
       return analysisCache.result;
     }
@@ -227,7 +227,7 @@ Analyze these anomalies and provide your assessment.`;
 
   // 4. Call AI Gateway
   try {
-    console.log(`[AnomalyAIAnalyzer] Calling AI provider with ${anomalies.length} anomalies...`);
+    console.info(`[AnomalyAIAnalyzer] Calling AI provider with ${anomalies.length} anomalies...`);
     lastAICallTime = now;
 
     const aiResult = await chatCompletion({
@@ -248,7 +248,7 @@ Analyze these anomalies and provide your assessment.`;
       timestamp: now,
     };
 
-    console.log(`[AnomalyAIAnalyzer] Analysis complete: severity=${result.severity}, type=${result.anomalyType}`);
+    console.info(`[AnomalyAIAnalyzer] Analysis complete: severity=${result.severity}, type=${result.anomalyType}`);
     return result;
 
   } catch (error) {

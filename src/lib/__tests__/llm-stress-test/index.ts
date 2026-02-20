@@ -71,25 +71,25 @@ export class LLMStressTestOrchestrator {
       'src/lib/__tests__/llm-stress-test/output'
     );
 
-    console.log(`✅ Initialized ${this.clients.length} clients`);
-    console.log(`   Providers: ${providers.join(', ')}`);
-    console.log(`   Tiers: ${tiers.join(', ')}`);
-    console.log(`   Output directory: ${this.outputDir}`);
+    console.info(`✅ Initialized ${this.clients.length} clients`);
+    console.info(`   Providers: ${providers.join(', ')}`);
+    console.info(`   Tiers: ${tiers.join(', ')}`);
+    console.info(`   Output directory: ${this.outputDir}`);
   }
 
   /**
    * Run all scenarios and save results
    */
   async runAll(): Promise<void> {
-    console.log('\n🚀 Starting LLM Stress Tests...\n');
-    console.log(`Clients: ${this.clients.length}`);
-    console.log(`Scenarios: ${this.scenarios.length}\n`);
+    console.info('\n🚀 Starting LLM Stress Tests...\n');
+    console.info(`Clients: ${this.clients.length}`);
+    console.info(`Scenarios: ${this.scenarios.length}\n`);
 
     const allResults: any[] = [];
     const startTime = Date.now();
 
     for (const scenario of this.scenarios) {
-      console.log(`▶️  Running: ${scenario.name}`);
+      console.info(`▶️  Running: ${scenario.name}`);
       const scenarioStartTime = Date.now();
 
       try {
@@ -97,7 +97,7 @@ export class LLMStressTestOrchestrator {
         allResults.push(...results);
 
         const scenarioDuration = ((Date.now() - scenarioStartTime) / 1000).toFixed(1);
-        console.log(`✅ Completed: ${results.length} results in ${scenarioDuration}s\n`);
+        console.info(`✅ Completed: ${results.length} results in ${scenarioDuration}s\n`);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
         console.error(`❌ Failed: ${errorMsg}\n`);
@@ -105,7 +105,7 @@ export class LLMStressTestOrchestrator {
     }
 
     const totalDuration = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`\n📊 All tests completed in ${totalDuration}s\n`);
+    console.info(`\n📊 All tests completed in ${totalDuration}s\n`);
 
     // Save results
     await this.saveResults(allResults);
@@ -131,22 +131,22 @@ export class LLMStressTestOrchestrator {
     // Write Markdown report
     const reportPath = path.join(this.outputDir, `report-${timestamp}.md`);
     await fs.writeFile(reportPath, markdownReport, 'utf8');
-    console.log(`  📄 ${path.relative(process.cwd(), reportPath)}`);
+    console.info(`  📄 ${path.relative(process.cwd(), reportPath)}`);
 
     // Write JSON results
     const jsonPath = path.join(this.outputDir, `results-${timestamp}.json`);
     await fs.writeFile(jsonPath, jsonReport, 'utf8');
-    console.log(`  📄 ${path.relative(process.cwd(), jsonPath)}`);
+    console.info(`  📄 ${path.relative(process.cwd(), jsonPath)}`);
 
     // Summary
     const totalRequests = results.reduce((s: number, r: any) => s + r.totalRequests, 0);
     const totalCost = results.reduce((s: number, r: any) => s + r.totalCostUsd, 0);
     const avgAccuracy = results.reduce((s: number, r: any) => s + r.accuracy, 0) / results.length;
 
-    console.log(`\n📈 Summary:`);
-    console.log(`  Total requests: ${totalRequests.toLocaleString()}`);
-    console.log(`  Total cost: $${totalCost.toFixed(2)}`);
-    console.log(`  Average accuracy: ${avgAccuracy.toFixed(1)}%`);
+    console.info(`\n📈 Summary:`);
+    console.info(`  Total requests: ${totalRequests.toLocaleString()}`);
+    console.info(`  Total cost: $${totalCost.toFixed(2)}`);
+    console.info(`  Average accuracy: ${avgAccuracy.toFixed(1)}%`);
   }
 }
 

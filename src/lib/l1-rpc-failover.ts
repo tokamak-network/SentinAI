@@ -90,7 +90,7 @@ export async function resolveProxydConfigMapName(): Promise<string> {
     );
     if (proxydCm) {
       proxydConfigMapNameCache = proxydCm;
-      console.log(`[L1 Failover] Auto-detected Proxyd ConfigMap: ${proxydCm}`);
+      console.info(`[L1 Failover] Auto-detected Proxyd ConfigMap: ${proxydCm}`);
       return proxydCm;
     }
   } catch {
@@ -189,7 +189,7 @@ async function restartProxydPod(namespace: string): Promise<boolean> {
     const cmd = `delete pod -l app=proxyd -n ${namespace}`;
     await runK8sCommand(cmd, { timeout: 10000 });
 
-    console.log(`[L1 Failover] Restarted Proxyd pod(s) in namespace ${namespace}`);
+    console.info(`[L1 Failover] Restarted Proxyd pod(s) in namespace ${namespace}`);
     return true;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -228,7 +228,7 @@ async function applyBackendReplacement(
     const cmd = `patch configmap ${configMapName} -n ${namespace} --type='json' -p='${patchJson}'`;
     await runK8sCommand(cmd, { timeout: 15000 });
 
-    console.log(
+    console.info(
       `[L1 Failover] Updated Proxyd backend ${backendName}: ${maskUrl(previousUrl)} → ${maskUrl(newUrl)}`
     );
 
@@ -470,7 +470,7 @@ export async function executeFailover(
       (startIndex + i) % state.endpoints.length;
     const candidate = state.endpoints[candidateIndex];
 
-    console.log(
+    console.info(
       `[L1 Failover] Checking candidate: ${maskUrl(candidate.url)}`
     );
 
@@ -490,7 +490,7 @@ export async function executeFailover(
     state.activeIndex = candidateIndex;
     state.lastFailoverTime = Date.now();
 
-    console.log(
+    console.info(
       `[L1 Failover] Switched: ${maskUrl(fromUrl)} → ${maskUrl(candidate.url)} (reason: ${reason})`
     );
 
@@ -543,7 +543,7 @@ export async function updateK8sL1Rpc(
             [comp.envVarName]: newUrl,
           });
           result.updated.push(comp.statefulSetName || comp.envVarName);
-          console.log(`[L1 Failover] Docker: Updated ${comp.envVarName}`);
+          console.info(`[L1 Failover] Docker: Updated ${comp.envVarName}`);
         }
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -554,7 +554,7 @@ export async function updateK8sL1Rpc(
   }
 
   if (!hasK8sCluster()) {
-    console.log(
+    console.info(
       '[L1 Failover] No K8s cluster configured, skipping component update'
     );
     return result;
@@ -569,7 +569,7 @@ export async function updateK8sL1Rpc(
         const cmd = `set env statefulset/${comp.statefulSetName} -n ${namespace} ${comp.envVarName}=${newUrl}`;
         await runK8sCommand(cmd, { timeout: 15000 });
         result.updated.push(comp.statefulSetName);
-        console.log(
+        console.info(
           `[L1 Failover] Updated ${comp.statefulSetName} ${comp.envVarName}`
         );
       }
@@ -883,7 +883,7 @@ async function resolveProxydBackend(
       throw new Error(`Backend ${firstBackendName} has no rpc_url`);
     }
 
-    console.log(`[L1 Failover] Resolved Proxyd backend: ${firstBackendName} → ${maskUrl(rpcUrl)}`);
+    console.info(`[L1 Failover] Resolved Proxyd backend: ${firstBackendName} → ${maskUrl(rpcUrl)}`);
     return rpcUrl;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

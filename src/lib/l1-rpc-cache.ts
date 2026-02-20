@@ -73,12 +73,12 @@ export async function getCachedL1BlockNumber(fetchFn: () => Promise<bigint>): Pr
 
   // Check cache hit
   if (cache.l1BlockNumber && now - cache.l1BlockNumber.timestamp < L1_BLOCK_CACHE_TTL_MS) {
-    console.log('[L1 Cache] Hit: L1 block number');
+    console.info('[L1 Cache] Hit: L1 block number');
     return cache.l1BlockNumber.value;
   }
 
   // Cache miss: fetch and store
-  console.log('[L1 Cache] Miss: L1 block number');
+  console.info('[L1 Cache] Miss: L1 block number');
   const value = await fetchFn();
   cache.l1BlockNumber = { value, timestamp: now };
   return value;
@@ -110,13 +110,13 @@ export async function getCachedEOABalance(
 
   // Check cache hit
   if (cached && now - cached.timestamp < EOA_BALANCE_CACHE_TTL_MS) {
-    console.log(`[L1 Cache] Hit: EOA balance ${address.slice(0, 10)}...`);
+    console.info(`[L1 Cache] Hit: EOA balance ${address.slice(0, 10)}...`);
     // Convert back from ETH to wei
     return BigInt(Math.floor(cached.value * 1e18));
   }
 
   // Cache miss: fetch and store
-  console.log(`[L1 Cache] Miss: EOA balance ${address.slice(0, 10)}...`);
+  console.info(`[L1 Cache] Miss: EOA balance ${address.slice(0, 10)}...`);
   const balanceWei = await fetchFn();
   const balanceEth = parseFloat(formatEther(balanceWei));
   cache.eoaBalances.set(normalized, { value: balanceEth, timestamp: now });
@@ -134,7 +134,7 @@ export function invalidateEOABalanceCache(address: string): void {
   const wasPresent = cache.eoaBalances.delete(normalized);
 
   if (wasPresent) {
-    console.log(`[L1 Cache] Invalidated: EOA balance ${address.slice(0, 10)}...`);
+    console.info(`[L1 Cache] Invalidated: EOA balance ${address.slice(0, 10)}...`);
   }
 }
 
@@ -143,7 +143,7 @@ export function invalidateEOABalanceCache(address: string): void {
  */
 export function clearL1Cache(): void {
   globalForCache.__sentinai_l1_cache = undefined;
-  console.log('[L1 Cache] Cleared all cache');
+  console.info('[L1 Cache] Cleared all cache');
 }
 
 /**

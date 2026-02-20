@@ -113,7 +113,7 @@ export class RedisStateStore implements IStateStore {
 
     this.client.on('connect', () => {
       this.connected = true;
-      console.log('[Redis Store] Connected');
+      console.info('[Redis Store] Connected');
     });
 
     this.client.on('error', (err) => {
@@ -1170,13 +1170,13 @@ export function getStore(): IStateStore {
   const redisUrl = process.env.REDIS_URL;
 
   if (redisUrl) {
-    console.log('[State Store] Using Redis:', redisUrl.replace(/\/\/.*@/, '//<credentials>@'));
+    console.info('[State Store] Using Redis:', redisUrl.replace(/\/\/.*@/, '//<credentials>@'));
     globalForStore.__sentinai_store = new RedisStateStore({
       url: redisUrl,
       ...DEFAULT_REDIS_CONFIG,
     });
   } else {
-    console.log('[State Store] Using InMemory (set REDIS_URL for persistence)');
+    console.info('[State Store] Using InMemory (set REDIS_URL for persistence)');
     globalForStore.__sentinai_store = new InMemoryStateStore();
   }
 

@@ -118,7 +118,7 @@ async function executeActions(
       const result = await executeAction(action, DEFAULT_SCALING_CONFIG);
       Object.assign(actionResult, result);
       
-      console.log(`[Remediation] Action ${action.type}: ${result.status}`);
+      console.info(`[Remediation] Action ${action.type}: ${result.status}`);
 
       // Wait after execution if specified
       if (action.waitAfterMs && result.status === 'success') {
@@ -178,13 +178,13 @@ export async function executeRemediation(
   const config = store.getConfig();
   const startTime = new Date().toISOString();
 
-  console.log(`[Remediation] Triggered for event ${event.id}`);
+  console.info(`[Remediation] Triggered for event ${event.id}`);
 
   // 1. Match playbook
   const playbook = matchPlaybook(event, analysis);
 
   if (!playbook) {
-    console.log('[Remediation] No matching playbook found');
+    console.info('[Remediation] No matching playbook found');
     
     // Create a no-op execution record
     const execution: RemediationExecution = {
@@ -203,13 +203,13 @@ export async function executeRemediation(
     return execution;
   }
 
-  console.log(`[Remediation] Matched playbook: ${playbook.name}`);
+  console.info(`[Remediation] Matched playbook: ${playbook.name}`);
 
   // 2. Safety gate checks
   const safetyCheck = await checkSafetyGates(playbook.name, config);
 
   if (!safetyCheck.allowed) {
-    console.log(`[Remediation] Blocked: ${safetyCheck.reason}`);
+    console.info(`[Remediation] Blocked: ${safetyCheck.reason}`);
     
     const execution: RemediationExecution = {
       id: generateUUID(),
@@ -255,14 +255,14 @@ export async function executeRemediation(
 
   if (execution.status === 'success') {
     store.recordSuccess(playbook.name);
-    console.log(`[Remediation] ✅ Success: ${playbook.name}`);
+    console.info(`[Remediation] ✅ Success: ${playbook.name}`);
   } else if (execution.status === 'failed') {
     store.recordFailure(playbook.name);
-    console.log(`[Remediation] ❌ Failed: ${playbook.name}`);
+    console.info(`[Remediation] ❌ Failed: ${playbook.name}`);
 
     // Try fallback actions if available
     if (playbook.fallback && playbook.fallback.length > 0) {
-      console.log('[Remediation] Attempting fallback actions...');
+      console.info('[Remediation] Attempting fallback actions...');
       
       const fallbackResults: ActionResult[] = playbook.fallback.map(action => ({
         action,
@@ -278,10 +278,10 @@ export async function executeRemediation(
 
       if (execution.status === 'success') {
         store.recordSuccess(playbook.name);
-        console.log('[Remediation] ✅ Fallback succeeded');
+        console.info('[Remediation] ✅ Fallback succeeded');
       } else {
         execution.escalationLevel = 1;
-        console.log('[Remediation] ⚠️ Fallback also failed, escalating...');
+        console.info('[Remediation] ⚠️ Fallback also failed, escalating...');
       }
     } else {
       execution.escalationLevel = 1;
@@ -308,7 +308,7 @@ export async function executePlaybook(
   }
 
   // Manual execution: Skip safety gates (operator override)
-  console.log(`[Remediation] Manual execution: ${playbookName}`);
+  console.info(`[Remediation] Manual execution: ${playbookName}`);
 
   const execution: RemediationExecution = {
     id: generateUUID(),

@@ -436,7 +436,7 @@ export default function Dashboard() {
         setIsLoading(false);
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
-          console.log('Fetch aborted');
+          console.info('Fetch aborted');
         } else {
           console.error(err);
         }

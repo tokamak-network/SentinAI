@@ -1,0 +1,51 @@
+{
+  "ci": {
+    "collect": {
+      "url": [
+        "http://localhost:3002/",
+        "http://localhost:3002/v2"
+      ],
+      "startServerCommand": "npm run start -- -p 3002",
+      "startServerReadyPattern": "Ready",
+      "startServerReadyTimeout": 120000,
+      "numberOfRuns": 1,
+      "settings": {
+        "preset": "desktop",
+        "chromeFlags": "--no-sandbox --disable-dev-shm-usage",
+        "screenEmulation": {
+          "mobile": false,
+          "width": 1920,
+          "height": 1080,
+          "deviceScaleFactor": 1,
+          "disabled": false
+        }
+      }
+    },
+    "assert": {
+      "assertions": {
+        "categories:performance": [
+          "error",
+          {
+            "minScore": 0.7
+          }
+        ],
+        "categories:accessibility": [
+          "error",
+          {
+            "minScore": 0.8
+          }
+        ],
+        "categories:seo": [
+          "error",
+          {
+            "minScore": 0.8
+          }
+        ]
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage"
+    }
+  }
+}
+

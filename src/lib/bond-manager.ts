@@ -119,7 +119,7 @@ export class BondManager {
         // - Send transaction
         // - Wait for confirmation
         
-        console.log(`[BondManager] Would claim bond for game ${claim.gameId}: ${claim.amount} ETH`);
+        console.info(`[BondManager] Would claim bond for game ${claim.gameId}: ${claim.amount} ETH`);
         claimed.push(claim.gameId);
       } catch (error) {
         const err = error as Error;

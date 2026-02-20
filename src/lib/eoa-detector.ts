@@ -99,7 +99,7 @@ export async function getEOAAddressWithAutoDetect(
   // Priority 1: Manual EOA address
   const manualEOA = getEOAFromEnv(role);
   if (manualEOA) {
-    console.log(`[EOA Detector] Using manual ${role} EOA: ${manualEOA}`);
+    console.info(`[EOA Detector] Using manual ${role} EOA: ${manualEOA}`);
     return manualEOA;
   }
 
@@ -108,7 +108,7 @@ export async function getEOAAddressWithAutoDetect(
   if (privateKey) {
     const derivedEOA = deriveEOAFromPrivateKey(privateKey);
     if (derivedEOA) {
-      console.log(`[EOA Detector] Derived ${role} EOA from private key: ${derivedEOA}`);
+      console.info(`[EOA Detector] Derived ${role} EOA from private key: ${derivedEOA}`);
       return derivedEOA;
     } else {
       console.error(`[EOA Detector] Failed to derive ${role} EOA from private key`);

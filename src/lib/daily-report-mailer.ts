@@ -229,7 +229,7 @@ export async function deliverDailyReport(date: Date): Promise<DeliveryResult> {
     const dateStr = formatDate(date);
 
     // 1. Read the existing report file
-    console.log(`[DailyReportMailer] Fetching report for ${dateStr}...`);
+    console.info(`[DailyReportMailer] Fetching report for ${dateStr}...`);
     const reportContent = await readExistingReport(dateStr);
 
     if (!reportContent) {
@@ -257,7 +257,7 @@ export async function deliverDailyReport(date: Date): Promise<DeliveryResult> {
     }
 
     // 4. Send webhook request
-    console.log(`[DailyReportMailer] Sending report to Slack...`);
+    console.info(`[DailyReportMailer] Sending report to Slack...`);
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -277,7 +277,7 @@ export async function deliverDailyReport(date: Date): Promise<DeliveryResult> {
     }
 
     // 5. Success
-    console.log(`[DailyReportMailer] Report delivered successfully to Slack`);
+    console.info(`[DailyReportMailer] Report delivered successfully to Slack`);
     return {
       success: true,
       method: 'slack',

@@ -242,7 +242,7 @@ export async function POST(request: NextRequest) {
           breakdown: reactiveDecision.breakdown,
         };
         triggeredBy = 'auto';
-        console.log(`[Predictive Scaler] Preemptive scale-up: ${currentVcpu} -> ${prediction.predictedVcpu} vCPU`);
+        console.info(`[Predictive Scaler] Preemptive scale-up: ${currentVcpu} -> ${prediction.predictedVcpu} vCPU`);
       } else {
         // Use reactive decision
         decision = reactiveDecision;

@@ -24,7 +24,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest): Promise<NextResponse<RCAResponse>> {
   const startTime = Date.now();
-  console.log('[API /rca] POST request received');
+  console.info('[API /rca] POST request received');
 
   try {
     // Parse request body
@@ -36,11 +36,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
     }
 
     const triggeredBy = body.autoTriggered ? 'auto' : 'manual';
-    console.log(`[API /rca] Triggered by: ${triggeredBy}`);
+    console.info(`[API /rca] Triggered by: ${triggeredBy}`);
 
     // 1. Collect recent metrics from MetricsStore
     const metrics = await getRecentMetrics();
-    console.log(`[API /rca] Collected ${metrics.length} metric data points`);
+    console.info(`[API /rca] Collected ${metrics.length} metric data points`);
 
     // 2. Detect anomalies using the latest metrics
     let anomalies: ReturnType<typeof detectAnomalies> = [];
@@ -48,14 +48,14 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
       const currentMetric = metrics[metrics.length - 1];
       const historyMetrics = metrics.slice(0, -1);
       anomalies = detectAnomalies(currentMetric, historyMetrics);
-      console.log(`[API /rca] Detected ${anomalies.filter(a => a.isAnomaly).length} anomalies`);
+      console.info(`[API /rca] Detected ${anomalies.filter(a => a.isAnomaly).length} anomalies`);
     }
 
     // 3. Collect logs from all components
     let logs: Record<string, string>;
     try {
       logs = await getAllLiveLogs();
-      console.log(`[API /rca] Collected logs from ${Object.keys(logs).length} components`);
+      console.info(`[API /rca] Collected logs from ${Object.keys(logs).length} components`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.warn(`[API /rca] Failed to get live logs, using mock: ${errorMessage}`);
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
     // 5. Add to history
     addRCAHistory(result, triggeredBy);
 
-    console.log(`[API /rca] Analysis complete in ${Date.now() - startTime}ms`);
+    console.info(`[API /rca] Analysis complete in ${Date.now() - startTime}ms`);
 
     return NextResponse.json({
       success: true,
@@ -93,7 +93,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
  * GET: Get RCA history
  */
 export async function GET(request: NextRequest): Promise<NextResponse<RCAHistoryResponse>> {
-  console.log('[API /rca] GET request received');
+  console.info('[API /rca] GET request received');
 
   try {
     const { searchParams } = new URL(request.url);

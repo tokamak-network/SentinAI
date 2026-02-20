@@ -28,11 +28,11 @@ describe('Scenario: idle_to_spike', () => {
   const result = backtestScenario(IDLE_TO_SPIKE);
 
   it('should report accuracy against operator expectations', () => {
-    console.log(`  idle_to_spike accuracy: ${result.accuracy.toFixed(1)}%`);
-    console.log(`  under-scaled: ${result.underScaleCount}, over-scaled: ${result.overScaleCount}`);
+    console.info(`  idle_to_spike accuracy: ${result.accuracy.toFixed(1)}%`);
+    console.info(`  under-scaled: ${result.underScaleCount}, over-scaled: ${result.overScaleCount}`);
     for (const s of result.stepDecisions) {
       const mark = s.correct ? 'OK' : s.vcpuDelta > 0 ? 'OVER' : 'UNDER';
-      console.log(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu} (score=${s.decision.score})`);
+      console.info(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu} (score=${s.decision.score})`);
     }
     // Accuracy >= 50% is minimum viable (algorithm should agree with operator on most steps)
     expect(result.accuracy).toBeGreaterThanOrEqual(50);
@@ -63,10 +63,10 @@ describe('Scenario: gradual_rise', () => {
   const result = backtestScenario(GRADUAL_RISE);
 
   it('should report accuracy against operator expectations', () => {
-    console.log(`  gradual_rise accuracy: ${result.accuracy.toFixed(1)}%`);
+    console.info(`  gradual_rise accuracy: ${result.accuracy.toFixed(1)}%`);
     for (const s of result.stepDecisions) {
       const mark = s.correct ? 'OK' : s.vcpuDelta > 0 ? 'OVER' : 'UNDER';
-      console.log(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu} (score=${s.decision.score})`);
+      console.info(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu} (score=${s.decision.score})`);
     }
     expect(result.accuracy).toBeGreaterThanOrEqual(50);
   });
@@ -84,10 +84,10 @@ describe('Scenario: oscillating', () => {
   const result = backtestScenario(OSCILLATING);
 
   it('should report accuracy against operator expectations', () => {
-    console.log(`  oscillating accuracy: ${result.accuracy.toFixed(1)}%`);
+    console.info(`  oscillating accuracy: ${result.accuracy.toFixed(1)}%`);
     for (const s of result.stepDecisions) {
       const mark = s.correct ? 'OK' : s.vcpuDelta > 0 ? 'OVER' : 'UNDER';
-      console.log(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu} (score=${s.decision.score})`);
+      console.info(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu} (score=${s.decision.score})`);
     }
     expect(result.accuracy).toBeGreaterThanOrEqual(80);
   });
@@ -103,10 +103,10 @@ describe('Scenario: sustained_critical', () => {
   const result = backtestScenario(SUSTAINED_CRITICAL);
 
   it('should report accuracy against operator expectations', () => {
-    console.log(`  sustained_critical accuracy: ${result.accuracy.toFixed(1)}%`);
+    console.info(`  sustained_critical accuracy: ${result.accuracy.toFixed(1)}%`);
     for (const s of result.stepDecisions) {
       const mark = s.correct ? 'OK' : s.vcpuDelta > 0 ? 'OVER' : 'UNDER';
-      console.log(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu} (score=${s.decision.score})`);
+      console.info(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu} (score=${s.decision.score})`);
     }
     expect(result.accuracy).toBeGreaterThanOrEqual(50);
   });
@@ -135,14 +135,14 @@ describe('Overall accuracy summary', () => {
   });
 
   it('should report overall accuracy and recommendations', () => {
-    console.log(`\n  === OVERALL ACCURACY: ${summary.overallAccuracy.toFixed(1)}% ===`);
+    console.info(`\n  === OVERALL ACCURACY: ${summary.overallAccuracy.toFixed(1)}% ===`);
     for (const s of summary.scenarios) {
-      console.log(`  ${s.scenario}: ${s.accuracy.toFixed(1)}% (${s.correctDecisions}/${s.totalSteps}) under=${s.underScaleCount} over=${s.overScaleCount}`);
+      console.info(`  ${s.scenario}: ${s.accuracy.toFixed(1)}% (${s.correctDecisions}/${s.totalSteps}) under=${s.underScaleCount} over=${s.overScaleCount}`);
     }
     if (summary.recommendations.length > 0) {
-      console.log(`\n  Recommendations:`);
+      console.info(`\n  Recommendations:`);
       for (const r of summary.recommendations) {
-        console.log(`    - ${r}`);
+        console.info(`    - ${r}`);
       }
     }
     // Overall accuracy should be meaningful but we expect gaps with human judgment
@@ -232,13 +232,13 @@ describe('Predictive: spike_rescue', () => {
   const result = backtestPredictiveScenario(PREDICTIVE_SPIKE_RESCUE);
 
   it('should report reactive vs combined accuracy', () => {
-    console.log(`\n  === PREDICTIVE: spike_rescue ===`);
-    console.log(`  Reactive accuracy:  ${result.reactiveAccuracy.toFixed(1)}%`);
-    console.log(`  Combined accuracy:  ${result.combinedAccuracy.toFixed(1)}%`);
-    console.log(`  Overrides: ${result.overrideCount} (helpful=${result.helpfulOverrides}, harmful=${result.harmfulOverrides})`);
+    console.info(`\n  === PREDICTIVE: spike_rescue ===`);
+    console.info(`  Reactive accuracy:  ${result.reactiveAccuracy.toFixed(1)}%`);
+    console.info(`  Combined accuracy:  ${result.combinedAccuracy.toFixed(1)}%`);
+    console.info(`  Overrides: ${result.overrideCount} (helpful=${result.helpfulOverrides}, harmful=${result.harmfulOverrides})`);
     for (const s of result.stepDecisions) {
       const mark = s.correct ? 'OK' : s.vcpuDelta > 0 ? 'OVER' : 'UNDER';
-      console.log(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu}`);
+      console.info(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu}`);
     }
     expect(result.combinedAccuracy).toBeGreaterThanOrEqual(50);
   });
@@ -269,13 +269,13 @@ describe('Predictive: false_alarm', () => {
   const result = backtestPredictiveScenario(PREDICTIVE_FALSE_ALARM);
 
   it('should report reactive vs combined accuracy', () => {
-    console.log(`\n  === PREDICTIVE: false_alarm ===`);
-    console.log(`  Reactive accuracy:  ${result.reactiveAccuracy.toFixed(1)}%`);
-    console.log(`  Combined accuracy:  ${result.combinedAccuracy.toFixed(1)}%`);
-    console.log(`  Overrides: ${result.overrideCount} (helpful=${result.helpfulOverrides}, harmful=${result.harmfulOverrides})`);
+    console.info(`\n  === PREDICTIVE: false_alarm ===`);
+    console.info(`  Reactive accuracy:  ${result.reactiveAccuracy.toFixed(1)}%`);
+    console.info(`  Combined accuracy:  ${result.combinedAccuracy.toFixed(1)}%`);
+    console.info(`  Overrides: ${result.overrideCount} (helpful=${result.helpfulOverrides}, harmful=${result.harmfulOverrides})`);
     for (const s of result.stepDecisions) {
       const mark = s.correct ? 'OK' : s.vcpuDelta > 0 ? 'OVER' : 'UNDER';
-      console.log(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu}`);
+      console.info(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu}`);
     }
     expect(result.combinedAccuracy).toBeGreaterThanOrEqual(50);
   });
@@ -308,11 +308,11 @@ describe('Predictive override summary', () => {
     const totalHelpful = results.reduce((sum, r) => sum + r.helpfulOverrides, 0);
     const totalHarmful = results.reduce((sum, r) => sum + r.harmfulOverrides, 0);
 
-    console.log(`\n  === PREDICTIVE OVERRIDE SUMMARY ===`);
-    console.log(`  Total accuracy: ${((totalCorrect / totalSteps) * 100).toFixed(1)}%`);
-    console.log(`  Total overrides: ${totalOverrides} (helpful=${totalHelpful}, harmful=${totalHarmful})`);
+    console.info(`\n  === PREDICTIVE OVERRIDE SUMMARY ===`);
+    console.info(`  Total accuracy: ${((totalCorrect / totalSteps) * 100).toFixed(1)}%`);
+    console.info(`  Total overrides: ${totalOverrides} (helpful=${totalHelpful}, harmful=${totalHarmful})`);
     for (const r of results) {
-      console.log(`  ${r.scenario}: reactive=${r.reactiveAccuracy.toFixed(1)}% → combined=${r.combinedAccuracy.toFixed(1)}% (overrides=${r.overrideCount})`);
+      console.info(`  ${r.scenario}: reactive=${r.reactiveAccuracy.toFixed(1)}% → combined=${r.combinedAccuracy.toFixed(1)}% (overrides=${r.overrideCount})`);
     }
 
     // Predictive should not make things worse overall

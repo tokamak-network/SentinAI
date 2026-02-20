@@ -53,7 +53,7 @@ export function initVcpuProfile(scenario: Scenario): void {
     currentIndex: 0,
     startTime: Date.now(),
   };
-  console.log(`[Seed vCPU Manager] Initialized for scenario: ${scenario}, values:`, profile.vcpuValues);
+  console.info(`[Seed vCPU Manager] Initialized for scenario: ${scenario}, values:`, profile.vcpuValues);
 }
 
 /**
@@ -86,7 +86,7 @@ export function getCurrentVcpu(): number {
   if (calculatedIndex !== profile.currentIndex) {
     const prevIndex = profile.currentIndex;
     profile.currentIndex = newIndex;
-    console.log(`[Seed vCPU] ${profile.scenario} scenario: elapsed ${(elapsedMs / 1000).toFixed(1)}s, index ${prevIndex} → ${newIndex}, vCPU = ${interpolated.toFixed(2)}`);
+    console.info(`[Seed vCPU] ${profile.scenario} scenario: elapsed ${(elapsedMs / 1000).toFixed(1)}s, index ${prevIndex} → ${newIndex}, vCPU = ${interpolated.toFixed(2)}`);
   }
 
   return interpolated;
