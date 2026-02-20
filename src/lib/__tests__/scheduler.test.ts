@@ -399,7 +399,7 @@ describe('scheduler', () => {
 
   describe('Daily Report Schedule Override', () => {
     it('should use DAILY_REPORT_SCHEDULE env var when set', async () => {
-      const consoleSpy = vi.spyOn(console, 'log');
+      const consoleSpy = vi.spyOn(console, 'info');
       process.env.DAILY_REPORT_SCHEDULE = '0 9 * * *';
 
       await scheduler.initializeScheduler();
@@ -413,7 +413,7 @@ describe('scheduler', () => {
     });
 
     it('should use default schedule when env var is not set', async () => {
-      const consoleSpy = vi.spyOn(console, 'log');
+      const consoleSpy = vi.spyOn(console, 'info');
       delete process.env.DAILY_REPORT_SCHEDULE;
 
       await scheduler.initializeScheduler();

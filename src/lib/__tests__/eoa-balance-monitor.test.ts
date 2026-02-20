@@ -28,6 +28,7 @@ vi.mock('viem', () => ({
   parseEther: vi.fn((val: string) => BigInt(Math.floor(parseFloat(val) * 1e18))),
   formatEther: vi.fn((val: bigint) => (Number(val) / 1e18).toString()),
   parseGwei: vi.fn((val: string) => BigInt(Math.floor(parseFloat(val) * 1e9))),
+  defineChain: vi.fn((config) => config),
 }));
 
 vi.mock('viem/accounts', () => ({

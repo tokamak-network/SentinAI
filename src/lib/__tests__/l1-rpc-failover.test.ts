@@ -15,6 +15,7 @@ vi.mock('viem', () => ({
     getBlockNumber: mockGetBlockNumber,
   })),
   http: vi.fn(),
+  defineChain: vi.fn((config) => config),
 }));
 
 vi.mock('viem/chains', () => ({

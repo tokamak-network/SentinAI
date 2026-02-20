@@ -10,8 +10,10 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
     "prod:gate:tier1": "bash scripts/prod-gate-tier1.sh",
     "prod:gate:tier2": "bash scripts/prod-gate-tier2.sh",
+    "prod:gate:tier3": "bash scripts/prod-gate-tier3.sh",
     "verify": "bash scripts/verify-e2e.sh",
     "benchmark": "npx tsx scripts/benchmark-models.ts",
     "smoke:metrics:optimism": "bash scripts/smoke-optimism-metrics.sh"
@@ -32,6 +34,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@playwright/test": "^1.58.2",
     "@types/iarna__toml": "^2.0.5",
     "@types/node": "^20",
     "@types/node-cron": "^3.0.11",

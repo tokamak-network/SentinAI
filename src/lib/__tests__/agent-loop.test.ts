@@ -17,6 +17,7 @@ vi.mock('viem', () => ({
     getBlockNumber: vi.fn().mockResolvedValue(BigInt(500)),
   })),
   http: vi.fn(),
+  defineChain: vi.fn((config) => config),
 }));
 
 vi.mock('viem/chains', () => ({
