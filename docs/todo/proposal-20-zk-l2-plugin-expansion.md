@@ -24,6 +24,18 @@ SentinAI의 체인 플러그인 시스템을 확장해 다음 범주의 네트�
 - "미지원 항목 N/A" 남발 대신, 섹션 자체를 렌더링하지 않는다.
 - 통합은 백엔드 플러그인 아키텍처 레벨에서만 수행하고, UI는 체인 전용 콘솔로 제공한다.
 
+### 1.2 ZKsync 공식 문서 분석 반영 (2026-02-20)
+
+ZKsync 문서 기준으로 Proposal 20에 다음 사실을 반영한다.
+
+- ZK Stack 주요 구성요소: `ZKsync OS`, `ZKsync OS Server(Sequencer)`, `Airbender Prover`, `Explorer`, `Portal`, `Fee Withdrawer`
+- ZKsync OS 아키텍처: execution/proving 분리 + 단일 Rust 코드베이스를 `x86(실행)` / `RISC-V(증명)`로 컴파일
+- OS Server 핵심 서브시스템: `Sequencer`, `RPC API`, `Batcher(배치/증명/L1 제출 경로)`
+- Gateway: ZKsync 체인(rollup/validium)에서 선택적으로 사용하는 settlement/aggregation 레이어
+- 문서상 현시점 주의사항: `zkstack` CLI quickstart는 "ZKsync OS 미반영(legacy EraVM chain)" 경로가 존재
+
+따라서 구현 시 `zkstack` 플러그인은 단일 모드가 아니라, **`legacy-era` / `os-preview` 운영 모드 분리**를 기본 정책으로 둔다.
+
 ---
 
 ## 2. 범위
@@ -71,7 +83,7 @@ src/chains/
   registry.ts
   thanos/
   optimism/
-  zkstack/          # 신규: ZK Stack 전용
+  zkstack/          # 신규: ZK Stack 전용 (legacy-era / os-preview 모드)
   zkl2-generic/     # 신규: ZK L2 공통 템플릿
 ```
 
@@ -84,6 +96,12 @@ src/chains/
 - `proof`: proof generation lag, proof queue depth (가능한 체인만)
 
 지원 불가 항목은 `null` 허용 + UI에서 `N/A` 렌더링.
+
+`zkstack` 플러그인 추가 규칙:
+
+- `execution`은 기본 필수
+- `settlement`는 배처/L1 제출 경로가 확인될 때 활성
+- `proof`는 prover 연동이 확인될 때만 활성
 
 ### 4.3 UI 렌더링 규칙 (필수)
 
@@ -100,6 +118,7 @@ src/chains/
 
 1. `ChainPlugin`에 capability 선언 추가
 2. ZK 전용 optional probe 계약 추가
+3. `chainMode` 필드 추가 (`legacy-era` | `os-preview` | `generic`)
 3. 기존 Thanos/Optimism 플러그인 회귀 수정
 
 산출물:
@@ -111,8 +130,11 @@ src/chains/
 
 1. `src/chains/zkstack/index.ts` 생성
 2. env 매핑 규칙 정의 (`CHAIN_TYPE=zkstack`)
-3. metrics adapter 연결 (`/api/metrics` 경로 유지)
-4. health 계산에서 ZK capability 반영
+3. 모드 분기 추가:
+   - `ZKSTACK_MODE=legacy-era` (기본)
+   - `ZKSTACK_MODE=os-preview`
+4. metrics adapter 연결 (`/api/metrics` 경로 유지)
+5. health 계산에서 ZK capability 반영
 
 산출물:
 
@@ -151,6 +173,16 @@ src/chains/
 - `Dashboard UI Basic Design` 섹션 확정
 - 구현 대상 컴포넌트 목록/우선순위
 
+### Phase 6: 운영 경로 검증 (0.5일)
+
+1. `legacy-era` 모드 로컬 실행 점검 (`zkstack` CLI quickstart 경로)
+2. `os-preview` 모드 메트릭 매핑 점검 (지원 필드만 노출)
+3. Gateway 사용 여부(`on`/`off`)에 따른 settlement 카드 노출 검증
+
+산출물:
+
+- 모드별 호환성 매트릭스 문서
+
 ---
 
 ## 6. 환경변수 설계
@@ -163,15 +195,18 @@ src/chains/
 
 ZK 선택:
 
+- `ZKSTACK_MODE=legacy-era|os-preview` (default: `legacy-era`)
 - `ZK_PROOF_RPC_URL=...` (optional)
 - `ZK_BATCHER_STATUS_URL=...` (optional)
 - `ZK_FINALITY_MODE=confirmed|finalized|verified`
+- `ZK_SETTLEMENT_LAYER=l1|gateway` (default: `l1`)
 
 원칙:
 
 - 필수 최소 2개(`CHAIN_TYPE`, `L2_RPC_URL`)로 기동
 - 나머지는 비어도 서버/대시보드가 실패하지 않아야 함
 - `CHAIN_TYPE`은 워크스페이스 단위로 고정(런타임 사용자 토글 금지)
+- `ZKSTACK_MODE`가 `os-preview`여도 미지원 probe는 자동 비활성
 
 ---
 
@@ -211,6 +246,7 @@ ZK 전용 컴포넌트:
 - `ProofGenerationLagCard`
 - `ProofQueueDepthCard`
 - `VerificationFinalityCard`
+- `BatcherToSettlementCard` (L1/Gateway 제출 상태)
 
 ### 7.3 사용자 흐름
 
@@ -226,6 +262,7 @@ ZK 전용 컴포넌트:
 - probe 실패 시 해당 카드만 degradation 처리(전체 페이지 장애 전파 금지)
 - 액션 실행 전 preflight 체크(권한, cooldown, state consistency) 필수
 - 모바일(360px)에서는 핵심 상태/인시던트/액션 3개 영역 우선 노출
+- 모드 불일치(`legacy-era` vs `os-preview`) 감지 시 경고 배너 + 자동 readonly
 
 ---
 
@@ -241,6 +278,8 @@ ZK 전용 컴포넌트:
 
 - `CHAIN_TYPE=zkstack`로 `/api/metrics` smoke
 - `CHAIN_TYPE=zkl2-generic`로 `/api/health` smoke
+- `CHAIN_TYPE=zkstack,ZKSTACK_MODE=legacy-era` smoke
+- `CHAIN_TYPE=zkstack,ZKSTACK_MODE=os-preview` smoke
 - OP 모드에서 ZK 전용 필드 미노출 검증
 - ZK 모드에서 OP 전용 필드 미노출 검증
 
@@ -261,6 +300,8 @@ ZK 전용 컴포넌트:
 
 - 리스크: 체인별 RPC 스펙 편차
   - 대응: capability + optional probe로 strict 의존 제거
+- 리스크: ZKsync 문서/릴리스 변화로 모드별 필드가 빠르게 변동
+  - 대응: 플러그인 버전 태그 + weekly compatibility 테스트
 - 리스크: UI가 OP 메트릭을 강가정
   - 대응: 표시 조건 분기 + N/A 전략 통일
 - 리스크: 운영자가 env를 과설정/누락
@@ -271,9 +312,11 @@ ZK 전용 컴포넌트:
 ## 10. 작업 체크리스트
 
 - [ ] `ChainPlugin` capability 확장
+- [ ] `chainMode` (`legacy-era`/`os-preview`/`generic`) 계약 추가
 - [ ] `zkstack` 플러그인 구현
 - [ ] `zkl2-generic` 플러그인 구현
 - [ ] API 경로 호환성 검증 (`metrics/health/scaler`)
+- [ ] `ZK_SETTLEMENT_LAYER` (`l1`/`gateway`) 분기 반영
 - [ ] Strict Chain Isolation UI 적용 (타 체인 정보 미노출)
 - [ ] `.env.local.sample` + `docs/guide/ENV_GUIDE.md` 갱신
 - [ ] 플러그인 단위/통합 테스트 추가
@@ -285,6 +328,7 @@ ZK 전용 컴포넌트:
 
 - `CHAIN_TYPE=zkstack`로 로컬 구동 + 주요 API 정상 응답
 - `CHAIN_TYPE=zkl2-generic`로 로컬 구동 + 주요 API 정상 응답
+- `zkstack`의 `legacy-era` / `os-preview` 모드 각각 스모크 통과
 - 기존 `thanos`, `optimism` 회귀 없음
 - OP 모드에서 ZK 정보가 UI/API에 노출되지 않음
 - ZK 모드에서 OP 정보가 UI/API에 노출되지 않음
