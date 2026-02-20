@@ -27,6 +27,14 @@
 - [x] `install.sh`에 체인 플러그인 선택 및 Optimism 메타데이터 설정 반영
 - [x] 스모크/스크립트 문법 검증
 
+### In Progress (2026-02-20 Proposal 20 ZK Plugin + Dashboard)
+- [x] `ChainPlugin` 계약 확장 (`chainMode`, `capabilities`)
+- [x] `src/chains/zkstack` 플러그인 추가 (`legacy-era` / `os-preview`)
+- [x] `CHAIN_TYPE=zkstack` 레지스트리 매핑 및 테스트 보강
+- [x] `/api/metrics` 체인 메타 응답(`chain`) 및 capability 기반 필드 분기
+- [x] 대시보드 체인 격리 렌더링 (동적 EOA roles, OP Fault Proof 숨김, ZK Proof/Settlement 카드 추가)
+- [x] lint/type/test 재검증 및 잔여 타입 오류 정리
+
 ### In Progress (2026-02-16 Refresh Audit)
 - [x] **Codebase Refresh Audit P0-P2 진행 완료** (`docs/todo/codebase-audit-2026-02-16-refresh.md`)
   - P0: Seed `blockInterval` 덮어쓰기 수정 + 8 vCPU 메모리 타입 정합(16GiB) ✅
