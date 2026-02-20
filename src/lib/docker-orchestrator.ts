@@ -57,7 +57,8 @@ export async function getAllDockerContainerMetrics(): Promise<Map<string, Contai
 
   const entries = await Promise.allSettled(
     plugin.k8sComponents.map(async (comp) => {
-      const metrics = await getDockerContainerMetrics(comp.component);
+      const service = comp.dockerServiceName || comp.component;
+      const metrics = await getDockerContainerMetrics(service);
       return { component: comp.component, metrics };
     })
   );

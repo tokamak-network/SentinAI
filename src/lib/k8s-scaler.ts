@@ -17,6 +17,7 @@ import { runK8sCommand } from '@/lib/k8s-config';
 import { zeroDowntimeScale } from '@/lib/zero-downtime-scaler';
 import { getStore } from '@/lib/redis-store';
 import { isDockerMode } from '@/lib/docker-config';
+import { getChainPlugin } from '@/chains';
 import {
   getDockerContainerMetrics,
   getAllDockerContainerMetrics,
@@ -29,6 +30,14 @@ export interface ContainerResourceUsage {
   memoryMiB: number;
 }
 
+function getPrimaryDockerServiceName(): string {
+  const plugin = getChainPlugin();
+  const primary = plugin.k8sComponents.find(
+    (component) => component.component === plugin.primaryExecutionClient
+  );
+  return primary?.dockerServiceName || primary?.component || 'op-geth';
+}
+
 /**
  * Get real container CPU/memory usage via kubectl top
  * Requires metrics-server installed in the cluster.
@@ -39,7 +48,7 @@ export async function getContainerCpuUsage(
 ): Promise<ContainerResourceUsage | null> {
   const simConfig = await getStore().getSimulationConfig();
   if (simConfig.enabled) return null;
-  if (isDockerMode()) return getDockerContainerMetrics('op-geth');
+  if (isDockerMode()) return getDockerContainerMetrics(getPrimaryDockerServiceName());
 
   try {
     const { namespace, statefulSetName } = config;
@@ -261,7 +270,7 @@ export async function getCurrentVcpu(
 
   // Docker mode: Read from container inspect
   if (isDockerMode()) {
-    return getDockerCurrentCpuCores('op-geth');
+    return getDockerCurrentCpuCores(getPrimaryDockerServiceName());
   }
 
   try {
@@ -451,7 +460,7 @@ export async function scaleOpGeth(
   try {
     // Docker mode: Use docker update instead of kubectl patch
     if (isDockerMode()) {
-      await scaleDockerContainer('op-geth', targetVcpu, targetMemoryGiB);
+      await scaleDockerContainer(getPrimaryDockerServiceName(), targetVcpu, targetMemoryGiB);
 
       const previousVcpu = state.currentVcpu;
       const previousMemoryGiB = state.currentMemoryGiB;
