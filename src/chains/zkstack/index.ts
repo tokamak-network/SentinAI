@@ -40,6 +40,20 @@ function hasSettlementProbe(): boolean {
   return Boolean(process.env.ZK_BATCHER_STATUS_URL);
 }
 
+function getComponentProfile(): 'core-only' | 'full' {
+  const profile = process.env.ZKSTACK_COMPONENT_PROFILE?.trim().toLowerCase();
+  if (profile === 'full') return 'full';
+  if (profile === 'core-only') return 'core-only';
+  return process.env.ORCHESTRATOR_TYPE === 'docker' ? 'core-only' : 'full';
+}
+
+function getK8sComponents(): K8sComponentConfig[] {
+  if (getComponentProfile() === 'core-only') {
+    return K8S_COMPONENTS.filter((component) => component.component === 'zksync-server');
+  }
+  return K8S_COMPONENTS;
+}
+
 export class ZkstackPlugin implements ChainPlugin {
   readonly chainType = 'zkstack';
   readonly displayName = getDisplayName();
@@ -58,7 +72,7 @@ export class ZkstackPlugin implements ChainPlugin {
   readonly dependencyGraph: Record<ChainComponent, ComponentDependency> = DEPENDENCY_GRAPH;
   readonly componentAliases: Record<string, ChainComponent> = COMPONENT_ALIASES;
 
-  readonly k8sComponents: K8sComponentConfig[] = K8S_COMPONENTS;
+  readonly k8sComponents: K8sComponentConfig[] = getK8sComponents();
   readonly primaryExecutionClient: ChainComponent = 'zksync-server';
 
   readonly eoaRoles: ChainEOARole[] = EOA_CONFIGS.map(c => c.role);
