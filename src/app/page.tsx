@@ -13,6 +13,18 @@ import type { CostReport } from '@/types/cost';
 // --- Interfaces ---
 interface MetricData {
   timestamp: string;
+  chain?: {
+    type: string;
+    displayName: string;
+    mode: string;
+    capabilities: {
+      l1Failover: boolean;
+      eoaBalanceMonitoring: boolean;
+      disputeGameMonitoring: boolean;
+      proofMonitoring: boolean;
+      settlementMonitoring: boolean;
+    };
+  };
   metrics: {
     l1BlockHeight: number;
     blockHeight: number;
@@ -41,9 +53,7 @@ interface MetricData {
     healthy: boolean;
   }>;
   eoaBalances?: {
-    batcher: { address: string; balanceEth: number; level: string } | null;
-    proposer: { address: string; balanceEth: number; level: string } | null;
-    challenger: { address: string; balanceEth: number; level: string } | null;
+    roles: Record<string, { address: string; balanceEth: number; level: 'normal' | 'warning' | 'critical' } | null>;
     signerAvailable: boolean;
   };
   disputeGames?: {
@@ -56,6 +66,19 @@ interface MetricData {
     factoryConfigured: boolean;
     lastCheckedAt: string;
     error?: string;
+  };
+  proof?: {
+    enabled: boolean;
+    queueDepth: number;
+    generationLagSec: number;
+    verificationLagSec: number;
+  };
+  settlement?: {
+    enabled: boolean;
+    layer: string;
+    finalityMode: string;
+    postingLagSec: number;
+    healthy: boolean;
   };
 }
 
@@ -212,6 +235,7 @@ const COMPONENT_ROLES: Record<string, string> = {
   'Batcher': 'L2 tx batch submission to L1',
   'Proposer': 'L2 state root proposal to L1',
   'Challenger': 'Fault proof dispute participation',
+  'Prover': 'Proof generation and verification pipeline',
 };
 
 /** Parse "Fargate (1.0 vCPU / 1792Mi)" into structured resource data */
@@ -496,6 +520,13 @@ export default function Dashboard() {
     </div>
   );
 
+  const networkName = current?.chain?.displayName || process.env.NEXT_PUBLIC_NETWORK_NAME;
+  const eoaRoleEntries = Object.entries(current?.eoaBalances?.roles || {}).filter(([, value]) => value !== null);
+  const showL1Failover = Boolean(l1Failover && current?.chain?.capabilities?.l1Failover !== false);
+  const showFaultProof = Boolean(current?.chain?.capabilities?.disputeGameMonitoring && current?.disputeGames?.enabled);
+  const showProof = Boolean(current?.chain?.capabilities?.proofMonitoring && current?.proof?.enabled);
+  const showSettlement = Boolean(current?.chain?.capabilities?.settlementMonitoring && current?.settlement?.enabled);
+
   // --- Render ---
   return (
     <div className="min-h-screen bg-[#F8F9FA] text-gray-800 font-sans p-6 md:p-10 pb-16 max-w-[1600px] mx-auto">
@@ -513,14 +544,14 @@ export default function Dashboard() {
             Autonomous Node Guardian
           </p>
         </div>
-        {process.env.NEXT_PUBLIC_NETWORK_NAME && (
+        {networkName && (
           <div className="ml-auto flex items-center gap-3 bg-white rounded-2xl pl-3 pr-5 py-2.5 shadow-sm border border-gray-200/60">
             <div className="bg-slate-100 p-2 rounded-xl">
               <Globe size={18} className="text-slate-500" />
             </div>
             <div>
               <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Network</p>
-              <p className="text-sm font-bold text-slate-800 whitespace-nowrap">{process.env.NEXT_PUBLIC_NETWORK_NAME}</p>
+              <p className="text-sm font-bold text-slate-800 whitespace-nowrap">{networkName}</p>
             </div>
           </div>
         )}
@@ -562,66 +593,32 @@ export default function Dashboard() {
             <p className="text-[10px] text-gray-400 font-semibold uppercase">TxPool Pending</p>
             <p className="text-lg font-bold text-gray-900 font-mono">{current?.metrics.txPoolCount || 0}</p>
           </div>
-          {current?.eoaBalances?.batcher && (
-            <>
-              <div className="h-8 w-px bg-gray-200"></div>
-              <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${
-                  current.eoaBalances.batcher.level === 'normal' ? 'bg-green-500' :
-                  current.eoaBalances.batcher.level === 'warning' ? 'bg-amber-500' :
-                  'bg-red-500 animate-pulse'
-                }`}></div>
-                <div>
-                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Batcher</p>
-                  <p className={`text-lg font-bold font-mono ${
-                    current.eoaBalances.batcher.level === 'normal' ? 'text-gray-900' :
-                    current.eoaBalances.batcher.level === 'warning' ? 'text-amber-600' :
-                    'text-red-600'
-                  }`}>{current.eoaBalances.batcher.balanceEth.toFixed(4)} ETH</p>
+          {eoaRoleEntries.map(([role, value]) => {
+            if (!value) return null;
+            const statusColor = value.level === 'normal'
+              ? 'bg-green-500'
+              : value.level === 'warning'
+                ? 'bg-amber-500'
+                : 'bg-red-500 animate-pulse';
+            const textColor = value.level === 'normal'
+              ? 'text-gray-900'
+              : value.level === 'warning'
+                ? 'text-amber-600'
+                : 'text-red-600';
+
+            return (
+              <div key={role} className="contents">
+                <div className="h-8 w-px bg-gray-200"></div>
+                <div className="flex items-center gap-3">
+                  <div className={`w-2 h-2 rounded-full ${statusColor}`}></div>
+                  <div>
+                    <p className="text-[10px] text-gray-400 font-semibold uppercase">{role}</p>
+                    <p className={`text-lg font-bold font-mono ${textColor}`}>{value.balanceEth.toFixed(4)} ETH</p>
+                  </div>
                 </div>
               </div>
-            </>
-          )}
-          {current?.eoaBalances?.proposer && (
-            <>
-              <div className="h-8 w-px bg-gray-200"></div>
-              <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${
-                  current.eoaBalances.proposer.level === 'normal' ? 'bg-green-500' :
-                  current.eoaBalances.proposer.level === 'warning' ? 'bg-amber-500' :
-                  'bg-red-500 animate-pulse'
-                }`}></div>
-                <div>
-                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Proposer</p>
-                  <p className={`text-lg font-bold font-mono ${
-                    current.eoaBalances.proposer.level === 'normal' ? 'text-gray-900' :
-                    current.eoaBalances.proposer.level === 'warning' ? 'text-amber-600' :
-                    'text-red-600'
-                  }`}>{current.eoaBalances.proposer.balanceEth.toFixed(4)} ETH</p>
-                </div>
-              </div>
-            </>
-          )}
-          {current?.eoaBalances?.challenger && (
-            <>
-              <div className="h-8 w-px bg-gray-200"></div>
-              <div className="flex items-center gap-3">
-                <div className={`w-2 h-2 rounded-full ${
-                  current.eoaBalances.challenger.level === 'normal' ? 'bg-green-500' :
-                  current.eoaBalances.challenger.level === 'warning' ? 'bg-amber-500' :
-                  'bg-red-500 animate-pulse'
-                }`}></div>
-                <div>
-                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Challenger</p>
-                  <p className={`text-lg font-bold font-mono ${
-                    current.eoaBalances.challenger.level === 'normal' ? 'text-gray-900' :
-                    current.eoaBalances.challenger.level === 'warning' ? 'text-amber-600' :
-                    'text-red-600'
-                  }`}>{current.eoaBalances.challenger.balanceEth.toFixed(4)} ETH</p>
-                </div>
-              </div>
-            </>
-          )}
+            );
+          })}
           <div className="h-8 w-px bg-gray-200"></div>
           <div>
             <p className="text-[10px] text-gray-400 font-semibold uppercase">Sync Status</p>
@@ -634,7 +631,7 @@ export default function Dashboard() {
       </div>
 
       {/* L1 RPC Failover Status */}
-      {l1Failover && (
+      {showL1Failover && l1Failover && (
         <div className="bg-white rounded-2xl px-6 py-4 mb-8 shadow-sm border border-gray-200/60">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
@@ -666,7 +663,7 @@ export default function Dashboard() {
       )}
 
       {/* Fault Proof Status */}
-      {current?.disputeGames?.enabled && (
+      {showFaultProof && current?.disputeGames && (
         <div className="bg-white rounded-2xl px-6 py-4 mb-8 shadow-sm border border-gray-200/60">
           <div className="flex items-center justify-between mb-3">
             <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Fault Proof</p>
@@ -700,6 +697,54 @@ export default function Dashboard() {
               <p className={`text-sm font-bold ${current.disputeGames.factoryConfigured && current.disputeGames.challengerConfigured ? 'text-green-600' : 'text-amber-600'}`}>
                 {current.disputeGames.factoryConfigured && current.disputeGames.challengerConfigured ? 'Ready' : 'Partial'}
               </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showProof && current?.proof && (
+        <div className="bg-white rounded-2xl px-6 py-4 mb-8 shadow-sm border border-gray-200/60">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Proof Pipeline</p>
+            <p className="text-[11px] text-gray-500">Mode: {current.chain?.mode || 'unknown'}</p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Queue Depth</p>
+              <p className="text-xl font-bold text-gray-900 font-mono">{current.proof.queueDepth}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Generation Lag</p>
+              <p className="text-xl font-bold text-gray-900 font-mono">{current.proof.generationLagSec}s</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Verification Lag</p>
+              <p className="text-xl font-bold text-gray-900 font-mono">{current.proof.verificationLagSec}s</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSettlement && current?.settlement && (
+        <div className="bg-white rounded-2xl px-6 py-4 mb-8 shadow-sm border border-gray-200/60">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Settlement</p>
+            <p className="text-[11px] text-gray-500">{current.settlement.layer} · {current.settlement.finalityMode}</p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <div>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Posting Lag</p>
+              <p className="text-xl font-bold text-gray-900 font-mono">{current.settlement.postingLagSec}s</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Health</p>
+              <p className={`text-xl font-bold font-mono ${current.settlement.healthy ? 'text-green-600' : 'text-red-600'}`}>
+                {current.settlement.healthy ? 'Healthy' : 'Degraded'}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Mode</p>
+              <p className="text-xl font-bold text-gray-900 font-mono">{current.chain?.mode || 'unknown'}</p>
             </div>
           </div>
         </div>
