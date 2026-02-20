@@ -364,6 +364,7 @@ export async function GET(request: Request) {
                 gethVcpu: 8,
                 gethMemGiB: 16,
                 syncLag: 0,
+                syncLagReliable: plugin.chainType !== 'zkstack',
                 source: "SIMULATED_FAST_PATH"
             },
             components: simulatedComponents,
@@ -711,8 +712,25 @@ export async function GET(request: Request) {
         const expectedInterval = plugin.expectedBlockIntervalSeconds;
         const blockAge = Math.floor(Date.now() / 1000) - Number(block.timestamp);
         const syncLag = Math.max(0, blockAge - expectedInterval);
+        const syncLagReliable = plugin.chainType !== 'zkstack';
         const settlementLayer = process.env.ZK_SETTLEMENT_LAYER || 'l1';
         const finalityMode = process.env.ZK_FINALITY_MODE || 'confirmed';
+
+        // Local ZK Stack quickstart runs sequencer as a host process (not container).
+        // Normalize component status for operator readability when RPC is healthy.
+        if (plugin.chainType === 'zkstack') {
+            for (const component of components) {
+                if (component.component === plugin.primaryExecutionClient && component.status === 'Error') {
+                    component.status = 'Running';
+                    component.current = `Local RPC (${rpcUrl})`;
+                    component.type = 'Process';
+                    component.rawCpu = currentVcpu;
+                } else if (component.status === 'Error') {
+                    component.status = 'Not Managed';
+                    component.current = 'Local quickstart process mode';
+                }
+            }
+        }
 
         const responseSource = usingSeedMetrics ? 'SEED_SCENARIO' : 'REAL_K8S_CONFIG';
         const response = NextResponse.json({
@@ -733,6 +751,7 @@ export async function GET(request: Request) {
                 gethVcpu: currentVcpu,
                 gethMemGiB: currentVcpu * 2,
                 syncLag,
+                syncLagReliable,
                 cpuSource,
                 source: responseSource,
             },

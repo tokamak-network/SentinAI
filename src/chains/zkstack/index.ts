@@ -32,6 +32,14 @@ function getDisplayName(): string {
   return `${base} (${getMode()})`;
 }
 
+function hasProofProbe(): boolean {
+  return Boolean(process.env.ZK_PROOF_RPC_URL);
+}
+
+function hasSettlementProbe(): boolean {
+  return Boolean(process.env.ZK_BATCHER_STATUS_URL);
+}
+
 export class ZkstackPlugin implements ChainPlugin {
   readonly chainType = 'zkstack';
   readonly displayName = getDisplayName();
@@ -40,8 +48,9 @@ export class ZkstackPlugin implements ChainPlugin {
     l1Failover: true,
     eoaBalanceMonitoring: true,
     disputeGameMonitoring: false,
-    proofMonitoring: true,
-    settlementMonitoring: true,
+    // Hide proof/settlement cards unless dedicated probes are configured.
+    proofMonitoring: hasProofProbe(),
+    settlementMonitoring: hasSettlementProbe(),
   } as const;
 
   readonly components: ChainComponent[] = [...ZKSTACK_COMPONENTS];

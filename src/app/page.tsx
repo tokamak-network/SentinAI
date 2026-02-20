@@ -34,6 +34,7 @@ interface MetricData {
     gethVcpu: number;
     gethMemGiB: number;
     syncLag: number;
+    syncLagReliable?: boolean;
   };
   components?: ComponentData[];
   cost: {
@@ -619,14 +620,18 @@ export default function Dashboard() {
               </div>
             );
           })}
-          <div className="h-8 w-px bg-gray-200"></div>
-          <div>
-            <p className="text-[10px] text-gray-400 font-semibold uppercase">Sync Status</p>
-            <p className="text-lg font-bold text-green-600 flex items-center gap-1">
-              <CheckCircle2 size={14} />
-              {current?.metrics.syncLag === 0 ? 'Synced' : `Lag: ${current?.metrics.syncLag}`}
-            </p>
-          </div>
+          {current?.metrics.syncLagReliable !== false && (
+            <>
+              <div className="h-8 w-px bg-gray-200"></div>
+              <div>
+                <p className="text-[10px] text-gray-400 font-semibold uppercase">Sync Status</p>
+                <p className="text-lg font-bold text-green-600 flex items-center gap-1">
+                  <CheckCircle2 size={14} />
+                  {current?.metrics.syncLag === 0 ? 'Synced' : `Lag: ${current?.metrics.syncLag}`}
+                </p>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
