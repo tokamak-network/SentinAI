@@ -129,7 +129,7 @@ If op-node/batcher/proposer connect to L1 through Proxyd:
 |---|---|---|
 | `L1_PROXYD_ENABLED` | `false` | Enable Proxyd mode |
 | `L1_PROXYD_CONFIGMAP_NAME` | `proxyd-config` | Proxyd ConfigMap name |
-| `L1_PROXYD_DATA_KEY` | `proxyd.toml` | TOML key in ConfigMap |
+| `L1_PROXYD_DATA_KEY` | `proxyd-config.toml` | TOML key in ConfigMap |
 | `L1_PROXYD_UPSTREAM_GROUP` | `main` | Upstream group to update |
 | `L1_PROXYD_UPDATE_MODE` | `replace` | `replace` or `append` |
 | `L1_PROXYD_SPARE_URLS` | — | Spare RPC URLs for 429 auto-replacement (comma-separated) |

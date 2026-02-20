@@ -24,11 +24,12 @@ SentinAI는 Optimism L2 노드를 위한 AI 기반 모니터링 및 자동 스�
 
 ---
 
-## 1.2 Unit Test Coverage (완료: 2026-02-10)
+## 1.2 Unit Test Coverage
 
-**최종 달성:** 23% → ~51% ✅ (전체), ~70% (핵심 모듈)
+**최신 실행 기준(2026-02-20):** 32개 파일, 750개 테스트 100% 통과, lines coverage 55%
+**참고:** 아래 상세 표는 2026-02-10 확장 작업 스냅샷입니다.
 
-### 테스트 현황 (23개 파일, 541개 테스트)
+### 테스트 현황 (2026-02-10 스냅샷: 23개 파일, 541개 테스트)
 
 #### Phase 1-2: 핵심 비즈니스 로직 (10개 모듈, 211테스트)
 
@@ -96,15 +97,15 @@ SentinAI는 Optimism L2 노드를 위한 AI 기반 모니터링 및 자동 스�
 ```bash
 # .env.local
 L2_RPC_URL=https://mainnet.optimism.io
-L1_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+L1_RPC_URLS=https://ethereum-sepolia-rpc.publicnode.com,https://sepolia.drpc.org
 
 # AI Gateway (Tokamak)
 AI_GATEWAY_URL=https://api.ai.tokamak.network
 ANTHROPIC_API_KEY=sk-xxx
 
 # 선택적
-EKS_CLUSTER_NAME=op-celestia-dev
-EKS_NAMESPACE=optimism
+AWS_CLUSTER_NAME=op-celestia-dev
+K8S_NAMESPACE=optimism
 ```
 
 ### 2.2 의존성 설치
@@ -122,13 +123,13 @@ npm install
 
 ```bash
 npm run dev
-# http://localhost:3000 에서 대시보드 확인
+# http://localhost:3002 에서 대시보드 확인
 ```
 
 ### 3.2 단위 테스트
 
 ```bash
-# 전체 테스트 (541 tests, 23 파일)
+# 전체 테스트 (750 tests, 32 파일)
 npm run test:run
 
 # 전체 테스트 + 커버리지 리포트
@@ -185,8 +186,60 @@ npx playwright install
 npm run test:e2e
 
 # UI 모드로 실행
-npm run test:e2e:ui
+npx playwright test --ui
 ```
+
+### 3.4 Tier 3 게이트 테스트 (Coverage/E2E/Bundle/CWV)
+
+#### 통합 실행 (권장)
+
+```bash
+npm run prod:gate:tier3
+```
+
+실행 스크립트: `scripts/prod-gate-tier3.sh`
+
+#### 개별 실행
+
+```bash
+# 12) Coverage gate
+npm run test:coverage
+node scripts/check-coverage.mjs
+
+# 14) Bundle gate
+npm run build
+node scripts/check-bundle-size.mjs
+
+# 13) E2E gate
+npx playwright install --with-deps chromium
+npm run test:e2e
+
+# 15) CWV gate
+npx @lhci/cli@0.15.x autorun --config=.lighthouserc.cwv.json
+```
+
+#### 임계치 조정 (로컬 실험용)
+
+```bash
+# Coverage 최소치 변경 (기본 50)
+TIER3_MIN_COVERAGE_PCT=55 node scripts/check-coverage.mjs
+
+# Bundle 최대치 변경 (기본 200KB)
+TIER3_FIRST_LOAD_JS_MAX_BYTES=230400 node scripts/check-bundle-size.mjs
+```
+
+#### 실패 시 확인 순서
+
+1. `npm run build`가 먼저 성공하는지 확인
+2. Playwright 브라우저 설치 여부 확인 (`npx playwright install --with-deps chromium`)
+3. `.next/build-manifest.json` 생성 여부 확인 (Bundle gate 선행 조건)
+4. `coverage/coverage-summary.json` 생성 여부 확인 (Coverage gate 선행 조건)
+5. CWV 측정 URL이 열리는지 확인 (`http://localhost:3002/v2`)
+
+#### CI 자동 실행
+
+- 워크플로: `.github/workflows/prod-gate-tier3.yml`
+- 트리거: 매일 UTC 00:00 (KST 09:00), 수동 실행(`workflow_dispatch`)
 
 ---
 
@@ -210,27 +263,27 @@ npm run test:e2e:ui
 
 ```bash
 # 헬스 체크
-curl http://localhost:3000/api/health | jq
+curl http://localhost:3002/api/health | jq
 
 # 메트릭 조회
-curl http://localhost:3000/api/metrics | jq
+curl http://localhost:3002/api/metrics | jq
 
 # 스트레스 모드 메트릭
-curl "http://localhost:3000/api/metrics?stress=true" | jq
+curl "http://localhost:3002/api/metrics?stress=true" | jq
 
 # 이상 탐지
-curl http://localhost:3000/api/anomalies | jq
+curl http://localhost:3002/api/anomalies | jq
 
 # RCA 분석 (AI 호출)
-curl -X POST http://localhost:3000/api/rca \
+curl -X POST http://localhost:3002/api/rca \
   -H "Content-Type: application/json" \
   -d '{"autoTriggered": false}' | jq
 
 # 비용 리포트 (AI 호출)
-curl "http://localhost:3000/api/cost-report?days=7" | jq
+curl "http://localhost:3002/api/cost-report?days=7" | jq
 
 # 예측 데이터 시드
-curl -X POST "http://localhost:3000/api/metrics/seed?scenario=rising" | jq
+curl -X POST "http://localhost:3002/api/metrics/seed?scenario=rising" | jq
 ```
 
 ---
@@ -336,7 +389,7 @@ src/app/api/
 
 ```bash
 # AI Gateway 연결 테스트 (RCA)
-curl -X POST http://localhost:3000/api/rca \
+curl -X POST http://localhost:3002/api/rca \
   -H "Content-Type: application/json" \
   -d '{"autoTriggered": false}'
 
@@ -364,7 +417,7 @@ AI Gateway 연결 실패 시에도 fallback 로직이 동작하는지 확인:
 export ANTHROPIC_API_KEY=invalid
 
 # RCA 요청 → fallback 응답 확인
-curl -X POST http://localhost:3000/api/rca -H "Content-Type: application/json" -d '{}'
+curl -X POST http://localhost:3002/api/rca -H "Content-Type: application/json" -d '{}'
 # confidence: 0.3 (fallback 표시)
 ```
 
@@ -403,7 +456,7 @@ gcloud run deploy sentinai \
 | API 응답 없음 | 개발 서버 미실행 | `npm run dev` 실행 |
 | AI 분석 실패 | API 키 미설정 | `.env.local` 확인 |
 | 메트릭 0 표시 | RPC 연결 실패 | L2_RPC_URL 확인 |
-| 빌드 실패 | 타입 오류 | `npm run type-check` |
+| 빌드 실패 | 타입 오류 | `npx tsc --noEmit` |
 
 ### 9.2 로그 확인
 

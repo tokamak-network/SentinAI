@@ -69,7 +69,7 @@ await chatCompletion({
 
 Set only the API key in `.env.local`:
 ```bash
-QWEN_API_KEY=sk-fFKWrjzL-01D2b6_BCbjdg
+QWEN_API_KEY=your-qwen-api-key-here
 ```
 
 No model override needed; tier-based selection works automatically.

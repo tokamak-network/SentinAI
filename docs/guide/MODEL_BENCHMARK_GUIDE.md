@@ -20,7 +20,7 @@ SentinAI 벤치마크는 4개 AI 제공자의 모델을 지원합니다.
 
 **환경변수 예시:**
 ```bash
-QWEN_API_KEY=sk-fFKWrjzL-01D2b6_BCbjdg
+QWEN_API_KEY=your-qwen-api-key-here
 QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode
 QWEN_MODEL=qwen-turbo-latest  # 선택사항: 기본 모델 오버라이드
 ```

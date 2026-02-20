@@ -18,7 +18,7 @@
 ### 1.2 환경 설정
 ```env
 AI_GATEWAY_URL=https://api.ai.tokamak.network
-ANTHROPIC_API_KEY=sk-2B04UUO0zf6LIeafA8HrMQ (설정됨)
+ANTHROPIC_API_KEY=sk-ant-... (설정됨)
 ```
 
 ### 1.3 알려진 이슈
