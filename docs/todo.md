@@ -77,6 +77,7 @@
 - [ ] Multi-chain dashboard UI dynamic rendering (Phase 5)
 
 **Docs:** `docs/todo/universal-blockchain-platform.md`
+**ZK 확장 계획:** `docs/todo/proposal-20-zk-l2-plugin-expansion.md`
 
 **Estimate:** 5-7 days (1-2 days per plugin)
 
