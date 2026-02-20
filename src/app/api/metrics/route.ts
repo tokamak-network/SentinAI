@@ -26,6 +26,7 @@ import type { AnomalyResult } from '@/types/anomaly';
 // Whether anomaly detection is enabled (default: enabled)
 const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'false';
 const RPC_TIMEOUT_MS = 15_000;
+const STATUS_PROBE_TIMEOUT_MS = 5_000;
 
 // Block interval tracking moved to state store (Redis or InMemory)
 
@@ -54,6 +55,15 @@ interface ComponentVisualConfig {
     displayName: string;
     icon: string;
     strategy: string;
+}
+
+interface SettlementProbeStatus {
+    enabled: boolean;
+    layer: string;
+    finalityMode: string;
+    postingLagSec: number;
+    healthy: boolean;
+    componentStatus?: Record<string, string>;
 }
 
 function toTitleCase(value: string): string {
@@ -143,6 +153,36 @@ async function getDisputeGameStatus(l1RpcUrl: string) {
             lastCheckedAt: new Date().toISOString(),
             error: 'failed-to-fetch',
         };
+    }
+}
+
+async function fetchSettlementStatus(
+    fallback: Omit<SettlementProbeStatus, 'enabled'>
+): Promise<SettlementProbeStatus | null> {
+    const statusUrl = process.env.ZK_BATCHER_STATUS_URL;
+    if (!statusUrl) return null;
+
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), STATUS_PROBE_TIMEOUT_MS);
+        const response = await fetch(statusUrl, { signal: controller.signal, cache: 'no-store' });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+            return null;
+        }
+
+        const data = await response.json() as Partial<SettlementProbeStatus>;
+        return {
+            enabled: true,
+            layer: data.layer || fallback.layer,
+            finalityMode: data.finalityMode || fallback.finalityMode,
+            postingLagSec: Number.isFinite(data.postingLagSec) ? Number(data.postingLagSec) : fallback.postingLagSec,
+            healthy: typeof data.healthy === 'boolean' ? data.healthy : fallback.healthy,
+            componentStatus: data.componentStatus,
+        };
+    } catch {
+        return null;
     }
 }
 
@@ -440,10 +480,11 @@ export async function GET(request: Request) {
 
         const componentPromises = plugin.k8sComponents.map((config) => {
             const visual = getComponentVisual(config.component);
+            const runtimeServiceName = config.dockerServiceName || config.component;
             return fetchDetails(
                 config.component,
                 `app=${appPrefix}-${config.labelSuffix}`,
-                config.component,
+                runtimeServiceName,
                 visual.displayName,
                 visual.icon,
                 visual.strategy
@@ -715,6 +756,15 @@ export async function GET(request: Request) {
         const syncLagReliable = plugin.chainType !== 'zkstack';
         const settlementLayer = process.env.ZK_SETTLEMENT_LAYER || 'l1';
         const finalityMode = process.env.ZK_FINALITY_MODE || 'confirmed';
+        const settlementFallback = {
+            layer: settlementLayer,
+            finalityMode,
+            postingLagSec: Math.max(0, syncLag),
+            healthy: l1HealthStatus.healthy,
+        };
+        const settlementStatus = plugin.capabilities.settlementMonitoring
+            ? await fetchSettlementStatus(settlementFallback)
+            : null;
 
         // Local ZK Stack quickstart runs sequencer as a host process (not container).
         // Normalize component status for operator readability when RPC is healthy.
@@ -728,6 +778,11 @@ export async function GET(request: Request) {
                 } else if (component.status === 'Error') {
                     component.status = 'Not Managed';
                     component.current = 'Local quickstart process mode';
+                }
+
+                const probedStatus = settlementStatus?.componentStatus?.[component.component];
+                if (probedStatus) {
+                    component.status = probedStatus;
                 }
             }
         }
@@ -821,14 +876,14 @@ export async function GET(request: Request) {
                     },
                 }
                 : {}),
-            ...(plugin.capabilities.settlementMonitoring
+            ...(settlementStatus
                 ? {
                     settlement: {
-                        enabled: true,
-                        layer: settlementLayer,
-                        finalityMode,
-                        postingLagSec: Math.max(0, syncLag),
-                        healthy: l1HealthStatus.healthy,
+                        enabled: settlementStatus.enabled,
+                        layer: settlementStatus.layer,
+                        finalityMode: settlementStatus.finalityMode,
+                        postingLagSec: settlementStatus.postingLagSec,
+                        healthy: settlementStatus.healthy,
                     },
                 }
                 : {}),

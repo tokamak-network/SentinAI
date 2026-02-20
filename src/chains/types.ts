@@ -36,6 +36,8 @@ export interface ComponentDependency {
 export interface K8sComponentConfig {
   /** Component identifier (e.g. 'op-geth') */
   component: ChainComponent;
+  /** Optional docker-compose service override for this component */
+  dockerServiceName?: string;
   /** Label suffix for pod selector (e.g. 'geth' -> app=op-geth) */
   labelSuffix: string;
   /** StatefulSet name suffix (e.g. 'op-geth' -> prefix-op-geth-0) */

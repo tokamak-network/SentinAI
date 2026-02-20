@@ -4,6 +4,11 @@ import type {
   EOAConfig,
 } from '../types';
 
+function readServiceEnv(key: string, fallback: string): string {
+  const value = process.env[key]?.trim();
+  return value && value.length > 0 ? value : fallback;
+}
+
 export const ZKSTACK_COMPONENTS = [
   'zksync-server',
   'zk-batcher',
@@ -50,6 +55,7 @@ export const COMPONENT_ALIASES: Record<string, string> = {
 export const K8S_COMPONENTS: K8sComponentConfig[] = [
   {
     component: 'zksync-server',
+    dockerServiceName: readServiceEnv('ZKSTACK_EXECUTION_SERVICE', 'zkstack-core'),
     labelSuffix: 'server',
     statefulSetSuffix: 'zksync-server',
     l1RpcEnvVar: 'ETH_CLIENT_WEB3_URL',
@@ -57,6 +63,8 @@ export const K8S_COMPONENTS: K8sComponentConfig[] = [
   },
   {
     component: 'zk-batcher',
+    // In server-v2 topology batcher pipeline can be part of core service.
+    dockerServiceName: readServiceEnv('ZKSTACK_BATCHER_SERVICE', 'zkstack-core'),
     labelSuffix: 'batcher',
     statefulSetSuffix: 'zk-batcher',
     l1RpcEnvVar: 'ETH_CLIENT_WEB3_URL',
@@ -64,6 +72,7 @@ export const K8S_COMPONENTS: K8sComponentConfig[] = [
   },
   {
     component: 'zk-prover',
+    dockerServiceName: readServiceEnv('ZKSTACK_PROVER_SERVICE', 'zkstack-core'),
     labelSuffix: 'prover',
     statefulSetSuffix: 'zk-prover',
     isPrimaryExecution: false,

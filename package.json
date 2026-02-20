@@ -15,6 +15,7 @@
     "prod:gate:tier2": "bash scripts/prod-gate-tier2.sh",
     "prod:gate:tier3": "bash scripts/prod-gate-tier3.sh",
     "verify": "bash scripts/verify-e2e.sh",
+    "probe:zk:settlement": "node scripts/zk-settlement-probe.mjs",
     "benchmark": "npx tsx scripts/benchmark-models.ts",
     "smoke:metrics:optimism": "bash scripts/smoke-optimism-metrics.sh"
   },
