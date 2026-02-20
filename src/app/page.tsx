@@ -43,7 +43,19 @@ interface MetricData {
   eoaBalances?: {
     batcher: { address: string; balanceEth: number; level: string } | null;
     proposer: { address: string; balanceEth: number; level: string } | null;
+    challenger: { address: string; balanceEth: number; level: string } | null;
     signerAvailable: boolean;
+  };
+  disputeGames?: {
+    enabled: boolean;
+    activeGames: number;
+    gamesNearDeadline: number;
+    claimableBonds: number;
+    totalBondsLockedEth: number;
+    challengerConfigured: boolean;
+    factoryConfigured: boolean;
+    lastCheckedAt: string;
+    error?: string;
   };
 }
 
@@ -199,6 +211,7 @@ const COMPONENT_ROLES: Record<string, string> = {
   'Consensus Node': 'L1 derivation & sequencing',
   'Batcher': 'L2 tx batch submission to L1',
   'Proposer': 'L2 state root proposal to L1',
+  'Challenger': 'Fault proof dispute participation',
 };
 
 /** Parse "Fargate (1.0 vCPU / 1792Mi)" into structured resource data */
@@ -589,6 +602,26 @@ export default function Dashboard() {
               </div>
             </>
           )}
+          {current?.eoaBalances?.challenger && (
+            <>
+              <div className="h-8 w-px bg-gray-200"></div>
+              <div className="flex items-center gap-3">
+                <div className={`w-2 h-2 rounded-full ${
+                  current.eoaBalances.challenger.level === 'normal' ? 'bg-green-500' :
+                  current.eoaBalances.challenger.level === 'warning' ? 'bg-amber-500' :
+                  'bg-red-500 animate-pulse'
+                }`}></div>
+                <div>
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase">Challenger</p>
+                  <p className={`text-lg font-bold font-mono ${
+                    current.eoaBalances.challenger.level === 'normal' ? 'text-gray-900' :
+                    current.eoaBalances.challenger.level === 'warning' ? 'text-amber-600' :
+                    'text-red-600'
+                  }`}>{current.eoaBalances.challenger.balanceEth.toFixed(4)} ETH</p>
+                </div>
+              </div>
+            </>
+          )}
           <div className="h-8 w-px bg-gray-200"></div>
           <div>
             <p className="text-[10px] text-gray-400 font-semibold uppercase">Sync Status</p>
@@ -628,6 +661,46 @@ export default function Dashboard() {
                 Last failover: {new Date(l1Failover.lastFailover).toLocaleTimeString()}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Fault Proof Status */}
+      {current?.disputeGames?.enabled && (
+        <div className="bg-white rounded-2xl px-6 py-4 mb-8 shadow-sm border border-gray-200/60">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Fault Proof</p>
+            <p className="text-[11px] text-gray-500">
+              Last check: {new Date(current.disputeGames.lastCheckedAt).toLocaleTimeString()}
+            </p>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Active Games</p>
+              <p className="text-xl font-bold text-gray-900 font-mono">{current.disputeGames.activeGames}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Near Deadline</p>
+              <p className={`text-xl font-bold font-mono ${current.disputeGames.gamesNearDeadline > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                {current.disputeGames.gamesNearDeadline}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Claimable Bonds</p>
+              <p className={`text-xl font-bold font-mono ${current.disputeGames.claimableBonds > 0 ? 'text-amber-600' : 'text-gray-900'}`}>
+                {current.disputeGames.claimableBonds}
+              </p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Locked Bonds</p>
+              <p className="text-xl font-bold text-gray-900 font-mono">{current.disputeGames.totalBondsLockedEth.toFixed(4)} ETH</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Config</p>
+              <p className={`text-sm font-bold ${current.disputeGames.factoryConfigured && current.disputeGames.challengerConfigured ? 'text-green-600' : 'text-amber-600'}`}>
+                {current.disputeGames.factoryConfigured && current.disputeGames.challengerConfigured ? 'Ready' : 'Partial'}
+              </p>
+            </div>
           </div>
         </div>
       )}
