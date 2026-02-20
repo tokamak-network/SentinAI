@@ -1,6 +1,6 @@
 /**
  * EOA Balance Monitoring Types
- * Type definitions for batcher/proposer balance monitoring and auto-refill
+ * Type definitions for batcher/proposer/challenger balance monitoring and auto-refill
  */
 
 // ============================================================
@@ -93,6 +93,8 @@ export interface EOABalanceStatus {
   batcher: BalanceCheckResult | null;
   /** Proposer EOA balance check result */
   proposer: BalanceCheckResult | null;
+  /** Challenger EOA balance check result */
+  challenger: BalanceCheckResult | null;
   /** Treasury balance (if signer configured) */
   treasury: BalanceCheckResult | null;
   /** Total ETH refilled today */

@@ -441,9 +441,15 @@ async function executeRefillEOA(action: RemediationAction): Promise<string> {
  */
 async function executeVerifyBalanceRestored(action: RemediationAction): Promise<string> {
   const role = (action.params?.role as EOARole) || 'batcher';
-  const targetAddr = role === 'batcher'
-    ? process.env.BATCHER_EOA_ADDRESS
-    : process.env.PROPOSER_EOA_ADDRESS;
+  const plugin = getChainPlugin();
+  const eoaConfig = plugin.eoaConfigs.find(c => c.role === role);
+  const targetAddr = eoaConfig
+    ? process.env[eoaConfig.addressEnvVar]
+    : (role === 'batcher'
+      ? process.env.BATCHER_EOA_ADDRESS
+      : role === 'proposer'
+        ? process.env.PROPOSER_EOA_ADDRESS
+        : process.env.CHALLENGER_EOA_ADDRESS);
 
   if (!targetAddr) {
     throw new Error(`${role} EOA address not configured`);

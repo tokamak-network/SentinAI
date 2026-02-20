@@ -1,6 +1,6 @@
 /**
  * EOA Balance Monitor
- * Monitor batcher/proposer L1 ETH balance and trigger auto-refill.
+ * Monitor batcher/proposer/challenger L1 ETH balance and trigger auto-refill.
  * Uses viem for L1 RPC calls and transaction signing.
  */
 
@@ -98,7 +98,13 @@ function classifyBalance(balanceEth: number, config: EOABalanceConfig): BalanceL
 function getEOAAddress(role: EOARole): `0x${string}` | null {
   const plugin = getChainPlugin();
   const eoaConfig = plugin.eoaConfigs.find(c => c.role === role);
-  const envKey = eoaConfig?.addressEnvVar || (role === 'batcher' ? 'BATCHER_EOA_ADDRESS' : 'PROPOSER_EOA_ADDRESS');
+  const envKey = eoaConfig?.addressEnvVar || (
+    role === 'batcher'
+      ? 'BATCHER_EOA_ADDRESS'
+      : role === 'proposer'
+        ? 'PROPOSER_EOA_ADDRESS'
+        : 'CHALLENGER_EOA_ADDRESS'
+  );
   const addr = process.env[envKey];
   if (addr && addr.startsWith('0x')) {
     return addr as `0x${string}`;
@@ -170,11 +176,13 @@ export async function getAllBalanceStatus(
 
   let batcher: BalanceCheckResult | null = null;
   let proposer: BalanceCheckResult | null = null;
+  let challenger: BalanceCheckResult | null = null;
   let treasury: BalanceCheckResult | null = null;
 
   // Try environment variables first, then auto-detect if needed
   let batcherAddr = getEOAAddress('batcher');
   let proposerAddr = getEOAAddress('proposer');
+  const challengerAddr = getEOAAddress('challenger');
 
   // If not in env, attempt auto-detection from L1 transactions
   if (!batcherAddr || !proposerAddr) {
@@ -229,6 +237,21 @@ export async function getAllBalanceStatus(
       );
     }
 
+    if (challengerAddr) {
+      promises.push(
+        getCachedEOABalance(challengerAddr, () => client.getBalance({ address: challengerAddr })).then(bal => {
+          const eth = parseFloat(formatEther(bal));
+          challenger = {
+            address: challengerAddr,
+            role: 'challenger',
+            balanceEth: eth,
+            level: classifyBalance(eth, config),
+            timestamp: new Date().toISOString(),
+          };
+        })
+      );
+    }
+
     if (treasuryKey) {
       const account = privateKeyToAccount(treasuryKey);
       promises.push(
@@ -253,6 +276,7 @@ export async function getAllBalanceStatus(
   return {
     batcher,
     proposer,
+    challenger,
     treasury,
     dailyRefillTotalEth: state.dailyRefillTotalEth,
     dailyRefillRemainingEth: Math.max(0, config.maxDailyRefillEth - state.dailyRefillTotalEth),

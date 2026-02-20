@@ -1,10 +1,11 @@
 /**
  * EOA Balance API
- * GET: Return current balance status for batcher/proposer EOAs
+ * GET: Return current balance status for batcher/proposer/challenger EOAs
  * POST: Trigger manual refill for a specific EOA
  */
 
 import { NextResponse } from 'next/server';
+import { getChainPlugin } from '@/chains';
 import { getAllBalanceStatus, refillEOA, getRefillEvents } from '@/lib/eoa-balance-monitor';
 import { getActiveL1RpcUrl } from '@/lib/l1-rpc-failover';
 import type { EOARole } from '@/types/eoa-balance';
@@ -35,23 +36,29 @@ export async function GET() {
 
 /**
  * POST /api/eoa-balance
- * Trigger manual refill: { target: 'batcher' | 'proposer' }
+ * Trigger manual refill: { target: 'batcher' | 'proposer' | 'challenger' }
  */
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const target = body.target as EOARole;
 
-    if (!target || !['batcher', 'proposer'].includes(target)) {
+    if (!target || !['batcher', 'proposer', 'challenger'].includes(target)) {
       return NextResponse.json(
-        { error: 'Invalid target. Must be "batcher" or "proposer".' },
+        { error: 'Invalid target. Must be "batcher", "proposer", or "challenger".' },
         { status: 400 }
       );
     }
 
-    const targetAddr = target === 'batcher'
-      ? process.env.BATCHER_EOA_ADDRESS
-      : process.env.PROPOSER_EOA_ADDRESS;
+    const plugin = getChainPlugin();
+    const eoaConfig = plugin.eoaConfigs.find(c => c.role === target);
+    const targetAddr = eoaConfig
+      ? process.env[eoaConfig.addressEnvVar]
+      : (target === 'batcher'
+        ? process.env.BATCHER_EOA_ADDRESS
+        : target === 'proposer'
+          ? process.env.PROPOSER_EOA_ADDRESS
+          : process.env.CHALLENGER_EOA_ADDRESS);
 
     if (!targetAddr) {
       return NextResponse.json(
