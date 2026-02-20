@@ -83,6 +83,20 @@ export interface ChainAIPrompts {
 }
 
 // ============================================================
+// Runtime Mode & Capabilities
+// ============================================================
+
+export type ChainMode = 'standard' | 'legacy-era' | 'os-preview' | 'generic';
+
+export interface ChainCapabilities {
+  readonly l1Failover: boolean;
+  readonly eoaBalanceMonitoring: boolean;
+  readonly disputeGameMonitoring: boolean;
+  readonly proofMonitoring: boolean;
+  readonly settlementMonitoring: boolean;
+}
+
+// ============================================================
 // ChainPlugin Interface
 // ============================================================
 
@@ -97,6 +111,10 @@ export interface ChainPlugin {
   readonly chainType: string;
   /** Human-readable display name (e.g. 'Thanos L2 Rollup') */
   readonly displayName: string;
+  /** Runtime mode for this chain plugin */
+  readonly chainMode: ChainMode;
+  /** Feature/capability flags for strict chain isolation in API/UI */
+  readonly capabilities: ChainCapabilities;
 
   // ---- Component Topology ----
 

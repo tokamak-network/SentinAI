@@ -7,6 +7,7 @@
 import type { ChainPlugin } from './types';
 import { ThanosPlugin } from './thanos';
 import { OptimismPlugin } from './optimism';
+import { ZkstackPlugin } from './zkstack';
 
 let activePlugin: ChainPlugin | null = null;
 
@@ -22,6 +23,10 @@ function resolvePluginFromEnv(): ChainPlugin {
     case 'op-stack':
     case 'my-l2':
       return new OptimismPlugin();
+    case 'zkstack':
+    case 'zksync':
+    case 'zk-stack':
+      return new ZkstackPlugin();
     default:
       console.warn(`[ChainRegistry] Unknown CHAIN_TYPE "${chainType}", falling back to thanos`);
       return new ThanosPlugin();

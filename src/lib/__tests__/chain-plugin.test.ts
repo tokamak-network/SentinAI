@@ -6,6 +6,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ThanosPlugin } from '@/chains/thanos';
 import { OptimismPlugin } from '@/chains/optimism';
+import { ZkstackPlugin } from '@/chains/zkstack';
 import {
   getChainPlugin,
   resetChainRegistry,
@@ -306,6 +307,35 @@ describe('ThanosPlugin', () => {
   });
 });
 
+describe('ZkstackPlugin', () => {
+  let plugin: ZkstackPlugin;
+
+  beforeEach(() => {
+    delete process.env.ZKSTACK_MODE;
+    plugin = new ZkstackPlugin();
+  });
+
+  it('should expose zkstack chain metadata', () => {
+    expect(plugin.chainType).toBe('zkstack');
+    expect(plugin.chainMode).toBe('legacy-era');
+    expect(plugin.capabilities.proofMonitoring).toBe(true);
+    expect(plugin.capabilities.disputeGameMonitoring).toBe(false);
+  });
+
+  it('should switch mode to os-preview via env', () => {
+    process.env.ZKSTACK_MODE = 'os-preview';
+    const preview = new ZkstackPlugin();
+    expect(preview.chainMode).toBe('os-preview');
+  });
+
+  it('should include zk-specific components', () => {
+    expect(plugin.components).toContain('zksync-server');
+    expect(plugin.components).toContain('zk-batcher');
+    expect(plugin.components).toContain('zk-prover');
+    expect(plugin.primaryExecutionClient).toBe('zksync-server');
+  });
+});
+
 // ============================================================
 // Registry Tests
 // ============================================================
@@ -336,6 +366,14 @@ describe('ChainRegistry', () => {
     const mockPlugin: ChainPlugin = {
       chainType: 'test-chain',
       displayName: 'Test Chain',
+      chainMode: 'standard',
+      capabilities: {
+        l1Failover: false,
+        eoaBalanceMonitoring: false,
+        disputeGameMonitoring: false,
+        proofMonitoring: false,
+        settlementMonitoring: false,
+      },
       components: ['test-node'],
       metaComponents: ['l1', 'system'],
       dependencyGraph: {
@@ -397,5 +435,14 @@ describe('ChainRegistry', () => {
     const plugin = getChainPlugin();
     expect(plugin.chainType).toBe('optimism');
     expect(plugin).toBeInstanceOf(OptimismPlugin);
+  });
+
+  it('should load ZkstackPlugin when CHAIN_TYPE is zkstack', () => {
+    process.env.CHAIN_TYPE = 'zkstack';
+    resetChainRegistry();
+
+    const plugin = getChainPlugin();
+    expect(plugin.chainType).toBe('zkstack');
+    expect(plugin).toBeInstanceOf(ZkstackPlugin);
   });
 });

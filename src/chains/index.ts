@@ -10,6 +10,8 @@ export type {
   K8sComponentConfig,
   EOAConfig,
   ChainAIPrompts,
+  ChainMode,
+  ChainCapabilities,
 } from './types';
 
 export {

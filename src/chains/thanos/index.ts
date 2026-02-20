@@ -31,6 +31,14 @@ import { THANOS_PLAYBOOKS } from './playbooks';
 export class ThanosPlugin implements ChainPlugin {
   readonly chainType = 'thanos';
   readonly displayName = 'Thanos L2 Rollup';
+  readonly chainMode = 'standard' as const;
+  readonly capabilities = {
+    l1Failover: true,
+    eoaBalanceMonitoring: true,
+    disputeGameMonitoring: true,
+    proofMonitoring: false,
+    settlementMonitoring: true,
+  } as const;
 
   // Component Topology
   readonly components: ChainComponent[] = [...OP_COMPONENTS];

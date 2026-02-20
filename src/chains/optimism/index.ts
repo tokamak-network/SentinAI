@@ -40,6 +40,14 @@ function getDisplayName(): string {
 export class OptimismPlugin implements ChainPlugin {
   readonly chainType = 'optimism';
   readonly displayName = getDisplayName();
+  readonly chainMode = 'standard' as const;
+  readonly capabilities = {
+    l1Failover: true,
+    eoaBalanceMonitoring: true,
+    disputeGameMonitoring: true,
+    proofMonitoring: false,
+    settlementMonitoring: true,
+  } as const;
 
   // Component Topology (standard OP Stack)
   readonly components: ChainComponent[] = [...OP_COMPONENTS];
