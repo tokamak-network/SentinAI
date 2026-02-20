@@ -13,6 +13,35 @@
 - 선택적으로 Portal/Explorer 실행
 - 선택적으로 Gateway 정산 레이어 실험 준비
 
+## 1.1 실행 구성 구분 (중요)
+
+본 가이드의 실행 경로는 두 층으로 나뉩니다.
+
+1) **필수: 로컬 L2 실행**
+- `zkstack ecosystem init --dev`
+- `zkstack server --chain <CHAIN_NAME>`
+- 목적: 체인 자체를 로컬에서 구동
+
+2) **선택: Probe 서버 실행**
+- 예: `scripts/zk-settlement-probe.mjs`
+- 목적: SentinAI 대시보드에서 settlement/prover/batcher 상태를 더 정확히 표기
+- 참고: Probe는 L2 실행의 필수 조건이 아니며, 관측(visualization) 정확도 향상용입니다.
+
+3) **선택: server-v2 컨테이너 모드**
+- 목적: SentinAI의 자동 액션/상태 수집을 컨테이너 기준으로 통일
+- 전제: 핵심 런타임(`zkstack-core`, `zkstack-apis`)만 docker-compose로 운영
+- 참고: quickstart 기본(`zkstack server`)은 프로세스 모드이므로 컨테이너 인식 범위가 제한됩니다.
+
+### 표준 템플릿 사용 원칙
+
+- `external/zkstack-local/...` 파일을 SentinAI 런타임이 직접 참조하지 않습니다.
+- 연동은 `examples/zkstack/` 템플릿을 기준으로 수행합니다.
+- 추천 시작점:
+  - `examples/zkstack/.env.example`
+  - `examples/zkstack/docker-compose.core-only.yml`
+  - `examples/zkstack/secrets.container.yaml.example`
+  - `examples/zkstack/settlement-probe-response.example.json`
+
 ---
 
 ## 2. 중요 주의사항
@@ -182,6 +211,68 @@ EXPECTED_L1_CHAIN_ID=0x9 \
 - `PASS`: 검증 통과
 - `WARN`: 환경 의존 이슈 가능성 있음 (예: L1 미사용)
 - `FAIL`: 즉시 조치 필요 (예: chainId 불일치, RPC 응답 실패)
+
+### 5.6 Probe 서버 (선택, 대시보드 고급 상태용)
+
+로컬 L2만 실행해도 체인은 정상 동작합니다.  
+다만 SentinAI 대시보드에서 settlement 카드와 `batcher/prover` 상태를 정확히 표시하려면 probe를 추가로 실행합니다.
+
+```bash
+npm run probe:zk:settlement
+```
+
+기본 엔드포인트:
+- `http://localhost:8081/status/settlement`
+
+SentinAI 연동 예시:
+
+```bash
+CHAIN_TYPE=zkstack \
+ZKSTACK_MODE=legacy-era \
+ZK_BATCHER_STATUS_URL=http://localhost:8081/status/settlement \
+L2_RPC_URL=http://localhost:3050 \
+L1_RPC_URLS=http://localhost:8545 \
+npm run dev
+```
+
+주의:
+- `ZK_BATCHER_STATUS_URL`를 설정하지 않으면 settlement 카드는 숨김 처리됩니다.
+- 이는 "미지원/부정확 데이터 미표시" 원칙에 따른 동작입니다.
+
+### 5.7 server-v2 컨테이너 모드 연동 (선택)
+
+SentinAI를 컨테이너 오케스트레이션 모드로 사용할 때 설정합니다.
+
+```bash
+ORCHESTRATOR_TYPE=docker
+```
+
+ZK Stack 서비스명 매핑(기본값 포함):
+
+- `ZKSTACK_EXECUTION_SERVICE` (default: `zkstack-core`)
+- `ZKSTACK_BATCHER_SERVICE` (default: `zkstack-core`)
+- `ZKSTACK_PROVER_SERVICE` (default: `zkstack-core`)
+- `ZKSTACK_COMPONENT_PROFILE` (default: `core-only` in docker mode)
+
+SentinAI 실행 예시:
+
+```bash
+CHAIN_TYPE=zkstack \
+ORCHESTRATOR_TYPE=docker \
+DOCKER_COMPOSE_FILE=/path/to/docker-compose.core-only.yml \
+ZKSTACK_EXECUTION_SERVICE=zkstack-core \
+ZKSTACK_BATCHER_SERVICE=zkstack-core \
+ZKSTACK_PROVER_SERVICE=zkstack-core \
+ZKSTACK_COMPONENT_PROFILE=core-only \
+ZK_BATCHER_STATUS_URL=http://localhost:8081/status/settlement \
+L2_RPC_URL=http://localhost:3050 \
+L1_RPC_URLS=http://localhost:8545 \
+npm run dev
+```
+
+설명:
+- `zk-batcher`가 독립 컨테이너가 아니고 `server-v2` 내부 컴포넌트인 경우 `ZKSTACK_BATCHER_SERVICE=zkstack-core`로 매핑합니다.
+- core-only 템플릿에서는 `zk-prover`도 `zkstack-core` 상태를 기준으로 표기합니다.
 
 ---
 

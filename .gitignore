@@ -12,6 +12,10 @@ coverage
 # Generated data
 data/
 
+# Local external references / large experiment artifacts
+external/
+foundryup-zksync
+
 # Playwright
 playwright-report/
 test-results/

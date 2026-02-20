@@ -1,0 +1,23 @@
+{
+  "layer": "l1",
+  "finalityMode": "confirmed",
+  "postingLagSec": 18,
+  "healthy": true,
+  "componentStatus": {
+    "zksync-server": "Running",
+    "zk-batcher": "Running",
+    "zk-prover": "Running"
+  },
+  "diagnostics": {
+    "l2RpcUrl": "http://localhost:3050",
+    "l1RpcUrl": "http://localhost:8545",
+    "l2BlockNumber": 128,
+    "l1BlockNumber": 50212,
+    "latestBlockTxCount": 4,
+    "txpoolPending": 0,
+    "idleMode": false,
+    "thresholdSec": 120,
+    "errors": [],
+    "checkedAt": "2026-02-20T14:00:00.000Z"
+  }
+}

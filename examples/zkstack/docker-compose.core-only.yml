@@ -1,0 +1,57 @@
+services:
+  zkstack-core:
+    image: matterlabs/server-v2:latest
+    platform: linux/amd64
+    command:
+      - --components
+      - tree,eth,state_keeper,housekeeper,proof_data_handler,commitment_generator,da_dispatcher,vm_runner_protective_reads,consensus
+      - --config-path
+      - ${ZKSTACK_CONFIG_DIR}/general.yaml
+      - --secrets-path
+      - ${ZKSTACK_CONFIG_DIR}/secrets.container.yaml
+      - --contracts-config-path
+      - ${ZKSTACK_CONFIG_DIR}/contracts.yaml
+      - --wallets-path
+      - ${ZKSTACK_CONFIG_DIR}/wallets.yaml
+      - --genesis-path
+      - ${ZKSTACK_CONFIG_DIR}/genesis.yaml
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - ${HOST_WORKSPACE_ROOT}:${HOST_WORKSPACE_ROOT}
+    ports:
+      - '3320:3320'
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3071/health']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  zkstack-apis:
+    image: matterlabs/server-v2:latest
+    platform: linux/amd64
+    depends_on:
+      zkstack-core:
+        condition: service_healthy
+    command:
+      - --components
+      - http_api,ws_api
+      - --config-path
+      - ${ZKSTACK_CONFIG_DIR}/general.yaml
+      - --secrets-path
+      - ${ZKSTACK_CONFIG_DIR}/secrets.container.yaml
+      - --contracts-config-path
+      - ${ZKSTACK_CONFIG_DIR}/contracts.yaml
+      - --wallets-path
+      - ${ZKSTACK_CONFIG_DIR}/wallets.yaml
+      - --genesis-path
+      - ${ZKSTACK_CONFIG_DIR}/genesis.yaml
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    volumes:
+      - ${HOST_WORKSPACE_ROOT}:${HOST_WORKSPACE_ROOT}
+    ports:
+      - '3050:3050'
+      - '3051:3051'
+      - '3071:3071'
+      - '3312:3312'

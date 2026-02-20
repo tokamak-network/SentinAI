@@ -208,6 +208,33 @@ Sends `high`/`critical` anomaly events via webhook. Compatible with Slack Incomi
 
 ---
 
+## 8. ZK Stack Template (Optional)
+
+ZK Stack 연동은 `external` 경로를 직접 참조하지 말고 템플릿을 사용하세요.
+
+- Template dir: `examples/zkstack/`
+- Env template: `examples/zkstack/.env.example`
+- Core-only compose template: `examples/zkstack/docker-compose.core-only.yml`
+- Container secrets template: `examples/zkstack/secrets.container.yaml.example`
+- Probe schema: `examples/zkstack/settlement-probe-response.example.json`
+
+추가 변수:
+
+| Variable | Description |
+|---|---|
+| `CHAIN_TYPE` | `zkstack` |
+| `ZKSTACK_MODE` | `legacy-era` or `os-preview` |
+| `ZK_BATCHER_STATUS_URL` | Settlement probe endpoint |
+| `ZK_PROOF_RPC_URL` | Proof probe endpoint (optional) |
+| `ZK_SETTLEMENT_LAYER` | `l1` or `gateway` |
+| `ZK_FINALITY_MODE` | `confirmed`, `finalized`, `verified` |
+| `ZKSTACK_EXECUTION_SERVICE` | Docker service mapping for execution |
+| `ZKSTACK_BATCHER_SERVICE` | Docker service mapping for batcher |
+| `ZKSTACK_PROVER_SERVICE` | Docker service mapping for prover (core-only 기본값: `zkstack-core`) |
+| `ZKSTACK_COMPONENT_PROFILE` | `core-only` or `full` (docker 모드 기본: `core-only`) |
+
+---
+
 ## Variable Summary
 
 ### Required (1)

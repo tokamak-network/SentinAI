@@ -57,10 +57,13 @@ AI 모델을 활용한 모니터링, 스케일링, 보안, 예측, 운영 자동
 | [Redis 설정](guide/redis-setup.md) | 개발자 | InMemory vs Redis 선택, 설정/제거 방법 |
 | [EC2 설치 가이드](guide/ec2-setup-guide.md) | 비개발자/운영자 | AWS EC2 + Docker Compose + Cloudflare Tunnel 배포 |
 | [L1 Proxyd Failover](guide/proxyd-failover-setup.md) | 운영자 | **[필수]** L2 블록 생성 보호: Paid L1 RPC quota 초과 시 자동 failover |
-| [Optimism L2 로컬 연결](guide/optimism-l2-sentinai-local-setup.md) | 개발자/운영자 | Optimism L2 실행부터 SentinAI 연동 및 검증까지 |
+| [ZK Stack 로컬 연동](guide/zkstack-local-setup-guide.md) | 개발자/운영자 | ZK Stack 로컬 L2 실행, Probe, SentinAI 연동 절차 |
 | [데모 시나리오](guide/demo-scenarios.md) | 테스트/데모 | 다양한 시나리오별 L2 메트릭 시뮬레이션 |
 | [프로덕션 로드 테스트](guide/production-load-testing-guide.md) | QA/운영 | 실제 EKS 환경에서의 부하 테스트 및 검증 |
 | [스케일링 정확도 테스트](guide/scaling-accuracy-testing-guide.md) | 개발자/운영자 | 스케일링 알고리즘 백테스트 원리, 사용법, 시나리오 추가 방법 |
+
+표준 연동 템플릿:
+- `examples/zkstack/` (`.env.example`, `settlement-probe-response.example.json`)
 
 ---
 

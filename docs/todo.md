@@ -34,6 +34,7 @@
 - [x] `/api/metrics` 체인 메타 응답(`chain`) 및 capability 기반 필드 분기
 - [x] 대시보드 체인 격리 렌더링 (동적 EOA roles, OP Fault Proof 숨김, ZK Proof/Settlement 카드 추가)
 - [x] lint/type/test 재검증 및 잔여 타입 오류 정리
+- [x] `examples/zkstack` 표준 템플릿 추가 (`.env`, probe 응답 스키마, 사용 가이드)
 
 ### In Progress (2026-02-16 Refresh Audit)
 - [x] **Codebase Refresh Audit P0-P2 진행 완료** (`docs/todo/codebase-audit-2026-02-16-refresh.md`)
