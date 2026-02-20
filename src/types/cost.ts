@@ -44,6 +44,20 @@ export interface CostReport {
   usagePatterns: UsagePattern[];
   aiInsight: string;
   periodDays: number;
+  savingsAdvice?: {
+    id: string;
+    generatedAt: string;
+    recommendation: string;
+    options: Array<{
+      name: string;
+      label: string;
+      committedVcpu: number;
+      savingsVsOnDemand: number;
+      savingsPct: number;
+      overCommitmentPct: number;
+      underCommitmentPct: number;
+    }>;
+  } | null;
 }
 
 /**

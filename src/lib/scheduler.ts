@@ -12,14 +12,17 @@ import { takeSnapshot, getAccumulatedData, initializeAccumulator } from '@/lib/d
 import { generateDailyReport } from '@/lib/daily-report-generator';
 import { deliverDailyReport } from '@/lib/daily-report-mailer';
 import { runAgentCycle } from '@/lib/agent-loop';
+import { applyScheduledScaling, buildScheduleProfile } from '@/lib/scheduled-scaler';
 
 let initialized = false;
 let agentTask: ScheduledTask | null = null;
 let snapshotTask: ScheduledTask | null = null;
 let reportTask: ScheduledTask | null = null;
+let scheduledScalingTask: ScheduledTask | null = null;
 let agentTaskRunning = false;
 let snapshotTaskRunning = false;
 let reportTaskRunning = false;
+let scheduledScalingTaskRunning = false;
 
 // Agent loop enable check — defaults to true if L2_RPC_URL is set
 function isAgentLoopEnabled(): boolean {
@@ -34,7 +37,7 @@ function isAgentLoopEnabled(): boolean {
  */
 export async function initializeScheduler(): Promise<void> {
   if (initialized) {
-    console.log('[Scheduler] Already initialized, skipping');
+    console.info('[Scheduler] Already initialized, skipping');
     return;
   }
 
@@ -58,9 +61,9 @@ export async function initializeScheduler(): Promise<void> {
         if (result.phase === 'error') {
           console.error('[AgentLoop] Cycle error:', result.error);
         } else if (result.scaling?.executed) {
-          console.log(`[AgentLoop] Scaling executed: ${result.scaling.reason} (${duration}ms)`);
+          console.info(`[AgentLoop] Scaling executed: ${result.scaling.reason} (${duration}ms)`);
         } else {
-          console.log(`[AgentLoop] Cycle completed (${duration}ms)`);
+          console.info(`[AgentLoop] Cycle completed (${duration}ms)`);
         }
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -69,9 +72,9 @@ export async function initializeScheduler(): Promise<void> {
         agentTaskRunning = false;
       }
     });
-    console.log('[Scheduler] Agent loop enabled (every 60s, 50s timeout)');
+    console.info('[Scheduler] Agent loop enabled (every 60s, 50s timeout)');
   } else {
-    console.log('[Scheduler] Agent loop disabled (set AGENT_LOOP_ENABLED=true or L2_RPC_URL to enable)');
+    console.info('[Scheduler] Agent loop disabled (set AGENT_LOOP_ENABLED=true or L2_RPC_URL to enable)');
   }
 
   // 5-minute snapshot cron
@@ -94,19 +97,19 @@ export async function initializeScheduler(): Promise<void> {
     if (reportTaskRunning) return;
     reportTaskRunning = true;
     try {
-      console.log('[Scheduler] Starting daily report generation...');
+      console.info('[Scheduler] Starting daily report generation...');
       const data = await getAccumulatedData();
       if (data) {
         const result = await generateDailyReport(data);
         if (result.success) {
-          console.log(`[Scheduler] Daily report generated: ${result.reportPath}`);
+          console.info(`[Scheduler] Daily report generated: ${result.reportPath}`);
 
           // Deliver report via Slack
           const yesterday = new Date();
           yesterday.setDate(yesterday.getDate() - 1);
           const deliveryResult = await deliverDailyReport(yesterday);
           if (deliveryResult.success) {
-            console.log(`[Scheduler] Daily report delivered via ${deliveryResult.method}`);
+            console.info(`[Scheduler] Daily report delivered via ${deliveryResult.method}`);
           } else {
             console.error(`[Scheduler] Daily report delivery failed: ${deliveryResult.error}`);
           }
@@ -124,8 +127,28 @@ export async function initializeScheduler(): Promise<void> {
     }
   }, { timezone: 'Asia/Seoul' });
 
+  // Scheduled scaling: every hour at minute 0 (KST)
+  scheduledScalingTask = cron.schedule('0 * * * *', async () => {
+    if (scheduledScalingTaskRunning) return;
+    scheduledScalingTaskRunning = true;
+    try {
+      await buildScheduleProfile();
+      const result = await applyScheduledScaling();
+      if (result.executed) {
+        console.info(`[Scheduler] Scheduled scaling executed: ${result.message}`);
+      } else {
+        console.info(`[Scheduler] Scheduled scaling skipped: ${result.message}`);
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[Scheduler] Scheduled scaling error:', msg);
+    } finally {
+      scheduledScalingTaskRunning = false;
+    }
+  }, { timezone: 'Asia/Seoul' });
+
   initialized = true;
-  console.log(`[Scheduler] Initialized — snapshot: */5 * * * *, report: ${reportSchedule} (KST)`);
+  console.info(`[Scheduler] Initialized — snapshot: */5 * * * *, report: ${reportSchedule}, scheduled-scaling: 0 * * * * (KST)`);
 }
 
 /**
@@ -144,8 +167,12 @@ export function stopScheduler(): void {
     reportTask.stop();
     reportTask = null;
   }
+  if (scheduledScalingTask) {
+    scheduledScalingTask.stop();
+    scheduledScalingTask = null;
+  }
   initialized = false;
-  console.log('[Scheduler] Stopped');
+  console.info('[Scheduler] Stopped');
 }
 
 /**
@@ -157,6 +184,7 @@ export function getSchedulerStatus(): {
   agentTaskRunning: boolean;
   snapshotTaskRunning: boolean;
   reportTaskRunning: boolean;
+  scheduledScalingTaskRunning: boolean;
 } {
   return {
     initialized,
@@ -164,5 +192,6 @@ export function getSchedulerStatus(): {
     agentTaskRunning,
     snapshotTaskRunning,
     reportTaskRunning,
+    scheduledScalingTaskRunning,
   };
 }

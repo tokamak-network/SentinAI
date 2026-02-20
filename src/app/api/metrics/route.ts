@@ -19,6 +19,7 @@ import { getDockerComponentDetails } from '@/lib/docker-orchestrator';
 import { getActiveL1RpcUrl, getL2NodesL1RpcStatus } from '@/lib/l1-rpc-failover';
 import { getAllBalanceStatus } from '@/lib/eoa-balance-monitor';
 import { getDisputeGameMonitor } from '@/lib/dispute-game-monitor';
+import { checkDerivationLag, isL1Healthy } from '@/lib/derivation-lag-monitor';
 import { resolveBlockInterval } from '@/lib/block-interval';
 import type { AnomalyResult } from '@/types/anomaly';
 
@@ -344,13 +345,26 @@ export async function GET(request: Request) {
                 monthlySaving: Number(currentSaving.toFixed(2)),
             },
             status: "healthy",
+            derivationLag: {
+                available: false,
+                lag: null,
+                level: 'unknown',
+                currentL1: null,
+                headL1: null,
+                unsafeL2: null,
+                safeL2: null,
+                finalizedL2: null,
+                checkedAt: new Date().toISOString(),
+                l1Healthy: null,
+                l1ResponseTimeMs: null,
+            },
             disputeGames: await getDisputeGameStatus(getActiveL1RpcUrl())
         }, {
             headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
         });
     }
     // Debug: Log incoming request URL
-    console.log('[API] Request URL:', request.url);
+    console.info('[API] Request URL:', request.url);
     const startTotal = performance.now();
 
     try {
@@ -373,7 +387,7 @@ export async function GET(request: Request) {
             getContainerCpuUsage(),
             getAllContainerUsage(),
         ]);
-        console.log(`[Timer] K8s Fetch: ${(performance.now() - startK8s).toFixed(2)}ms`);
+        console.info(`[Timer] K8s Fetch: ${(performance.now() - startK8s).toFixed(2)}ms`);
 
         const components = [l2Client, consensus, batcher, proposer, challenger];
 
@@ -422,9 +436,11 @@ export async function GET(request: Request) {
         const l1RpcClient = createPublicClient({ chain: getChainPlugin().l1Chain, transport: http(l1RpcUrl) });
 
         // Fetch L2 block details and L1 block number in parallel (1 less RPC call)
-        const [block, l1BlockNumber] = await Promise.all([
+        const [block, l1BlockNumber, derivationLagStatus, l1HealthStatus] = await Promise.all([
             l2RpcClient.getBlock({ blockTag: 'latest' }),
-            getCachedL1BlockNumber(() => l1RpcClient.getBlockNumber())
+            getCachedL1BlockNumber(() => l1RpcClient.getBlockNumber()),
+            checkDerivationLag(rpcUrl),
+            isL1Healthy(l1RpcUrl, getChainPlugin().l1Chain),
         ]);
         const blockNumber = block.number;
 
@@ -457,7 +473,7 @@ export async function GET(request: Request) {
                 clearTimeout(txPoolTimeoutId);
             }
         }
-        console.log(`[Timer] RPC Fetch: ${(performance.now() - startRpc).toFixed(2)}ms`);
+        console.info(`[Timer] RPC Fetch: ${(performance.now() - startRpc).toFixed(2)}ms`);
 
         // 3. Check if seed scenario is active - use stored metrics if so
         // Get seed scenario from state store (cross-worker persistence)
@@ -467,14 +483,14 @@ export async function GET(request: Request) {
 
         // Only enter seed path when an active seed scenario exists (not 'live')
         if (activeScenario && activeScenario !== 'live') {
-            console.log(`[Metrics API] activeScenario from state store: ${activeScenario}`);
+            console.info(`[Metrics API] activeScenario from state store: ${activeScenario}`);
             const recentMetrics = await getRecentMetrics();
             if (recentMetrics && recentMetrics.length > 0) {
                 const latestMetric = recentMetrics[recentMetrics.length - 1];
                 if (latestMetric && latestMetric.cpuUsage !== undefined) {
                     seedMetricData = latestMetric;
                     usingSeedMetrics = true;
-                    console.log(`[Metrics API] Using seed metrics from store (scenario: ${activeScenario})`);
+                    console.info(`[Metrics API] Using seed metrics from store (scenario: ${activeScenario})`);
                 }
             }
         }
@@ -493,7 +509,7 @@ export async function GET(request: Request) {
             gasUsedRatio = seedMetricData.gasUsedRatio;
             blockInterval = seedMetricData.blockInterval;
             cpuSource = 'seed';
-            console.log(`[Metrics API] Using seed CPU=${realCpu.toFixed(1)}%, txPool=${effectiveTx}`);
+            console.info(`[Metrics API] Using seed CPU=${realCpu.toFixed(1)}%, txPool=${effectiveTx}`);
         } else {
             // Use real K8s metrics
             const gasUsed = Number(block.gasUsed);
@@ -520,15 +536,15 @@ export async function GET(request: Request) {
         // Apply seed scenario vCPU progression if active (before stress mode)
         // Use seed data's vCPU directly (works across worker threads)
         if (usingSeedMetrics && seedMetricData && seedMetricData.currentVcpu) {
-            console.log(`[Metrics API] Using seed data vCPU = ${seedMetricData.currentVcpu}`);
+            console.info(`[Metrics API] Using seed data vCPU = ${seedMetricData.currentVcpu}`);
             currentVcpu = seedMetricData.currentVcpu;
         } else if (activeScenario && activeScenario !== 'live') {
             // Fallback: try to get vCPU from in-memory profile if seed data unavailable
             const seedVcpu = getCurrentVcpu();
-            console.log(`[Metrics API] Seed scenario active (${activeScenario}): using vCPU = ${seedVcpu}`);
+            console.info(`[Metrics API] Seed scenario active (${activeScenario}): using vCPU = ${seedVcpu}`);
             currentVcpu = seedVcpu;
         } else if (!activeScenario || activeScenario === 'live') {
-            console.log(`[Metrics API] No active seed scenario, using K8s vCPU = ${currentVcpu}`);
+            console.info(`[Metrics API] No active seed scenario, using K8s vCPU = ${currentVcpu}`);
         }
 
         if (isStressTest) {
@@ -662,6 +678,11 @@ export async function GET(request: Request) {
             },
             status: "healthy",
             stressMode: isStressTest,
+            derivationLag: {
+                ...derivationLagStatus,
+                l1Healthy: l1HealthStatus.healthy,
+                l1ResponseTimeMs: l1HealthStatus.responseTimeMs,
+            },
             // === L2 Nodes L1 RPC Status ===
             l2NodesL1Rpc: isStressTest
                 ? getChainPlugin().k8sComponents
@@ -690,7 +711,7 @@ export async function GET(request: Request) {
 
         // Disable caching
         response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-        console.log(`[Timer] Total GET: ${(performance.now() - startTotal).toFixed(2)}ms`);
+        console.info(`[Timer] Total GET: ${(performance.now() - startTotal).toFixed(2)}ms`);
         return response;
 
     } catch (error) {

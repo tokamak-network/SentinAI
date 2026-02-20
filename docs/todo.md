@@ -2,6 +2,17 @@
 
 ## Current Status
 
+### In Progress (2026-02-20 Proposal 10/15/19 MVP Start)
+- [x] Proposal 19 Savings Plans Advisor 타입/분석 로직 구현 (`src/types/savings-advisor.ts`, `src/lib/savings-advisor.ts`)
+- [x] Savings Advisor API 추가 (`GET /api/savings-advisor`)
+- [x] Cost Report에 Savings Advice 요약 연동 (`src/lib/cost-optimizer.ts`, `src/types/cost.ts`)
+- [x] Proposal 15 Scheduled Scaling 타입/실행 모듈 구현 (`src/types/scheduled-scaling.ts`, `src/lib/scheduled-scaler.ts`)
+- [x] Scheduler 매시 정각 예약 스케일링 태스크 연동 (`src/lib/scheduler.ts`)
+- [x] Proposal 10 Derivation Lag 타입/모니터 구현 (`src/types/derivation.ts`, `src/lib/derivation-lag-monitor.ts`)
+- [x] Metrics API에 derivation lag 상태 포함 (`src/app/api/metrics/route.ts`)
+- [ ] 변경 파일 lint 및 스모크 검증
+- [ ] 문서/환경변수 가이드 후속 업데이트 (다음 커밋에서 보강)
+
 ### In Progress (2026-02-20 Optimism Plugin Integration)
 - [x] `docs/todo/optimism-tutorial-integration.md` 기반 요구사항 확인
 - [x] `src/chains/optimism` 체인 플러그인 구현 (튜토리얼 OP Stack용)
@@ -117,6 +128,12 @@
 
 - dev 서버를 실제로 띄운 뒤 `/api/metrics?stress=true`를 호출해 Optimism 모드 API 응답을 검증하는 스모크 테스트를 추가함
 - 설치 스크립트에서 `CHAIN_TYPE`를 입력/검증/저장하고, Optimism 선택 시 `L2_CHAIN_*`, `L1_CHAIN` 기본값까지 함께 구성하도록 확장함
+
+## Review (2026-02-20 Proposal 10/15/19 MVP Start)
+
+- Savings Plans Advisor를 독립 모듈/전용 API로 추가하고 `cost-report` 응답에 요약 필드를 연결해 즉시 소비 가능하게 구성함
+- Scheduled Scaling은 매시 정각 cron으로 실행되며, 쿨다운/오토스케일링 상태/실시간 CPU override를 포함한 안전 가드로 최소 동작 MVP를 완성함
+- Derivation Lag Monitor를 `optimism_syncStatus` 기반으로 추가하고 `/api/metrics` 응답에 lag 레벨 및 L1 헬스 정보를 포함해 관측 경로를 확보함
 
 ---
 

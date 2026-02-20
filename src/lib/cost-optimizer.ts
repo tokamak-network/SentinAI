@@ -16,6 +16,7 @@ import { getScalingHistory } from './k8s-scaler';
 import { chatCompletion } from './ai-client';
 import { parseAIJSON } from './ai-response-parser';
 import { getChainPlugin } from '@/chains';
+import { generateSavingsAdvice } from './savings-advisor';
 
 // ============================================================
 // Cost Calculation Utilities
@@ -334,6 +335,8 @@ export async function generateCostReport(days: number = 7): Promise<CostReport> 
     ? Math.round(((currentMonthly - optimizedMonthly) / currentMonthly) * 100)
     : 0;
 
+  const savingsAdvice = await generateSavingsAdvice(Math.max(30, effectiveDays));
+
   // Generate simple UUID
   const id = `cost-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
@@ -347,5 +350,21 @@ export async function generateCostReport(days: number = 7): Promise<CostReport> 
     usagePatterns: patterns,
     aiInsight: insight,
     periodDays: effectiveDays,
+    savingsAdvice: savingsAdvice
+      ? {
+          id: savingsAdvice.id,
+          generatedAt: savingsAdvice.generatedAt,
+          recommendation: savingsAdvice.recommendation,
+          options: savingsAdvice.options.map(option => ({
+            name: option.name,
+            label: option.label,
+            committedVcpu: option.committedVcpu,
+            savingsVsOnDemand: option.savingsVsOnDemand,
+            savingsPct: option.savingsPct,
+            overCommitmentPct: option.overCommitmentPct,
+            underCommitmentPct: option.underCommitmentPct,
+          })),
+        }
+      : null,
   };
 }
