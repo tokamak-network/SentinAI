@@ -2,66 +2,66 @@
 
 ## 2026-02-20
 
-- Tier3 번들 게이트는 raw 합산만 보면 과도하게 실패하므로 전송 기준(gzip) 수치를 함께 봐야 운영 판단이 맞다.
-  - 규칙: First Load JS 제한은 `rootMain + polyfill` gzip 합산 기준으로 측정하고, raw/gzip 수치를 함께 출력한다.
-- Lighthouse 게이트는 모바일/데스크톱을 분리하지 않으면 반응형 품질 회귀를 놓치기 쉽다.
-  - 규칙: Tier2는 모바일(360px)과 데스크톱(1920px) 설정을 분리해 각각 assertion을 강제한다.
-- 프로덕션 게이트에 샘플/외부 레포가 섞이면 build/ts/lint가 기능 품질과 무관하게 깨진다.
-  - 규칙: `external/**`, 테스트, 문서 경로는 운영 빌드/타입체크 타깃에서 분리하고 Tier1 게이트 스크립트로 고정 검증한다.
-- 신규 자동화(예약 스케일링)는 실시간 부하와 충돌할 수 있어 CPU 기반 override가 없으면 역효과가 날 수 있다.
-  - 규칙: cron 기반 scale-down은 최근 실시간 CPU가 임계치 이상이면 반드시 건너뛰고, 이유를 실행 결과에 남긴다.
-- 체인 플러그인 기반 EOA 확장을 했어도 API 응답/대시보드 타입을 함께 늘리지 않으면 신규 역할이 화면에 나타나지 않는다.
-  - 규칙: `eoaRoles`에 역할을 추가하면 `eoa-balance-monitor` → `/api/metrics` → `page.tsx` 타입/렌더링을 한 변경셋에서 동기화한다.
-- create-l2-rollup 예제의 컨테이너 태그가 최신 op-deployer 산출물과 불일치할 수 있다.
-  - 규칙: L2 부트스트랩 실패 시 `op-node/op-geth` 버전과 `rollup-rpc` 포트(8547 vs 9545) 정합을 먼저 점검하고, 제네시스 변경 시 `docker-compose down -v`로 데이터 볼륨을 초기화한다.
-- 체인 플러그인이 추가되어도 레지스트리가 환경 변수 기반 선택을 하지 않으면 실제 운영에서 신규 플러그인이 절대 활성화되지 않는다.
-  - 규칙: 새 플러그인 추가 시 `registry`의 선택 분기(`CHAIN_TYPE`)와 대응 테스트를 같은 변경셋에 포함한다.
-- OP Stack 계열 체인은 컴포넌트/의존성/플레이북이 대부분 동일하다.
-  - 규칙: 체인별 차이는 `chain metadata(l1/l2 chain, display name, chain id)`에 집중하고, 공통 토폴로지는 재사용해 중복을 줄인다.
-- 복잡한 API 라우트는 유닛 목킹보다 실제 HTTP 스모크 경로가 회귀를 빨리 잡는다.
-  - 규칙: `/api/*` 핵심 엔드포인트는 최소 1개는 서버 기동 + 실제 curl 검증 스크립트를 유지한다.
-- 설치 스크립트가 새 기능을 모르면 런타임 지원이 있어도 운영자가 설정할 수 없다.
-  - 규칙: 체인/오케스트레이터 같은 상위 선택지가 추가되면 `install.sh` 프롬프트, 비대화식 env 검증, `.env.local` 출력을 함께 업데이트한다.
+- Tier 3 bundle gate fails excessively when looking only at the raw sum, so it is best to look at the transmission standard (gzip) figures together to determine the correct operation.
+- Rule: First Load JS limit is measured based on the sum of `rootMain + polyfill` gzip, and raw/gzip figures are also output.
+- Lighthouse gate is easy to miss responsive quality regression if mobile/desktop are not separated.
+- Rule: Tier2 separates mobile (360px) and desktop (1920px) settings and forces assertions for each.
+- If samples/external repo are mixed in the production gate, build/ts/lint will be broken regardless of feature quality.
+- Rule: `external/**`, test, and document paths are separated from the operational build/type check target and fixedly verified with Tier1 gate script.
+- New automation (scheduled scaling) can conflict with real-time load, which can be counterproductive without a CPU-based override.
+- Rule: cron-based scale-down is always skipped if the recent real-time CPU is above the threshold, and the reason is left in the execution results.
+- Even if you expand the EOA based on the chain plugin, the new role will not appear on the screen unless you also increase the API response/dashboard type.
+- Rule: When a role is added to `eoaRoles`, `eoa-balance-monitor` → `/api/metrics` → `page.tsx` type/rendering is synchronized in one change set.
+- The container tags in the create-l2-rollup example may be inconsistent with the latest op-deployer output.
+- Rule: When L2 bootstrap fails, check the `op-node/op-geth` version and `rollup-rpc` port (8547 vs 9545) consistency first, and when changing genesis, initialize the data volume with `docker-compose down -v`.
+- Even if a chain plugin is added, if the registry does not make selections based on environment variables, the new plugin will never be activated in actual operation.
+- Rule: When adding a new plugin, include the optional branch of `registry` (`CHAIN_TYPE`) and corresponding tests in the same change set.
+- OP Stack series chains have mostly the same components/dependencies/playbooks.
+- Rule: Differences by chain focus on `chain metadata (l1/l2 chain, display name, chain id)`, and common topologies are reused to reduce duplication.
+- In complex API routes, the actual HTTP smoke route catches regression faster than unit mocking.
+- Rule: `/api/*` At least one core endpoint starts the server + maintains the actual curl verification script.
+- If the installation script does not know the new feature, the operator cannot set it up even if there is runtime support.
+- Rule: When a parent option such as chain/orchestrator is added, the `install.sh` prompt, non-interactive env validation, and `.env.local` output are updated together.
 
 ## 2026-02-19
 
-- 대시보드 카드에 리스트형 데이터가 누적되면 카드 자체가 늘어나 레이아웃이 무너진다.
-  - 규칙: 로그/컴포넌트처럼 증분 데이터는 카드 높이를 고정하고 내부 영역에만 `overflow-y-auto`를 적용한다.
-- flex 레이아웃에서 오른쪽 텍스트 영역이 남는 공간을 다 쓰지 못하면 예상보다 빠르게 줄바꿈된다.
-  - 규칙: 상세 텍스트 영역은 `flex-1 min-w-0`를 명시하고, 주변 배지는 `shrink-0`/`min-w-0`를 분리해 실제 가용폭을 최대화한다.
-- 단일 행 로그에서 좌측 고정폭 컬럼이 많으면 우측 분석 텍스트가 구조적으로 압축된다.
-  - 규칙: 우측 영역 확보가 필요하면 좌측 컬럼 폭부터 축소하고, 보조 아이콘은 별도 컬럼 대신 우측 메타 영역 안으로 합친다.
-- 로그 UI에서 공간 활용이 우선이면 고정 컬럼 정렬보다 `flex-wrap` 기반의 유동 행이 더 안정적이다.
-  - 규칙: 정렬 일관성보다 가독성과 정보 밀도가 중요할 때는 줄 단위 유동 레이아웃을 기본으로 선택한다.
-- seed 시나리오 TTL이 agent-loop 주기보다 짧으면 주입 부하가 스케일링 루프에 반영되지 않을 수 있다.
-  - 규칙: 검증용 seed TTL은 agent-loop 주기 이상으로 유지하고, seed API TTL과 상태 저장소 TTL을 동일하게 맞춘다.
-- seed 데이터의 `currentVcpu`는 관측용일 수 있어 실행 결정에 그대로 쓰면 오판이 생긴다.
-  - 규칙: auto-scaling 실행 판단의 `currentVcpu`는 실제 런타임 상태(k8s/scaler state) 기준으로 계산한다.
+- When list-type data accumulates on a dashboard card, the card itself expands and the layout collapses.
+- Rule: Like logs/components, incremental data fixes the card height and applies `overflow-y-auto` only to the inner area.
+- In a flex layout, if the right text area does not use up all the remaining space, lines will wrap faster than expected.
+- Rule: The detailed text area specifies `flex-1 min-w-0`, and the surrounding badge separates `shrink-0`/`min-w-0` to maximize the actual usable width.
+- If there are many left fixed-width columns in a single-line log, the right-side analysis text is structurally compressed.
+- Rule: If it is necessary to secure the right area, reduce the width of the left column first, and merge auxiliary icons into the right meta area instead of a separate column.
+- If space utilization is a priority in the log UI, floating rows based on `flex-wrap` are more stable than fixed column sorting.
+- Rule: When readability and information density are more important than alignment consistency, select line-by-line fluid layout as the default.
+- If the seed scenario TTL is shorter than the agent-loop period, the injection load may not be reflected in the scaling loop.
+- Rule: The seed TTL for verification is maintained beyond the agent-loop cycle, and the seed API TTL and state storage TTL are set to be the same.
+- `currentVcpu` in the seed data may be for observation purposes only, so using it as is for execution decisions will result in misjudgments.
+- Rule: `currentVcpu` for auto-scaling execution judgment is calculated based on the actual runtime state (k8s/scaler state).
 
 ## 2026-02-16
 
-- 분기 로직에서 공통 변수 재초기화는 상위 분기 값을 쉽게 덮어쓴다.
-  - 규칙: `seed/live`처럼 의미가 다른 경로는 계산 함수를 분리하고, 공유 변수 재할당을 최소화한다.
-- 타입 단언(`as`)으로 런타임 계약을 축소하면 결함이 숨겨진다.
-  - 규칙: 스케일링 tier 같은 핵심 도메인은 공통 타입 별칭을 만들고 전 구간에서 동일 타입을 사용한다.
-- 동일한 외부 RPC 호출 패턴은 타임아웃/재시도 정책을 통일해야 한다.
-  - 규칙: API/agent-loop 모두 공통 fetch 유틸 또는 동일 타임아웃 정책을 강제한다.
-- 관측 API의 메타데이터(`source`)는 실제 데이터 경로(seed/live)와 반드시 일치해야 한다.
-  - 규칙: 응답 필드는 하드코딩하지 말고, 분기 결과에서 파생된 값을 단일 변수로 설정한다.
-- 인증 면제 경로는 접두사 매칭보다 정확 경로 매칭이 안전하다.
-  - 규칙: 민감한 미들웨어 예외는 `startsWith` 대신 exact allowlist를 기본값으로 사용한다.
+- Reinitialization of common variables in branching logic easily overwrites the parent branch value.
+- Rule: Paths with different meanings, such as `seed/live`, separate calculation functions and minimize reallocation of shared variables.
+- Reducing the runtime contract with type assertions (`as`) hides the defect.
+- Rule: For core domains such as scaling tier, create a common type alias and use the same type in all sections.
+- The same external RPC call pattern must have a unified timeout/retry policy.
+- Rule: Forces a common fetch utility or the same timeout policy for both API/agent-loop.
+- The metadata (`source`) of the observation API must match the actual data path (seed/live).
+- Rule: Do not hardcode the response field, and set the value derived from the branch result as a single variable.
+- For authentication-exempted paths, exact path matching is safer than prefix matching.
+- Rule: Sensitive middleware exceptions use exact allowlist as the default instead of `startsWith`.
 
 ## 2026-02-20
 
-- 로컬 체인 가이드에서 "실행됨" 표현만으로는 재현 가능한 검증이 어렵다.
-  - 규칙: 체인 실행 문서에는 반드시 `eth_chainId`, `eth_blockNumber`, `eth_syncing`, `zks_L1BatchNumber` 명령과 통과 기준(예상 값/범위)을 함께 명시한다.
-- 장애 대응 속도는 증상별 확인 순서를 문서화했는지에 크게 좌우된다.
-  - 규칙: 실행/운영 가이드의 트러블슈팅은 `증상 -> 확인 명령 -> 원인 -> 조치` 4단 구조로 작성한다.
-- 검증 스크립트에서 네트워크 호출 실패를 원본 에러에 맡기면 사용자 판독성이 떨어진다.
-  - 규칙: `curl` 실패는 래퍼 함수에서 잡아 `FAIL + 호출 대상(url/method)` 형태로 표준화해 출력한다.
-- 체인 확장 시 API가 OP 전용 필드를 기본으로 반환하면 UI 격리 원칙이 즉시 깨진다.
-  - 규칙: `/api/metrics`는 `plugin.capabilities` 기준으로 필드를 조건부 생성하고, 대시보드는 동일 capability로만 섹션 렌더링한다.
-- `server-v2`처럼 단일 컨테이너에 다수 컴포넌트가 내장된 토폴로지는 서비스명 매핑이 없으면 상태 수집이 실패한다.
-  - 규칙: 플러그인 컴포넌트와 런타임 서비스가 다르면 `dockerServiceName` 매핑 필드를 두고 환경변수로 override 가능하게 한다.
-- 외부 레퍼런스 레포를 런타임 경로로 직접 참조하면 재현성과 배포 안정성이 떨어진다.
-  - 규칙: `external/*`는 분석/참고 용도로만 두고, 실제 연동 계약은 `examples/*` 템플릿으로 추출해 관리한다.
+- Reproducible verification is difficult with just the expression “executed” in the local chain guide.
+- Rule: The chain execution document must specify the `eth_chainId`, `eth_blockNumber`, `eth_syncing`, `zks_L1BatchNumber` commands and the passing criteria (expected value/range).
+- The speed of responding to a problem largely depends on whether the confirmation sequence for each symptom is documented.
+- Rule: Troubleshooting in the execution/operation guide is written in a four-stage structure: ‘Symptom -> Check command -> Cause -> Action.’
+- If network call failure is left to the original error in the verification script, user readability is reduced.
+- Rule: `curl` failure is caught in the wrapper function, standardized and output in the form of `FAIL + call target (url/method)`.
+- When expanding the chain, if the API returns OP-only fields as default, the UI isolation principle is immediately broken.
+- Rule: `/api/metrics` conditionally creates fields based on `plugin.capabilities`, and the dashboard renders sections only with the same capabilities.
+- In a topology where multiple components are embedded in a single container, such as `server-v2`, status collection fails if there is no service name mapping.
+- Rule: If the plug-in component and runtime service are different, leave a `dockerServiceName` mapping field and enable overriding with an environment variable.
+- If you directly reference an external reference repo through the runtime path, reproducibility and deployment stability will be poor.
+- Rule: `external/*` is only for analysis/reference purposes, and the actual interconnection contract is extracted and managed with the `examples/*` template.

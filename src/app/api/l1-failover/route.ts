@@ -12,6 +12,7 @@ export async function GET() {
   try {
     const state = getL1FailoverState();
     const activeEndpoint = state.endpoints[state.activeIndex];
+    const latestEvent = state.events.length > 0 ? state.events[state.events.length - 1] : null;
 
     // Get Proxyd active backend URL for L2 nodes
     let proxydActiveUrl = 'unknown';
@@ -48,8 +49,8 @@ export async function GET() {
       failoverCount: state.endpoints.length,
       spareUrlCount: state.spareUrls.length,
       healthy: activeEndpoint?.healthy ?? false,
-      lastFailover: state.events[0]?.timestamp || null,
-      lastFailoverReason: state.events[0]?.reason || null,
+      lastFailover: latestEvent?.timestamp || null,
+      lastFailoverReason: latestEvent?.reason || null,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

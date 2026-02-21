@@ -2,7 +2,7 @@
  * L1 RPC Auto-Failover Module
  * Manages multiple L1 RPC endpoints with automatic failover.
  * Detects failures, switches to healthy backup, and updates K8s components.
- * Monitors Proxyd backends for 429 errors and auto-replaces with spare URLs.
+ * Monitors Proxyd backends for repeated probe failures and auto-replaces with spare URLs.
  */
 
 import { createPublicClient, http } from 'viem';
@@ -29,7 +29,7 @@ import type {
 /** Consecutive failures before triggering failover (general errors) */
 const MAX_CONSECUTIVE_FAILURES = 3;
 
-/** Consecutive 429 (quota exhausted) failures before triggering failover */
+/** Default consecutive probe failures before triggering Proxyd backend replacement */
 const MAX_CONSECUTIVE_FAILURES_429 = 10;
 
 /** Minimum interval between failovers (ms) */
@@ -629,16 +629,21 @@ export async function probeBackend(url: string): Promise<{ ok: boolean; status?:
 }
 
 /**
- * Check all Proxyd backends in the target group for 429 errors.
- * When a backend accumulates 10+ consecutive 429 responses, replace its URL
- * with the next spare URL from L1_PROXYD_SPARE_URLS.
+ * Check all Proxyd backends in the target group for probe failures.
+ * When a backend accumulates repeated failures (429, 5xx, timeout/network),
+ * replace its URL with the next spare URL.
+ * Threshold can be tuned with L1_PROXYD_REPLACEMENT_THRESHOLD (default: 10).
  *
- * Called from agent-loop every cycle (30s).
+ * Called from agent-loop every cycle (scheduler interval, currently 60s).
  */
 export async function checkProxydBackends(): Promise<BackendReplacementEvent | null> {
   if (process.env.L1_PROXYD_ENABLED !== 'true') return null;
 
   const state = getState();
+  const replacementThreshold = parsePositiveInt(
+    process.env.L1_PROXYD_REPLACEMENT_THRESHOLD,
+    MAX_CONSECUTIVE_FAILURES_429
+  );
   const configMapName = await resolveProxydConfigMapName();
   const dataKey = process.env.L1_PROXYD_DATA_KEY || 'proxyd-config.toml';
   const targetGroup = process.env.L1_PROXYD_UPSTREAM_GROUP || 'main';
@@ -681,7 +686,7 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
       health = {
         name: backendName,
         rpcUrl,
-        consecutive429: 0,
+        consecutiveFailures: 0,
         healthy: true,
         replaced: false,
       };
@@ -697,14 +702,14 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
     const probe = await probeBackend(rpcUrl);
     health.lastChecked = Date.now();
 
-    if (probe.status === 429) {
-      health.consecutive429++;
+    if (isProxydFailoverCandidate(probe)) {
+      health.consecutiveFailures++;
       health.healthy = false;
       console.warn(
-        `[L1 Failover] Backend ${backendName} returned 429 (${health.consecutive429}/${MAX_CONSECUTIVE_FAILURES_429})`
+        `[L1 Failover] Backend ${backendName} probe failed (${describeProbeFailure(probe)}): ${health.consecutiveFailures}/${replacementThreshold}`
       );
 
-      if (health.consecutive429 >= MAX_CONSECUTIVE_FAILURES_429) {
+      if (health.consecutiveFailures >= replacementThreshold) {
         // Threshold reached — replace with spare URL
         if (state.spareUrls.length === 0) {
           console.error(
@@ -724,14 +729,14 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
 
         health.replaced = true;
         health.replacedWith = spareUrl;
-        health.consecutive429 = 0;
+        health.consecutiveFailures = 0;
 
         const event: BackendReplacementEvent = {
           timestamp: new Date().toISOString(),
           backendName,
           oldUrl: maskUrl(rpcUrl),
           newUrl: maskUrl(spareUrl),
-          reason: `${MAX_CONSECUTIVE_FAILURES_429} consecutive 429 errors (quota exhausted)`,
+          reason: `${replacementThreshold} consecutive backend probe failures (${describeProbeFailure(probe)})`,
           simulated: false,
         };
 
@@ -743,11 +748,13 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
         return event;
       }
     } else if (probe.ok) {
-      // Reset 429 counter on success
-      health.consecutive429 = 0;
+      // Reset failure counter on successful probe
+      health.consecutiveFailures = 0;
       health.healthy = true;
+    } else {
+      // Non-failover statuses (e.g. 4xx except 429) mark unhealthy but do not trigger replacement
+      health.healthy = false;
     }
-    // Non-429 errors (timeout, connection refused) don't increment 429 counter
   }
 
   return null;
@@ -787,6 +794,25 @@ export function resetL1FailoverState(): void {
 
 function hasK8sCluster(): boolean {
   return !!(process.env.AWS_CLUSTER_NAME || process.env.K8S_API_URL);
+}
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const parsed = Number.parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < 1) return fallback;
+  return parsed;
+}
+
+function isProxydFailoverCandidate(probe: { ok: boolean; status?: number }): boolean {
+  if (probe.status === 429) return true;
+  if (typeof probe.status === 'number' && probe.status >= 500) return true;
+  if (!probe.ok && probe.status === undefined) return true; // timeout/network
+  return false;
+}
+
+function describeProbeFailure(probe: { ok: boolean; status?: number }): string {
+  if (probe.status === undefined) return 'timeout-or-network';
+  return `HTTP ${probe.status}`;
 }
 
 // ============================================================

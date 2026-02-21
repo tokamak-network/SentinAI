@@ -1,287 +1,287 @@
-# SentinAI 모델 벤치마크 가이드
+# SentinAI Model Benchmark Guide
 
-## 지원 모델 및 가격
+## Supported Models and Pricing
 
-SentinAI 벤치마크는 4개 AI 제공자의 모델을 지원합니다.
+The SentinAI benchmark supports models from four AI providers.
 
-### 1. Qwen (알리바바) 🟢 **권장**
+### 1. Qwen (Alibaba) 🟢 **Recommended**
 
-**설정:**
-- 환경변수: `QWEN_API_KEY`, `QWEN_BASE_URL` (선택), `QWEN_MODEL` (선택)
-- 기본 엔드포인트: `https://dashscope.aliyuncs.com/compatible-mode`
-- 호환성: OpenAI `/v1/chat/completions` 호환
+**setting:**
+- Environment variables: `QWEN_API_KEY`, `QWEN_BASE_URL` (optional), `QWEN_MODEL` (optional)
+- Default endpoint: `https://dashscope.aliyuncs.com/compatible-mode`
+- Compatibility: OpenAI `/v1/chat/completions` compatible
 
-**모델:**
+**model:**
 
-| Tier | 모델명 | 입력 가격 | 출력 가격 | 응답 속도 | 특징 |
+| Tier | Model name | input price | output price | response speed | Features |
 |------|--------|---------|---------|---------|------|
-| **fast** | `qwen-turbo-latest` | $0.50/M | $0.50/M | ⚡⚡⚡ 빠름 | 경량, 저비용 |
-| **best** | `qwen-max-latest` | $2.00/M | $2.00/M | ⚡⚡ 보통 | 고품질, 중간 비용 |
+| **fast** | `qwen-turbo-latest` | $0.50/M | $0.50/M | ⚡⚡⚡ Fast | Lightweight, low cost |
+| **best** | `qwen-max-latest` | $2.00/M | $2.00/M | ⚡⚡ Average | High quality, medium cost |
 
-**환경변수 예시:**
+**Example of environment variables:**
 ```bash
 QWEN_API_KEY=your-qwen-api-key-here
 QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode
-QWEN_MODEL=qwen-turbo-latest  # 선택사항: 기본 모델 오버라이드
+QWEN_MODEL=qwen-turbo-latest # Optional: Override the default model
 ```
 
-**장점:**
-✅ 가장 저렴
-✅ 빠른 응답
-✅ OpenAI 호환 API
-✅ 한국어 처리 우수
+**merit:**
+✅ Cheapest
+✅ Fast response
+✅ OpenAI compatible API
+✅ Excellent Korean language processing
 
 ---
 
-### 2. Anthropic (Claude) 🔵 **높은 품질**
+### 2. Anthropic (Claude) 🔵 **High Quality**
 
-**설정:**
-- 환경변수: `ANTHROPIC_API_KEY`
-- 엔드포인트: `https://api.anthropic.com`
+**setting:**
+- Environment variable: `ANTHROPIC_API_KEY`
+- Endpoint: `https://api.anthropic.com`
 
-**모델:**
+**model:**
 
-| Tier | 모델명 | 입력 가격 | 출력 가격 | 응답 속도 | 특징 |
+| Tier | Model name | input price | output price | response speed | Features |
 |------|--------|---------|---------|---------|------|
-| **fast** | `claude-haiku-4-5-20251001` | $0.80/M | $0.15/M | ⚡⚡⚡ 빠름 | 간단한 작업 |
-| **best** | `claude-sonnet-4-5-20250929` | $3.00/M | $15.00/M | ⚡⚡ 보통 | 복잡한 분석 |
+| **fast** | `claude-haiku-4-5-20251001` | $0.80/M | $0.15/M | ⚡⚡⚡ Fast | Simple task |
+| **best** | `claude-sonnet-4-5-20250929` | $3.00/M | $15.00/M | ⚡⚡ Average | Complex Analysis |
 
-**환경변수 예시:**
+**Example of environment variables:**
 ```bash
 ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-**장점:**
-✅ 우수한 정확도
-✅ 안정적인 API
-✅ 한글 처리 우수
-✅ 긴 컨텍스트 지원
+**merit:**
+✅ Excellent accuracy
+✅ Stable API
+✅ Excellent Korean language processing
+✅ Long context support
 
-**단점:**
-❌ 중간~고가
-❌ Haiku는 단순 작업만 가능
+**disadvantage:**
+❌ Medium to high price
+❌ Haiku can only do simple tasks
 
 ---
 
-### 3. OpenAI (GPT) 🟡 **⚠️ 모델명 확인 필요**
+### 3. OpenAI (GPT) 🟡 **⚠️ Model name needs to be confirmed**
 
-**설정:**
-- 환경변수: `OPENAI_API_KEY`, `OPENAI_BASE_URL` (선택), `OPENAI_MODEL` (선택)
-- 엔드포인트: `https://api.openai.com` 또는 호환 프록시
-- 오버라이드: `OPENAI_MODEL_FAST`, `OPENAI_MODEL_BEST`
+**setting:**
+- Environment variables: `OPENAI_API_KEY`, `OPENAI_BASE_URL` (optional), `OPENAI_MODEL` (optional)
+- Endpoint: `https://api.openai.com` or compatible proxy
+- Override: `OPENAI_MODEL_FAST`, `OPENAI_MODEL_BEST`
 
-**모델:**
+**model:**
 
-| Tier | 설정된 모델명 | 입력 가격 | 출력 가격 | 응답 속도 | ⚠️ 주의 |
+| Tier | Set model name | input price | output price | response speed | ⚠️ Caution |
 |------|--------|---------|---------|---------|--------|
-| **fast** | `gpt-4.1-mini` | $0.15/M | $0.60/M | ⚡⚡⚡ | **확인 필요** |
-| **best** | `gpt-4.1` | $30.00/M | $60.00/M | ⚡ 느림 | **확인 필요** |
+| **fast** | `gpt-4.1-mini` | $0.15/M | $0.60/M | ⚡⚡⚡ | **Confirmation required** |
+| **best** | `gpt-4.1` | $30.00/M | $60.00/M | ⚡ Slow | **Confirmation required** |
 
-**실제 OpenAI 모델명** (2026-02):
-- `gpt-4-turbo` ← 권장
-- `gpt-4o` ← 최신
-- `gpt-3.5-turbo` ← 저가 대체
-- `o1` ← 추론 전문
+**Actual OpenAI model name** (2026-02):
+- `gpt-4-turbo` ← recommended
+- `gpt-4o` ← Latest
+- `gpt-3.5-turbo` ← Low-cost alternative
+- `o1` ← Inference text
 
-**환경변수 예시:**
+**Example of environment variables:**
 ```bash
 OPENAI_API_KEY=sk-...
-OPENAI_BASE_URL=https://api.openai.com  # 또는 프록시 URL
-OPENAI_MODEL=gpt-4-turbo                # 모든 tier 기본값
-OPENAI_MODEL_FAST=gpt-3.5-turbo         # fast tier 오버라이드
-OPENAI_MODEL_BEST=gpt-4o                # best tier 오버라이드
+OPENAI_BASE_URL=https://api.openai.com # or proxy URL
+OPENAI_MODEL=gpt-4-turbo # Default for all tiers
+OPENAI_MODEL_FAST=gpt-3.5-turbo # fast tier override
+OPENAI_MODEL_BEST=gpt-4o # best tier override
 ```
 
-**장점:**
-✅ 최고의 정확도 (gpt-4 시리즈)
-✅ 엔터프라이즈급 지원
+**merit:**
+✅ Highest accuracy (gpt-4 series)
+✅ Enterprise-grade support
 
-**단점:**
-❌ 가장 비쌈
-❌ 응답이 느림
+**disadvantage:**
+❌ Most expensive
+❌ Slow response
 
 ---
 
 ### 4. Gemini (Google) 🟣
 
-**설정:**
-- 환경변수: `GEMINI_API_KEY`
-- 엔드포인트: `https://generativelanguage.googleapis.com`
+**setting:**
+- Environment variable: `GEMINI_API_KEY`
+- Endpoint: `https://generativelanguage.googleapis.com`
 
-**모델:**
+**model:**
 
-| Tier | 모델명 | 입력 가격 | 출력 가격 | 응답 속도 | 특징 |
+| Tier | Model name | input price | output price | response speed | Features |
 |------|--------|---------|---------|---------|------|
-| **fast** | `gemini-2.5-flash-lite` | $0.075/M | $0.30/M | ⚡⚡⚡ 빠름 | 경량 |
-| **best** | `gemini-2.5-pro` | $1.50/M | $6.00/M | ⚡⚡ 보통 | 고급 분석 |
+| **fast** | `gemini-2.5-flash-lite` | $0.075/M | $0.30/M | ⚡⚡⚡ Fast | Lightweight |
+| **best** | `gemini-2.5-pro` | $1.50/M | $6.00/M | ⚡⚡ Average | Advanced Analytics |
 
-**환경변수 예시:**
+**Example of environment variables:**
 ```bash
 GEMINI_API_KEY=AIzaSy...
 ```
 
-**장점:**
-✅ 가성비 좋음
-✅ 빠른 응답
-✅ 멀티모달 지원
+**merit:**
+✅ Good value for money
+✅ Fast response
+✅ Multimodal support
 
-**단점:**
-❌ 한글 처리 중간
+**disadvantage:**
+❌ Intermediate Korean language processing
 
 ---
 
-## 벤치마크 실행 방법
+## How to run the benchmark
 
-### 기본 실행
+### Default execution
 
 ```bash
-# 모든 설정된 provider 테스트 (3회 반복)
+# Test all configured providers (repeat 3 times)
 npm run benchmark
 
-# Qwen만 테스트 (1회 반복, 빠른 테스트)
+# Test only Qwen (repeat once, quick test)
 npm run benchmark -- --providers qwen --iterations 1
 
-# Claude + OpenAI 비교 (2회 반복)
+# Claude + OpenAI comparison (repeated 2 times)
 npm run benchmark -- --providers anthropic,openai --iterations 2
 ```
 
-### 결과 해석
+### Interpretation of results
 
-생성되는 파일:
+Files generated:
 - **CSV**: `benchmark-results/YYYY-MM-DDTHH-MM-SS.csv`
-  - 원시 데이터 (응답 시간, 토큰, 비용, 정확도, 에러)
+- Raw data (response time, tokens, cost, accuracy, error)
 - **Markdown**: `benchmark-results/YYYY-MM-DDTHH-MM-SS.md`
-  - 요약 리포트 (순위, 분석, 권고사항)
+- Summary report (ranking, analysis, recommendations)
 
-**CSV 열:**
+**CSV column:**
 ```
-prompt_id         # 테스트한 프롬프트 ID
-provider          # AI 제공자 (qwen, anthropic, openai, gemini)
-tier              # 모델 계층 (fast, best)
-iteration         # 반복 번호
-latency_ms        # 응답 시간 (밀리초)
-tokens_in         # 입력 토큰 수
-tokens_out        # 출력 토큰 수
-cost_usd          # 예상 비용 (USD)
-accuracy          # 정확도 (0 또는 1)
-error             # 에러 메시지 (있을 경우)
+prompt_id # Tested prompt ID
+provider # AI provider (qwen, anthropotic, openai, gemini)
+tier # model tier (fast, best)
+iteration # iteration number
+latency_ms # response time (milliseconds)
+tokens_in # Number of input tokens
+tokens_out # Number of output tokens
+cost_usd # Estimated Cost (USD)
+accuracy #accuracy (0 or 1)
+error # error message (if any)
 ```
 
 ---
 
-## 테스트되는 프롬프트 (5개)
+## Prompts tested (5)
 
-| ID | Tier | 설명 | 출력 형식 |
+| ID | Tier | Description | output format |
 |----|------|------|---------|
-| `predictive-scaler` | fast | AI 시계열 예측 | JSON |
-| `anomaly-analyzer` | fast | 이상 징후 분석 | JSON |
-| `rca-engine` | best | 근본 원인 분석 | JSON |
-| `daily-report` | best | 일일 운영 보고서 | Markdown (한국어) |
-| `nlops-responder` | fast | 자연어 응답 생성 | Text |
+| `predictive-scaler` | fast | AI time series prediction | JSON |
+| `anomaly-analyzer` | fast | Anomaly analysis | JSON |
+| `rca-engine` | best | Root Cause Analysis | JSON |
+| `daily-report` | best | Daily operation report | Markdown (Korean) |
+| `nlops-responder` | fast | Generate natural language responses | Text |
 
 ---
 
-## 비용 추정
+## Cost Estimation
 
-**프롬프트당 예상 비용 (1회 반복):**
+**Estimated cost per prompt (one repetition):**
 
-| Provider | Tier | 예상 비용 | 가격 기준 |
+| Provider | Tier | Estimated Cost | By price |
 |----------|------|---------|---------|
-| **Qwen** | fast | $0.0002-0.0005 | 극저가 |
-| **Qwen** | best | $0.0008-0.0015 | 저가 |
-| **Claude** | fast | $0.0001-0.0002 | 저가 |
-| **Claude** | best | $0.0050-0.0100 | 중가 |
-| **GPT** | fast | $0.0001-0.0003 | 저가 |
-| **GPT** | best | $0.1000-0.2000 | 고가 ⚠️ |
-| **Gemini** | fast | $0.0001-0.0002 | 극저가 |
-| **Gemini** | best | $0.0005-0.0010 | 저가 |
+| **Qwen** | fast | $0.0002-0.0005 | Extremely low price |
+| **Qwen** | best | $0.0008-0.0015 | low price |
+| **Claude** | fast | $0.0001-0.0002 | low price |
+| **Claude** | best | $0.0050-0.0100 | mid price |
+| **GPT** | fast | $0.0001-0.0003 | low price |
+| **GPT** | best | $0.1000-0.2000 | Expensive ⚠️ |
+| **Gemini** | fast | $0.0001-0.0002 | Extremely low price |
+| **Gemini** | best | $0.0005-0.0010 | low price |
 
-**전체 벤치마크 비용 (5 prompts × 1 iteration):**
-- Qwen 만: ~$0.005
+**Total benchmark cost (5 prompts × 1 iteration):**
+- Qwen only: ~$0.005
 - Claude + Qwen: ~$0.015
-- 모든 provider: ~$0.50+
+- All providers: ~$0.50+
 
 ---
 
-## 트러블슈팅
+## Troubleshooting
 
-### API 404 에러
+### API 404 error
 
 ```
 Error: OpenAI API error 404: {"detail":"Not Found"}
 ```
 
-**원인:** 모델명이 올바르지 않음
-**해결:**
+**Cause:** Model name is incorrect
+**solve:**
 ```bash
-# 올바른 모델명으로 오버라이드
+# Override with the correct model name
 export OPENAI_MODEL=gpt-4-turbo
 npm run benchmark -- --providers openai --iterations 1
 ```
 
-### 타임아웃 에러
+### Timeout error
 
-**원인:** API 응답이 느림 (네트워크/부하)
-**해결:** 타임아웃 증가 및 반복 횟수 감소
+**Cause:** Slow API response (network/load)
+**Solution:** Increase timeout and reduce number of iterations
 ```bash
-# 번치마크 스크립트에서 timeoutFast/timeoutBest 수정 (기본값: 30000/60000ms)
+# Modify timeoutFast/timeoutBest in bunchmark script (default: 30000/60000ms)
 ```
 
-### 인증 에러
+### Authentication error
 
 ```
 Error: No AI API key configured
 ```
 
-**원인:** 환경변수 미설정
-**해결:**
+**Cause:** Environment variable not set
+**solve:**
 ```bash
-# .env.local 확인
+# Check .env.local
 cat .env.local | grep API_KEY
 
-# 또는 EC2 배포 시
+# or when deploying on EC2
 bash scripts/install.sh
 ```
 
 ---
 
-## 성능 비교 요약 (참고: 2026-02-13 테스트)
+## Performance comparison summary (Reference: tested on 2026-02-13)
 
-### 가성비 최고 🏆
+### Best value for money 🏆
 **Qwen Turbo (fast tier)**
 - 비용: $0.50/M input, $0.50/M output
-- 속도: ⚡⚡⚡ 빠름
-- 추천: 실시간 모니터링
+- Speed: ⚡⚡⚡ Fast
+- Recommendation: Real-time monitoring
 
-### 품질 최고 🌟
+### Top quality 🌟
 **Claude Sonnet (best tier)**
 - 비용: $3.00/M input, $15.00/M output
-- 속도: ⚡⚡ 보통
-- 추천: 복잡한 분석, RCA
+- Speed: ⚡⚡ Average
+- Recommended: Complex analysis, RCA
 
-### 균형 잡힌 선택 ⚖️
+### Balanced choices ⚖️
 **Gemini Flash Lite (fast tier)**
 - 비용: $0.075/M input, $0.30/M output
-- 속도: ⚡⚡⚡ 빠름
-- 추천: 비용 + 속도 균형
+- Speed: ⚡⚡⚡ Fast
+- Recommended: Cost + speed balance
 
 ---
 
-## 다음 단계
+## Next steps
 
-1. **벤치마크 실행**
+1. **Run benchmark**
    ```bash
    npm run benchmark -- --providers qwen --iterations 3
    ```
 
-2. **결과 분석**
-   - `benchmark-results/` 디렉토리에서 CSV/Markdown 확인
+2. **Result Analysis**
+- Check CSV/Markdown in `benchmark-results/` directory
 
-3. **A/B 테스트**
-   - 프로덕션에서 특정 모델 조합 테스트 (Phase 2 기능)
-   - `.env.local`에 `AB_TEST_ENABLED=true` 설정
+3. **A/B testing**
+- Test specific model combinations in production (Phase 2 features)
+- Set `AB_TEST_ENABLED=true` in `.env.local`
 
 ---
 
-**문서 갱신:** 2026-02-13
-**벤치마크 버전:** 1.0.0
+**Document update:** 2026-02-13
+**Benchmark version:** 1.0.0

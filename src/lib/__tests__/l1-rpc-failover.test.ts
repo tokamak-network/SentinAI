@@ -61,6 +61,7 @@ describe('l1-rpc-failover', () => {
     delete process.env.K8S_API_URL;
     delete process.env.L1_PROXYD_ENABLED;
     delete process.env.L1_PROXYD_SPARE_URLS;
+    delete process.env.L1_PROXYD_REPLACEMENT_THRESHOLD;
     delete process.env.L1_PROXYD_CONFIGMAP_NAME;
     delete process.env.L1_PROXYD_DATA_KEY;
     delete process.env.L1_PROXYD_UPSTREAM_GROUP;
@@ -586,7 +587,7 @@ backends = ["backend1", "backend2"]
         expect(result).toBeNull();
       });
 
-      it('should track 429 counts per backend', async () => {
+      it('should track consecutive probe failures per backend', async () => {
         process.env.L1_PROXYD_ENABLED = 'true';
         process.env.L1_PROXYD_SPARE_URLS = 'https://spare1.io';
         resetL1FailoverState();
@@ -605,13 +606,13 @@ backends = ["backend1", "backend2"]
 
         const state = getL1FailoverState();
         const health = state.proxydHealth.find((h) => h.name === 'backend1');
-        expect(health?.consecutive429).toBe(9);
+        expect(health?.consecutiveFailures).toBe(9);
         expect(health?.replaced).toBe(false);
 
         fetchSpy.mockRestore();
       });
 
-      it('should replace backend after 10 consecutive 429 errors (simulation)', async () => {
+      it('should replace backend after repeated probe failures (simulation)', async () => {
         process.env.L1_PROXYD_ENABLED = 'true';
         process.env.L1_PROXYD_SPARE_URLS = 'https://spare1.io';
         process.env.SCALING_SIMULATION_MODE = 'true';
@@ -661,7 +662,29 @@ backends = ["backend1", "backend2"]
         fetchSpy.mockRestore();
       });
 
-      it('should reset 429 counter on successful probe', async () => {
+      it('should replace backend on repeated 5xx errors with custom threshold', async () => {
+        process.env.L1_PROXYD_ENABLED = 'true';
+        process.env.L1_PROXYD_SPARE_URLS = 'https://spare1.io';
+        process.env.L1_PROXYD_REPLACEMENT_THRESHOLD = '2';
+        resetL1FailoverState();
+
+        mockRunK8sCommand.mockResolvedValue({ stdout: MOCK_PROXYD_TOML, stderr: '' });
+
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+          new Response('Upstream error', { status: 503 })
+        );
+
+        await checkProxydBackends();
+        const replacement = await checkProxydBackends();
+
+        expect(replacement).not.toBeNull();
+        expect(replacement!.backendName).toBe('backend1');
+        expect(replacement!.reason).toContain('HTTP 503');
+
+        fetchSpy.mockRestore();
+      });
+
+      it('should reset failure counter on successful probe', async () => {
         process.env.L1_PROXYD_ENABLED = 'true';
         process.env.L1_PROXYD_SPARE_URLS = 'https://spare1.io';
         resetL1FailoverState();
@@ -682,7 +705,7 @@ backends = ["backend1", "backend2"]
 
         const state = getL1FailoverState();
         const health = state.proxydHealth.find((h) => h.name === 'backend1');
-        expect(health?.consecutive429).toBe(0);
+        expect(health?.consecutiveFailures).toBe(0);
         expect(health?.healthy).toBe(true);
 
         fetchSpy.mockRestore();

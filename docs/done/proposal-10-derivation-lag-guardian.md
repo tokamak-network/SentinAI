@@ -1,79 +1,79 @@
-# Proposal 10: Derivation Lag Guardian — L2 파생 지연 감시 및 자동 복구
+# Proposal 10: Derivation Lag Guardian — L2 derivation lag monitoring and automatic recovery
 
-> **작성일**: 2026-02-11
-> **선행 조건**: Proposal 2 (Anomaly Detection) 구현 완료
-> **목적**: op-node의 L1 derivation 지연을 실시간 감시하여 L2 safe/finalized 블록 확정 지연을 방지
-
----
-
-## 목차
-
-1. [개요](#1-개요)
-2. [아키텍처](#2-아키텍처)
-3. [Agent Act — 자동 실행 액션](#3-agent-act--자동-실행-액션)
-4. [구현 명세](#4-구현-명세)
-5. [Playbook 정의](#5-playbook-정의)
-6. [안전장치](#6-안전장치)
-7. [환경 변수](#7-환경-변수)
-8. [타입 정의](#8-타입-정의)
-9. [기존 모듈 수정](#9-기존-모듈-수정)
-10. [테스트 계획](#10-테스트-계획)
+> **Created date**: 2026-02-11
+> **Prerequisite**: Proposal 2 (Anomaly Detection) implementation completed
+> **Purpose**: Monitor the op-node's L1 derivation delay in real time to prevent L2 safe/finalized block confirmation delay
 
 ---
 
-## 1. 개요
+## index
 
-### 1.1 문제
+1. [Overview](#1-Overview)
+2. [Architecture](#2-Architecture)
+3. [Agent Act — auto-run action](#3-agent-act--auto-run-action)
+4. [Implementation Specification](#4-Implementation-Specification)
+5. [Playbook definition](#5-playbook-definition)
+6. [Safety device](#6-Safety device)
+7. [Environment Variables](#7-Environment-Variables)
+8. [Type-Definition](#8-Type-Definition)
+9. [Modify existing module](#9-Existing-module-Modify)
+10. [Test Plan](#10-Test-Plan)
 
-op-node는 L1 블록을 읽어 L2 상태를 derive(파생)한다. op-node가 L1 HEAD 대비 뒤처지면:
+---
 
-| 지연 수준 | 의미 | 영향 |
+## 1. Overview
+
+### 1.1 Problem
+
+The op-node reads the L1 block and derives the L2 state. If the op-node lags behind L1 HEAD:
+
+| Delay level | Meaning | Impact |
 |----------|------|------|
-| **30 blocks** (~6분) | 경미한 파생 지연 | safe/finalized 확정 지연 시작 |
-| **120 blocks** (~24분) | 심각한 파생 지연 | L2 상태 확정이 크게 지연 |
-| **600 blocks** (~2시간) | 비상 | 출금 finality, bridge 운영에 영향 |
+| **30 blocks** (~6 minutes) | Minor derivative delay | safe/finalized finalized delayed start |
+| **120 blocks** (~24 minutes) | serious derivative delays | Significant delay in L2 status confirmation |
+| **600 blocks** (~2 hours) | Emergency | Withdrawal finality, impact on bridge operation |
 
-현재 시스템의 한계:
-- `l2BlockHeight` plateau 탐지로 **완전 정지**만 감지
-- **서서히 벌어지는 derivation lag**는 탐지하지 못함
-- L1 자체 지연과 op-node 문제를 구분하지 못함
+Limitations of the current system:
+- `l2BlockHeight` plateau detection detects only **full stop**
+- **Cannot detect gradual derivation lag**
+- Failure to distinguish between L1 own delay and op-node issues
 
-### 1.2 목표
+### 1.2 Goal
 
-1. `optimism_syncStatus` RPC를 통해 정확한 derivation lag를 측정
-2. 3단계 임계값 기반 알림 및 자동 복구
-3. L1 지연 vs op-node 문제를 자동 구분하여 적절한 대응
+1. Measure accurate derivation lag through `optimism_syncStatus` RPC
+2. 3-level threshold-based notification and automatic recovery
+3. Automatically distinguish between L1 delay and op-node issues and respond appropriately
 
-### 1.3 핵심 원칙
+### 1.3 Core principles
 
-- **정확한 측정**: block height 비교가 아닌 `syncStatus`의 L1 origin 기반 lag 계산
-- **원인 구분**: L1 RPC 장애, op-node hang, L1 reorg를 각각 구분
-- **보수적 대응**: L1 reorg 시에는 자동 복구를 시도하지 않음
+- **Accurate measurement**: Calculate lag based on L1 origin of `syncStatus` rather than comparing block height
+- **Cause classification**: Classifies L1 RPC failure, op-node hang, and L1 reorg respectively.
+- **Conservative response**: Do not attempt automatic recovery during L1 reorg
 
 ---
 
-## 2. 아키텍처
+## 2. Architecture
 
-### 2.1 Derivation Lag 계산 원리
+### 2.1 Derivation Lag calculation principle
 
 ```
 Optimism Derivation Pipeline:
   L1 Block (Ethereum)  ──→  op-node (derivation)  ──→  L2 State (safe/finalized)
 
-Lag 계산:
+Lag calculation:
   derivationLag = l1Head - syncStatus.current_l1
 
   syncStatus (optimism_syncStatus RPC response):
   {
-    "current_l1": { "number": 12340000 },   ← op-node가 처리한 마지막 L1 블록
-    "head_l1":    { "number": 12340150 },   ← L1의 최신 블록
+"current_l1": { "number": 12340000 }, ← Last L1 block processed by op-node
+"head_l1": { "number": 12340150 }, ← Latest block in L1
     "unsafe_l2":  { "number": 6200000 },    ← L2 unsafe head
     "safe_l2":    { "number": 6199500 },    ← L2 safe head
     "finalized_l2": { "number": 6199000 }   ← L2 finalized head
   }
 ```
 
-### 2.2 데이터 플로우
+### 2.2 Data flow
 
 ```
 Agent Loop (30s)
@@ -90,34 +90,34 @@ Agent Loop (30s)
   │     └── lag > 600 → EMERGENCY (severity: critical)
   │
   ├── Decide ──────────────────────────────────────────────
-  │   1. L1 RPC 응답 확인 → L1 자체 지연이면 대기
-  │   2. L1 정상이면 op-node 문제 → 재시작 플레이북
+│ 1. Check L1 RPC response → If L1 itself is delayed, wait
+│ 2. If L1 is normal, op-node problem → Restart playbook
   │
   └── Act ─────────────────────────────────────────────────
-      ├── [Safe] check_l1_connection → L1 정상 여부 확인
-      ├── [Safe] collect_logs(op-node) → 에러 로그 수집
-      ├── [Guarded] restart_pod(op-node) → L1 정상 & lag > CRITICAL
-      ├── [Safe] health_check → lag 감소 추세 확인
-      └── [Safe] escalate_operator → lag > EMERGENCY or L1 장애
+├── [Safe] check_l1_connection → Check whether L1 is normal
+├── [Safe] collect_logs(op-node) → Collect error logs
+├── [Guarded] restart_pod(op-node) → L1 정상 & lag > CRITICAL
+├── [Safe] health_check → Check lag reduction trend
+└── [Safe] escalate_operator → lag > EMERGENCY or L1 장애
 ```
 
 ---
 
-## 3. Agent Act — 자동 실행 액션
+## 3. Agent Act — Auto-execute action
 
-### 3.1 액션 테이블
+### 3.1 Action table
 
 | # | Action | Safety | Trigger | Description |
 |---|--------|--------|---------|-------------|
-| 1 | `check_l1_connection` | Safe | lag > WARNING | L1 RPC 응답 및 block time 확인. L1 자체 지연인지 op-node 문제인지 구분 |
-| 2 | `collect_logs` | Safe | lag > WARNING | op-node 최근 로그 수집 (derivation pipeline, reset 관련 에러) |
-| 3 | `restart_pod` | **Guarded** | lag > CRITICAL & L1 정상 | op-node pod 재시작 (kubectl delete, StatefulSet 자동 재생성) |
-| 4 | `health_check` | Safe | restart 후 60s | op-node 재시작 후 derivation 재개 확인 (lag 감소 추세) |
-| 5 | `escalate_operator` | Safe | lag > EMERGENCY or L1 장애 | 운영자 긴급 알림 (L1 문제는 자동 해결 불가) |
+| 1 | `check_l1_connection` | Safe | lag > WARNING | Check L1 RPC response and block time. Distinguish whether it is L1's own delay or an op-node problem |
+| 2 | `collect_logs` | Safe | lag > WARNING | op-node recent log collection (errors related to derivation pipeline, reset) |
+| 3 | `restart_pod` | **Guarded** | lag > CRITICAL & L1 normal | restart op-node pod (kubectl delete, auto-regenerate StatefulSet) |
+| 4 | `health_check` | Safe | 60s after restart | Confirm derivation resumes after op-node restart (lag decreasing trend) |
+| 5 | `escalate_operator` | Safe | lag > EMERGENCY or L1 failure | Operator emergency notification (L1 problems cannot be resolved automatically) |
 
-### 3.2 실행 흐름 예시
+### 3.2 Execution flow example
 
-**시나리오: Derivation lag = 150 blocks, L1 정상**
+**Scenario: Derivation lag = 150 blocks, L1 normal**
 
 ```
 [Observe] optimism_syncStatus:
@@ -149,7 +149,7 @@ Agent Loop (30s)
 [Alert] Slack: "✅ op-node derivation stall resolved. Lag: 150 → 70 (decreasing)"
 ```
 
-**시나리오: Derivation lag = 200 blocks, L1 장애**
+**Scenario: Derivation lag = 200 blocks, L1 failure**
 
 ```
 [Observe] derivationLag = 200 blocks (> CRITICAL 120)
@@ -168,7 +168,7 @@ Agent Loop (30s)
 
 ---
 
-## 4. 구현 명세
+## 4. Implementation Specification
 
 ### 4.1 `src/lib/derivation-lag-monitor.ts` (~250 LOC)
 
@@ -214,10 +214,10 @@ export async function isL1Healthy(l1RpcUrl: string): Promise<{
 }>;
 ```
 
-**핵심 로직: `getSyncStatus()`**
+**Core logic: `getSyncStatus()`**
 
 ```typescript
-// optimism_syncStatus는 표준 Optimism RPC method
+// optimism_syncStatus is the standard Optimism RPC method
 const response = await client.request({
   method: 'optimism_syncStatus' as any,
   params: [],
@@ -235,11 +235,11 @@ return {
 
 ---
 
-## 5. Playbook 정의
+## 5. Playbook definition
 
-기존 `op-node-derivation-stall` 플레이북을 **확장**하여 derivation lag 조건을 추가한다 (새 플레이북을 만들지 않음).
+**Extend** the existing `op-node-derivation-stall` playbook to add a derivation lag condition (do not create a new playbook).
 
-### 5.1 기존 플레이북 확장
+### 5.1 Extending existing playbooks
 
 ```yaml
 name: op-node-derivation-stall
@@ -248,7 +248,7 @@ trigger:
   component: op-node
   indicators:
     - type: metric
-      condition: l2BlockHeight stagnant  # 기존
+condition: l2BlockHeight stagnant # existing
     - type: metric
       condition: derivationLag > 120     # NEW
     - type: log_pattern
@@ -271,53 +271,53 @@ maxAttempts: 1
 
 ---
 
-## 6. 안전장치
+## 6. Safety device
 
-### 6.1 L1 Reorg 대응
+### 6.1 L1 Reorg response
 
 ```
-L1 reorg 감지 시:
-  → 자동 복구 시도하지 않음
-  → op-node가 자체적으로 reorg를 처리할 시간을 줌 (5분 대기)
-  → 5분 후에도 lag 증가 시 운영자 알림
+When detecting L1 reorg:
+→ Do not attempt automatic recovery
+→ Give op-node time to process reorg on its own (wait for 5 minutes)
+→ If the lag increases even after 5 minutes, the operator is notified
 ```
 
-감지 방법: `syncStatus.head_l1`이 이전 cycle보다 감소하면 L1 reorg 발생.
+Detection method: L1 reorg occurs when `syncStatus.head_l1` decreases from the previous cycle.
 
-### 6.2 False Positive 방지
+### 6.2 Preventing False Positives
 
-| 원인 | 구분 방법 | 대응 |
+| Cause | Classification method | Response |
 |------|---------|------|
-| L1 RPC 장애 | `isL1Healthy()` 체크 | 운영자 알림 (auto-fix 불가) |
-| L1 자체 느림 (merge 등) | L1 avg block interval > 15s | 임계값 동적 조정 |
-| op-node 정상 catch-up | lag 감소 추세 | 알림 억제 |
-| L1 reorg | head_l1 감소 | 자동 복구 유보 |
+| L1 RPC failure | Check `isL1Healthy()` | Operator notification (auto-fix not possible) |
+| L1 itself is slow (merge, etc.) | L1 avg block interval > 15s | Threshold dynamic adjustment |
+| op-node normal catch-up | lag decreasing trend | Suppress notifications |
+| L1 reorg | head_l1 decrease | Suspend automatic recovery |
 
-### 6.3 재시작 제한
+### 6.3 Restart Limitations
 
-- op-node 재시작은 기존 Proposal 8의 안전장치 적용:
-  - Cooldown: 5분 (동일 pod 재시작 간격)
-  - 시간당 최대: 3회
-  - Circuit Breaker: 연속 3회 실패 시 24시간 비활성화
+- Op-node restart applies the safety features of existing Proposal 8:
+- Cooldown: 5 minutes (same pod restart interval)
+- Maximum per hour: 3 times
+- Circuit Breaker: Deactivated for 24 hours if it fails 3 times in a row
 
 ---
 
-## 7. 환경 변수
+## 7. Environment variables
 
-| 변수 | 기본값 | 설명 |
+| variable | default | Description |
 |------|--------|------|
 | `OP_NODE_RPC_URL` | `L2_RPC_URL` | op-node admin RPC endpoint (syncStatus 호출용) |
 | `DERIVATION_LAG_WARNING` | `30` | Warning threshold in L1 blocks |
 | `DERIVATION_LAG_CRITICAL` | `120` | Critical threshold in L1 blocks |
 | `DERIVATION_LAG_EMERGENCY` | `600` | Emergency threshold in L1 blocks |
 
-**기존 환경변수 재사용:**
+**Reuse of existing environment variables:**
 - `L1_RPC_URL` → L1 health check
 - `L2_RPC_URL` → fallback for op-node RPC
 
 ---
 
-## 8. 타입 정의
+## 8. Type definition
 
 ### 8.1 `src/types/derivation.ts` (~50 LOC)
 
@@ -349,20 +349,20 @@ export interface DerivationLagResult {
 
 ---
 
-## 9. 기존 모듈 수정
+## 9. Modify existing modules
 
 ### 9.1 `src/lib/agent-loop.ts`
 
-`collectMetrics()` 에 `optimism_syncStatus` 호출 추가:
+Add `optimism_syncStatus` call to `collectMetrics()`:
 
 ```typescript
-// L2 RPC로 sync status 조회 (op-node가 동일 RPC를 노출하는 경우)
+// Check sync status with L2 RPC (if op-node exposes the same RPC)
 let syncStatus: SyncStatus | null = null;
 try {
   const opNodeRpcUrl = process.env.OP_NODE_RPC_URL || rpcUrl;
   syncStatus = await getSyncStatus(opNodeRpcUrl);
 } catch {
-  // syncStatus 실패는 non-fatal
+// syncStatus failure is non-fatal
 }
 ```
 
@@ -383,13 +383,13 @@ function detectDerivationLag(lag: number, thresholds: LagThresholds): AnomalyRes
       zScore: 0, direction: 'spike', rule: 'threshold-breach',
       description: `Derivation lag ${lag} blocks (critical > ${thresholds.critical})` };
   }
-  return null; // WARNING은 anomaly가 아닌 dashboard alert
+return null; // WARNING is a dashboard alert, not an anomaly
 }
 ```
 
 ### 9.4 `src/lib/playbook-matcher.ts`
 
-`matchesMetricCondition()`에 derivation lag 조건 추가:
+Add derivation lag condition to `matchesMetricCondition()`:
 
 ```typescript
 if (condition.includes('derivationLag >')) {
@@ -401,45 +401,45 @@ if (condition.includes('derivationLag >')) {
 
 ---
 
-## 10. 테스트 계획
+## 10. Test plan
 
-### 10.1 유닛 테스트 (`derivation-lag-monitor.test.ts`)
+### 10.1 Unit tests (`derivation-lag-monitor.test.ts`)
 
-| # | 테스트 | 검증 |
+| # | test | verification |
 |---|--------|------|
-| 1 | getSyncStatus() parsing | optimism_syncStatus RPC 응답 파싱 |
-| 2 | calculateLag() | lag = headL1 - currentL1 정확 계산 |
-| 3 | getLagLevel() thresholds | 각 임계값 구간별 level 판정 |
-| 4 | L1 health check | L1 RPC 응답 시간 및 block interval 측정 |
-| 5 | L1 reorg detection | headL1 감소 시 isReorg = true |
-| 6 | Trend calculation | lag 변화 추세 (increasing/decreasing/stable) |
-| 7 | RPC failure handling | syncStatus 호출 실패 시 graceful fallback |
+| 1 | getSyncStatus() parsing | optimism_syncStatus RPC response parsing |
+| 2 | calculateLag() | lag = headL1 - currentL1 exact calculation |
+| 3 | getLagLevel() thresholds | Level determination for each threshold section |
+| 4 | L1 health check | L1 RPC response time and block interval measurement |
+| 5 | L1 reorg detection | When reducing headL1 isReorg = true |
+| 6 | Trend calculation | lag change trend (increasing/decreasing/stable) |
+| 7 | RPC failure handling | graceful fallback when syncStatus call fails |
 
-### 10.2 통합 테스트 시나리오
+### 10.2 Integration test scenario
 
 ```
-시나리오 1: lag 150 blocks + L1 정상 → op-node restart → lag 감소 확인
-시나리오 2: lag 200 blocks + L1 장애 → operator 알림 (restart 안 함)
-시나리오 3: lag 10 blocks → normal (anomaly 미생성)
-시나리오 4: L1 reorg 감지 → 자동 복구 유보 → 5분 대기
-시나리오 5: lag 감소 추세 → 불필요한 restart 방지
+Scenario 1: lag 150 blocks + L1 normal → op-node restart → check lag reduction
+Scenario 2: lag 200 blocks + L1 failure → operator notification (no restart)
+Scenario 3: lag 10 blocks → normal (anomaly not created)
+Scenario 4: Detect L1 reorg → Suspend automatic recovery → Wait 5 minutes
+Scenario 5: Lag reduction trend → Prevention of unnecessary restarts
 ```
 
 ---
 
-## 의존관계
+## Dependencies
 
 ```
-신규 모듈:
+New modules:
   ├── src/lib/derivation-lag-monitor.ts
   └── src/types/derivation.ts
 
-수정 모듈:
-  ├── src/lib/agent-loop.ts          → collectMetrics()에 syncStatus 추가
-  ├── src/lib/anomaly-detector.ts    → detectDerivationLag() 추가
-  ├── src/lib/playbook-matcher.ts    → derivationLag 조건 추가
-  └── src/types/anomaly.ts           → AnomalyMetric에 'derivationLag' 추가
+Modification module:
+├── src/lib/agent-loop.ts → Add syncStatus to collectMetrics()
+├── src/lib/anomaly-detector.ts    → detectDerivationLag() 추가
+├── src/lib/playbook-matcher.ts → Add derivationLag condition
+└── src/types/anomaly.ts → Add ‘derivationLag’ to AnomalyMetric
 
-의존 라이브러리:
-  └── viem (이미 설치됨) → client.request() for custom RPC
+Dependent libraries:
+└── viem (already installed) → client.request() for custom RPC
 ```

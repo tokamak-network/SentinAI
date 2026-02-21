@@ -3,7 +3,10 @@
 ## Quick Start — Just 3 Variables
 
 ```bash
-cp .env.local.sample .env.local
+# Choose one template by chain type:
+cp .env.thanos.example .env.local
+# cp .env.optimism.example .env.local
+# cp .env.zkstack.example .env.local
 ```
 
 ```bash
@@ -210,7 +213,7 @@ Sends `high`/`critical` anomaly events via webhook. Compatible with Slack Incomi
 
 ## 8. ZK Stack Template (Optional)
 
-ZK Stack 연동은 `external` 경로를 직접 참조하지 말고 템플릿을 사용하세요.
+When integrating with ZK Stack, do not refer to the `external` path directly but use a template.
 
 - Template dir: `examples/zkstack/`
 - Env template: `examples/zkstack/.env.example`
@@ -218,7 +221,7 @@ ZK Stack 연동은 `external` 경로를 직접 참조하지 말고 템플릿을 
 - Container secrets template: `examples/zkstack/secrets.container.yaml.example`
 - Probe schema: `examples/zkstack/settlement-probe-response.example.json`
 
-추가 변수:
+Additional variables:
 
 | Variable | Description |
 |---|---|

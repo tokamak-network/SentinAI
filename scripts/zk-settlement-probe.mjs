@@ -27,7 +27,7 @@ async function rpcCall(url, method, params = []) {
 
   const data = await response.json();
   if (data.error) {
-    throw new Error(data.error.message || 'RPC 오류');
+    throw new Error(data.error.message || 'RPC error');
   }
   return data.result;
 }
@@ -65,7 +65,7 @@ async function collectStatus() {
     idleMode = txpoolPending === 0 && latestBlockTxCount === 0;
     l2Ok = true;
   } catch (error) {
-    errors.push(`L2 RPC 실패: ${error instanceof Error ? error.message : String(error)}`);
+    errors.push(`L2 RPC failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   try {
@@ -73,7 +73,7 @@ async function collectStatus() {
     l1BlockNumber = parseHexToInt(l1BlockHex);
     l1Ok = true;
   } catch (error) {
-    errors.push(`L1 RPC 실패: ${error instanceof Error ? error.message : String(error)}`);
+    errors.push(`L1 RPC failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 
   const healthy = l1Ok && l2Ok && (
@@ -116,7 +116,7 @@ function writeJson(res, statusCode, payload) {
 
 const server = http.createServer(async (req, res) => {
   if (!req.url) {
-    writeJson(res, 400, { error: '잘못된 요청입니다.' });
+    writeJson(res, 400, { error: 'Invalid request.' });
     return;
   }
 
@@ -131,18 +131,18 @@ const server = http.createServer(async (req, res) => {
       writeJson(res, 200, status);
     } catch (error) {
       writeJson(res, 500, {
-        error: 'settlement 상태 수집 실패',
+        error: 'Failed to collect settlement status',
         detail: error instanceof Error ? error.message : String(error),
       });
     }
     return;
   }
 
-  writeJson(res, 404, { error: '지원하지 않는 경로입니다.' });
+  writeJson(res, 404, { error: 'Unsupported path.' });
 });
 
 server.listen(PORT, () => {
-  console.log(`[zk-settlement-probe] 실행 중: http://localhost:${PORT}/status/settlement`);
+  console.log(`[zk-settlement-probe] running: http://localhost:${PORT}/status/settlement`);
 });
 
 process.on('SIGINT', () => {

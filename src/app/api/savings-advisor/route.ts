@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     if (!advice) {
       return NextResponse.json({
         success: false,
-        message: 'Savings advice를 생성하기 위한 usage 데이터가 부족합니다. 최소 30일 데이터를 수집해 주세요.',
+        message: 'Insufficient usage data to generate savings advice. Please collect at least 30 days of data.',
       }, { status: 200 });
     }
 
@@ -35,7 +35,7 @@ export async function GET(request: Request) {
       // Custom option support can be extended later.
       return NextResponse.json({
         ...advice,
-        note: `customCommitVcpu=${customCommitVcpu} 입력은 다음 단계에서 시뮬레이션 옵션으로 확장 예정입니다.`,
+        note: `customCommitVcpu=${customCommitVcpu} will be supported as an extended simulation option in a future step.`,
       }, {
         headers: {
           'Cache-Control': 'no-store, no-cache, must-revalidate',
@@ -56,4 +56,3 @@ export async function GET(request: Request) {
     );
   }
 }
-

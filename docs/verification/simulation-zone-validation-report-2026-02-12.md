@@ -51,7 +51,7 @@
 ```
 
 **Dashboard Elements Changed**:
-- ✅ System Health: CPU gauge 50% (주황색)
+- ✅ System Health: CPU gauge 50% (orange)
 - ✅ L2 Metrics: TxPool +300% increase
 - ✅ Scaling Forecast: Score ~50 (NORMAL)
 - ✅ Activity Log: Should show escalating scores
@@ -89,7 +89,7 @@
 ```
 
 **Dashboard Elements Changed**:
-- ✅ System Health: CPU 96% (🔴 빨강 - CRITICAL)
+- ✅ System Health: CPU 96% (🔴 Red - CRITICAL)
 - ✅ Scaling Forecast: Score ~90 (HIGH/SCALED)
 - ✅ Scaling Forecast Badge: 🔴 "Scale Up" (Indigo)
 - ✅ Recommendation: "Scaling up to handle traffic spike"
@@ -123,7 +123,7 @@
 - No escalation detected ✓
 
 **Dashboard Elements**:
-- ✅ System Health: Green (초록색, 안정)
+- ✅ System Health: Green (green, stable)
 - ✅ Scaling Forecast: Score ~20 (IDLE)
 - ✅ Activity Log: IDLE status (no scaling)
 

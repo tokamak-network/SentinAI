@@ -1,121 +1,121 @@
-# Proposal 5: Natural Language Ops (NLOps) - 구현 명세서
+# Proposal 5: Natural Language Ops (NLOps) - Implementation Specification
 
-> 작성일: 2026-02-06
-> 업데이트: 2026-02-10 (코드베이스 동기화)
-> 대상: Claude Opus 4.6 구현 에이전트
-> 목적: 이 문서만으로 NLOps 기능을 완전히 구현할 수 있도록 모든 세부사항 제공
+> Creation date: 2026-02-06
+> Updated: 2026-02-10 (codebase synchronization)
+> Target: Claude Opus 4.6 Implementation Agent
+> Purpose: To provide all the details so that you can fully implement NLOps functionality with this document alone.
 
 ---
 
-## 목차
+## index
 
-1. [개요](#1-개요)
-2. [타입 정의](#2-타입-정의)
-3. [신규 파일 명세](#3-신규-파일-명세)
+1. [Overview](#1-Overview)
+2. [Type Definition](#2-Type-Definition)
+3. [New file specification](#3-new-file-specification)
    - 3.1 [nlops-engine.ts](#31-srclibinlops-enginets)
    - 3.2 [nlops-responder.ts](#32-srclibnlops-responderts)
    - 3.3 [NLOps API Route](#33-srcappapinlopsroutets)
-4. [기존 파일 수정](#4-기존-파일-수정)
-   - 4.1 [page.tsx 수정](#41-srcappppagetsx-수정)
-5. [API 명세](#5-api-명세)
-6. [AI 프롬프트 전문](#6-ai-프롬프트-전문)
-7. [환경 변수](#7-환경-변수)
-8. [테스트 검증](#8-테스트-검증)
-9. [의존관계](#9-의존관계)
-10. [명령어 매핑 표](#10-명령어-매핑-표)
+4. [Edit existing file](#4-Existing-file-Edit)
+- 4.1 [page.tsx fix](#41-srcappppagetsx-fix)
+5. [API specification](#5-api-specification)
+6. [AI Prompt Full Text](#6-ai-Prompt-Full Text)
+7. [Environment Variables](#7-Environment-Variables)
+8. [Test Verification](#8-Test-Verification)
+9. [Dependency](#9-Dependency)
+10. [Command Mapping Table](#10-Command-Mapping-Table)
 
 ---
 
-## 1. 개요
+## 1. Overview
 
-### 1.1 목표
+### 1.1 Goal
 
-**Natural Language Operations (NLOps)** 는 자연어 명령으로 SentinAI를 제어할 수 있는 대화형 인터페이스다.
-운영자가 GUI 버튼 대신 "현재 상태 알려줘", "4 vCPU로 스케일업" 같은 자연어로 시스템을 조작한다.
+**Natural Language Operations (NLOps)** is a conversational interface that allows you to control SentinAI with natural language commands.
+Instead of GUI buttons, operators operate the system with natural language such as “Tell me the current status” and “Scale up to 4 vCPU.”
 
-### 1.2 핵심 흐름
+### 1.2 Core flow
 
 ```
 ┌─────────────────┐     ┌──────────────────────┐     ┌────────────────────┐
 │ User Input      │     │ Intent Classifier    │     │ Action Router      │
-│ (Chat UI)       │────▶│ (chatCompletion)     │────▶│ (기존 API 호출)     │
+│ (Chat UI) │────▶│ (chatCompletion) │────▶│ (Existing API call) │
 └─────────────────┘     └──────────────────────┘     └─────────┬──────────┘
                                                                │
                         ┌──────────────────────┐               │
                         │ Response Generator   │◀──────────────┘
-                        │ (자연어 응답 생성)    │
+│ (Generating natural language responses) │
                         └──────────────────────┘
 ```
 
-### 1.3 주요 기능
+### 1.3 Key features
 
-1. **Intent Classification**: 사용자 입력을 구조화된 의도(Intent)로 분류
-2. **Action Router**: 의도에 따라 적절한 내부 API 호출
-3. **Confirmation Flow**: 위험한 작업(스케일링, 설정 변경)은 확인 단계 필요
-4. **Natural Response**: 실행 결과를 자연어로 변환하여 응답
+1. **Intent Classification**: Classifies user input into structured intent.
+2. **Action Router**: Call appropriate internal API based on intent
+3. **Confirmation Flow**: Dangerous operations (scaling, changing settings) require a confirmation step.
+4. **Natural Response**: Response by converting execution results into natural language
 
-### 1.4 지원 언어
+### 1.4 Supported languages
 
-- **입력**: 한국어 및 영어 모두 지원
-- **출력**: 한국어로 응답 (UI-facing text 한글 원칙)
+- **Input**: Supports both Korean and English
+- **Output**: Response in Korean (UI-facing text Korean principle)
 
-### 1.5 현재 코드베이스 상태
+### 1.5 Current codebase state
 
-NLOps가 연동하는 **기존 구현 완료 모듈**:
+**Existing implemented modules** that NLOps works with:
 
-| 기능 | API 엔드포인트 | 핵심 파일 | 상태 |
+| Features | API endpoint | core files | status |
 |------|---------------|----------|------|
-| 메트릭 조회 | `GET /api/metrics` | `src/lib/metrics-store.ts` | ✅ P1 구현 완료 |
-| 스케일러 상태/실행 | `GET/POST /api/scaler` | `src/lib/k8s-scaler.ts` | ✅ 구현 완료 |
-| 설정 변경 | `PATCH /api/scaler` | `src/lib/k8s-scaler.ts` | ✅ 구현 완료 |
-| 이상 탐지 | `GET /api/anomalies` | `src/lib/anomaly-detector.ts` | ✅ P2 구현 완료 |
-| 근본 원인 분석 | `POST /api/rca` | `src/lib/rca-engine.ts` | ✅ P3 구현 완료 |
-| 비용 리포트 | `GET /api/cost-report` | `src/lib/cost-optimizer.ts` | ✅ P4 구현 완료 |
-| 로그 분석 | (내부 함수) | `src/lib/ai-analyzer.ts` | ✅ 구현 완료 |
-| AI 클라이언트 | (내부 함수) | `src/lib/ai-client.ts` | ✅ 구현 완료 |
-| 헬스 체크 | `GET /api/health` | - | ✅ 구현 완료 |
+| Metric query | `GET /api/metrics` | `src/lib/metrics-store.ts` | ✅ P1 implementation complete |
+| Scaler Status/Running | `GET/POST /api/scaler` | `src/lib/k8s-scaler.ts` | ✅ Implementation complete |
+| Change settings | `PATCH /api/scaler` | `src/lib/k8s-scaler.ts` | ✅ Implementation complete |
+| Anomaly Detection | `GET /api/anomalies` | `src/lib/anomaly-detector.ts` | ✅ P2 implementation complete |
+| Root Cause Analysis | `POST /api/rca` | `src/lib/rca-engine.ts` | ✅ P3 implementation completed |
+| Cost Report | `GET /api/cost-report` | `src/lib/cost-optimizer.ts` | ✅ P4 implementation complete |
+| log analysis | (internal function) | `src/lib/ai-analyzer.ts` | ✅ Implementation complete |
+| AI Client | (internal function) | `src/lib/ai-client.ts` | ✅ Implementation complete |
+| Health check | `GET /api/health` | - | ✅ Implementation complete |
 
-**중요**: 로그 분석은 별도 API 라우트 없이 `ai-analyzer.ts`의 `analyzeLogChunk()` 함수를 직접 호출한다.
+**Important**: Log analysis directly calls the `analyzeLogChunk()` function of `ai-analyzer.ts` without a separate API route.
 
 ---
 
-## 2. 타입 정의
+## 2. Type definition
 
-### 2.1 파일: `src/types/nlops.ts` (신규 생성)
+### 2.1 File: `src/types/nlops.ts` (newly created)
 
 ```typescript
 /**
  * NLOps (Natural Language Operations) Type Definitions
- * 자연어 기반 운영 인터페이스를 위한 타입 정의
+* Type definition for natural language-based operating interface
  */
 
 // ============================================================
-// Intent Types (의도 분류)
+// Intent Types
 // ============================================================
 
 /**
- * 조회 대상 타입
+* Search target type
  */
 export type QueryTarget = 'status' | 'metrics' | 'history' | 'cost' | 'anomalies';
 
 /**
- * 로그 분석 모드
+* Log analysis mode
  */
 export type AnalyzeMode = 'normal' | 'attack' | 'live';
 
 /**
- * 설정 가능한 항목
+* Items that can be set
  */
 export type ConfigSetting = 'autoScaling' | 'simulationMode' | 'zeroDowntimeEnabled';
 
 /**
- * 유효한 vCPU 값 (기존 TargetVcpu 타입과 동일: 1 | 2 | 4)
+* Valid vCPU value (same as existing TargetVcpu type: 1 | 2 | 4)
  */
 export type NLOpsTargetVcpu = 1 | 2 | 4;
 
 /**
- * NLOps 의도 - Discriminated Union
- * 각 의도 타입별로 필요한 파라미터가 다름
+* NLOps Intent - Discriminated Union
+* Required parameters are different for each intent type
  */
 export type NLOpsIntent =
   | {
@@ -154,32 +154,32 @@ export type NLOpsIntent =
 // ============================================================
 
 /**
- * NLOps API 요청
+* NLOps API request
  */
 export interface NLOpsRequest {
-  /** 사용자 입력 메시지 */
+/** User input message */
   message: string;
-  /** 위험한 작업에 대한 확인 플래그 (true면 실행 승인) */
+/** Confirm flag for dangerous operation (if true, approve execution) */
   confirmAction?: boolean;
 }
 
 /**
- * NLOps API 응답
+* NLOps API response
  */
 export interface NLOpsResponse {
-  /** 분류된 의도 */
+/** Classified intent */
   intent: NLOpsIntent;
-  /** 실행 여부 (확인 대기 중이면 false) */
+/** Whether to execute (false if waiting for confirmation) */
   executed: boolean;
-  /** 자연어 응답 메시지 */
+/** Natural language response message */
   response: string;
-  /** 실행 결과 데이터 (선택적) */
+/** Execution result data (optional) */
   data?: Record<string, unknown>;
-  /** 확인이 필요한 경우 true */
+/** true if confirmation is required */
   needsConfirmation?: boolean;
-  /** 확인 요청 메시지 */
+/** Confirmation request message */
   confirmationMessage?: string;
-  /** 후속 질문 제안 */
+/** Suggest follow-up questions */
   suggestedFollowUp?: string[];
 }
 
@@ -188,43 +188,43 @@ export interface NLOpsResponse {
 // ============================================================
 
 /**
- * 채팅 메시지 역할
+* Chat message role
  */
 export type ChatRole = 'user' | 'assistant';
 
 /**
- * 채팅 메시지
+* Chat messages
  */
 export interface ChatMessage {
-  /** 고유 식별자 */
+/** Unique identifier */
   id: string;
-  /** 메시지 역할 (user 또는 assistant) */
+/** Message role (user or assistant) */
   role: ChatRole;
-  /** 메시지 내용 */
+/** Message content */
   content: string;
-  /** 타임스탬프 (ISO 8601) */
+/** Timestamp (ISO 8601) */
   timestamp: string;
-  /** 분류된 의도 (assistant 메시지인 경우) */
+/** Classified intent (if assistant message) */
   intent?: NLOpsIntent;
-  /** 실행 결과 데이터 (assistant 메시지인 경우) */
+/** Execution result data (in case of assistant message) */
   data?: Record<string, unknown>;
-  /** 확인 대기 중인지 여부 */
+/** Whether waiting for confirmation */
   awaitingConfirmation?: boolean;
 }
 
 /**
- * 채팅 상태
+* Chat status
  */
 export interface ChatState {
-  /** 채팅 패널 열림 여부 */
+/** Whether to open chat panel */
   isOpen: boolean;
-  /** 메시지 목록 */
+/** Message list */
   messages: ChatMessage[];
-  /** 입력 중인 메시지 */
+/** Message being entered */
   inputValue: string;
-  /** 전송 중 여부 */
+/** Whether transmitting */
   isSending: boolean;
-  /** 확인 대기 중인 작업 */
+/** Task awaiting confirmation */
   pendingConfirmation: {
     message: string;
     originalInput: string;
@@ -237,7 +237,7 @@ export interface ChatState {
 // ============================================================
 
 /**
- * Intent 분류 결과
+* Intent classification results
  */
 export interface IntentClassificationResult {
   intent: NLOpsIntent;
@@ -246,7 +246,7 @@ export interface IntentClassificationResult {
 }
 
 /**
- * 액션 실행 결과
+* Action execution result
  */
 export interface ActionExecutionResult {
   executed: boolean;
@@ -255,7 +255,7 @@ export interface ActionExecutionResult {
 }
 
 /**
- * 현재 시스템 상태 (Intent 분류 시 컨텍스트로 사용)
+* Current system state (used as context when classifying intent)
  */
 export interface CurrentSystemState {
   vcpu: number;
@@ -270,24 +270,24 @@ export interface CurrentSystemState {
 
 ---
 
-## 3. 신규 파일 명세
+## 3. New file specification
 
 ### 3.1 `src/lib/nlops-engine.ts`
 
-NLOps의 핵심 처리 엔진. Intent 분류, 액션 라우팅, 명령 처리를 담당한다.
+The core processing engine of NLOps. Responsible for intent classification, action routing, and command processing.
 
-**핵심 설계 원칙:**
-- AI 호출은 반드시 `src/lib/ai-client.ts`의 `chatCompletion()` 함수를 사용한다
-- 로그 분석은 `src/lib/ai-analyzer.ts`의 `analyzeLogChunk()` 함수를 직접 호출한다
-- 이상 탐지, RCA, 비용 리포트는 기존 API 엔드포인트를 fetch로 호출한다
+**Key Design Principles:**
+- AI calls must use the `chatCompletion()` function in `src/lib/ai-client.ts`
+- Log analysis directly calls the `analyzeLogChunk()` function in `src/lib/ai-analyzer.ts`.
+- Anomaly detection, RCA, and cost reports call existing API endpoints using fetch.
 
 ```typescript
 /**
  * NLOps Engine - Natural Language Operations Processing Engine
- * 자연어 명령 처리의 핵심 로직
+* Core logic of natural language command processing
  *
- * AI 호출: chatCompletion() from src/lib/ai-client.ts
- * 로그 분석: analyzeLogChunk() from src/lib/ai-analyzer.ts
+* AI 호출: chatCompletion() from src/lib/ai-client.ts
+* Log analysis: analyzeLogChunk() from src/lib/ai-analyzer.ts
  */
 
 import type {
@@ -312,7 +312,7 @@ import { getAllLiveLogs } from '@/lib/log-ingester';
 const NLOPS_ENABLED = process.env.NLOPS_ENABLED !== 'false';
 
 /**
- * 확인이 필요한 위험한 액션 타입
+* Dangerous action types that require confirmation
  */
 const DANGEROUS_ACTION_TYPES: NLOpsIntent['type'][] = ['scale', 'config'];
 
@@ -321,7 +321,7 @@ const DANGEROUS_ACTION_TYPES: NLOpsIntent['type'][] = ['scale', 'config'];
 // ============================================================
 
 /**
- * Intent 분류를 위한 시스템 프롬프트
+* System prompt for intent classification
  */
 const INTENT_CLASSIFICATION_SYSTEM_PROMPT = `You are a command interpreter for SentinAI, an Optimism L2 node monitoring and auto-scaling system.
 
@@ -365,19 +365,19 @@ Your task is to classify user input into one of the following intent types:
 ## Common Patterns
 
 Korean:
-- "현재 상태" → query/status
-- "메트릭 보여줘" → query/metrics
-- "비용 얼마야" / "비용 분석" → query/cost
-- "이상 탐지" / "이상 현황" → query/anomalies
-- "4 vCPU로 스케일업" / "4코어로 올려" → scale/4
-- "1 vCPU로 줄여" / "스케일다운" → scale/1
-- "로그 분석 해줘" → analyze/live
-- "자동 스케일링 켜줘" → config/autoScaling/true
-- "자동 스케일링 꺼줘" → config/autoScaling/false
-- "시뮬레이션 모드 켜줘" → config/simulationMode/true
-- "무중단 스케일링 켜줘" → config/zeroDowntimeEnabled/true
-- "왜 CPU가 높아?" → explain
-- "근본 원인 분석" / "RCA 실행" → rca
+- “Current status” → query/status
+- “Show me metrics” → query/metrics
+- “How much does it cost” / “Cost analysis” → query/cost
+- “Anomaly detection” / “Anomaly status” → query/anomalies
+- “Scaling up to 4 vCPU” / “Scaling up to 4 cores” → scale/4
+- "Reduce to 1 vCPU" / "Scale down" → scale/1
+- “Analyze the log” → analyze/live
+- “Turn on auto scaling” → config/autoScaling/true
+- “Turn off auto scaling” → config/autoScaling/false
+- “Turn on simulation mode” → config/simulationMode/true
+- “Turn on non-stop scaling” → config/zeroDowntimeEnabled/true
+- “Why is my CPU high?” → explain
+- “Root cause analysis” / “RCA execution” → rca
 
 English:
 - "current status" → query/status
@@ -397,7 +397,7 @@ Respond ONLY with a valid JSON object (no markdown code blocks):
 }`;
 
 /**
- * Intent 분류를 위한 사용자 프롬프트 생성
+* Creating user prompts for intent classification
  */
 function buildIntentClassificationUserPrompt(
   userInput: string,
@@ -418,9 +418,9 @@ Parse the user's intent and respond with a JSON object.`;
 }
 
 /**
- * 사용자 입력을 Intent로 분류
+* Classify user input as Intent
  *
- * chatCompletion()의 modelTier: 'fast' (Haiku) 사용 — 빠른 분류
+* use modelTier: 'fast' (Haiku) in chatCompletion() — fast classification
  */
 export async function classifyIntent(
   userInput: string,
@@ -463,7 +463,7 @@ export async function classifyIntent(
 }
 
 /**
- * Intent 정규화 및 유효성 검증
+* Intent normalization and validation
  */
 function normalizeIntent(rawIntent: Record<string, unknown>, originalInput: string): NLOpsIntent {
   const type = rawIntent.type as string;
@@ -519,7 +519,7 @@ function normalizeIntent(rawIntent: Record<string, unknown>, originalInput: stri
 // ============================================================
 
 /**
- * Intent에 따른 액션 실행
+Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
  */
 export async function executeAction(
   intent: NLOpsIntent,
@@ -557,7 +557,7 @@ export async function executeAction(
 }
 
 /**
- * Query 액션 실행
+* Execute Query action
  */
 async function executeQueryAction(
   target: QueryTarget,
@@ -613,7 +613,7 @@ async function executeQueryAction(
 }
 
 /**
- * Scale 액션 실행
+* Execute Scale action
  */
 async function executeScaleAction(
   targetVcpu: NLOpsTargetVcpu,
@@ -634,10 +634,10 @@ async function executeScaleAction(
 }
 
 /**
- * Analyze 액션 실행
+* Execute Analyze action
  *
- * 주의: /api/analyze-logs 라우트가 없으므로
- * ai-analyzer.ts의 analyzeLogChunk()를 직접 호출한다.
+* Note: There is no /api/analyze-logs route.
+* Directly call analyzeLogChunk() in ai-analyzer.ts.
  */
 async function executeAnalyzeAction(mode: AnalyzeMode): Promise<ActionExecutionResult> {
   try {
@@ -659,15 +659,15 @@ async function executeAnalyzeAction(mode: AnalyzeMode): Promise<ActionExecutionR
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    throw new Error(`로그 분석 실패: ${errorMessage}`);
+throw new Error(`Log analysis failed: ${errorMessage}`);
   }
 }
 
 /**
- * Config 액션 실행
+* Execute Config action
  *
- * 기존 PATCH /api/scaler 엔드포인트 사용
- * 지원 필드: autoScalingEnabled, simulationMode, zeroDowntimeEnabled
+* Use existing PATCH /api/scaler endpoint
+* Supported fields: autoScalingEnabled, simulationMode, zeroDowntimeEnabled
  */
 async function executeConfigAction(
   setting: ConfigSetting,
@@ -692,21 +692,21 @@ async function executeConfigAction(
 }
 
 /**
- * Explain 액션 실행 (정적 지식 반환)
+* Execute Explain action (return static knowledge)
  */
 async function executeExplainAction(topic: string): Promise<ActionExecutionResult> {
   const explanations: Record<string, string> = {
-    cpu: 'CPU 사용률은 op-geth 실행 클라이언트의 처리 부하를 나타냅니다. 높은 CPU는 트랜잭션 처리량이 많거나 블록 동기화 중임을 의미합니다.',
-    vcpu: 'vCPU는 가상 CPU 코어 수입니다. SentinAI는 1, 2, 4 vCPU 사이에서 동적으로 스케일링하여 비용을 최적화합니다.',
-    txpool: 'TxPool은 처리 대기 중인 트랜잭션 풀입니다. TxPool이 지속적으로 증가하면 batcher 지연이나 네트워크 정체를 의심해볼 수 있습니다.',
-    autoscaling: '자동 스케일링은 CPU, Gas 사용률, TxPool, AI 분석 결과를 종합하여 자동으로 vCPU를 조절하는 기능입니다.',
-    cooldown: '쿨다운은 연속적인 스케일링을 방지하기 위한 대기 시간입니다. 기본값은 5분(300초)입니다.',
-    fargate: 'AWS Fargate는 서버리스 컨테이너 실행 환경입니다. SentinAI는 Fargate에서 op-geth를 실행하며 vCPU/메모리 기반으로 과금됩니다.',
-    optimism: 'Optimism은 이더리움 L2 롤업 솔루션입니다. op-geth(실행), op-node(합의), op-batcher(배치 제출), op-proposer(상태 제안) 컴포넌트로 구성됩니다.',
-    scaling: '스케일링 점수는 CPU(30%), Gas(30%), TxPool(20%), AI(20%) 가중치로 계산됩니다. 30 미만이면 1 vCPU, 70 미만이면 2 vCPU, 70 이상이면 4 vCPU로 조정됩니다.',
-    rca: '근본 원인 분석(RCA)은 이상 탐지 시 AI가 op-geth, op-node, op-batcher, op-proposer, L1 간의 의존 관계를 분석하여 문제의 원인을 추적합니다.',
-    anomaly: '이상 탐지는 Z-Score 기반 통계적 방법과 규칙 기반(블록 plateau, TxPool monotonic increase) 방법을 함께 사용합니다.',
-    zerodowntime: '무중단 스케일링은 Blue-Green 전략으로 새 인스턴스를 먼저 준비한 후 트래픽을 전환하여 다운타임 없이 스케일링합니다.',
+cpu: 'CPU utilization indicates the processing load on the client executing op-geth. High CPU means high transaction processing or block synchronization.',
+vcpu: 'vCPU is the number of virtual CPU cores. SentinAI dynamically scales between 1, 2, and 4 vCPUs to optimize costs.',
+txpool: 'TxPool is a pool of transactions waiting to be processed. If TxPool continues to increase, batcher delay or network congestion may be suspected.',
+autoscaling: 'Auto scaling is a function that automatically adjusts vCPU by combining CPU, Gas utilization, TxPool, and AI analysis results.',
+cooldown: 'Cooldown is a waiting period to prevent continuous scaling. The default is 5 minutes (300 seconds).',
+fargate: 'AWS Fargate is a serverless container execution environment. SentinAI runs op-geth on Fargate and is billed based on vCPU/memory.',
+optimism: 'Optimism is an Ethereum L2 rollup solution. It consists of op-geth (execution), op-node (consensus), op-batcher (batch submission), and op-proposer (state proposal) components.',
+scaling: 'The scaling score is calculated with CPU (30%), Gas (30%), TxPool (20%), and AI (20%) weights. Below 30, this scales to 1 vCPU, below 70 scales to 2 vCPU, and above 70 scales to 4 vCPU.',
+rca: 'Root cause analysis (RCA) traces the cause of the problem by analyzing the dependency relationships between op-geth, op-node, op-batcher, op-proposer, and L1 when detecting an anomaly.',
+anomaly: 'Anomaly detection uses a combination of Z-Score based statistical methods and rule-based (block plateau, TxPool monotonic increase) methods.',
+zerodowntime: 'Non-disruptive scaling is a Blue-Green strategy that first prepares new instances and then switches traffic to scale without downtime.',
   };
 
   const topicLower = topic.toLowerCase();
@@ -723,15 +723,15 @@ async function executeExplainAction(topic: string): Promise<ActionExecutionResul
     executed: true,
     result: {
       topic,
-      explanation: explanation || `"${topic}"에 대한 설명을 찾을 수 없습니다. cpu, vcpu, txpool, autoscaling, cooldown, fargate, optimism, rca, anomaly 등의 키워드를 시도해보세요.`,
+explanation: explanation || No description found for `"${topic}". Try keywords such as cpu, vcpu, txpool, autoscaling, cooldown, fargate, optimism, rca, anomaly, etc.`,
     },
   };
 }
 
 /**
- * RCA 액션 실행
+* Execute RCA action
  *
- * 기존 POST /api/rca 엔드포인트 사용
+* Use existing POST /api/rca endpoint
  */
 async function executeRcaAction(baseUrl: string): Promise<ActionExecutionResult> {
   const response = await fetch(`${baseUrl}/api/rca`, {
@@ -740,7 +740,7 @@ async function executeRcaAction(baseUrl: string): Promise<ActionExecutionResult>
     body: JSON.stringify({ autoTriggered: false }),
   });
 
-  if (!response.ok) throw new Error(`RCA 분석 실패: ${response.status}`);
+if (!response.ok) throw new Error(`RCA analysis failed: ${response.status}`);
 
   return { executed: true, result: await response.json() };
 }
@@ -750,7 +750,7 @@ async function executeRcaAction(baseUrl: string): Promise<ActionExecutionResult>
 // ============================================================
 
 /**
- * 현재 시스템 상태 조회
+* Check current system status
  */
 async function fetchCurrentState(baseUrl: string): Promise<CurrentSystemState> {
   try {
@@ -781,7 +781,7 @@ async function fetchCurrentState(baseUrl: string): Promise<CurrentSystemState> {
 }
 
 /**
- * NLOps 메인 명령 처리 함수
+* NLOps main command processing function
  */
 export async function processCommand(
   userInput: string,
@@ -792,14 +792,14 @@ export async function processCommand(
     return {
       intent: { type: 'unknown', originalInput: userInput },
       executed: false,
-      response: 'NLOps 기능이 비활성화되어 있습니다.',
+response: 'NLOps feature is disabled.',
     };
   }
 
   const currentState = await fetchCurrentState(baseUrl);
   const { intent, requireConfirmation, clarification } = await classifyIntent(userInput, currentState);
 
-  // 확인이 필요하고 아직 확인되지 않은 경우
+// If confirmation is required and not yet confirmed
   if (requireConfirmation && !confirmAction) {
     const confirmMessage = generateConfirmationMessage(intent);
     const { generateResponse } = await import('./nlops-responder');
@@ -811,14 +811,14 @@ export async function processCommand(
       response,
       needsConfirmation: true,
       confirmationMessage: confirmMessage,
-      suggestedFollowUp: ['취소', '확인'],
+suggestedFollowUp: ['Cancel', 'Confirm'],
     };
   }
 
-  // 액션 실행
+// action execution
   const actionResult = await executeAction(intent, baseUrl, confirmAction);
 
-  // 응답 생성
+// generate response
   const { generateResponse, getSuggestedFollowUps } = await import('./nlops-responder');
   const response = await generateResponse(intent, actionResult.result, actionResult.executed);
   const suggestedFollowUp = getSuggestedFollowUps(intent);
@@ -826,35 +826,35 @@ export async function processCommand(
   return {
     intent,
     executed: actionResult.executed,
-    response: clarification ? `${response}\n\n(참고: ${clarification})` : response,
+response: clarification ? `${response}\n\n(참고: ${clarification})` : response,
     data: actionResult.result || undefined,
     suggestedFollowUp,
   };
 }
 
 /**
- * 확인 메시지 생성
+* Generate confirmation message
  */
 function generateConfirmationMessage(intent: NLOpsIntent): string {
   switch (intent.type) {
     case 'scale':
-      return `${intent.targetVcpu} vCPU로 스케일링을 실행하시겠습니까?`;
+return `Do you want to scale to ${intent.targetVcpu} vCPU?`;
     case 'config': {
       const settingNames: Record<ConfigSetting, string> = {
-        autoScaling: '자동 스케일링',
-        simulationMode: '시뮬레이션 모드',
-        zeroDowntimeEnabled: '무중단 스케일링',
+autoScaling: 'Auto scaling',
+simulationMode: 'Simulation mode',
+zeroDowntimeEnabled: 'Non-disruptive scaling',
       };
-      const action = intent.value ? '활성화' : '비활성화';
-      return `${settingNames[intent.setting]}을(를) ${action}하시겠습니까?`;
+const action = intent.value ? 'enabled' : 'deactivated';
+return `Do you want ${action} ${settingNames[intent.setting]}?`;
     }
     default:
-      return '이 작업을 실행하시겠습니까?';
+return 'Do you want to run this task?';
   }
 }
 
 /**
- * NLOps 활성화 상태 확인
+* Check NLOps activation status
  */
 export function isNLOpsEnabled(): boolean {
   return NLOPS_ENABLED;
@@ -863,18 +863,18 @@ export function isNLOpsEnabled(): boolean {
 
 ### 3.2 `src/lib/nlops-responder.ts`
 
-실행 결과를 자연어 응답으로 변환하는 모듈.
+A module that converts execution results into natural language responses.
 
-**핵심 설계 원칙:**
-- AI 호출은 `chatCompletion()` 사용 (modelTier: 'fast')
-- 정적 응답이 가능한 경우 AI 호출 생략 (토큰 절약)
+**Key Design Principles:**
+- AI calls use `chatCompletion()` (modelTier: 'fast')
+- Omit AI call when static response is possible (token saving)
 
 ```typescript
 /**
  * NLOps Responder - Natural Language Response Generator
- * 실행 결과를 자연어 응답으로 변환
+* Convert execution results into natural language responses
  *
- * AI 호출: chatCompletion() from src/lib/ai-client.ts
+* AI 호출: chatCompletion() from src/lib/ai-client.ts
  */
 
 import type { NLOpsIntent } from '@/types/nlops';
@@ -889,7 +889,7 @@ const RESPONSE_SYSTEM_PROMPT = `You are a helpful assistant for SentinAI, an Opt
 Your task is to convert structured data into natural, friendly Korean responses.
 
 ## Guidelines
-1. ALWAYS respond in Korean (한국어)
+1. ALWAYS respond in Korean
 2. Be concise but informative
 3. Format numbers nicely (e.g., 1,234 instead of 1234)
 4. Include relevant metrics and status information
@@ -907,18 +907,18 @@ Your task is to convert structured data into natural, friendly Korean responses.
 3. Brief explanation or next steps (if applicable)`;
 
 /**
- * 실행 결과를 자연어 응답으로 변환
+* Convert execution results into natural language responses
  */
 export async function generateResponse(
   intent: NLOpsIntent,
   result: Record<string, unknown> | null,
   executed: boolean
 ): Promise<string> {
-  // 정적 응답이 가능한 경우
+// When static response is possible
   const staticResponse = getStaticResponse(intent, result, executed);
   if (staticResponse) return staticResponse;
 
-  // AI를 통한 자연어 응답 생성
+// Generate natural language responses through AI
   try {
     const aiResult = await chatCompletion({
       systemPrompt: RESPONSE_SYSTEM_PROMPT,
@@ -942,35 +942,35 @@ If there's an error, explain it kindly and suggest what to do.`,
 }
 
 /**
- * 정적 응답 (AI 호출 없이 즉시 반환)
+* Static response (returns immediately without AI call)
  */
 function getStaticResponse(
   intent: NLOpsIntent,
   result: Record<string, unknown> | null,
   executed: boolean
 ): string | null {
-  // 확인 대기 중
+// Waiting for confirmation
   if (!executed && result === null) {
     switch (intent.type) {
       case 'scale':
-        return `${intent.targetVcpu} vCPU로 스케일링하려고 합니다. 계속하시려면 '확인'을 눌러주세요.`;
+return `${intent.targetVcpu} Attempting to scale to vCPU. To continue, click 'OK'.`;
       case 'config': {
         const names: Record<string, string> = {
-          autoScaling: '자동 스케일링',
-          simulationMode: '시뮬레이션 모드',
-          zeroDowntimeEnabled: '무중단 스케일링',
+autoScaling: 'Auto scaling',
+simulationMode: 'Simulation mode',
+zeroDowntimeEnabled: 'Non-disruptive scaling',
         };
-        const action = intent.value ? '활성화' : '비활성화';
-        return `${names[intent.setting]}을(를) ${action}하려고 합니다. 계속하시려면 '확인'을 눌러주세요.`;
+const action = intent.value ? 'enabled' : 'deactivated';
+return `Attempting to ${action} ${names[intent.setting]}. To continue, click 'OK'.`;
       }
     }
   }
 
   if (intent.type === 'unknown') {
-    return '죄송합니다, 명령을 이해하지 못했습니다. "현재 상태", "로그 분석", "2 vCPU로 스케일" 같은 명령을 시도해보세요.';
+return 'Sorry, I didn't understand your command. Try commands like "current status", "analyze logs", and "scale to 2 vCPU"';
   }
 
-  // explain은 정적 응답 사용
+// explain uses static response
   if (intent.type === 'explain' && result) {
     const explanation = (result as Record<string, string>)?.explanation;
     if (explanation) return explanation;
@@ -980,37 +980,37 @@ function getStaticResponse(
 }
 
 /**
- * 폴백 응답 (AI 실패 시)
+* Fallback response (in case of AI failure)
  */
 function getFallbackResponse(
   intent: NLOpsIntent,
   result: Record<string, unknown> | null,
   executed: boolean
 ): string {
-  if (!executed) return '작업을 실행하지 못했습니다. 잠시 후 다시 시도해주세요.';
+if (!executed) return 'The task execution failed. Please try again later.';
 
   switch (intent.type) {
     case 'query': {
       if (intent.target === 'status') {
         const metrics = (result as Record<string, Record<string, unknown>>)?.metrics?.metrics;
         if (metrics) {
-          return `현재 상태: ${metrics.gethVcpu || 1} vCPU, CPU ${(metrics.cpuUsage as number)?.toFixed(1) || 0}%, TxPool ${metrics.txPoolCount || 0}개 대기 중`;
+return `Current state: ${metrics.gethVcpu || 1} vCPU, CPU ${(metrics.cpuUsage as number)?.toFixed(1) || 0}%, TxPool ${metrics.txPoolCount || 0} waiting`;
         }
       }
-      return '데이터를 조회했습니다.';
+return 'Data was viewed.';
     }
     case 'scale':
-      return `스케일링 완료: ${(result as Record<string, unknown>)?.previousVcpu || '?'} → ${(result as Record<string, unknown>)?.currentVcpu || intent.targetVcpu} vCPU`;
+return `스케일링 완료: ${(result as Record<string, unknown>)?.previousVcpu || '?'} → ${(result as Record<string, unknown>)?.currentVcpu || intent.targetVcpu} vCPU`;
     case 'analyze':
       return (result as Record<string, Record<string, unknown>>)?.analysis?.summary
         ? String((result as Record<string, Record<string, unknown>>).analysis.summary)
-        : '로그 분석을 완료했습니다.';
+: 'Log analysis completed.';
     case 'config':
-      return '설정이 변경되었습니다.';
+return 'Settings have been changed.';
     case 'rca':
-      return '근본 원인 분석을 실행했습니다.';
+return 'Root cause analysis has been run.';
     default:
-      return '작업이 완료되었습니다.';
+return 'The operation has been completed.';
   }
 }
 
@@ -1022,27 +1022,27 @@ export function getSuggestedFollowUps(intent: NLOpsIntent): string[] {
   switch (intent.type) {
     case 'query':
       switch (intent.target) {
-        case 'status': return ['로그 분석 해줘', '비용 확인해줘', '이상 현황 보여줘'];
-        case 'metrics': return ['현재 상태 알려줘', '스케일링 히스토리 보여줘'];
-        case 'cost': return ['현재 상태 알려줘', '비용 절감 방법 알려줘'];
-        case 'anomalies': return ['근본 원인 분석해줘', '로그 분석 해줘'];
-        case 'history': return ['현재 상태 알려줘', '비용 확인해줘'];
-        default: return ['현재 상태 알려줘'];
+case 'status': return ['Analyze logs', 'Check costs', 'Show me abnormal status'];
+case 'metrics': return ['Tell me the current status', 'Show me the scaling history'];
+case 'cost': return ['Tell me the current status', 'Tell me how to reduce costs'];
+case 'anomalies': return ['Analyze the root cause', 'Analyze the log'];
+case 'history': return ['Tell me the current status', 'Check the cost'];
+default: return ['Tell me the current status'];
       }
-    case 'scale': return ['현재 상태 확인해줘', '비용 얼마나 드는지 알려줘'];
-    case 'analyze': return ['근본 원인 분석해줘', '이상 현황 보여줘', '현재 상태 알려줘'];
-    case 'config': return ['현재 상태 알려줘', '설정 확인해줘'];
-    case 'explain': return ['현재 상태 알려줘', '다른 것도 설명해줘'];
-    case 'rca': return ['로그 분석 해줘', '현재 상태 알려줘', '이상 현황 보여줘'];
-    case 'unknown': return ['현재 상태 알려줘', '로그 분석 해줘', '도움말'];
-    default: return ['현재 상태 알려줘'];
+case 'scale': return ['Check the current status', 'Tell me how much it costs'];
+case 'analyze': return ['Analyze the root cause', 'Show me the status of the problem', 'Tell me the current status'];
+case 'config': return ['Tell me the current status', 'Check the settings'];
+case 'explain': return ['Tell me the current status', 'Tell me something else'];
+case 'rca': return ['Analyze the log', 'Tell me the current status', 'Show me the status of abnormalities'];
+case 'unknown': return ['Tell me the current status', 'Analyze the log', 'Help'];
+default: return ['Tell me the current status'];
   }
 }
 ```
 
 ### 3.3 `src/app/api/nlops/route.ts`
 
-NLOps API 엔드포인트.
+NLOps API endpoint.
 
 ```typescript
 /**
@@ -1092,7 +1092,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<NLOpsResp
         error: 'Failed to process command',
         intent: { type: 'unknown' as const, originalInput: '' },
         executed: false,
-        response: `명령 처리 중 오류가 발생했습니다: ${errorMessage}`,
+response: `An error occurred while processing the command: ${errorMessage}`,
       },
       { status: 500 }
     );
@@ -1118,27 +1118,27 @@ export async function GET(): Promise<NextResponse> {
 
 ---
 
-## 4. 기존 파일 수정
+## 4. Edit existing files
 
-### 4.1 `src/app/page.tsx` 수정
+### 4.1 Modify `src/app/page.tsx`
 
-대시보드에 채팅 UI를 추가한다. 화면 하단에 고정된 토글 버튼과 슬라이드업 패널 형태.
+Add chat UI to the dashboard. Toggle button and slide-up panel fixed at the bottom of the screen.
 
-#### 4.1.1 Import 추가
+#### 4.1.1 Add Import
 
-파일 상단의 import 섹션에 추가 (`lucide-react` import에 아이콘 추가 + 타입 import):
+Add to the import section at the top of the file (add icon to `lucide-react` import + type import):
 
 ```typescript
-// 기존 lucide-react import에 추가할 아이콘:
+// Icon to add to existing lucide-react import:
 // MessageSquare, Send, Bot, User, X
 
-// 새로 추가할 import:
+// new import to add:
 import type { ChatMessage, NLOpsResponse, NLOpsIntent } from '@/types/nlops';
 ```
 
-#### 4.1.2 State 추가
+#### 4.1.2 State added
 
-`Dashboard` 컴포넌트의 기존 state 선언 블록 (costReport state 근처) 아래에 추가:
+Add below the existing state declaration block of the `Dashboard` component (near the costReport state):
 
 ```typescript
 // --- NLOps Chat State ---
@@ -1154,9 +1154,9 @@ const [pendingConfirmation, setPendingConfirmation] = useState<{
 const chatMessagesEndRef = useRef<HTMLDivElement>(null);
 ```
 
-#### 4.1.3 Chat 핸들러 함수 추가
+#### 4.1.3 Add Chat handler function
 
-`fetchCostReport` 함수 아래에 추가:
+Add below `fetchCostReport` function:
 
 ```typescript
 // --- NLOps Chat Handlers ---
@@ -1175,7 +1175,7 @@ const sendChatMessage = async (message: string, confirmAction?: boolean) => {
   const userMessage: ChatMessage = {
     id: generateMessageId(),
     role: 'user',
-    content: confirmAction ? '확인' : message.trim(),
+content: confirmAction? '확인': message.trim(),
     timestamp: new Date().toISOString(),
   };
 
@@ -1223,7 +1223,7 @@ const sendChatMessage = async (message: string, confirmAction?: boolean) => {
     const errorMessage: ChatMessage = {
       id: generateMessageId(),
       role: 'assistant',
-      content: '죄송합니다, 요청을 처리하는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+content: 'Sorry, there was an error processing your request. Please try again later.',
       timestamp: new Date().toISOString(),
     };
     setChatMessages(prev => [...prev, errorMessage]);
@@ -1243,7 +1243,7 @@ const handleCancel = () => {
   const cancelMessage: ChatMessage = {
     id: generateMessageId(),
     role: 'assistant',
-    content: '작업이 취소되었습니다.',
+content: 'The operation has been cancelled.',
     timestamp: new Date().toISOString(),
   };
   setChatMessages(prev => [...prev, cancelMessage]);
@@ -1258,15 +1258,15 @@ const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
 };
 ```
 
-#### 4.1.4 Chat UI JSX 삽입 위치
+#### 4.1.4 Chat UI JSX insertion location
 
-**정확한 삽입 위치**: `return` 문 내부, 3-column grid (`md:grid-cols-3`) 닫는 `</div>` 아래, 메인 컨테이너 `</div>` 바로 앞.
+**Exact insertion location**: Inside the `return` statement, below the closing `</div>` of the 3-column grid (`md:grid-cols-3`), and immediately before the main container `</div>`.
 
-현재 page.tsx에서 마지막 섹션은 Documentation 카드가 포함된 3-column grid이다.
-해당 grid의 닫는 태그 이후에 Chat UI를 추가한다:
+The last section in the current page.tsx is a 3-column grid containing the Documentation card.
+Add the Chat UI after the grid's closing tag:
 
 ```tsx
-      {/* 기존 3-column grid 닫는 태그 */}
+{/* Existing 3-column grid closing tag */}
       </div>
 
       {/* ============================================================ */}
@@ -1280,7 +1280,7 @@ const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
           className="fixed bottom-6 right-6 bg-slate-900 text-white rounded-full p-4 shadow-xl hover:bg-slate-800 transition-all hover:scale-105 z-50 flex items-center gap-2"
         >
           <MessageSquare size={24} />
-          <span className="text-sm font-semibold pr-1">SentinAI 어시스턴트</span>
+<span className="text-sm font-semibold pr-1">SentinAI Assistant</span>
         </button>
       )}
 
@@ -1294,8 +1294,8 @@ const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
                 <Bot size={18} className="text-white" />
               </div>
               <div>
-                <h3 className="font-bold text-white text-sm">SentinAI Ops 어시스턴트</h3>
-                <p className="text-[10px] text-gray-400">자연어로 시스템을 제어하세요</p>
+<h3 className="font-bold text-white text-sm">SentinAI Ops Assistant</h3>
+<p className="text-[10px] text-gray-400">Control your system with natural language</p>
               </div>
             </div>
             <button onClick={() => setChatOpen(false)} className="text-gray-400 hover:text-white transition-colors p-1">
@@ -1308,10 +1308,10 @@ const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
             {chatMessages.length === 0 && (
               <div className="text-center text-gray-400 mt-8">
                 <Bot size={40} className="mx-auto mb-3 opacity-50" />
-                <p className="text-sm">안녕하세요! SentinAI 어시스턴트입니다.</p>
-                <p className="text-xs mt-1">아래 예시를 클릭하거나 직접 입력해보세요.</p>
+<p className="text-sm">Hello! This is SentinAI assistant.</p>
+<p className="text-xs mt-1">Click on the example below or enter it yourself.</p>
                 <div className="flex flex-wrap gap-2 justify-center mt-4">
-                  {['현재 상태', '로그 분석 해줘', '비용 확인'].map((example) => (
+{['Current status', 'Analyze log', 'Check cost'].map((example) => (
                     <button key={example} onClick={() => sendChatMessage(example)}
                       className="text-xs bg-white border border-gray-200 px-3 py-1.5 rounded-full hover:border-blue-300 hover:text-blue-600 transition-colors">
                       {example}
@@ -1331,7 +1331,7 @@ const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
                   <div className={`flex items-center gap-2 mb-1 ${msg.role === 'user' ? 'justify-end' : ''}`}>
                     {msg.role === 'assistant' && <Bot size={12} className="text-blue-500" />}
                     <span className={`text-[10px] ${msg.role === 'user' ? 'text-blue-100' : 'text-gray-400'}`}>
-                      {msg.role === 'user' ? '나' : 'SentinAI'}
+{msg.role === 'user' ? '나' : 'SentinAI'}
                     </span>
                     {msg.role === 'user' && <User size={12} className="text-blue-100" />}
                   </div>
@@ -1364,11 +1364,11 @@ const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
               <div className="flex gap-2">
                 <button onClick={handleConfirm} disabled={isSending}
                   className="flex-1 bg-blue-500 text-white text-sm font-semibold py-2 rounded-lg hover:bg-blue-600 transition-colors disabled:opacity-50">
-                  확인
+check
                 </button>
                 <button onClick={handleCancel} disabled={isSending}
                   className="flex-1 bg-gray-200 text-gray-700 text-sm font-semibold py-2 rounded-lg hover:bg-gray-300 transition-colors disabled:opacity-50">
-                  취소
+cancellation
                 </button>
               </div>
             </div>
@@ -1378,7 +1378,7 @@ const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
           <div className="p-4 border-t border-gray-100 bg-white">
             <div className="flex items-center gap-2">
               <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)}
-                onKeyDown={handleChatKeyDown} placeholder="명령을 입력하세요..."
+onKeyDown={handleChatKeyDown} placeholder="Enter the command..."
                 disabled={isSending || !!pendingConfirmation}
                 className="flex-1 bg-gray-100 border-none rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
               <button onClick={() => sendChatMessage(chatInput)}
@@ -1391,7 +1391,7 @@ const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
         </div>
       )}
 
-    {/* 메인 컨테이너 닫는 태그 */}
+{/* main container closing tag */}
     </div>
   );
 }
@@ -1399,18 +1399,18 @@ const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
 
 ---
 
-## 5. API 명세
+## 5. API Specification
 
 ### 5.1 POST /api/nlops
 
-자연어 명령을 처리한다.
+Process natural language commands.
 
 #### Request
 
 ```typescript
 interface NLOpsRequest {
-  message: string;           // 필수, 1-500자
-  confirmAction?: boolean;   // 선택, 위험한 작업 확인 시 true
+message: string;           // Required, 1-500 characters
+confirmAction?: boolean;   // Optional, true when checking for dangerous operations
 }
 ```
 
@@ -1428,59 +1428,59 @@ interface NLOpsResponse {
 }
 ```
 
-#### 예시: 상태 조회
+#### Example: Status query
 
 ```json
 // Request
-{ "message": "현재 상태 알려줘" }
+{ "message": "Tell me your current status" }
 
 // Response
 {
   "intent": { "type": "query", "target": "status" },
   "executed": true,
-  "response": "현재 시스템은 1 vCPU로 정상 운영 중입니다.\n\n- CPU 사용률: 12.5%\n- TxPool 대기: 23개\n- 자동 스케일링: 활성화\n- 월 예상 비용: $42",
+"response": "Currently the system is operating normally with 1 vCPU.\n\n- CPU Utilization: 12.5%\n- TxPool Standbys: 23\n- Autoscaling: Enabled\n- Estimated monthly cost: $42",
   "data": { "metrics": { ... }, "scaler": { ... } },
-  "suggestedFollowUp": ["로그 분석 해줘", "비용 확인해줘", "이상 현황 보여줘"]
+"suggestedFollowUp": ["Analyze logs", "Check costs", "Show me abnormal status"]
 }
 ```
 
-#### 예시: 스케일링 (확인 필요)
+#### Example: Scaling (requires confirmation)
 
 ```json
-// Request 1 (최초 요청)
-{ "message": "4 vCPU로 스케일업" }
+// Request 1 (initial request)
+{ "message": "Scale up to 4 vCPU" }
 
-// Response 1 (확인 대기)
+// Response 1 (waiting for confirmation)
 {
   "intent": { "type": "scale", "targetVcpu": 4, "force": false },
   "executed": false,
-  "response": "4 vCPU로 스케일링하려고 합니다. 계속하시려면 '확인'을 눌러주세요.",
+"response": "You are about to scale to 4 vCPU. Click 'OK' to continue.",
   "needsConfirmation": true,
-  "confirmationMessage": "4 vCPU로 스케일링을 실행하시겠습니까?"
+"confirmationMessage": "Do you want to scale to 4 vCPU?"
 }
 
-// Request 2 (확인)
-{ "message": "4 vCPU로 스케일업", "confirmAction": true }
+// Request 2 (Confirm)
+{ "message": "Scale up to 4 vCPU", "confirmAction": true }
 
-// Response 2 (실행 완료)
+// Response 2 (execution complete)
 {
   "intent": { "type": "scale", "targetVcpu": 4, "force": false },
   "executed": true,
-  "response": "스케일링이 완료되었습니다!\n이전: 1 vCPU / 2 GiB\n현재: 4 vCPU / 8 GiB"
+"response": "Scaling completed!\nPrevious: 1 vCPU / 2 GiB\nCurrent: 4 vCPU / 8 GiB"
 }
 ```
 
-#### 예시: 로그 분석
+#### Example: Log analysis
 
 ```json
 // Request
-{ "message": "로그 분석 해줘" }
+{ "message": "Please analyze the log" }
 
 // Response
 {
   "intent": { "type": "analyze", "mode": "live" },
   "executed": true,
-  "response": "로그 분석 결과입니다.\n\n심각도: normal\n\n모든 컴포넌트가 정상 동작 중입니다.",
+"response": "This is the result of log analysis.\n\nSeverity: normal\n\nAll components are operating normally.",
   "data": {
     "source": "ai-analyzer",
     "mode": "live",
@@ -1506,33 +1506,33 @@ interface NLOpsResponse {
 
 ---
 
-## 6. AI 프롬프트 전문
+## 6. AI Prompt Professional
 
-### 6.1 Intent Classification 프롬프트
+### 6.1 Intent Classification Prompt
 
-시스템 프롬프트: 섹션 3.1의 `INTENT_CLASSIFICATION_SYSTEM_PROMPT` 참조
+System prompt: See `INTENT_CLASSIFICATION_SYSTEM_PROMPT` in section 3.1
 
-### 6.2 Response Generation 프롬프트
+### 6.2 Response Generation Prompt
 
-시스템 프롬프트: 섹션 3.2의 `RESPONSE_SYSTEM_PROMPT` 참조
+System prompt: see `RESPONSE_SYSTEM_PROMPT` in section 3.2
 
 ---
 
-## 7. 환경 변수
+## 7. Environment variables
 
-### 7.1 신규
+### 7.1 New
 
 ```bash
-# NLOps 활성화 (기본값: true)
+# Enable NLOps (default: true)
 NLOPS_ENABLED=true
 ```
 
-### 7.2 기존 (필수, 이미 설정됨)
+### 7.2 Existing (required, already set)
 
 ```bash
-# AI Client (ai-client.ts가 자동 감지)
+# AI Client (ai-client.ts automatically detects)
 ANTHROPIC_API_KEY=sk-xxx
-AI_GATEWAY_URL=https://api.ai.tokamak.network  # 선택, 프록시 경유
+AI_GATEWAY_URL=https://api.ai.tokamak.network # optional, via proxy
 
 # Base URL
 NEXT_PUBLIC_BASE_URL=http://localhost:3002
@@ -1540,119 +1540,119 @@ NEXT_PUBLIC_BASE_URL=http://localhost:3002
 
 ---
 
-## 8. 테스트 검증
+## 8. Test verification
 
-### 8.1 API 테스트 (curl)
+### 8.1 API testing (curl)
 
 ```bash
-# 1. 상태 조회
+# 1. Status inquiry
 curl -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "현재 상태 알려줘"}'
+-d '{"message": "Tell me the current status"}'
 
-# 2. 메트릭 조회 (영어)
+# 2. Metric lookup (English)
 curl -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
   -d '{"message": "show me the metrics"}'
 
-# 3. 스케일링 요청 (확인 대기)
+# 3. Scaling request (awaiting confirmation)
 curl -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "4 vCPU로 올려줘"}'
+-d '{"message": "Upgrade to 4 vCPU"}'
 
-# 4. 스케일링 확인
+#4. Check scaling
 curl -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "4 vCPU로 올려줘", "confirmAction": true}'
+-d '{"message": "Upgrade to 4 vCPU", "confirmAction": true}'
 
-# 5. 로그 분석 (ai-analyzer.ts 직접 호출)
+# 5. Log analysis (call ai-analyzer.ts directly)
 curl -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "로그 분석 해줘"}'
+-d '{"message": "Please analyze the log"}'
 
-# 6. 이상 탐지 조회
+# 6. Anomaly detection query
 curl -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "이상 현황 보여줘"}'
+-d '{"message": "Show me the status of an error"}'
 
-# 7. RCA 분석
+#7. RCA Analysis
 curl -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "근본 원인 분석해줘"}'
+-d '{"message": "Analyze the root cause"}'
 
-# 8. 비용 리포트
+# 8. Cost Report
 curl -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "비용 얼마야"}'
+-d '{"message": "How much does it cost"}'
 
-# 9. 설정 변경
+# 9. Change settings
 curl -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "자동 스케일링 꺼줘", "confirmAction": true}'
+-d '{"message": "Turn off automatic scaling", "confirmAction": true}'
 
-# 10. 설명 요청
+# 10. Ask for clarification
 curl -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "vCPU가 뭐야?"}'
+-d '{"message": "What is a vCPU?"}'
 
-# 11. NLOps 상태 확인
+# 11. Check NLOps status
 curl http://localhost:3002/api/nlops
 
-# 12. 에러 케이스: 빈 메시지
+# 12. Error case: Empty message
 curl -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
   -d '{"message": ""}'
 # Expected: 400
 
-# 13. 에러 케이스: 유효하지 않은 vCPU (3)
+# 13. Error case: Invalid vCPU (3)
 curl -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "3 vCPU로 스케일"}'
+-d '{"message": "Scale to 3 vCPU"}'
 # Expected: unknown intent
 ```
 
-### 8.2 UI 테스트 체크리스트
+### 8.2 UI testing checklist
 
-1. **채팅 패널**
-   - [ ] 우하단 버튼 클릭 → 패널 열림
-   - [ ] 헤더 화살표 클릭 → 패널 닫힘
-   - [ ] 패널 열린 상태에서 토글 버튼 숨김
+1. **Chat Panel**
+- Click the [ ] button at the bottom right → Open the panel
+- Click the [ ] header arrow → close the panel
+- [ ] Hide toggle button when panel is open
 
-2. **메시지 전송**
-   - [ ] Enter 키로 전송
-   - [ ] 빈 메시지 전송 불가
-   - [ ] 전송 중 로딩 인디케이터 (bounce dots)
+2. **Send message**
+- Send with [ ] Enter key
+- [ ] Empty message cannot be sent
+- [ ] Loading indicator during transfer (bounce dots)
 
-3. **확인 흐름**
-   - [ ] 스케일링 요청 → 확인 다이얼로그
-   - [ ] 확인 → 실행
-   - [ ] 취소 → 취소 메시지
+3. **Confirmation Flow**
+- [ ] Scaling request → confirmation dialog
+- [ ] OK → Run
+- [ ] Cancel → Cancel message
 
-4. **예시 버튼**
-   - [ ] 빈 채팅에서 예시 표시
-   - [ ] 클릭 시 해당 명령 전송
+4. **Example Button**
+- [ ] Show example in empty chat
+- Click [ ] to send the corresponding command
 
 ---
 
-## 9. 의존관계
+## 9. Dependencies
 
-### 9.1 내부 모듈 의존성
+### 9.1 Internal module dependencies
 
 ```
 nlops-engine.ts
-  ├── ai-client.ts          # chatCompletion() - Intent 분류
-  ├── ai-analyzer.ts         # analyzeLogChunk() - 로그 분석
-  ├── log-ingester.ts        # getAllLiveLogs() - 로그 수집
-  └── nlops-responder.ts     # generateResponse() - 응답 생성
-        └── ai-client.ts     # chatCompletion() - 응답 생성
+├── ai-client.ts # chatCompletion() - Intent 분류
+├── ai-analyzer.ts # analyzeLogChunk() - Log analysis
+├── log-ingester.ts # getAllLiveLogs() - Log collection
+└── nlops-responder.ts # generateResponse() - Generate response
+└── ai-client.ts # chatCompletion() - Generate response
 
 /api/nlops/route.ts
   └── nlops-engine.ts        # processCommand()
 ```
 
-### 9.2 API 엔드포인트 의존성
+### 9.2 API endpoint dependencies
 
-| Intent | API 호출 | 메서드 |
+| Intent | API call | method |
 |--------|----------|--------|
 | query/status | `/api/metrics` + `/api/scaler` | GET |
 | query/metrics | `/api/metrics` | GET |
@@ -1660,34 +1660,34 @@ nlops-engine.ts
 | query/cost | `/api/cost-report?days=7` | GET |
 | query/anomalies | `/api/anomalies` | GET |
 | scale | `/api/scaler` | POST |
-| analyze | `analyzeLogChunk()` 직접 호출 | - |
+| analyze | Call `analyzeLogChunk()` directly | - |
 | config | `/api/scaler` | PATCH |
-| explain | 정적 응답 | - |
+| explain | static response | - |
 | rca | `/api/rca` | POST |
 
 ---
 
-## 10. 명령어 매핑 표
+## 10. Command mapping table
 
-### 10.1 한국어 명령어
+### 10.1 Korean commands
 
-| 명령어 예시 | Intent | 호출 대상 |
+| Command example | Intent | call target |
 |-------------|--------|----------|
-| "현재 상태" / "상태 알려줘" | query/status | GET /api/metrics + /api/scaler |
-| "메트릭 보여줘" | query/metrics | GET /api/metrics |
-| "스케일링 기록" | query/history | GET /api/scaler |
-| "비용 얼마야" / "비용 분석" | query/cost | GET /api/cost-report |
-| "이상 현황" / "이상 탐지" | query/anomalies | GET /api/anomalies |
-| "4 vCPU로 올려" | scale/4 | POST /api/scaler |
-| "1 vCPU로 줄여" | scale/1 | POST /api/scaler |
-| "로그 분석 해줘" | analyze/live | analyzeLogChunk() |
-| "자동 스케일링 켜줘" | config/autoScaling/true | PATCH /api/scaler |
-| "시뮬레이션 모드 끄기" | config/simulationMode/false | PATCH /api/scaler |
-| "무중단 스케일링 켜줘" | config/zeroDowntimeEnabled/true | PATCH /api/scaler |
-| "CPU가 뭐야?" | explain/cpu | 정적 응답 |
-| "근본 원인 분석" | rca | POST /api/rca |
+| “Current status” / “Tell me the status” | query/status | GET /api/metrics + /api/scaler |
+| “Show me the metrics” | query/metrics | GET /api/metrics |
+| "Scaling Records" | query/history | GET /api/scaler |
+| “How much does it cost” / “Cost analysis” | query/cost | GET /api/cost-report |
+| “Anomaly Status” / “Anomaly Detection” | query/anomalies | GET /api/anomalies |
+| "Up to 4 vCPU" | scale/4 | POST /api/scaler |
+| "Reduce to 1 vCPU" | scale/1 | POST /api/scaler |
+| “Analyze logs” | analyze/live | analyzeLogChunk() |
+| “Turn on automatic scaling” | config/autoScaling/true | PATCH /api/scaler |
+| "Turn off simulation mode" | config/simulationMode/false | PATCH /api/scaler |
+| “Turn on non-stop scaling” | config/zeroDowntimeEnabled/true | PATCH /api/scaler |
+| “What is a CPU?” | explain/cpu | static response |
+| “Root Cause Analysis” | rca | POST /api/rca |
 
-### 10.2 영어 명령어
+### 10.2 English commands
 
 | Command Example | Intent | Target |
 |-----------------|--------|--------|
@@ -1702,36 +1702,36 @@ nlops-engine.ts
 
 ---
 
-## 부록 A: 파일 생성/수정 체크리스트
+## Appendix A: File Creation/Modification Checklist
 
-### A.1 신규 파일 (4개)
+### A.1 New files (4)
 
-- [ ] `src/types/nlops.ts` — 타입 정의
-- [ ] `src/lib/nlops-engine.ts` — 핵심 엔진
-- [ ] `src/lib/nlops-responder.ts` — 응답 생성기
-- [ ] `src/app/api/nlops/route.ts` — API 엔드포인트
+- [ ] `src/types/nlops.ts` — Type definitions
+- [ ] `src/lib/nlops-engine.ts` — Core engine
+- [ ] `src/lib/nlops-responder.ts` — Response generator
+- [ ] `src/app/api/nlops/route.ts` — API endpoint
 
-### A.2 수정 파일 (2개)
+### A.2 Modified files (2)
 
 - [ ] `src/app/page.tsx` — Chat UI 추가 (import, state, handlers, JSX)
 - [ ] `.env.local.sample` — NLOPS_ENABLED 추가
 
-### A.3 환경 설정
+### A.3 Preferences
 
 - [ ] `.env.local` — NLOPS_ENABLED=true 추가
 
 ---
 
-## 부록 B: 예상 토큰 사용량
+## Appendix B: Expected Token Usage
 
-| 기능 | AI 모델 | 호출 빈도 | 예상 토큰/호출 |
+| Features | AI model | call frequency | expected token/call |
 |------|---------|----------|---------------|
-| Intent Classification | Haiku 4.5 (fast) | 매 메시지 | ~300 |
-| Response Generation | Haiku 4.5 (fast) | 복잡한 응답만 | ~700 |
-| Explain | 없음 (정적) | - | 0 |
+| Intent Classification | Haiku 4.5 (fast) | Every message | ~300 |
+| Response Generation | Haiku 4.5 (fast) | Complex responses only | ~700 |
+| Explain | None (static) | - | 0 |
 
-- 정적 응답 사용 시 Response Generation AI 호출 생략
-- 평균 메시지당 약 300~1000 토큰 예상
+- Response Generation AI call is omitted when using static response
+- Expect approximately 300 to 1000 tokens per message on average
 
 ---
 

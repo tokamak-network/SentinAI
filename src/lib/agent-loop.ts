@@ -10,7 +10,7 @@ import { pushMetric, getRecentMetrics } from '@/lib/metrics-store';
 import { getStore } from '@/lib/redis-store';
 import { recordUsage } from '@/lib/usage-tracker';
 import { runDetectionPipeline, type DetectionResult } from '@/lib/detection-pipeline';
-import { getActiveL1RpcUrl, reportL1Success, reportL1Failure, checkProxydBackends } from '@/lib/l1-rpc-failover';
+import { getActiveL1RpcUrl, reportL1Success, reportL1Failure, checkProxydBackends, getFailoverEvents } from '@/lib/l1-rpc-failover';
 import {
   makeScalingDecision,
   mapAIResultToSeverity,
@@ -54,6 +54,7 @@ export interface AgentCycleResult {
     gasUsedRatio: number;
     batcherBalanceEth?: number;
     proposerBalanceEth?: number;
+    challengerBalanceEth?: number;
   } | null;
   detection: DetectionResult | null;
   scaling: {
@@ -69,6 +70,13 @@ export interface AgentCycleResult {
     toUrl: string;
     k8sUpdated: boolean;
   };
+  proxydReplacement?: {
+    triggered: boolean;
+    backendName: string;
+    oldUrl: string;
+    newUrl: string;
+    reason: string;
+  };
   error?: string;
 }
 
@@ -77,6 +85,7 @@ export interface AgentCycleResult {
 // ============================================================
 
 let running = false;
+let lastObservedFailoverTimestamp: string | null = null;
 
 
 // ============================================================
@@ -437,6 +446,8 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
     }
 
     const { dataPoint, l1BlockHeight, failover, batcherBalanceEth, proposerBalanceEth, challengerBalanceEth } = collected;
+    let failoverInfo = failover;
+    let proxydReplacement: AgentCycleResult['proxydReplacement'] | undefined;
 
     const metricsResult: AgentCycleResult['metrics'] = {
       l1BlockHeight,
@@ -454,9 +465,27 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       const replacement = await checkProxydBackends();
       if (replacement) {
         console.info(`[AgentLoop] Proxyd backend replaced: ${replacement.backendName} → ${replacement.newUrl}`);
+        proxydReplacement = {
+          triggered: true,
+          backendName: replacement.backendName,
+          oldUrl: replacement.oldUrl,
+          newUrl: replacement.newUrl,
+          reason: replacement.reason,
+        };
       }
     } catch {
       // Non-blocking — continue cycle
+    }
+
+    // Include non-Proxyd L1 URL failovers even when they were triggered outside this cycle path.
+    const latestFailoverEvent = getLatestUnseenFailoverEvent(failoverInfo);
+    if (!failoverInfo && latestFailoverEvent) {
+      failoverInfo = {
+        triggered: true,
+        fromUrl: latestFailoverEvent.fromUrl,
+        toUrl: latestFailoverEvent.toUrl,
+        k8sUpdated: latestFailoverEvent.k8sUpdated,
+      };
     }
 
     // Phase 2: Detect — run anomaly detection pipeline
@@ -475,10 +504,11 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       metrics: metricsResult,
       detection,
       scaling,
-      failover,
+      failover: failoverInfo,
+      proxydReplacement,
     };
     await pushCycleResult(result);
-    console.info(`[Agent Loop] Cycle complete: score=${scaling?.score}, L2=${metricsResult.l2BlockHeight}`);
+    console.info(`[Agent Loop] Cycle complete: score=${scaling?.score}, L2=${dataPoint.blockHeight}`);
     return result;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
@@ -510,6 +540,36 @@ export function isAgentRunning(): boolean {
  */
 export function resetAgentState(): void {
   running = false;
+  lastObservedFailoverTimestamp = null;
+}
+
+function getLatestUnseenFailoverEvent(
+  currentCycleFailover?: AgentCycleResult['failover']
+): ReturnType<typeof getFailoverEvents>[number] | null {
+  const events = getFailoverEvents();
+  if (events.length === 0) return null;
+
+  const latest = events[events.length - 1];
+  if (!latest) return null;
+
+  // If this cycle already captured a failover, mark it as observed and don't override.
+  if (currentCycleFailover?.triggered) {
+    lastObservedFailoverTimestamp = latest.timestamp;
+    return null;
+  }
+
+  // Bootstrap: don't replay stale history on first observation.
+  if (lastObservedFailoverTimestamp === null) {
+    lastObservedFailoverTimestamp = latest.timestamp;
+    return null;
+  }
+
+  if (latest.timestamp === lastObservedFailoverTimestamp) {
+    return null;
+  }
+
+  lastObservedFailoverTimestamp = latest.timestamp;
+  return latest;
 }
 
 // ============================================================

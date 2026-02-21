@@ -3,44 +3,44 @@
 ## Current Status
 
 ### In Progress (2026-02-20 Proposal 10/15/19 MVP Start)
-- [x] Proposal 19 Savings Plans Advisor 타입/분석 로직 구현 (`src/types/savings-advisor.ts`, `src/lib/savings-advisor.ts`)
+- [x] Proposal 19 Savings Plans Advisor type/analysis logic implementation (`src/types/savings-advisor.ts`, `src/lib/savings-advisor.ts`)
 - [x] Savings Advisor API 추가 (`GET /api/savings-advisor`)
-- [x] Cost Report에 Savings Advice 요약 연동 (`src/lib/cost-optimizer.ts`, `src/types/cost.ts`)
-- [x] Proposal 15 Scheduled Scaling 타입/실행 모듈 구현 (`src/types/scheduled-scaling.ts`, `src/lib/scheduled-scaler.ts`)
-- [x] Scheduler 매시 정각 예약 스케일링 태스크 연동 (`src/lib/scheduler.ts`)
-- [x] Proposal 10 Derivation Lag 타입/모니터 구현 (`src/types/derivation.ts`, `src/lib/derivation-lag-monitor.ts`)
-- [x] Metrics API에 derivation lag 상태 포함 (`src/app/api/metrics/route.ts`)
-- [ ] 변경 파일 lint 및 스모크 검증
-- [ ] 문서/환경변수 가이드 후속 업데이트 (다음 커밋에서 보강)
+- [x] Savings Advice summary linked to Cost Report (`src/lib/cost-optimizer.ts`, `src/types/cost.ts`)
+- [x] Proposal 15 Scheduled Scaling type/execution module implementation (`src/types/scheduled-scaling.ts`, `src/lib/scheduled-scaler.ts`)
+- [x] Scheduler hourly reservation scaling task integration (`src/lib/scheduler.ts`)
+- [x] Proposal 10 Derivation Lag type/monitor implementation (`src/types/derivation.ts`, `src/lib/derivation-lag-monitor.ts`)
+- [x] Include derivation lag status in Metrics API (`src/app/api/metrics/route.ts`)
+- [ ] Change file lint and smoke verification
+- [ ] Subsequent update to the document/environment variable guide (reinforced in the next commit)
 
 ### In Progress (2026-02-20 Optimism Plugin Integration)
-- [x] `docs/todo/optimism-tutorial-integration.md` 기반 요구사항 확인
-- [x] `src/chains/optimism` 체인 플러그인 구현 (튜토리얼 OP Stack용)
-- [x] `CHAIN_TYPE` 기반 플러그인 자동 로딩 확장 (`optimism`, `my-l2` alias)
-- [x] 체인 레지스트리 테스트 보강 (`CHAIN_TYPE=optimism|my-l2`)
-- [x] `.env.local.sample`에 Optimism 플러그인 환경 변수 문서화
-- [x] lint 및 테스트 실행으로 회귀 검증 (chain-plugin 통과, tsc 전체 실패는 기존 테스트 타입 불일치 이슈)
+- [x] Check requirements based on `docs/todo/optimism-tutorial-integration.md`
+- [x] `src/chains/optimism` chain plugin implementation (for tutorial OP Stack)
+- [x] Extension of automatic loading of `CHAIN_TYPE` based plugins (`optimism`, `my-l2` alias)
+- [x] Enhanced chain registry testing (`CHAIN_TYPE=optimism|my-l2`)
+- [x] Document Optimism plugin environment variables in `.env.local.sample`.
+- [x] Regression verification through lint and test execution (chain-plugin passes, tsc overall failure is an issue with existing test type mismatch)
 
 ### In Progress (2026-02-20 Optimism Metrics Smoke + Installer)
-- [x] `CHAIN_TYPE=optimism` 기준 실제 `/api/metrics` 호출 스모크 테스트 스크립트 추가
-- [x] npm 실행 커맨드 추가 (`smoke:metrics:optimism`)
-- [x] `install.sh`에 체인 플러그인 선택 및 Optimism 메타데이터 설정 반영
-- [x] 스모크/스크립트 문법 검증
+- [x] Add actual `/api/metrics` call smoke test script based on `CHAIN_TYPE=optimism`
+- [x] Add npm run command (`smoke:metrics:optimism`)
+- [x] Chain plugin selection and Optimism metadata settings reflected in `install.sh`
+- [x] Smoke/script grammar verification
 
 ### In Progress (2026-02-20 Proposal 20 ZK Plugin + Dashboard)
-- [x] `ChainPlugin` 계약 확장 (`chainMode`, `capabilities`)
-- [x] `src/chains/zkstack` 플러그인 추가 (`legacy-era` / `os-preview`)
-- [x] `CHAIN_TYPE=zkstack` 레지스트리 매핑 및 테스트 보강
-- [x] `/api/metrics` 체인 메타 응답(`chain`) 및 capability 기반 필드 분기
-- [x] 대시보드 체인 격리 렌더링 (동적 EOA roles, OP Fault Proof 숨김, ZK Proof/Settlement 카드 추가)
-- [x] lint/type/test 재검증 및 잔여 타입 오류 정리
-- [x] `examples/zkstack` 표준 템플릿 추가 (`.env`, probe 응답 스키마, 사용 가이드)
+- [x] `ChainPlugin` contract extension (`chainMode`, `capabilities`)
+- [x] Added `src/chains/zkstack` plugin (`legacy-era` / `os-preview`)
+- [x] `CHAIN_TYPE=zkstack` registry mapping and test enhancements
+- [x] `/api/metrics` chain meta response (`chain`) and capability based field branching
+- [x] Dashboard chain isolation rendering (dynamic EOA roles, OP Fault Proof hidden, ZK Proof/Settlement card added)
+- [x] Re-verify lint/type/test and clean up residual type errors
+- [x] Add `examples/zkstack` standard template (`.env`, probe response schema, usage guide)
 
 ### In Progress (2026-02-16 Refresh Audit)
-- [x] **Codebase Refresh Audit P0-P2 진행 완료** (`docs/todo/codebase-audit-2026-02-16-refresh.md`)
-  - P0: Seed `blockInterval` 덮어쓰기 수정 + 8 vCPU 메모리 타입 정합(16GiB) ✅
-  - P1: `/api/metrics` txpool 타임아웃 + source 메타데이터 정확화 ✅
-  - P2: 미들웨어 경로 매칭 강화 + 운영 코드 lint warning 정리 + ESLint ignore 현대화 ✅
+- [x] **Codebase Refresh Audit P0-P2 progress completed** (`docs/todo/codebase-audit-2026-02-16-refresh.md`)
+- P0: Fix Seed `blockInterval` overwrite + Match 8 vCPU memory type (16GiB) ✅
+- P1: `/api/metrics` txpool timeout + source metadata accuracy ✅
+- P2: Enhanced middleware path matching + Cleaned up operational code lint warnings + Modernized ESLint ignore ✅
 
 ### Completed (2026-02-16)
 - [x] **Proposal 1-8 fully implemented (100%)**
@@ -86,7 +86,7 @@
 - [ ] Multi-chain dashboard UI dynamic rendering (Phase 5)
 
 **Docs:** `docs/todo/universal-blockchain-platform.md`
-**ZK 확장 계획:** `docs/todo/proposal-20-zk-l2-plugin-expansion.md`
+**ZK Expansion Plan:** `docs/todo/proposal-20-zk-l2-plugin-expansion.md`
 
 **Estimate:** 5-7 days (1-2 days per plugin)
 
@@ -119,31 +119,31 @@
 
 ## Recent Changes (2026-02-19)
 
-- [x] 대시보드 Row 2 카드 높이 고정 (`Activity Log`, `Components`)
-- [x] `Activity Log` 과거 로그 탐색 슬라이더 추가 (로그 누적 시 구간 이동)
-- [x] `Components` 카드 내부 스크롤 적용 (카드 외곽 높이 유지)
-- [x] 검증 경로 보강: read-only 모드에서 스케일러 쓰기 허용 옵션 추가 (`SENTINAI_ALLOW_SCALER_WRITE_IN_READONLY`)
-- [x] seed 시나리오 TTL 정합화 (Redis/InMemory `setSeedScenario` 기본 80초)
-- [x] Agent Loop 스케일링 판단 시 seed `currentVcpu` 대신 실제 런타임 vCPU 사용
+- [x] Fixed dashboard Row 2 card height (`Activity Log`, `Components`)
+- [x] Added `Activity Log` past log navigation slider (moves sections when logs are accumulated)
+- [x] Apply scrolling inside the `Components` card (maintain height outside the card)
+- [x] Verification path augmentation: Add option to allow scaler writing in read-only mode (`SENTINAI_ALLOW_SCALER_WRITE_IN_READONLY`)
+- [x] Seed scenario TTL consistency (Redis/InMemory `setSeedScenario` default 80 seconds)
+- [x] When determining Agent Loop scaling, use actual runtime vCPU instead of seed `currentVcpu`
 
 ---
 
 ## Review (2026-02-20 Optimism Plugin Integration)
 
-- 표준 OP Stack 튜토리얼 배포를 위해 `OptimismPlugin` 추가 및 Thanos 공통 구성 재사용으로 변경 범위를 최소화함
-- 레지스트리에서 `CHAIN_TYPE`를 해석해 `optimism`/`my-l2`를 자동 매핑하도록 확장함
-- 테스트에서 `CHAIN_TYPE`별 로딩 경로를 검증해 기본값(thanos) 회귀를 방지함
+- Minimize the scope of change by adding `OptimismPlugin` and reusing Thanos common configuration to distribute the standard OP Stack tutorial.
+- Extended to automatically map `optimism`/`my-l2` by interpreting `CHAIN_TYPE` in the registry.
+- Prevent default (thanos) regression by verifying the loading path for each `CHAIN_TYPE` in the test.
 
 ## Review (2026-02-20 Optimism Metrics Smoke + Installer)
 
-- dev 서버를 실제로 띄운 뒤 `/api/metrics?stress=true`를 호출해 Optimism 모드 API 응답을 검증하는 스모크 테스트를 추가함
-- 설치 스크립트에서 `CHAIN_TYPE`를 입력/검증/저장하고, Optimism 선택 시 `L2_CHAIN_*`, `L1_CHAIN` 기본값까지 함께 구성하도록 확장함
+- Added a smoke test that verifies the Optimism mode API response by actually launching the dev server and calling `/api/metrics?stress=true`.
+- Enter/verify/save `CHAIN_TYPE` in the installation script and expand to configure `L2_CHAIN_*` and `L1_CHAIN` default values ​​when Optimism is selected.
 
 ## Review (2026-02-20 Proposal 10/15/19 MVP Start)
 
-- Savings Plans Advisor를 독립 모듈/전용 API로 추가하고 `cost-report` 응답에 요약 필드를 연결해 즉시 소비 가능하게 구성함
-- Scheduled Scaling은 매시 정각 cron으로 실행되며, 쿨다운/오토스케일링 상태/실시간 CPU override를 포함한 안전 가드로 최소 동작 MVP를 완성함
-- Derivation Lag Monitor를 `optimism_syncStatus` 기반으로 추가하고 `/api/metrics` 응답에 lag 레벨 및 L1 헬스 정보를 포함해 관측 경로를 확보함
+- Add Savings Plans Advisor as an independent module/dedicated API and configure it for immediate consumption by connecting a summary field to the `cost-report` response.
+- Scheduled Scaling runs as a cron every hour, and completes the minimum operation MVP with safety guards including cooldown/autoscaling status/real-time CPU override.
+- Add Derivation Lag Monitor based on `optimism_syncStatus` and secure observation path by including lag level and L1 health information in `/api/metrics` response.
 
 ---
 

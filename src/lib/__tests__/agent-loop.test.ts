@@ -118,6 +118,7 @@ import { runAgentCycle, isAgentRunning, resetAgentState } from '@/lib/agent-loop
 import { runDetectionPipeline } from '@/lib/detection-pipeline';
 import { makeScalingDecision } from '@/lib/scaling-decision';
 import { scaleOpGeth, isAutoScalingEnabled, checkCooldown } from '@/lib/k8s-scaler';
+import * as failoverModule from '@/lib/l1-rpc-failover';
 
 describe('agent-loop', () => {
   beforeEach(() => {
@@ -256,6 +257,53 @@ describe('agent-loop', () => {
 
       expect(result.phase).toBe('error');
       expect(result.error).toBeDefined();
+    });
+
+    it('should include unseen external L1 failover event in cycle result', async () => {
+      const { createPublicClient } = await import('viem');
+      vi.mocked(createPublicClient).mockReturnValue({
+        getBlock: vi.fn().mockResolvedValue({
+          number: BigInt(1000),
+          transactions: ['0x1', '0x2'],
+          gasUsed: BigInt(5000000),
+          gasLimit: BigInt(10000000),
+        }),
+        getBlockNumber: vi.fn().mockResolvedValue(BigInt(500)),
+      } as never);
+
+      const getFailoverEventsSpy = vi.spyOn(failoverModule, 'getFailoverEvents');
+      getFailoverEventsSpy.mockReturnValueOnce([]); // bootstrap
+      await runAgentCycle();
+
+      getFailoverEventsSpy.mockReturnValueOnce([
+        {
+          timestamp: '2026-02-21T00:00:00.000Z',
+          fromUrl: 'https://rpc1.io',
+          toUrl: 'https://rpc2.io',
+          reason: 'external failover',
+          k8sUpdated: true,
+          k8sComponents: ['op-op-node'],
+          simulated: false,
+        },
+      ]);
+      await runAgentCycle(); // observe latest failover timestamp
+
+      getFailoverEventsSpy.mockReturnValueOnce([
+        {
+          timestamp: '2026-02-21T00:01:00.000Z',
+          fromUrl: 'https://rpc2.io',
+          toUrl: 'https://rpc3.io',
+          reason: 'external failover #2',
+          k8sUpdated: false,
+          k8sComponents: [],
+          simulated: false,
+        },
+      ]);
+      const result = await runAgentCycle();
+      expect(result.failover?.triggered).toBe(true);
+      expect(result.failover?.fromUrl).toBe('https://rpc2.io');
+      expect(result.failover?.toUrl).toBe('https://rpc3.io');
+      getFailoverEventsSpy.mockRestore();
     });
   });
 

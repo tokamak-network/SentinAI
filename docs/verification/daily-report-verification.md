@@ -1,40 +1,40 @@
-# 일일 운영 보고서 기능 — 검증 보고서
+# Daily operation report function — Verification report
 
-> **검증일**: 2026-02-09
-> **대상 스펙**: `docs/spec/daily-report-spec.md`
-> **검증 환경**: macOS, Node.js 20, Next.js 16.1.6 (Turbopack), dev 모드
+> **Verification date**: 2026-02-09
+> **Target spec**: `docs/spec/daily-report-spec.md`
+> **Verification environment**: macOS, Node.js 20, Next.js 16.1.6 (Turbopack), dev mode
 > **커밋**: `bc435b8` (feat: add daily operation report generation system)
 
 ---
 
-## 1. 검증 요약
+## 1. Verification summary
 
-| 검증 항목 | 결과 | 비고 |
+| Verification items | Results | Remarks |
 |-----------|------|------|
-| TypeScript 빌드 | **PASS** | `npm run build` 정상 완료 |
-| ESLint | **PASS** | 에러 0개 (기존 coverage 경고 1개만 존재) |
-| 서버 시작 시 스케줄러 초기화 | **PASS** | instrumentation.ts 정상 동작 |
-| 축적기 초기화 (API) | **PASS** | `initialized: true, currentDate: 2026-02-09` |
-| 5분 스냅샷 동작 | **PASS** | `snapshotCount: 1` 확인 |
-| AI 보고서 생성 (API 호출) | **PARTIAL** | AI Gateway 도달 확인 (429 rate limit) |
-| 에러 핸들링 | **PASS** | API 키 부재, 네트워크 오류 시 적절한 에러 메시지 |
-| 보고서 목록 조회 | **PASS** | `GET ?list=true` 정상 |
-| 보고서 내용 조회 | **PASS** | `GET ?date=YYYY-MM-DD` 정상 |
-| 중복 방지 (force=false) | **PASS** | 기존 보고서 있으면 에러 반환 |
-| 날짜 형식 검증 | **PASS** | 잘못된 형식 시 400 |
-| 과거 날짜 요청 | **PASS** | 인메모리 한계 안내 메시지 |
-| 기본 GET (상태 + 목록) | **PASS** | accumulator + recentReports 정상 |
-| Docker 설정 | **PASS** | Dockerfile, docker-compose.yml 수정 확인 |
-| scaler 통합 | **PASS** | addScalingEvent import 및 호출 추가 |
-| log analysis 통합 | **PASS** | addLogAnalysisResult 호출 추가 |
+| TypeScript Build | **PASS** | `npm run build` completed normally |
+| ESLint | **PASS** | 0 errors (only 1 existing coverage warning) |
+| Initialize scheduler at server startup | **PASS** | instrumentation.ts normal operation |
+| Accumulator initialization (API) | **PASS** | `initialized: true, currentDate: 2026-02-09` |
+| 5-minute snapshot operation | **PASS** | Check `snapshotCount: 1` |
+| AI report generation (API call) | **PARTIAL** | AI Gateway arrival confirmation (429 rate limit) |
+| Error handling | **PASS** | Appropriate error message in case of absence of API key or network error |
+| View report list | **PASS** | `GET ?list=true` normal |
+| View report contents | **PASS** | `GET ?date=YYYY-MM-DD` normal |
+| Avoid duplication (force=false) | **PASS** | Returns an error if there is an existing report |
+| Date Format Validation | **PASS** | 400 for invalid format |
+| Request a past date | **PASS** | In-memory limit information message |
+| Basic GET (status + list) | **PASS** | accumulator + recentReports normal |
+| Docker settings | **PASS** | Check Dockerfile, docker-compose.yml modification |
+| scaler integration | **PASS** | addScalingEvent import and call |
+| log analysis integration | **PASS** | Add addLogAnalysisResult call |
 
-**전체 결과**: 16/16 항목 통과 (1개 PARTIAL — AI Gateway rate limit)
+**Overall results**: 16/16 items passed (1 PARTIAL — AI Gateway rate limit)
 
 ---
 
-## 2. 상세 검증 내역
+## 2. Detailed verification details
 
-### 2.1 빌드 + Lint (Phase 6)
+### 2.1 Build + Lint (Phase 6)
 
 ```
 $ npm run build
@@ -43,10 +43,10 @@ $ npm run build
 Route: ƒ /api/reports/daily (Dynamic)
 
 $ npm run lint
-✖ 1 problem (0 errors, 1 warning)  ← 기존 coverage 폴더 경고
+✖ 1 problem (0 errors, 1 warning) ← Warning for existing coverage folder
 ```
 
-### 2.2 서버 시작 시 스케줄러 초기화
+### 2.2 Scheduler initialization when server starts
 
 ```
 [Daily Accumulator] Initialized for 2026-02-09
@@ -54,9 +54,9 @@ $ npm run lint
 ✓ Ready in 1143ms
 ```
 
-`instrumentation.ts` → `initializeScheduler()` → `initializeAccumulator()` 체인 정상 동작.
+`instrumentation.ts` → `initializeScheduler()` → `initializeAccumulator()` chain operates normally.
 
-### 2.3 축적기 상태 API
+### 2.3 Accumulator Status API
 
 ```json
 GET /api/reports/daily?status=true
@@ -72,7 +72,7 @@ GET /api/reports/daily?status=true
 }
 ```
 
-### 2.4 Seed 데이터 주입
+### 2.4 Seed data injection
 
 ```json
 POST /api/metrics/seed?scenario=rising
@@ -82,7 +82,7 @@ POST /api/metrics/seed?scenario=spike
 { "success": true, "scenario": "spike", "injectedCount": 20 }
 ```
 
-### 2.5 수동 보고서 생성
+### 2.5 Manual report generation
 
 ```json
 POST /api/reports/daily  { "debug": true }
@@ -98,10 +98,10 @@ POST /api/reports/daily  { "debug": true }
 }
 ```
 
-**분석**: AI Gateway까지 정상 도달. 429 응답은 rate limit으로, API 통신 자체는 정상.
-프롬프트 조립, 메타데이터 계산, 에러 핸들링 모두 정상 동작.
+**Analysis**: Reached the top of AI Gateway. The 429 response is rate limit, and the API communication itself is normal.
+Prompt assembly, metadata calculation, and error handling all operate normally.
 
-### 2.6 보고서 조회 API
+### 2.6 Report View API
 
 ```json
 GET /api/reports/daily?list=true
@@ -117,17 +117,17 @@ GET /api/reports/daily?date=2025-12-31
 { "success": false, "error": "No report found for 2025-12-31" }
 ```
 
-### 2.7 중복 방지
+### 2.7 Avoid duplication
 
 ```json
-POST /api/reports/daily  {}  (기존 보고서 존재 시)
+POST /api/reports/daily {} (if existing report exists)
 {
     "success": false,
     "error": "Report for 2026-02-09 already exists. Use force=true to overwrite."
 }
 ```
 
-### 2.8 기본 GET
+### 2.8 Basic GET
 
 ```json
 GET /api/reports/daily
@@ -140,7 +140,7 @@ GET /api/reports/daily
 }
 ```
 
-### 2.9 과거 날짜 요청
+### 2.9 Past date request
 
 ```json
 POST /api/reports/daily  { "date": "2026-01-01" }
@@ -152,81 +152,81 @@ POST /api/reports/daily  { "date": "2026-01-01" }
 
 ---
 
-## 3. 구현 중 발견된 이슈 및 수정
+## 3. Issues and modifications discovered during implementation
 
 ### 3.1 `next.config.ts` — instrumentationHook 불필요
 
-- **문제**: 스펙에서 `experimental.instrumentationHook: true` 추가를 명시했으나, Next.js 16에서는 기본 지원
-- **증상**: 빌드 시 `'instrumentationHook' does not exist in type 'ExperimentalConfig'` 타입 에러
-- **수정**: `experimental` 블록 제거. `src/instrumentation.ts` 파일만 있으면 자동 인식
+- **Problem**: The spec specifies the addition of `experimental.instrumentationHook: true`, but it is supported by default in Next.js 16.
+- **Symptom**: `'instrumentationHook' does not exist in type 'ExperimentalConfig'` type error when building.
+- **FIX**: Removed `experimental` block. Automatic recognition with just the `src/instrumentation.ts` file
 
-### 3.2 `node-cron` 타입 참조
+### 3.2 `node-cron` type reference
 
-- **문제**: `cron.ScheduledTask` 네임스페이스 참조가 빌드 시 타입 에러
-- **수정**: `import cron, { type ScheduledTask } from 'node-cron'`로 명시적 타입 import
+- **Problem**: `cron.ScheduledTask` namespace reference causes type error when building
+- **Fix**: Explicit type import with `import cron, { type ScheduledTask } from 'node-cron'`.
 
-### 3.3 모듈 스코프 분리 (Next.js dev 모드)
+### 3.3 Separate module scope (Next.js dev mode)
 
-- **문제**: `instrumentation.ts`에서 초기화한 축적기 싱글톤과 API route 모듈의 인스턴스가 분리됨
-- **원인**: Next.js dev 모드에서 HMR 시 API route가 별도 모듈 스코프로 로드
-- **수정**: API route의 GET/POST 핸들러에서 `initializeAccumulator()` 호출 추가 (idempotent). POST에서는 `takeSnapshot()`도 호출하여 최신 데이터 확보
-- **참고**: production 빌드에서는 모듈 싱글톤이 공유되므로 이 문제 없음. 추가한 코드는 방어적 초기화로, production에서도 무해
+- **Problem**: The accumulator singleton initialized in `instrumentation.ts` and the instance of the API route module are separated.
+- **Cause**: When performing HMR in Next.js dev mode, the API route is loaded as a separate module scope.
+- **Edit**: Added `initializeAccumulator()` call in GET/POST handler of API route (idempotent). In POST, we also call `takeSnapshot()` to obtain the latest data.
+- **Note**: This problem does not exist in production builds since the module singleton is shared. The code you added is a defensive initialization, so it is harmless even in production.
 
-### 3.4 `analyze-logs/route.ts` 부재
+### 3.4 Absence of `analyze-logs/route.ts`
 
-- **문제**: 스펙에서 `src/app/api/analyze-logs/route.ts` 수정을 명시했으나, 해당 파일 미존재
-- **수정**: 로그 분석 결과 기록을 `scaler/route.ts`의 `fetchAIAnalysis()` 함수 내부에 추가 (실제 로그 분석이 수행되는 위치)
+- **Problem**: The specification specifies modification of `src/app/api/analyze-logs/route.ts`, but the file does not exist.
+- **Edit**: Add recording of log analysis results inside the `fetchAIAnalysis()` function in `scaler/route.ts` (where the actual log analysis is performed).
 
-### 3.5 미사용 상수 경고
+### 3.5 Unused constant warning
 
-- **문제**: `SNAPSHOT_INTERVAL_MS` 상수 정의 후 미사용 (lint 경고)
-- **수정**: 해당 상수 제거 (`MIN_SNAPSHOT_GAP_MS`로 대체됨)
+- **Problem**: `SNAPSHOT_INTERVAL_MS` constant not used after definition (lint warning)
+- **FIX**: Remove that constant (replaced by `MIN_SNAPSHOT_GAP_MS`).
 
 ---
 
-## 4. 파일 변경 목록
+## 4. File change list
 
-### 신규 파일 (6개)
+### New files (6)
 
-| 파일 | 줄 수 | 역할 |
+| file | number of lines | Role |
 |------|-------|------|
-| `src/types/daily-report.ts` | 126 | 전체 타입 정의 |
-| `src/lib/daily-accumulator.ts` | 196 | 24시간 메트릭 축적기 |
-| `src/lib/daily-report-generator.ts` | 271 | AI 보고서 생성 + 파일 저장 |
-| `src/lib/scheduler.ts` | 101 | node-cron 스케줄러 |
-| `src/instrumentation.ts` | 6 | Next.js 서버 시작 훅 |
-| `src/app/api/reports/daily/route.ts` | 153 | GET/POST API 엔드포인트 |
+| `src/types/daily-report.ts` | 126 | Full type definition |
+| `src/lib/daily-accumulator.ts` | 196 | 24 Hour Metric Accumulator |
+| `src/lib/daily-report-generator.ts` | 271 | Generate AI Report + Save File |
+| `src/lib/scheduler.ts` | 101 | node-cron scheduler |
+| `src/instrumentation.ts` | 6 | Next.js server startup hook |
+| `src/app/api/reports/daily/route.ts` | 153 | GET/POST API endpoint |
 
-### 수정 파일 (4개)
+### Modified files (4)
 
-| 파일 | 변경 내용 |
+| file | Changes |
 |------|-----------|
-| `src/app/api/scaler/route.ts` | `addScalingEvent` + `addLogAnalysisResult` 통합 |
-| `Dockerfile` | `data/reports` 디렉토리 생성 |
-| `docker-compose.yml` | `sentinai-reports` 볼륨 마운트 |
-| `package.json` | `node-cron`, `@types/node-cron` 의존성 |
+| `src/app/api/scaler/route.ts` | `addScalingEvent` + `addLogAnalysisResult` integration |
+| `Dockerfile` | Create `data/reports` directory |
+| `docker-compose.yml` | Mount `sentinai-reports` volume |
+| `package.json` | `node-cron`, `@types/node-cron` dependencies |
 
 ---
 
-## 5. 미검증 항목 (운영 환경 필요)
+## 5. Unverified items (requires operating environment)
 
-| 항목 | 사유 |
+| Item | Reason |
 |------|------|
-| AI 보고서 실제 생성 (마크다운 품질) | AI Gateway rate limit으로 전체 보고서 생성 미완료 |
-| 23:55 KST cron 자동 실행 | 실시간 대기 불가 (스케줄 등록은 확인) |
-| Docker 볼륨 영속성 | Docker 환경 미테스트 |
-| 장시간 축적 (288 스냅샷) | 24시간 연속 운영 필요 |
-| 날짜 변경 시 축적기 리셋 | 자정 전후 테스트 필요 |
+| Actual generation of AI reports (Markdown quality) | Full report generation incomplete due to AI Gateway rate limit |
+| 23:55 KST cron automatic execution | No real-time waiting (confirm schedule registration) |
+| Docker volume persistence | Docker environment untested |
+| Long-time accumulation (288 snapshots) | Requires continuous operation 24 hours a day |
+| Accumulator reset when date changes | Testing required around midnight |
 
 ---
 
-## 6. 결론
+## 6. Conclusion
 
-일일 보고서 기능의 핵심 구현이 완료되었으며, 개발 환경에서 검증 가능한 모든 항목을 통과했습니다.
+The core implementation of the daily report functionality has been completed and all verifiable items have passed in the development environment.
 
-- **축적기**: 초기화, 스냅샷, 데이터 완성도 계산 정상
-- **API**: GET (상태/목록/조회), POST (생성), 에러 핸들링, 중복 방지 모두 정상
-- **스케줄러**: 서버 시작 시 cron 등록 확인 (5분/23:55 KST)
-- **기존 코드 통합**: scaler route에 스케일링 이벤트 + 로그 분석 기록 추가 완료
+- **Accumulator**: Initialization, snapshot, data completeness calculation normal
+- **API**: GET (status/list/query), POST (creation), error handling, and duplication prevention are all normal.
+- **Scheduler**: Check cron registration when server starts (5 minutes/23:55 KST)
+- **Integration of existing code**: Scaling event + log analysis records added to scaler route.
 
-AI Gateway 접근이 가능한 운영 환경에서 실제 보고서 생성 품질을 추가 확인할 것을 권고합니다.
+We recommend that you further check the actual report generation quality in an operating environment with AI Gateway access.

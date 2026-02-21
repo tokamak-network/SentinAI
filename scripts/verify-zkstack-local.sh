@@ -27,7 +27,7 @@ fail() {
 require_cmd() {
   local cmd="$1"
   if ! command -v "$cmd" >/dev/null 2>&1; then
-    fail "필수 명령어 없음: ${cmd}"
+    fail "Missing required command: ${cmd}"
   fi
 }
 
@@ -38,7 +38,7 @@ rpc_call() {
   local response
   payload=$(printf '{"jsonrpc":"2.0","method":"%s","params":[],"id":1}' "$method")
   if ! response=$(curl -fsS "$url" -H 'content-type: application/json' --data "$payload" 2>/dev/null); then
-    fail "RPC 호출 실패: url=${url}, method=${method}"
+    fail "RPC call failed: url=${url}, method=${method}"
   fi
   echo "$response"
 }
@@ -61,28 +61,28 @@ main() {
   require_cmd sed
   require_cmd rg
 
-  echo "검증 대상:"
+  echo "Validation targets:"
   echo "- L2 RPC: ${L2_RPC_URL}"
   echo "- L1 RPC: ${L1_RPC_URL}"
-  echo "- 기대 L2 chainId: ${EXPECTED_L2_CHAIN_ID}"
-  echo "- 기대 L1 chainId: ${EXPECTED_L1_CHAIN_ID}"
+  echo "- Expected L2 chainId: ${EXPECTED_L2_CHAIN_ID}"
+  echo "- Expected L1 chainId: ${EXPECTED_L1_CHAIN_ID}"
   echo
 
   if ps aux | rg -q 'zkstack .*server|zksync_server'; then
-    pass "서버 프로세스 감지"
+    pass "Server process detected"
   else
-    warn "서버 프로세스 미감지 (다른 셸/컨테이너에서 실행 중일 수 있음)"
+    warn "Server process not detected (it may be running in another shell/container)"
   fi
 
   local l2_chain_id
   l2_chain_id=$(rpc_call "$L2_RPC_URL" "eth_chainId" | extract_result)
   if [[ -z "$l2_chain_id" ]]; then
-    fail "L2 eth_chainId 응답 파싱 실패"
+    fail "Failed to parse L2 eth_chainId response"
   fi
   if [[ "$l2_chain_id" == "$EXPECTED_L2_CHAIN_ID" ]]; then
-    pass "L2 chainId 일치: ${l2_chain_id}"
+    pass "L2 chainId matches: ${l2_chain_id}"
   else
-    fail "L2 chainId 불일치: expected=${EXPECTED_L2_CHAIN_ID}, actual=${l2_chain_id}"
+    fail "L2 chainId mismatch: expected=${EXPECTED_L2_CHAIN_ID}, actual=${l2_chain_id}"
   fi
 
   local block_before block_after
@@ -90,41 +90,41 @@ main() {
   sleep 2
   block_after=$(rpc_call "$L2_RPC_URL" "eth_blockNumber" | extract_result)
   if [[ -z "$block_after" ]]; then
-    fail "L2 eth_blockNumber 응답 파싱 실패"
+    fail "Failed to parse L2 eth_blockNumber response"
   fi
-  pass "L2 blockNumber 확인: before=${block_before}, after=${block_after}"
+  pass "L2 blockNumber check: before=${block_before}, after=${block_after}"
 
   local syncing
   syncing=$(rpc_call "$L2_RPC_URL" "eth_syncing" | extract_result)
   if [[ "$syncing" == "false" ]]; then
-    pass "L2 동기화 상태 정상: eth_syncing=false"
+    pass "L2 sync status is healthy: eth_syncing=false"
   else
-    warn "L2 동기화 진행 중: eth_syncing=${syncing}"
+    warn "L2 is syncing: eth_syncing=${syncing}"
   fi
 
   local l1_batch
   l1_batch=$(rpc_call "$L2_RPC_URL" "zks_L1BatchNumber" | extract_result)
   if [[ -z "$l1_batch" ]]; then
-    fail "L2 zks_L1BatchNumber 응답 파싱 실패"
+    fail "Failed to parse L2 zks_L1BatchNumber response"
   fi
   if (( $(hex_to_dec "$l1_batch") >= 0 )); then
-    pass "L1 배치 번호 확인: ${l1_batch}"
+    pass "L1 batch number check: ${l1_batch}"
   else
-    fail "L1 배치 번호 비정상: ${l1_batch}"
+    fail "Invalid L1 batch number: ${l1_batch}"
   fi
 
   local l1_chain_id
   l1_chain_id=$(rpc_call "$L1_RPC_URL" "eth_chainId" | extract_result || true)
   if [[ -z "$l1_chain_id" ]]; then
-    warn "L1 chainId 조회 실패 (L1 RPC 미사용 환경일 수 있음)"
+    warn "Failed to query L1 chainId (this may be an environment without L1 RPC)"
   elif [[ "$l1_chain_id" == "$EXPECTED_L1_CHAIN_ID" ]]; then
-    pass "L1 chainId 일치: ${l1_chain_id}"
+    pass "L1 chainId matches: ${l1_chain_id}"
   else
-    warn "L1 chainId 불일치: expected=${EXPECTED_L1_CHAIN_ID}, actual=${l1_chain_id}"
+    warn "L1 chainId mismatch: expected=${EXPECTED_L1_CHAIN_ID}, actual=${l1_chain_id}"
   fi
 
   echo
-  pass "로컬 ZK Stack L2 검증 완료"
+  pass "Local ZK Stack L2 validation completed"
 }
 
 main "$@"

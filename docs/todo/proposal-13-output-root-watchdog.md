@@ -1,60 +1,60 @@
-# Proposal 13: Output Root Submission Watchdog — Output Root 제출 감시
+# Proposal 13: Output Root Submission Watchdog — Output Root Submission Watchdog
 
-> **작성일**: 2026-02-11
-> **선행 조건**: Proposal 2 (Anomaly Detection) 구현 완료, Proposal 9 (EOA Balance) 권장
-> **목적**: op-proposer의 L2 output root 제출을 감시하여 출금 finality 지연 및 bridge 운영 장애를 방지
-
----
-
-## 목차
-
-1. [개요](#1-개요)
-2. [아키텍처](#2-아키텍처)
-3. [Agent Act — 자동 실행 액션](#3-agent-act--자동-실행-액션)
-4. [구현 명세](#4-구현-명세)
-5. [Playbook 정의](#5-playbook-정의)
-6. [안전장치](#6-안전장치)
-7. [환경 변수](#7-환경-변수)
-8. [타입 정의](#8-타입-정의)
-9. [기존 모듈 수정](#9-기존-모듈-수정)
-10. [테스트 계획](#10-테스트-계획)
+> **Created date**: 2026-02-11
+> **Prerequisite**: Proposal 2 (Anomaly Detection) implementation completed, Proposal 9 (EOA Balance) recommended
+> **Purpose**: Monitor the submission of the op-proposer's L2 output root to prevent withdrawal finality delays and bridge operation failures
 
 ---
 
-## 1. 개요
+## index
 
-### 1.1 문제
+1. [Overview](#1-Overview)
+2. [Architecture](#2-Architecture)
+3. [Agent Act — auto-run action](#3-agent-act--auto-run-action)
+4. [Implementation Specification](#4-Implementation-Specification)
+5. [Playbook definition](#5-playbook-definition)
+6. [Safety device](#6-Safety device)
+7. [Environment Variables](#7-Environment-Variables)
+8. [Type-Definition](#8-Type-Definition)
+9. [Modify existing module](#9-Existing-module-Modify)
+10. [Test Plan](#10-Test-Plan)
 
-op-proposer는 L2 상태 루트(output root)를 L1의 `L2OutputOracle` 컨트랙트에 주기적으로 제출한다. 이 제출이 지연되면:
+---
 
-| 영향 | 설명 |
+## 1. Overview
+
+### 1.1 Problem
+
+The op-proposer periodically submits the L2 state root (output root) to the `L2OutputOracle` contract of L1. If this submission is delayed:
+
+| Impact | Description |
 |------|------|
-| **출금 지연** | L2→L1 출금의 challenge period 시작이 늦어져 사용자 자금이 장기간 잠김 |
-| **Bridge 장애** | Dispute window가 비정상 확장되어 bridge 운영에 문제 발생 |
-| **Finality 손실** | L2 상태가 L1에 anchor되지 않아 보안 보장이 약화 |
+| **Withdrawal delay** | User funds are locked for a long period of time due to delayed start of challenge period for L2→L1 withdrawal |
+| **Bridge Failure** | Dispute window expands abnormally, causing problems in bridge operation |
+| **Finality Loss** | Security guarantees are weakened because the L2 state is not anchored to L1 |
 
-현재 시스템의 한계:
-- op-proposer를 **전혀 모니터링하지 않음** (로그 수집만)
-- Output root 제출 상태를 추적하지 않음
-- 제출 지연의 원인(잔액 부족, 가스 급등, proposer hang)을 구분하지 못함
+Limitations of the current system:
+- **Do not monitor op-proposers at all** (only collect logs)
+- Does not track output root submission status
+- Unable to distinguish between causes of submission delays (insufficient balance, gas surge, proposer hang)
 
-### 1.2 목표
+### 1.2 Goal
 
-1. L1의 `L2OutputOracle` 컨트랙트를 읽어 최신 output root 제출 상태를 추적
-2. 제출 지연(submission lag) 감지 및 원인 진단
-3. Proposal 9 (EOA Balance) 및 Proposal 11 (Gas Monitor)과 연동하여 원인별 자동 대응
+1. Read L1’s `L2OutputOracle` contract to track the latest output root submission status
+2. Detection of submission lag and diagnosis of cause
+3. Automatic response by cause in conjunction with Proposal 9 (EOA Balance) and Proposal 11 (Gas Monitor)
 
-### 1.3 핵심 원칙
+### 1.3 Core principles
 
-- **읽기 전용 모니터링**: L1 컨트랙트는 read-only call만 수행 (트랜잭션 미전송)
-- **Cross-feature 연동**: 원인 진단에 F1(잔액), F3(가스)의 데이터를 활용
-- **절대 금지**: "대체 output root 계산"이나 "output 트랜잭션 직접 제출"은 불가
+- **Read-only monitoring**: L1 contract only performs read-only calls (transaction is not sent)
+- **Cross-feature integration**: Use data from F1 (balance) and F3 (gas) to diagnose the cause.
+- **Absolutely prohibited**: “Calculating an alternative output root” or “directly submitting output transactions” is not allowed.
 
 ---
 
-## 2. 아키텍처
+## 2. Architecture
 
-### 2.1 L2OutputOracle 컨트랙트 인터페이스
+### 2.1 L2OutputOracle contract interface
 
 ```solidity
 // L2OutputOracle (Bedrock)
@@ -68,24 +68,24 @@ function SUBMISSION_INTERVAL() external view returns (uint256);  // L2 blocks be
 function L2_BLOCK_TIME() external view returns (uint256);
 ```
 
-### 2.2 Output Root Lag 계산
+### 2.2 Output Root Lag Calculation
 
 ```
 outputRootLag = currentL2BlockHeight - lastOutputRootL2Block
 
-예시:
+example:
   currentL2Block: 6,200,000
-  lastOutputRootL2Block: 6,196,200  (SUBMISSION_INTERVAL = 1800 기준, 2번 밀림)
+lastOutputRootL2Block: 6,196,200 (based on SUBMISSION_INTERVAL = 1800, pushed back 2 times)
   outputRootLag: 3,800 blocks
 
   WARNING:  lag > SUBMISSION_INTERVAL * 2 = 3,600
   CRITICAL: lag > SUBMISSION_INTERVAL * 3 = 5,400
 ```
 
-### 2.3 데이터 플로우
+### 2.3 Data flow
 
 ```
-Agent Loop (5분 간격 — contract read 비용 절감)
+Agent Loop (5 minute intervals — reduced contract read costs)
   │
   ├── Observe ──────────────────────────────────────────────
   │   L1 Contract Reads (viem readContract):
@@ -102,38 +102,38 @@ Agent Loop (5분 간격 — contract read 비용 절감)
   │     └── timeSinceLastSubmission > expectedInterval * 3 → CRITICAL
   │
   ├── Decide ──────────────────────────────────────────────
-  │   원인 진단:
-  │     ├── Proposer EOA 잔액 부족? → F1 refill 트리거
-  │     ├── L1 가스 급등? → F3 대기 전략
-  │     └── Proposer hang? → pod 재시작
+│ Cause diagnosis:
+│ ├── Proposer EOA balance insufficient? → F1 refill trigger
+│ ├── L1 gas surge? → F3 waiting strategy
+│ └── Proposer hang? → Restart the pod
   │
   └── Act ─────────────────────────────────────────────────
       ├── [Safe] check_eoa_balance(proposer)
       ├── [Safe] check_l1_gas_price
       ├── [Safe] collect_logs(op-proposer)
       ├── [Guarded] restart_pod(op-proposer)
-      ├── [Safe] verify_next_submission (5분 후)
+├── [Safe] verify_next_submission (after 5 minutes)
       └── [Safe] escalate_operator
 ```
 
 ---
 
-## 3. Agent Act — 자동 실행 액션
+## 3. Agent Act — Auto-execute action
 
-### 3.1 액션 테이블
+### 3.1 Action table
 
 | # | Action | Safety | Trigger | Description |
 |---|--------|--------|---------|-------------|
-| 1 | `check_eoa_balance` | Safe | lag > WARNING | proposer EOA 잔액 확인. 부족이면 Proposal 9의 refill 트리거 |
-| 2 | `check_l1_gas_price` | Safe | lag > WARNING | L1 gas price 확인. 과도하면 gas 안정화 대기 |
-| 3 | `collect_logs` | Safe | lag > WARNING | op-proposer 로그에서 실패 원인 확인 |
-| 4 | `restart_pod` | **Guarded** | lag > CRITICAL & balance OK & gas OK | op-proposer pod 재시작 |
-| 5 | `verify_next_submission` | Safe | restart 후 5min | L2OutputOracle 재조회하여 새 output root 제출 확인 |
-| 6 | `escalate_operator` | Safe | lag > CRITICAL * 2 or restart 실패 | challenge window 임박, 운영자 긴급 알림 |
+| 1 | `check_eoa_balance` | Safe | lag > WARNING | proposer Check EOA balance. Shortage triggers refill of Proposal 9 |
+| 2 | `check_l1_gas_price` | Safe | lag > WARNING | Check L1 gas price. If excessive, wait for gas to stabilize |
+| 3 | `collect_logs` | Safe | lag > WARNING | Check the cause of failure in the op-proposer log |
+| 4 | `restart_pod` | **Guarded** | lag > CRITICAL & balance OK & gas OK | restart op-proposer pod |
+| 5 | `verify_next_submission` | Safe | 5min after restart | Recheck L2OutputOracle to confirm submission of new output root |
+| 6 | `escalate_operator` | Safe | lag > CRITICAL * 2 or restart failed | Challenge window imminent, operator emergency notification |
 
-### 3.2 실행 흐름 예시
+### 3.2 Execution flow example
 
-**시나리오: Output root lag = 5,500 blocks (> CRITICAL 5,400)**
+**Scenario: Output root lag = 5,500 blocks (> CRITICAL 5,400)**
 
 ```
 [Observe] L2OutputOracle contract reads:
@@ -169,7 +169,7 @@ Agent Loop (5분 간격 — contract read 비용 절감)
 [Alert] Slack: "✅ op-proposer stall resolved. Output root #1235 submitted."
 ```
 
-**시나리오: Proposer 잔액 부족 (F1 연동)**
+**Scenario: Proposer balance insufficient (F1 linked)**
 
 ```
 [Observe] outputRootLag = 4000 blocks (> WARNING 3600)
@@ -190,7 +190,7 @@ Agent Loop (5분 간격 — contract read 비용 절감)
 
 ---
 
-## 4. 구현 명세
+## 4. Implementation Specification
 
 ### 4.1 `src/lib/output-root-monitor.ts` (~250 LOC)
 
@@ -259,7 +259,7 @@ export function calculateSubmissionLag(
 export function shouldCheck(): boolean;
 ```
 
-**핵심 로직: `getOutputRootStatus()`**
+**Core logic: `getOutputRootStatus()`**
 
 ```
 1. Create viem publicClient for L1
@@ -276,7 +276,7 @@ export function shouldCheck(): boolean;
 
 ---
 
-## 5. Playbook 정의
+## 5. Playbook definition
 
 ### 5.1 Playbook: `op-proposer-stall`
 
@@ -315,47 +315,47 @@ maxAttempts: 1
 
 ---
 
-## 6. 안전장치
+## 6. Safety device
 
-### 6.1 Contract 호환성
+### 6.1 Contract compatibility
 
-| 버전 | Contract | 참고 |
+| version | Contract | Note |
 |------|----------|------|
-| **Bedrock** | `L2OutputOracle` | 현재 구현 대상 |
-| **Fault Proof (향후)** | `DisputeGameFactory` | ABI 변경 필요 → 환경변수로 모드 전환 |
+| **Bedrock** | `L2OutputOracle` | Current Implementation Target |
+| **Fault Proof (future)** | `DisputeGameFactory` | ABI change required → Mode switching with environment variables |
 
 ```typescript
-// 향후 Fault Proof 모드 지원 가능
+// Fault Proof mode can be supported in the future
 const CONTRACT_MODE = process.env.OUTPUT_ROOT_CONTRACT_MODE || 'bedrock';
 // 'bedrock' → L2OutputOracle
 // 'fault-proof' → DisputeGameFactory (미구현, placeholder)
 ```
 
-### 6.2 Proposer 재시작 안전성
+### 6.2 Proposer restart safety
 
-| 위험 | 대응 |
+| danger | Response |
 |------|------|
-| Pending output tx 충돌 | 재시작 전 proposer의 pending tx 확인 (`eth_getTransactionCount pending vs latest`) |
-| 중복 output 제출 | L2OutputOracle가 자체적으로 중복 거부 (contract-level safety) |
-| Nonce 충돌 | proposer가 재시작 시 자동으로 nonce를 재동기화 |
+| Pending output tx conflict | Check proposer's pending tx before restarting (`eth_getTransactionCount pending vs latest`) |
+| Submit duplicate output | L2OutputOracle itself rejects duplicates (contract-level safety) |
+| Nonce conflict | automatically resynchronize nonce when proposer restarts |
 
-### 6.3 Check 간격
+### 6.3 Check interval
 
-- Contract read는 5분 간격 (L1 RPC 호출 비용 절감)
-- `SUBMISSION_INTERVAL`은 캐싱 (변경 빈도 매우 낮음)
-- Anomaly 발생 시 다음 cycle부터 1분 간격으로 전환 (빠른 복구 확인)
+- Contract read every 5 minutes (reduces L1 RPC call costs)
+- `SUBMISSION_INTERVAL` is cached (changes very rarely)
+- When anomaly occurs, switch to 1 minute interval from the next cycle (check for quick recovery)
 
-### 6.4 절대 금지 사항
+### 6.4 Absolutely prohibited things
 
-- **Output root 계산**: 시스템이 직접 output root를 계산하거나 제출하지 않음
-- **컨트랙트 쓰기**: L2OutputOracle에 트랜잭션을 보내지 않음
-- **Proposer 설정 변경**: op-proposer의 submission interval을 변경하지 않음
+- **Output root calculation**: The system does not directly calculate or submit the output root.
+- **Contract Write**: Do not send transaction to L2OutputOracle.
+- **Proposer settings change**: Do not change the submission interval of the op-proposer
 
 ---
 
-## 7. 환경 변수
+## 7. Environment variables
 
-| 변수 | 기본값 | 설명 |
+| variable | default | Description |
 |------|--------|------|
 | `L2_OUTPUT_ORACLE_ADDRESS` | — | L2OutputOracle contract address on L1 (required) |
 | `OUTPUT_ROOT_CHECK_INTERVAL` | `300` | Check interval in seconds (default 5min) |
@@ -363,13 +363,13 @@ const CONTRACT_MODE = process.env.OUTPUT_ROOT_CONTRACT_MODE || 'bedrock';
 | `OUTPUT_ROOT_LAG_CRITICAL_MULTIPLIER` | `3` | Critical: lag > SUBMISSION_INTERVAL * N |
 | `OUTPUT_ROOT_CONTRACT_MODE` | `bedrock` | Contract mode: bedrock or fault-proof |
 
-**기존 환경변수 재사용:**
+**Reuse of existing environment variables:**
 - `L1_RPC_URL` → L1 contract read
-- `PROPOSER_EOA_ADDRESS` → proposer balance check (Proposal 9 연동)
+- `PROPOSER_EOA_ADDRESS` → propose balance check (Proposal 9 연동)
 
 ---
 
-## 8. 타입 정의
+## 8. Type definition
 
 ### 8.1 `src/types/output-root.ts` (~70 LOC)
 
@@ -406,11 +406,11 @@ export interface OutputRootStatus {
 
 ---
 
-## 9. 기존 모듈 수정
+## 9. Modify existing modules
 
 ### 9.1 `src/lib/agent-loop.ts`
 
-5분 간격으로 output root 체크 추가:
+Add output root check every 5 minutes:
 
 ```typescript
 // Track last check time
@@ -454,11 +454,11 @@ function detectOutputRootDelay(
 
 ### 9.4 `src/lib/playbook-matcher.ts`
 
-`PLAYBOOKS[]`에 `op-proposer-stall` 추가 + `matchesMetricCondition()`에 outputRootLag 조건.
+Added `op-proposer-stall` to `PLAYBOOKS[]` + outputRootLag condition to `matchesMetricCondition()`.
 
 ### 9.5 `src/lib/action-executor.ts`
 
-`verify_next_submission` 액션 추가:
+Add `verify_next_submission` action:
 
 ```typescript
 case 'verify_next_submission':
@@ -476,69 +476,69 @@ export type RemediationActionType =
   | 'verify_next_submission';  // NEW
 ```
 
-### 9.7 Cross-feature 연동
+### 9.7 Cross-feature integration
 
 ```
 Proposal 9 (EOA Balance):
-  → outputRootLag > WARNING 시 proposer 잔액 확인
-  → 잔액 부족이면 자동 충전 트리거
+→ outputRootLag > Check proposer balance when WARNING
+→ Automatic recharge trigger if balance is insufficient
 
 Proposal 11 (Gas Monitor):
-  → outputRootLag > WARNING 시 L1 gas price 확인
-  → 가스 급등이면 gas 안정화 대기 (proposer 재시작 유보)
+→ outputRootLag > Check L1 gas price when WARNING
+→ If gas surges, wait for gas to stabilize (hold off proposer restart)
 
-RCA Engine (기존):
-  → op-proposer → l1 의존성 이미 정의됨
-  → outputRootLag anomaly 발생 시 RCA에 자동 포함
+RCA Engine (existing):
+→ op-proposer → l1 dependency already defined
+→ Automatically included in RCA when outputRootLag anomaly occurs
 ```
 
 ---
 
-## 10. 테스트 계획
+## 10. Test plan
 
-### 10.1 유닛 테스트 (`output-root-monitor.test.ts`)
+### 10.1 Unit tests (`output-root-monitor.test.ts`)
 
-| # | 테스트 | 검증 |
+| # | test | verification |
 |---|--------|------|
-| 1 | Contract ABI parsing | L2OutputOracle 응답 파싱 |
-| 2 | Lag calculation | currentL2 - lastOutputL2 정확 계산 |
-| 3 | Lag level classification | WARNING/CRITICAL 구간별 판정 |
-| 4 | Check interval enforcement | 5분 간격 준수 |
-| 5 | SUBMISSION_INTERVAL caching | 캐싱 동작 확인 |
+| 1 | Contract ABI parsing | Parsing L2OutputOracle response |
+| 2 | Lag calculation | currentL2 - lastOutputL2 exact calculation |
+| 3 | Lag level classification | WARNING/CRITICAL Judgment by section |
+| 4 | Check interval enforcement | Observe 5-minute intervals |
+| 5 | SUBMISSION_INTERVAL caching | Check caching operation |
 | 6 | Contract read failure | graceful fallback (anomaly 미생성) |
-| 7 | Time-based detection | timeSinceSubmission 기반 이상 탐지 |
+| 7 | Time-based detection | timeSinceSubmission based anomaly detection |
 
-### 10.2 통합 테스트 시나리오
+### 10.2 Integration test scenario
 
 ```
-시나리오 1: lag 5500 blocks + proposer balance OK + gas OK → restart proposer → 새 output 확인
-시나리오 2: lag 4000 blocks + proposer balance 0.05 ETH → F1 auto-refill → 자동 복구
-시나리오 3: lag 6000 blocks + L1 gas 250 gwei → gas 안정 대기 → gas 정상화 후 proposer 재시작
-시나리오 4: L2OutputOracle 주소 미설정 → monitor skip (graceful)
-시나리오 5: Contract read 실패 → 이전 캐싱 데이터 사용 or skip
+Scenario 1: lag 5500 blocks + proposer balance OK + gas OK → restart proposer → check new output
+Scenario 2: lag 4000 blocks + proposer balance 0.05 ETH → F1 auto-refill → automatic recovery
+Scenario 3: lag 6000 blocks + L1 gas 250 gwei → wait for gas to stabilize → restart proposer after gas normalization
+Scenario 4: L2OutputOracle address not set → monitor skip (graceful)
+Scenario 5: Contract read failure → Use previous caching data or skip
 ```
 
 ---
 
-## 의존관계
+## Dependencies
 
 ```
-신규 모듈:
+New modules:
   ├── src/lib/output-root-monitor.ts
   └── src/types/output-root.ts
 
-수정 모듈:
-  ├── src/lib/agent-loop.ts          → 5분 간격 output root check 추가
-  ├── src/lib/anomaly-detector.ts    → detectOutputRootDelay() 추가
-  ├── src/lib/playbook-matcher.ts    → op-proposer-stall 플레이북 추가
-  ├── src/lib/action-executor.ts     → verify_next_submission 액션 추가
-  ├── src/types/anomaly.ts           → AnomalyMetric 확장
-  └── src/types/remediation.ts       → RemediationActionType 확장
+Modification module:
+├── src/lib/agent-loop.ts → Add output root check every 5 minutes
+├── src/lib/anomaly-detector.ts    → detectOutputRootDelay() 추가
+├── src/lib/playbook-matcher.ts → Add op-proposer-stall playbook
+├── src/lib/action-executor.ts → Add verify_next_submission action
+├── src/types/anomaly.ts           → AnomalyMetric 확장
+└── src/types/remediation.ts       → RemediationActionType 확장
 
-Cross-feature 의존:
-  ├── Proposal 9 (EOA Balance)       → proposer 잔액 확인 및 자동 충전
-  └── Proposal 11 (Gas Monitor)      → L1 가스 가격 확인
+Cross-feature dependency:
+├── Proposal 9 (EOA Balance) → Check proposer balance and automatically recharge
+└── Proposal 11 (Gas Monitor) → Check L1 gas price
 
-의존 라이브러리:
-  └── viem (이미 설치됨) → getContract, readContract
+Dependent libraries:
+└── viem (already installed) → getContract, readContract
 ```

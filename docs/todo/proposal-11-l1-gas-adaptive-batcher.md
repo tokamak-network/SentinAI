@@ -1,78 +1,78 @@
-# Proposal 11: L1 Gas Price Adaptive Batcher — L1 가스 가격 기반 배치 전략
+# Proposal 11: L1 Gas Price Adaptive Batcher — L1 gas price-based placement strategy
 
-> **작성일**: 2026-02-11
-> **선행 조건**: Proposal 2 (Anomaly Detection), Proposal 4 (Cost Optimizer) 구현 완료
-> **목적**: L1 가스 가격 급등 시 op-batcher 배치 전략을 자동 조정하여 운영 비용 최적화
-
----
-
-## 목차
-
-1. [개요](#1-개요)
-2. [아키텍처](#2-아키텍처)
-3. [Agent Act — 자동 실행 액션](#3-agent-act--자동-실행-액션)
-4. [구현 명세](#4-구현-명세)
-5. [Playbook 정의](#5-playbook-정의)
-6. [안전장치](#6-안전장치)
-7. [환경 변수](#7-환경-변수)
-8. [타입 정의](#8-타입-정의)
-9. [기존 모듈 수정](#9-기존-모듈-수정)
-10. [테스트 계획](#10-테스트-계획)
+> **Created date**: 2026-02-11
+> **Prerequisite**: Proposal 2 (Anomaly Detection), Proposal 4 (Cost Optimizer) implementation completed
+> **Purpose**: Optimize operating costs by automatically adjusting op-batcher deployment strategy when L1 gas price surges
 
 ---
 
-## 1. 개요
+## index
 
-### 1.1 문제
+1. [Overview](#1-Overview)
+2. [Architecture](#2-Architecture)
+3. [Agent Act — auto-run action](#3-agent-act--auto-run-action)
+4. [Implementation Specification](#4-Implementation-Specification)
+5. [Playbook definition](#5-playbook-definition)
+6. [Safety device](#6-Safety device)
+7. [Environment Variables](#7-Environment-Variables)
+8. [Type-Definition](#8-Type-Definition)
+9. [Modify existing module](#9-Existing-module-Modify)
+10. [Test Plan](#10-Test-Plan)
 
-op-batcher는 L2 트랜잭션 배치를 L1에 제출한다. L1 가스 가격이 급등하면:
+---
 
-| 상황 | 영향 |
+## 1. Overview
+
+### 1.1 Problem
+
+The op-batcher submits L2 transaction batches to L1. If L1 gas prices surge:
+
+| Situation | Impact |
 |------|------|
-| NFT 민팅 이벤트 | 배치 제출 비용 10~50배 증가 |
-| 가스 급등 중 일정 빈도 배치 | 불필요한 고가스 지출 |
-| 극단적 가스 가격 | 배치 트랜잭션 pending 체류, 제출 실패 |
+| NFT Minting Event | 10-50X increase in batch submission costs |
+| Frequency placement during gas surge | Unnecessary high gas spending |
+| extreme gas prices | Batch transaction pending stay, submission failed |
 
-현재 시스템의 한계:
-- **L1 가스 가격을 전혀 모니터링하지 않음**
-- batcher가 가스 가격에 관계없이 동일 빈도로 배치 제출
-- 비용 최적화 기회를 놓침 (가스가 싼 시간대에 배치를 몰아서 제출)
+Limitations of the current system:
+- **No monitoring of L1 gas prices at all**
+- batcher submits batches at the same frequency regardless of gas price
+- Missed cost optimization opportunities (batch submissions during times of low gas availability)
 
-### 1.2 목표
+### 1.2 Goal
 
-1. L1 가스 가격을 실시간 모니터링 (base fee + priority fee)
-2. 가스 가격 수준별 배치 전략 자동 조정 (간격 증가, 일시 중지, 빠른 제출)
-3. 기존 cost-optimizer와 통합하여 가스비 지출 추적 및 보고
+1. Real-time monitoring of L1 gas price (base fee + priority fee)
+2. Automatic adjustment of deployment strategy by gas price level (increased interval, pause, quick submission)
+3. Track and report gas spending by integrating with existing cost-optimizer
 
-### 1.3 핵심 원칙
+### 1.3 Core principles
 
-- **Sequencer Window 준수**: 배치 지연은 최대 1시간 (12시간 window의 1/12)
-- **비용 vs 지연 균형**: 가스 절감과 data availability 확정 지연 사이의 최적점
-- **자동 복구**: 가스 가격 안정화 시 원래 설정으로 자동 복구
+- **Sequencer Window Compliance**: Batch delay is up to 1 hour (1/12 of a 12-hour window)
+- **Cost vs Delay Balance**: Optimal point between gas savings and data availability confirmation delay
+- **Automatic Recovery**: Automatically restores to original settings when gas price stabilizes
 
 ---
 
-## 2. 아키텍처
+## 2. Architecture
 
-### 2.1 Gas Price Level 체계
+### 2.1 Gas Price Level System
 
 ```
 L1 Gas Price (gwei)
   │
-  ├── NORMAL  (< 50 gwei)   → 기본 배치 간격 유지
-  ├── HIGH    (50-100 gwei)  → WARNING alert, 모니터링 강화
-  ├── SPIKE   (100-200 gwei) → 배치 간격 4배 증가 (15→60 channel duration)
-  └── EXTREME (> 200 gwei)   → 배치 일시 중지 (최대 1시간)
+├── NORMAL (< 50 gwei) → Maintain default batch interval
+├── HIGH (50-100 gwei) → WARNING alert, strengthened monitoring
+├── SPIKE (100-200 gwei) → 4-fold increase in batch interval (15→60 channel duration)
+└── EXTREME (> 200 gwei) → Pause batch (up to 1 hour)
 ```
 
-### 2.2 데이터 플로우
+### 2.2 Data flow
 
 ```
 Agent Loop (30s)
   │
   ├── Observe ──────────────────────────────────────────────
   │   l1Client.getGasPrice()          → currentGasPrice (gwei)
-  │   l1Client.request('eth_feeHistory') → baseFee trend (선택)
+│   l1Client.request('eth_feeHistory') → baseFee trend (선택)
   │
   ├── Detect ──────────────────────────────────────────────
   │   l1-gas-monitor.ts
@@ -81,51 +81,51 @@ Agent Loop (30s)
   │     └── gasPrice > EXTREME → CRITICAL anomaly (pause trigger)
   │
   ├── Decide ──────────────────────────────────────────────
-  │   1. 현재 gas level 판정
-  │   2. 현재 batcher config와 비교
-  │   3. 조정 필요 여부 결정
+│ 1. Determination of current gas level
+│ 2. Compare with current batcher config
+│ 3. Determine whether adjustments are needed
   │
   └── Act ─────────────────────────────────────────────────
-      ├── [Safe] collect_logs(op-batcher) → 현재 배치 상태 확인
+├── [Safe] collect_logs(op-batcher) → Check current batch status
       ├── [Guarded] adjust_batcher_config → ConfigMap patch
       ├── [Guarded] pause_batcher → scale to 0 (EXTREME)
-      ├── [Guarded] resume_batcher → scale to 1 (gas 안정화)
-      └── [Safe] escalate_operator → 1시간 이상 EXTREME 지속
+├── [Guarded] resume_batcher → scale to 1 (gas stabilization)
+└── [Safe] escalate_operator → EXTREME lasts for more than 1 hour
 ```
 
-### 2.3 Batcher Config 조정 방식
+### 2.3 Batcher Config adjustment method
 
 ```
-op-batcher 주요 설정:
-  --max-channel-duration: 배치 채널 최대 지속 시간 (L1 블록 수)
-    기본: 15 (약 3분)
-    SPIKE: 60 (약 12분) → 배치 빈도 4배 감소
+op-batcher main settings:
+--max-channel-duration: maximum duration of batch channel (number of L1 blocks)
+Default: 15 (about 3 minutes)
+SPIKE: 60 (about 12 minutes) → Deployment frequency reduced by 4 times
 
-조정 방법:
+Adjustment method:
   kubectl patch configmap <batcher-configmap> \
     --namespace <namespace> \
     --patch '{"data":{"OP_BATCHER_MAX_CHANNEL_DURATION":"60"}}'
 
-  → op-batcher pod restart 필요 (config 반영)
+→ op-batcher pod restart required (config reflected)
 ```
 
 ---
 
-## 3. Agent Act — 자동 실행 액션
+## 3. Agent Act — Auto-execute action
 
-### 3.1 액션 테이블
+### 3.1 Action table
 
 | # | Action | Safety | Trigger | Description |
 |---|--------|--------|---------|-------------|
-| 1 | `collect_logs` | Safe | gas > HIGH | op-batcher 로그에서 pending tx / failed submission 확인 |
-| 2 | `adjust_batcher_config` | **Guarded** | gas > SPIKE | op-batcher ConfigMap의 `MAX_CHANNEL_DURATION`을 kubectl patch로 증가 |
-| 3 | `pause_batcher` | **Guarded** | gas > EXTREME | op-batcher Deployment/StatefulSet replicas를 0으로 (일시 중지) |
-| 4 | `resume_batcher` | **Guarded** | gas < SPIKE (급락) | 중지된 op-batcher를 replicas 1로 복구 |
-| 5 | `escalate_operator` | Safe | EXTREME 1시간 지속 | 배치 제출 장기 중단 임박, 수동 개입 요청 |
+| 1 | `collect_logs` | Safe | gas > HIGH | Check pending tx / failed submission in op-batcher log |
+| 2 | `adjust_batcher_config` | **Guarded** | gas > SPIKE | Increase `MAX_CHANNEL_DURATION` in op-batcher ConfigMap with kubectl patch |
+| 3 | `pause_batcher` | **Guarded** | gas > EXTREME | op-batcher Deployment/StatefulSet replicas to 0 (pause) |
+| 4 | `resume_batcher` | **Guarded** | gas < SPIKE | Recover stopped op-batcher to replicas 1 |
+| 5 | `escalate_operator` | Safe | EXTREME Lasts 1 hour | Long-term outage of batch submissions imminent, manual intervention requested |
 
-### 3.2 실행 흐름 예시
+### 3.2 Execution flow example
 
-**시나리오: L1 gas = 130 gwei (SPIKE)**
+**Scenario: L1 gas = 130 gwei (SPIKE)**
 
 ```
 [Observe] l1Client.getGasPrice() = 130 gwei
@@ -151,7 +151,7 @@ op-batcher 주요 설정:
 [Alert] Slack: "⚠️ L1 gas spike (130 gwei). Batcher interval increased 4x to reduce costs."
 ```
 
-**시나리오: 가스 안정화 후 복구**
+**Scenario: Recovery after gas stabilization**
 
 ```
 [Observe] l1Client.getGasPrice() = 35 gwei (NORMAL, was SPIKE)
@@ -167,7 +167,7 @@ op-batcher 주요 설정:
 [Log] L1 gas stabilized: 35 gwei → batcher interval restored (60→15)
 ```
 
-**시나리오: EXTREME gas (250 gwei)**
+**Scenario: EXTREME gas (250 gwei)**
 
 ```
 [Observe] l1Client.getGasPrice() = 250 gwei
@@ -178,7 +178,7 @@ op-batcher 주요 설정:
     → Batcher paused. Batches will accumulate in sequencer.
   Step 2: Start timer: max pause duration = 60 minutes
 
---- 45분 후 ---
+--- 45 minutes later ---
 
 [Observe] l1Client.getGasPrice() = 80 gwei (< SPIKE)
 
@@ -188,7 +188,7 @@ op-batcher 주요 설정:
     → Batcher resumed. Accumulated batches will be submitted.
   Step 2: adjust_batcher_config → restore defaults
 
---- 만약 1시간 경과, 여전히 EXTREME ---
+--- If 1 hour has passed, still EXTREME ---
 
 [Act]
   Step 5: escalate_operator
@@ -199,7 +199,7 @@ op-batcher 주요 설정:
 
 ---
 
-## 4. 구현 명세
+## 4. Implementation Specification
 
 ### 4.1 `src/lib/l1-gas-monitor.ts` (~220 LOC)
 
@@ -248,7 +248,7 @@ export function getPauseDurationMinutes(): number | null;
 
 ---
 
-## 5. Playbook 정의
+## 5. Playbook definition
 
 ### 5.1 Playbook: `l1-gas-spike`
 
@@ -302,36 +302,36 @@ maxAttempts: 0  # Single pause, then escalate if still extreme
 
 ---
 
-## 6. 안전장치
+## 6. Safety device
 
-### 6.1 Sequencer Window 제한
+### 6.1 Sequencer Window Limitations
 
-| 제한 | 값 | 설명 |
+| Limited | value | Description |
 |------|---|------|
-| 최대 배치 지연 | 1시간 | Optimism sequencer window (12시간)의 1/12 |
-| Pause 타이머 | 60분 | 60분 초과 시 자동 escalation |
-| 원본 config 보존 | 자동 | 변경 전 원본 값 저장, 복구 시 사용 |
+| maximum batch delay | 1 hour | 1/12 of Optimism sequencer window (12 hours) |
+| Pause timer | 60 minutes | Automatic escalation when exceeding 60 minutes |
+| Preserve original config | automatic | Save the original value before change and use it when recovering |
 
-### 6.2 Config 변경 안전성
+### 6.2 Config change safety
 
 ```
-1. 변경 전: 현재 ConfigMap 값을 originalChannelDuration에 저장
-2. 변경: kubectl patch configmap
-3. Pod 재시작: kubectl delete pod (StatefulSet이 새 config로 재생성)
-4. 복구 시: originalChannelDuration 값으로 다시 patch
+1. Before change: Save current ConfigMap value to originalChannelDuration
+2. Change: kubectl patch configmap
+3. Restart the Pod: kubectl delete pod (StatefulSet will regenerate with new config)
+4. When recovering: patch back to the originalChannelDuration value
 ```
 
-### 6.3 재평가 주기
+### 6.3 Re-evaluation cycle
 
-- 가스 가격 변경 후에도 **5분마다** 재평가
-- 급락 시 **즉시** 복구 (다음 agent cycle에서)
-- Pause 상태에서 30분마다 gas price 재확인 로그
+- Reassess **every 5 minutes** even after gas price changes
+- **Instant** recovery in case of a plunge (in the next agent cycle)
+- Gas price recheck log every 30 minutes in Pause state
 
 ---
 
-## 7. 환경 변수
+## 7. Environment variables
 
-| 변수 | 기본값 | 설명 |
+| variable | default | Description |
 |------|--------|------|
 | `L1_GAS_PRICE_HIGH_GWEI` | `50` | High threshold (warning) |
 | `L1_GAS_PRICE_SPIKE_GWEI` | `100` | Spike threshold (adjust batcher) |
@@ -340,13 +340,13 @@ maxAttempts: 0  # Single pause, then escalate if still extreme
 | `BATCHER_CONFIGMAP_NAME` | auto-detect | op-batcher ConfigMap name |
 | `BATCHER_DEFAULT_CHANNEL_DURATION` | `15` | Default max channel duration (fallback) |
 
-**기존 환경변수 재사용:**
-- `L1_RPC_URL` → L1 gas price 조회
+**Reuse of existing environment variables:**
+- `L1_RPC_URL` → L1 gas price query
 - `K8S_NAMESPACE` → kubectl patch namespace
 
 ---
 
-## 8. 타입 정의
+## 8. Type definition
 
 ### 8.1 `src/types/l1-gas.ts` (~70 LOC)
 
@@ -383,12 +383,12 @@ export interface GasThresholds {
 
 ---
 
-## 9. 기존 모듈 수정
+## 9. Modify existing modules
 
 ### 9.1 `src/lib/agent-loop.ts`
 
 ```typescript
-// collectMetrics()에 gas price 조회 추가
+// Add gas price query to collectMetrics()
 const [block, l1BlockNumber, ..., l1GasPrice] = await Promise.all([
   // ... existing
   l1Client.getGasPrice(),
@@ -419,7 +419,7 @@ function detectGasPriceSpike(gasPriceGwei: number): AnomalyResult | null {
 
 ### 9.4 `src/lib/action-executor.ts`
 
-새 액션 3개 추가:
+Added 3 new actions:
 
 ```typescript
 case 'adjust_batcher_config':
@@ -447,62 +447,62 @@ export type RemediationActionType =
 
 ### 9.6 `src/lib/cost-optimizer.ts`
 
-가스 가격 데이터를 비용 분석에 통합:
-- L1 가스비 지출 구간별 추적
-- 배치 전략 조정에 의한 절감액 계산
+Integrate gas price data into cost analysis:
+- Tracking of L1 gas expenses by section
+- Calculate savings by adjusting deployment strategy
 
 ### 9.7 `src/lib/daily-report-generator.ts`
 
-일일 보고서에 가스비 섹션 추가:
-- 일일 평균/최대 L1 gas price
-- 배치 전략 조정 횟수
-- 가스비 절감 추정액
+Added gas cost section to daily report:
+- Daily average/maximum L1 gas price
+- Number of placement strategy adjustments
+- Estimated gas cost savings
 
 ---
 
-## 10. 테스트 계획
+## 10. Test plan
 
-### 10.1 유닛 테스트 (`l1-gas-monitor.test.ts`)
+### 10.1 Unit tests (`l1-gas-monitor.test.ts`)
 
-| # | 테스트 | 검증 |
+| # | test | verification |
 |---|--------|------|
-| 1 | Gas level classification | NORMAL/HIGH/SPIKE/EXTREME 구간별 정확한 분류 |
-| 2 | Strategy recommendation | 각 level에 대한 올바른 전략 권장 |
-| 3 | Batcher pause/resume state | pause 상태 추적 및 duration 계산 |
-| 4 | Config change and restore | 원본 config 보존 및 복구 |
-| 5 | Max pause duration | 60분 초과 시 escalation 트리거 |
-| 6 | Trend calculation | rising/falling/stable 추세 판정 |
-| 7 | Gas stabilization detection | SPIKE → NORMAL 전환 감지 |
+| 1 | Gas level classification | Accurate classification by NORMAL/HIGH/SPIKE/EXTREME section |
+| 2 | Strategy recommendation | Recommend correct strategies for each level |
+| 3 | Batcher pause/resume state | Track pause state and calculate duration |
+| 4 | Config change and restore | Preserve and restore original config |
+| 5 | Max pause duration | Trigger escalation when exceeding 60 minutes |
+| 6 | Trend calculation | Rising/falling/stable trend determination |
+| 7 | Gas stabilization detection | SPIKE → NORMAL transition detection |
 
-### 10.2 통합 테스트 시나리오
+### 10.2 Integration test scenario
 
 ```
-시나리오 1: gas 130 gwei → config 조정 (15→60) → gas 35 gwei → config 복구 (60→15)
-시나리오 2: gas 250 gwei → batcher pause → 45분 후 gas 80 gwei → resume
-시나리오 3: gas 250 gwei → 60분 지속 → operator escalation
-시나리오 4: gas 변동 심함 (100↔150) → 불필요한 config 변경 방지 (hysteresis)
-시나리오 5: Simulation mode → config 미변경, 로그만 기록
+Scenario 1: gas 130 gwei → config adjustment (15→60) → gas 35 gwei → config recovery (60→15)
+Scenario 2: gas 250 gwei → batcher pause → 45 minutes later gas 80 gwei → resume
+Scenario 3: gas 250 gwei → 60 minutes duration → operator escalation
+Scenario 4: Severe gas fluctuation (100↔150) → Prevent unnecessary config changes (hysteresis)
+Scenario 5: Simulation mode → config unchanged, only log recorded
 ```
 
 ---
 
-## 의존관계
+## Dependencies
 
 ```
-신규 모듈:
+New modules:
   ├── src/lib/l1-gas-monitor.ts
   └── src/types/l1-gas.ts
 
-수정 모듈:
-  ├── src/lib/agent-loop.ts          → collectMetrics()에 getGasPrice 추가
-  ├── src/lib/anomaly-detector.ts    → detectGasPriceSpike() 추가
-  ├── src/lib/playbook-matcher.ts    → 2개 플레이북 추가
-  ├── src/lib/action-executor.ts     → 3개 액션 추가
-  ├── src/lib/cost-optimizer.ts      → 가스비 데이터 통합
-  ├── src/lib/daily-report-generator.ts → 가스비 섹션 추가
-  ├── src/types/anomaly.ts           → AnomalyMetric 확장
-  └── src/types/remediation.ts       → RemediationActionType 확장
+Modification module:
+├── src/lib/agent-loop.ts → Add getGasPrice to collectMetrics()
+├── src/lib/anomaly-detector.ts    → detectGasPriceSpike() 추가
+├── src/lib/playbook-matcher.ts → Add 2 playbooks
+├── src/lib/action-executor.ts → Add 3 actions
+├── src/lib/cost-optimizer.ts → Gas cost data integration
+├── src/lib/daily-report-generator.ts → Add gas cost section
+├── src/types/anomaly.ts           → AnomalyMetric 확장
+└── src/types/remediation.ts       → RemediationActionType 확장
 
-의존 라이브러리:
-  └── viem (이미 설치됨) → getGasPrice, formatGwei
+Dependent libraries:
+└── viem (already installed) → getGasPrice, formatGwei
 ```

@@ -1,91 +1,91 @@
-# 스케일링 정확도 테스팅 프레임워크 가이드
+# Scaling Accuracy Testing Framework Guide
 
-SentinAI의 스케일링 알고리즘(반응형 + 예측형)이 실제 운영자 기대와 얼마나 일치하는지 측정하는 백테스팅 프레임워크.
+A backtesting framework to measure how well SentinAI's scaling algorithms (reactive + predictive) match actual operator expectations.
 
 ---
 
-## 원리
+## Principle
 
-### 무엇을 측정하는가?
+### What do we measure?
 
-이 프레임워크는 세 가지 질문에 답합니다:
+This framework answers three questions:
 
-1. **코드 정확성**: 스케일링 공식이 설계대로 계산되는가? (`scaling-decision.test.ts`)
-2. **반응형 판단 정확도**: 공식의 가중치/임계값이 시니어 SRE의 판단과 일치하는가?
-3. **예측형 개선 효과**: 예측 오버라이드가 반응형의 약점을 보완하는가?
+1. **Code Correctness**: Are the scaling formulas calculated as designed? (`scaling-decision.test.ts`)
+2. **Responsive judgment accuracy**: Do the weights/thresholds in the formula match the senior SRE’s judgment?
+3. **Predictive improvement effect**: Does predictive override compensate for the weaknesses of reactive?
 
-### 테스트 구분
+### Test classification
 
-| | 단위 테스트 | 반응형 백테스트 | 예측형 백테스트 |
+| | unit testing | Responsive Backtest | Predictive Backtest |
 |---|---|---|---|
 | **파일** | `scaling-decision.test.ts` | `scaling-accuracy/` | `scaling-accuracy/` |
-| **기준** | 코드 설계 명세 | 운영자 판단 | 운영자 판단 |
-| **함수** | 개별 함수 검증 | `backtestScenario()` | `backtestPredictiveScenario()` |
-| **실패 의미** | 버그 | 가중치/임계값 조정 필요 | 오버라이드 조건 조정 필요 |
-| **AI 필요** | 불필요 | 불필요 | 불필요 (mock prediction) |
+| **Standard** | Code Design Specification | Operator judgment | Operator judgment |
+| **Function** | Individual function verification | `backtestScenario()` | `backtestPredictiveScenario()` |
+| **Failure Meaning** | bug | Weights/thresholds need adjustment | Override conditions need to be adjusted |
+| **AI Required** | Not necessary | Not necessary | Unnecessary (mock prediction) |
 
-### 스케일링 공식 (참고)
+### Scaling formula (reference)
 
 ```
 score = cpu * 0.3 + gas * 100 * 0.3 + min(txPool/200, 1) * 100 * 0.2 + aiScore * 0.2
 ```
 
-| 점수 범위 | 티어 | vCPU | 메모리 |
+| Score range | Tier | vCPU | memory |
 |-----------|------|------|--------|
 | < 30 | Idle | 1 | 2 GiB |
 | 30 ~ 70 | Normal | 2 | 4 GiB |
 | 70 ~ 77 | High | 4 | 8 GiB |
 | >= 77 | Critical | 8 | 16 GiB |
 
-> **참고**: AI severity 없이 최대 점수는 80 (CPU 30 + Gas 30 + TxPool 20). Critical 임계값이 77이므로 AI 없이도 8 vCPU 도달 가능.
+> **Note**: Maximum score without AI severity is 80 (CPU 30 + Gas 30 + TxPool 20). Critical threshold is 77, so 8 vCPU can be reached without AI.
 
-### 예측형 오버라이드 조건
+### Predictive override condition
 
 ```
-오버라이드 발동 조건 (모두 만족해야 함):
+Conditions for override to trigger (all must be met):
 1. prediction.confidence >= 0.7 (70%)
 2. prediction.recommendedAction === 'scale_up' (스케일업만)
-3. prediction.predictedVcpu > reactiveVcpu (더 높은 vCPU)
+3. prediction.predictedVcpu > reactiveVcpu (higher vCPU)
 ```
 
-즉, 예측형은 **선제적 스케일업만** 가능합니다. 스케일다운이나 유지 추천은 무시됩니다.
+In other words, predictive type only allows **proactive scale-up**. Recommendations to scale down or maintain are ignored.
 
 ---
 
-## 아키텍처
+## Architecture
 
 ```
 scaling-accuracy/
 ├── types.ts                    # 타입 (ScenarioStep, BacktestResult, PredictiveBacktestResult)
-├── scenarios.ts                # 6가지 메트릭 시퀀스 (반응형 4 + 예측형 2)
-├── evaluator.ts                # 백테스트 엔진 (backtestScenario, backtestPredictiveScenario)
-└── scaling-accuracy.test.ts    # Vitest 테스트 스위트 (29개)
+├── scenarios.ts # 6 metric sequences (responsive 4 + predictive 2)
+├── evaluator.ts # Backtest engine (backtestScenario, backtestPredictiveScenario)
+└── scaling-accuracy.test.ts # Vitest test suite (29)
 ```
 
-### 반응형 동작 방식
+### Responsive behavior
 
 ```
 scenarios.ts          evaluator.ts              scaling-decision.ts
 ┌─────────────┐      ┌──────────────────┐      ┌─────────────────┐
-│ 시나리오     │      │ backtestScenario │      │ makeScaling     │
+│ Scenario │ │ backtestScenario │ │ makeScaling │
 │ [step1]     │─────▶│   for each step: │─────▶│   Decision()    │
-│ [step2]     │      │     metrics →    │      │   score 계산    │
-│ [step3]     │      │     decision =   │◀─────│   vCPU 결정     │
+│ [step2] │ │ metrics → │ │ score calculation │
+│ [step3] │ │ decision = │◀─────│ vCPU decision │
 │ ...         │      │     compare with │      └─────────────────┘
 │ expectedVcpu│      │     expectedVcpu │
 └─────────────┘      │                  │
-                     │   결과:          │
+│ Result: │
                      │   accuracy %     │
                      │   under/over cnt │
                      └──────────────────┘
 ```
 
-### 예측형 동작 방식
+### Predictive behavior
 
 ```
 scenarios.ts          evaluator.ts                           scaling-decision.ts
 ┌──────────────┐     ┌──────────────────────────┐           ┌─────────────────┐
-│ 시나리오      │     │ backtestPredictiveScenario│           │ makeScaling     │
+│ Scenario │ │ backtestPredictiveScenario│ │ makeScaling │
 │ [step]       │────▶│   1. reactive decision ───│──────────▶│   Decision()    │
 │  metrics     │     │   2. override check:      │◀──────────│   score → vCPU  │
 │  mockPredict │     │      conf >= 0.7?         │           └─────────────────┘
@@ -95,7 +95,7 @@ scenarios.ts          evaluator.ts                           scaling-decision.ts
                      │      reactive             │
                      │   4. compare expectedVcpu │
                      │                           │
-                     │   결과:                   │
+│ Result: │
                      │   reactiveAccuracy        │
                      │   combinedAccuracy        │
                      │   overrideCount           │
@@ -103,75 +103,75 @@ scenarios.ts          evaluator.ts                           scaling-decision.ts
                      └──────────────────────────┘
 ```
 
-1. 시나리오의 각 단계(step)에서 메트릭을 추출
-2. `makeScalingDecision()`에 전달하여 반응형 결과 수집
-3. `mockPrediction`이 있으면 오버라이드 조건 확인 → 조건 충족 시 예측 vCPU 사용
-4. 최종 `targetVcpu`와 운영자 기대 `expectedVcpu`를 비교
-5. 반응형 정확도 / 결합 정확도 / 오버라이드 통계 동시 산출
+1. Extract metrics from each step of the scenario
+2. Collect responsive results by passing them to `makeScalingDecision()`
+3. If there is `mockPrediction`, check the override condition → Use the predicted vCPU when the condition is met.
+4. Compare final `targetVcpu` with operator expected `expectedVcpu`
+5. Simultaneous calculation of responsive accuracy / combined accuracy / override statistics
 
 ---
 
-## 반응형 시나리오 (4개)
+## Responsive scenarios (4)
 
-### 1. `idle_to_spike` — 유휴 → 급격한 스파이크 → 회복
+### 1. `idle_to_spike` — idle → sudden spike → recovery
 
-저부하 상태에서 갑자기 CPU 95%, TxPool 400까지 치솟은 후 다시 안정화되는 패턴.
+A pattern that suddenly soars to 95% CPU and 400 TxPool in a low load state and then stabilizes again.
 
-| 단계 | CPU | Gas | TxPool | 운영자 기대 | 검증 대상 |
+| steps | CPU | Gas | TxPool | operator expectations | Verification target |
 |------|-----|-----|--------|------------|-----------|
-| Idle baseline | 10% | 5% | 20 | 1 vCPU | 안정 시 과잉 프로비저닝 방지 |
-| Spike begins | 80% | 85% | 180 | 4 vCPU | 스파이크 감지 속도 |
-| Peak spike | 92% | 95% | 300 | 4 vCPU | 점진적 스케일업 |
-| Sustained peak | 95% | 98% | 350 | 8 vCPU | 지속 고부하 → 긴급 모드 |
-| Critical | 98% | 99% | 400 | 8 vCPU | 최대 티어 유지 |
-| Recovery | 40% | 30% | 50 | 2 vCPU | 스케일다운 |
-| Post-spike idle | 8% | 5% | 10 | 1 vCPU | 완전 복귀 |
+| Idle baseline | 10% | 5% | 20 | 1 vCPU | Prevent over-provisioning at rest |
+| Spike begins | 80% | 85% | 180 | 4 vCPUs | Spike Detection Rate |
+| Peak spike | 92% | 95% | 300 | 4 vCPUs | Gradual scale-up |
+| Sustained peak | 95% | 98% | 350 | 8 vCPUs | Continuous high load → emergency mode |
+| Critical | 98% | 99% | 400 | 8 vCPUs | Maintain maximum tier |
+| Recovery | 40% | 30% | 50 | 2 vCPUs | scale down |
+| Post-spike idle | 8% | 5% | 10 | 1 vCPU | Full return |
 
-### 2. `gradual_rise` — 점진적 부하 증가
+### 2. `gradual_rise` — Gradual load increase
 
-부하가 천천히 올라가며 각 임계값 경계를 하나씩 넘는 패턴.
+A pattern in which the load slowly increases, crossing each threshold boundary one by one.
 
-| 단계 | CPU | Gas | TxPool | 운영자 기대 | 검증 대상 |
+| steps | CPU | Gas | TxPool | operator expectations | Verification target |
 |------|-----|-----|--------|------------|-----------|
-| Low load | 10% | 10% | 20 | 1 vCPU | 저부하 유지 |
-| Normal load begins | 40% | 40% | 80 | 2 vCPU | Normal 임계값 감지 |
-| Approaching high | 70% | 70% | 150 | 2 vCPU | 불필요한 조기 스케일업 방지 |
-| High load | 85% | 85% | 200 | 4 vCPU | High 티어 진입 |
-| Peak high | 95% | 95% | 250 | 8 vCPU | Critical 티어 진입 |
+| Low load | 10% | 10% | 20 | 1 vCPU | Maintain low load |
+| Normal load begins | 40% | 40% | 80 | 2 vCPUs | Normal threshold detection |
+| Approaching high | 70% | 70% | 150 | 2 vCPUs | Avoid unnecessary early scale-up |
+| High load | 85% | 85% | 200 | 4 vCPUs | Enter High Tier |
+| Peak high | 95% | 95% | 250 | 8 vCPUs | Entering Critical Tier |
 
-### 3. `oscillating` — 진동 패턴 (저 ↔ 중)
+### 3. `oscillating` — Oscillating pattern (low ↔ medium)
 
-저부하와 중부하를 반복하며 안정적으로 1~2 vCPU만 사용해야 하는 패턴.
+A pattern that requires only 1 to 2 vCPUs to be used stably, repeating low and medium loads.
 
-| 단계 | CPU | Gas | TxPool | 운영자 기대 | 검증 대상 |
+| steps | CPU | Gas | TxPool | operator expectations | Verification target |
 |------|-----|-----|--------|------------|-----------|
-| Low | 15% | 15% | 30 | 1 vCPU | 안정 유지 |
-| Medium | 50% | 55% | 100 | 2 vCPU | 적절한 스케일업 |
-| Low | 12% | 12% | 20 | 1 vCPU | 스케일다운 |
-| Medium | 52% | 58% | 105 | 2 vCPU | 안정 반복 |
+| Low | 15% | 15% | 30 | 1 vCPU | Maintain stability |
+| Medium | 50% | 55% | 100 | 2 vCPUs | Appropriate scale-up |
+| Low | 12% | 12% | 20 | 1 vCPU | scale down |
+| Medium | 52% | 58% | 105 | 2 vCPUs | stable repetition |
 
-> 핵심: 4 vCPU 이상으로 올라가면 **실패** — 과잉 프로비저닝.
+> Bottom line: **Fail** when you go above 4 vCPU — over-provisioning.
 
-### 4. `sustained_critical` — 지속적 고부하 → 회복
+### 4. `sustained_critical` — Sustained high load → recovery
 
-극심한 부하가 지속된 후 깨끗하게 스케일다운되는 패턴.
+A pattern that scales down cleanly after an extreme load continues.
 
-| 단계 | CPU | Gas | TxPool | 운영자 기대 | 검증 대상 |
+| steps | CPU | Gas | TxPool | operator expectations | Verification target |
 |------|-----|-----|--------|------------|-----------|
-| Critical | 95% | 95% | 280 | 8 vCPU | 즉시 최대 티어 |
-| Max load | 100% | 100% | 400 | 8 vCPU | 유지 |
-| Cooling down | 60% | 60% | 150 | 2 vCPU | 적절한 스케일다운 |
-| Normal | 8% | 5% | 10 | 1 vCPU | 최저 복귀 |
+| Critical | 95% | 95% | 280 | 8 vCPUs | Instant Max Tier |
+| Max load | 100% | 100% | 400 | 8 vCPUs | Maintenance |
+| Cooling down | 60% | 60% | 150 | 2 vCPUs | Appropriate scale down |
+| Normal | 8% | 5% | 10 | 1 vCPU | lowest return |
 
 ---
 
-## 예측형 시나리오 (2개)
+## Predictive scenarios (2)
 
-### 5. `predictive_spike_rescue` — 예측이 under-scaling 보완
+### 5. `predictive_spike_rescue` — Predictive compensation for under-scaling
 
-반응형이 score=65로 2 vCPU를 결정하는 스파이크 시작 단계에서, AI 예측(confidence=0.88, scale_up)이 4 vCPU로 오버라이드합니다.
+At the start of the spike, where reactive determines 2 vCPU with score=65, AI prediction (confidence=0.88, scale_up) overrides it with 4 vCPU.
 
-| 단계 | CPU | 반응형 | 예측 (mock) | 오버라이드 | 운영자 기대 |
+| steps | CPU | Responsive | prediction (mock) | Override | operator expectations |
 |------|-----|--------|------------|-----------|------------|
 | Idle baseline | 10% | 1 | — | — | 1 |
 | Idle | 12% | 1 | maintain (0.80) | ❌ | 1 |
@@ -182,13 +182,13 @@ scenarios.ts          evaluator.ts                           scaling-decision.ts
 | Recovery | 40% | 1 | scale_down (0.90) | ❌ (action≠scale_up) | 1 |
 | Post-spike idle | 8% | 1 | — | — | 1 |
 
-**결과**: reactive 75.0% → combined **87.5%** (+12.5%p, helpful override 1회)
+**Result**: reactive 75.0% → combined **87.5%** (+12.5%p, helpful override once)
 
-### 6. `predictive_false_alarm` — 낮은 신뢰도 예측 무시
+### 6. `predictive_false_alarm` — Ignore low confidence predictions
 
-AI가 scale_up을 추천하지만 confidence < 0.7이므로 오버라이드 발동 안 됨. 반응형 결과 유지.
+AI recommends scale_up, but because confidence < 0.7, override is not activated. Maintain responsive results.
 
-| 단계 | CPU | 반응형 | 예측 (mock) | 오버라이드 | 운영자 기대 |
+| steps | CPU | Responsive | prediction (mock) | Override | operator expectations |
 |------|-----|--------|------------|-----------|------------|
 | Normal load | 40% | 2 | scale_up 4 (0.55) | ❌ (conf < 0.7) | 2 |
 | Brief spike | 55% | 2 | scale_up 4 (0.65) | ❌ (conf < 0.7) | 2 |
@@ -196,31 +196,31 @@ AI가 scale_up을 추천하지만 confidence < 0.7이므로 오버라이드 발�
 | Low load | 15% | 1 | — | — | 1 |
 | Moderate | 45% | 2 | scale_up 2 (0.85) | ❌ (predicted ≤ reactive) | 2 |
 
-**결과**: reactive 80.0% = combined **80.0%** (override 0회, 변화 없음)
+**Result**: reactive 80.0% = combined **80.0%** (override 0 times, no change)
 
 ---
 
-## 사용법
+## How to use
 
-### 테스트 실행
+### Run tests
 
 ```bash
-# 전체 정확도 백테스트 (반응형 + 예측형)
+# Full accuracy backtest (responsive + predictive)
 npx vitest run src/lib/__tests__/scaling-accuracy/ --reporter=verbose
 
-# 단위 테스트 + 정확도 백테스트 함께 실행
+# Run unit test + accuracy backtest together
 npx vitest run src/lib/__tests__/scaling-decision.test.ts src/lib/__tests__/scaling-accuracy/
 
-# 전체 스케일링 관련 테스트 (agent-loop, block-interval 포함)
+# Full scaling-related tests (including agent-loop, block-interval)
 npx vitest run src/lib/__tests__/scaling-decision.test.ts \
   src/lib/__tests__/scaling-accuracy/ \
   src/lib/__tests__/block-interval.test.ts \
   src/lib/__tests__/agent-loop.test.ts
 ```
 
-### 출력 예시
+### Example output
 
-**반응형:**
+**Responsive:**
 
 ```
   === OVERALL ACCURACY: 92.6% ===
@@ -233,7 +233,7 @@ npx vitest run src/lib/__tests__/scaling-decision.test.ts \
     - Under-scaled 2x in "idle_to_spike" — review idle/normal thresholds
 ```
 
-**예측형:**
+**Predictive:**
 
 ```
   === PREDICTIVE OVERRIDE SUMMARY ===
@@ -243,7 +243,7 @@ npx vitest run src/lib/__tests__/scaling-decision.test.ts \
   predictive_false_alarm: reactive=80.0% → combined=80.0% (overrides=0)
 ```
 
-**단계별 상세:**
+**Step-by-step details:**
 
 ```
     [OK]    Idle baseline: expected=1 got=1 (score=6.5)
@@ -251,77 +251,77 @@ npx vitest run src/lib/__tests__/scaling-decision.test.ts \
     [OK]    Peak spike: expected=4 got=4 (score=75.6)
 ```
 
-- `[OK]`: 알고리즘 판단 = 운영자 기대
-- `[UNDER]`: 알고리즘이 운영자보다 낮은 vCPU 결정 (under-scaling)
-- `[OVER]`: 알고리즘이 운영자보다 높은 vCPU 결정 (over-scaling)
+- `[OK]`: Algorithm judgment = operator expectation
+- `[UNDER]`: algorithm determines lower vCPU than operator (under-scaling)
+- `[OVER]`: algorithm determines higher vCPU than operator (over-scaling)
 
-### 결과 해석
+### Interpretation of results
 
-| 정확도 | 의미 | 조치 |
+| Accuracy | Meaning | action |
 |--------|------|------|
-| 90%+ | 우수 — 알고리즘이 운영자와 거의 일치 | 유지 |
-| 70~90% | 양호 — 특정 시나리오에서 편차 | under/over 패턴 분석 후 임계값 미세조정 |
-| 50~70% | 미흡 — 가중치 또는 임계값 재설계 필요 | 시나리오별 상세 분석 |
-| <50% | 심각 — 공식 자체에 구조적 문제 | 가중치 비율, 메트릭 구성 재검토 |
+| 90%+ | Excellent — Algorithm closely matches operator | Maintenance |
+| 70~90% | Good — Deviation under certain scenarios | Fine-tune the threshold after analyzing under/over patterns |
+| 50~70% | Poor — weights or thresholds need to be redesigned | Detailed analysis by scenario |
+| <50% | Serious — structural problems with the formula itself | Weight ratio, metric composition revisited |
 
 ---
 
-## 가중치 및 임계값 조정
+## Adjust weights and thresholds
 
-### 환경변수로 임계값 변경
+### Change threshold with environmental variables
 
 ```bash
-# .env.local에서 임계값 조정
-SCALING_IDLE_THRESHOLD=30       # 기본값: 30 (이하면 1 vCPU)
-SCALING_NORMAL_THRESHOLD=70     # 기본값: 70 (이하면 2 vCPU, 이상이면 4 vCPU)
-SCALING_CRITICAL_THRESHOLD=77   # 기본값: 77 (이상이면 8 vCPU)
+# Adjust threshold in .env.local
+SCALING_IDLE_THRESHOLD=30 # Default: 30 (or less than 1 vCPU)
+SCALING_NORMAL_THRESHOLD=70 # Default: 70 (2 vCPU below, 4 vCPU above)
+SCALING_CRITICAL_THRESHOLD=77 # Default: 77 (or more than 8 vCPU)
 ```
 
-### 코드에서 가중치 변경
+### Change weights in code
 
-`src/types/scaling.ts`에서 `DEFAULT_SCALING_CONFIG.weights`를 수정합니다:
+Edit `DEFAULT_SCALING_CONFIG.weights` in `src/types/scaling.ts`:
 
 ```typescript
 weights: {
-  cpu: 0.3,     // CPU 사용률 가중치 (현재 30%)
-  gas: 0.3,     // Gas 사용률 가중치 (현재 30%)
-  txPool: 0.2,  // TxPool 대기열 가중치 (현재 20%)
-  ai: 0.2,      // AI 심각도 가중치 (현재 20%)
+cpu: 0.3, // CPU utilization weighting (currently 30%)
+gas: 0.3, // Gas usage weight (currently 30%)
+txPool: 0.2, // TxPool queue weight (currently 20%)
+ai: 0.2, // AI severity weight (currently 20%)
 },
 ```
 
-> **주의**: 가중치 합계는 반드시 1.0이어야 합니다. 변경 후 반드시 백테스트를 재실행하여 정확도 변화를 확인하세요.
+> **Note**: The weight sum must be 1.0. After making changes, be sure to re-run the backtest to check for changes in accuracy.
 
-### 조정 워크플로우
-
-```
-1. 백테스트 실행 → 현재 정확도 확인
-2. [UNDER]/[OVER] 패턴 분석
-3. 임계값 또는 가중치 수정
-4. 백테스트 재실행 → 정확도 개선 확인
-5. 다른 시나리오 정확도 저하 없는지 확인 (회귀 방지)
-```
-
-예시: "idle_to_spike에서 Spike begins 단계가 under-scaling"
+### Coordination Workflow
 
 ```
-문제: score=65인데 4 vCPU 필요 → Normal 임계값(70)에 미달
-해결 옵션:
-  A. Normal 임계값 65로 낮춤 → 다른 시나리오 영향 확인
-  B. CPU 가중치 0.3→0.35 증가 → 고CPU 상황 민감도 상승
-  C. 예측형 오버라이드로 보완 → PREDICTIVE_SPIKE_RESCUE 시나리오 참고
-  D. 시나리오 기대값 재검토 → score=65에서 2 vCPU가 합리적인지 재평가
+1. Run backtest → Check current accuracy
+2. [UNDER]/[OVER] pattern analysis
+3. Modify thresholds or weights
+4. Rerun backtest → Check accuracy improvement
+5. Verify that there is no decrease in accuracy in other scenarios (prevention of regression)
+```
+
+Example: "In idle_to_spike, the Spike begins phase is under-scaling"
+
+```
+Problem: score=65 requires 4 vCPU → falls short of Normal threshold (70)
+Resolution options:
+A. Lower the Normal threshold to 65 → Check the impact of other scenarios
+B. CPU weight increases from 0.3 to 0.35 → Increases sensitivity to high CPU situations
+C. Complement with predictive override → Refer to PREDICTIVE_SPIKE_RESCUE scenario
+D. Reassess scenario expectations → re-evaluate whether 2 vCPU is reasonable at score=65
 ```
 
 ---
 
-## 새 시나리오 추가
+## Add new scenario
 
-### 반응형 시나리오
+### Responsive Scenario
 
-#### 1단계: 시나리오 정의
+#### Step 1: Define the scenario
 
-`scenarios.ts`에 새 시나리오를 추가합니다:
+Add a new scenario to `scenarios.ts`:
 
 ```typescript
 export const MY_SCENARIO: ScalingScenario = {
@@ -340,14 +340,14 @@ export const MY_SCENARIO: ScalingScenario = {
       expectedVcpu: 4,
       label: 'Load spike',
     },
-    // ... 추가 단계
+// ... additional steps
   ],
 };
 ```
 
-`makePoint(offsetSeconds, cpu, txPool, gasRatio)` 헬퍼를 사용합니다. `expectedVcpu`는 운영자 판단으로 수동 설정하세요 — 공식으로 계산하지 마세요.
+Use the `makePoint(offsetSeconds, cpu, txPool, gasRatio)` helper. Set `expectedVcpu` manually at operator discretion — do not calculate it using a formula.
 
-#### 2단계: ALL_SCENARIOS에 등록
+#### Step 2: Register with ALL_SCENARIOS
 
 ```typescript
 export const ALL_SCENARIOS: ScalingScenario[] = [
@@ -355,13 +355,13 @@ export const ALL_SCENARIOS: ScalingScenario[] = [
   GRADUAL_RISE,
   OSCILLATING,
   SUSTAINED_CRITICAL,
-  MY_SCENARIO,  // 추가
+MY_SCENARIO, // Add
 ];
 ```
 
-#### 3단계: 테스트 추가
+#### Step 3: Add tests
 
-`scaling-accuracy.test.ts`에 describe 블록을 추가합니다:
+Add a describe block to `scaling-accuracy.test.ts`:
 
 ```typescript
 import { MY_SCENARIO } from './scenarios';
@@ -380,11 +380,11 @@ describe('Scenario: my_scenario', () => {
 });
 ```
 
-### 예측형 시나리오
+### Predictive Scenario
 
-#### 1단계: mockPrediction 포함 시나리오 정의
+#### Step 1: Define scenario with mockPrediction
 
-`scenarios.ts`에서 `makePrediction()` 헬퍼를 사용하여 mock prediction을 생성합니다:
+Create a mock prediction using the `makePrediction()` helper in `scenarios.ts`:
 
 ```typescript
 import { makePrediction, makePoint } from './scenarios';
@@ -406,8 +406,8 @@ export const MY_PREDICTIVE_SCENARIO: ScalingScenario = {
       label: 'Rising load',
       mockPrediction: makePrediction(
         4,            // predictedVcpu (1 | 2 | 4)
-        0.85,         // confidence (>= 0.7이면 오버라이드 가능)
-        'scale_up',   // action ('scale_up'만 오버라이드 가능)
+0.85, // confidence (can be overridden if >= 0.7)
+'scale_up', // action (only 'scale_up' can be overridden)
         'rising',     // trend
       ),
     },
@@ -415,17 +415,17 @@ export const MY_PREDICTIVE_SCENARIO: ScalingScenario = {
 };
 ```
 
-#### 2단계: ALL_PREDICTIVE_SCENARIOS에 등록
+#### Step 2: Register with ALL_PREDICTIVE_SCENARIOS
 
 ```typescript
 export const ALL_PREDICTIVE_SCENARIOS: ScalingScenario[] = [
   PREDICTIVE_SPIKE_RESCUE,
   PREDICTIVE_FALSE_ALARM,
-  MY_PREDICTIVE_SCENARIO,  // 추가
+MY_PREDICTIVE_SCENARIO, // Add
 ];
 ```
 
-#### 3단계: 테스트 추가
+#### Step 3: Add tests
 
 ```typescript
 describe('Predictive: my_scenario', () => {
@@ -440,10 +440,10 @@ describe('Predictive: my_scenario', () => {
 });
 ```
 
-> `backtestScenario()`를 사용하면 `mockPrediction` 필드가 무시되어 반응형만 테스트됩니다.
-> `backtestPredictiveScenario()`를 사용해야 예측 오버라이드가 적용됩니다.
+> Using `backtestScenario()` will cause the `mockPrediction` field to be ignored and only the responsive will be tested.
+> You must use `backtestPredictiveScenario()` for the prediction override to take effect.
 
-#### 4단계: 실행 및 검증
+#### Step 4: Run and Verify
 
 ```bash
 npx vitest run src/lib/__tests__/scaling-accuracy/ --reporter=verbose
@@ -451,46 +451,46 @@ npx vitest run src/lib/__tests__/scaling-accuracy/ --reporter=verbose
 
 ---
 
-## 현재 결과 (2026-02-18)
+## Current results (2026-02-18)
 
-### 반응형 (Reactive)
+### Responsive
 
-| 시나리오 | 정확도 | 일치/전체 | Under | Over | 비고 |
+| Scenario | Accuracy | Match/All | Under | Over | Remarks |
 |----------|--------|----------|-------|------|------|
-| idle_to_spike | 75.0% | 6/8 | 2 | 0 | Spike begins에서 score=65 (Normal 임계값 70 미달) |
-| gradual_rise | 100.0% | 7/7 | 0 | 0 | 완벽 일치 |
-| oscillating | 100.0% | 6/6 | 0 | 0 | 완벽 일치 |
-| sustained_critical | 100.0% | 6/6 | 0 | 0 | 완벽 일치 |
-| **종합** | **92.6%** | **25/27** | **2** | **0** | |
+| idle_to_spike | 75.0% | 6/8 | 2 | 0 | At Spike begins, score=65 (below Normal threshold of 70) |
+| gradual_rise | 100.0% | 7/7 | 0 | 0 | Perfect match |
+| oscillating | 100.0% | 6/6 | 0 | 0 | Perfect match |
+| sustained_critical | 100.0% | 6/6 | 0 | 0 | Perfect match |
+| **Comprehensive** | **92.6%** | **25/27** | **2** | **0** | |
 
 ### 예측형 (Reactive + Predictive)
 
-| 시나리오 | 반응형 | 결합 | 개선 | 오버라이드 | Helpful | Harmful |
+| Scenario | Responsive | combine | improvement | Override | Helpful | Harmful |
 |----------|--------|------|------|-----------|---------|---------|
 | predictive_spike_rescue | 75.0% | 87.5% | +12.5%p | 1 | 1 | 0 |
 | predictive_false_alarm | 80.0% | 80.0% | ±0 | 0 | 0 | 0 |
-| **종합** | — | **84.6%** | — | **1** | **1** | **0** |
+| **Comprehensive** | — | **84.6%** | — | **1** | **1** | **0** |
 
-### 알려진 한계
+### Known limitations
 
-- **급격한 스파이크 감지 지연**: CPU 80% + Gas 85% + TxPool 180의 조합이 score=65로 Normal 임계값(70)에 미달하여 2 vCPU로 결정됨. 예측형 오버라이드가 이를 보완 가능 (`PREDICTIVE_SPIKE_RESCUE` 참고).
-- **AI severity 미반영**: 현재 시나리오에는 AI severity가 포함되지 않음. AI 분석이 활성화되면 정확도가 달라질 수 있음.
-- **쿨다운 미시뮬레이션**: 백테스트는 각 단계를 독립적으로 평가하며, 실제 운영 시 5분 쿨다운이 있어 연속 스케일업이 제한될 수 있음.
-- **예측 vCPU 상한**: `PredictionResult.predictedVcpu`의 타입이 `1 | 2 | 4`이므로 예측형으로는 최대 4 vCPU까지만 오버라이드 가능. 8 vCPU는 반응형만으로 달성.
+- **Sudden spike detection delay**: The combination of CPU 80% + Gas 85% + TxPool 180 is below the Normal threshold (70) with score=65, so it is determined as 2 vCPU. Predictive overrides can compensate for this (see `PREDICTIVE_SPIKE_RESCUE`).
+- **AI severity not reflected**: AI severity is not included in the current scenario. Accuracy may vary when AI analytics is enabled.
+- **Cooldown misimulation**: Backtest evaluates each step independently, and in actual operation, there is a 5-minute cooldown, which may limit continuous scale-up.
+- **Prediction vCPU upper limit**: `PredictionResult.predictedVcpu` has type `1 | 2 | Since it is 4`, predictive type can only override up to 4 vCPU. 8 vCPU achieved with responsive only.
 
 ---
 
-## 관련 파일
+## Related files
 
-| 파일 | 역할 |
+| file | Role |
 |------|------|
-| `src/lib/scaling-decision.ts` | 스케일링 결정 엔진 (공식, 티어 결정, 사유 생성) |
-| `src/lib/predictive-scaler.ts` | 예측형 스케일링 엔진 (AI 시계열 분석) |
-| `src/lib/agent-loop.ts` | 자율 에이전트 루프 (반응형 + 예측형 오버라이드 적용) |
-| `src/types/scaling.ts` | 타입 + 기본 설정 (가중치, 임계값, AI 심각도 점수) |
+| `src/lib/scaling-decision.ts` | Scaling decision engine (formula, tier determination, reason generation) |
+| `src/lib/predictive-scaler.ts` | Predictive scaling engine (AI time series analysis) |
+| `src/lib/agent-loop.ts` | Autonomous agent loop (applies reactive + predictive overrides) |
+| `src/types/scaling.ts` | Type + Preferences (Weights, Thresholds, AI Severity Score) |
 | `src/types/prediction.ts` | 예측 타입 (PredictionResult, PredictionConfig) |
-| `src/lib/__tests__/scaling-decision.test.ts` | 단위 테스트 (39개) |
-| `src/lib/__tests__/scaling-accuracy/types.ts` | 백테스트 타입 정의 (반응형 + 예측형) |
-| `src/lib/__tests__/scaling-accuracy/scenarios.ts` | 6가지 시나리오 (반응형 4 + 예측형 2) |
-| `src/lib/__tests__/scaling-accuracy/evaluator.ts` | 백테스트 엔진 (backtestScenario + backtestPredictiveScenario) |
-| `src/lib/__tests__/scaling-accuracy/scaling-accuracy.test.ts` | 정확도 테스트 스위트 (29개) |
+| `src/lib/__tests__/scaling-decision.test.ts` | Unit tests (39) |
+| `src/lib/__tests__/scaling-accuracy/types.ts` | Backtest type definition (reactive + predictive) |
+| `src/lib/__tests__/scaling-accuracy/scenarios.ts` | 6 scenarios (4 reactive + 2 predictive) |
+| `src/lib/__tests__/scaling-accuracy/evaluator.ts` | (backtestScenario + backtestPredictiveScenario) |
+| `src/lib/__tests__/scaling-accuracy/scaling-accuracy.test.ts` | Accuracy Test Suite (29) |

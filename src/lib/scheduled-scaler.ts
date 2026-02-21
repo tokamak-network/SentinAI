@@ -135,7 +135,7 @@ export async function applyScheduledScaling(
       targetVcpu: currentVcpu as TargetVcpu,
       executed: false,
       skippedReason: 'disabled',
-      message: '예약 스케일링이 비활성화되어 있습니다.',
+      message: 'Scheduled scaling is disabled.',
     };
   }
 
@@ -147,7 +147,7 @@ export async function applyScheduledScaling(
       targetVcpu: currentVcpu as TargetVcpu,
       executed: false,
       skippedReason: 'auto-scaling-disabled',
-      message: '오토스케일링이 꺼져 있어 예약 스케일링을 건너뜁니다.',
+      message: 'Auto-scaling is disabled, skipping scheduled scaling.',
     };
   }
 
@@ -160,7 +160,7 @@ export async function applyScheduledScaling(
       targetVcpu: currentVcpu as TargetVcpu,
       executed: false,
       skippedReason: 'insufficient-data',
-      message: '예약 스케일링을 위한 usage 데이터가 부족합니다.',
+      message: 'Insufficient usage data for scheduled scaling.',
     };
   }
 
@@ -173,7 +173,7 @@ export async function applyScheduledScaling(
       targetVcpu: currentVcpu as TargetVcpu,
       executed: false,
       skippedReason: 'insufficient-data',
-      message: '현재 시간대 슬롯을 찾지 못했습니다.',
+      message: 'Could not find a schedule slot for the current time.',
     };
   }
 
@@ -185,7 +185,7 @@ export async function applyScheduledScaling(
       targetVcpu: slot.targetVcpu,
       executed: false,
       skippedReason: 'already-at-target',
-      message: '이미 스케줄 목표 vCPU입니다.',
+      message: 'Already at the scheduled target vCPU.',
     };
   }
 
@@ -198,7 +198,7 @@ export async function applyScheduledScaling(
       targetVcpu: slot.targetVcpu,
       executed: false,
       skippedReason: 'cooldown',
-      message: `쿨다운 중입니다. ${cooldown.remainingSeconds}s 후 재시도됩니다.`,
+      message: `In cooldown. Retry after ${cooldown.remainingSeconds}s.`,
     };
   }
 
@@ -212,7 +212,7 @@ export async function applyScheduledScaling(
       targetVcpu: slot.targetVcpu,
       executed: false,
       skippedReason: 'reactive-override',
-      message: `실시간 CPU ${latestCpu.toFixed(1)}%로 높아 scale-down 예약을 보류합니다.`,
+      message: `Live CPU is high at ${latestCpu.toFixed(1)}%, deferring scheduled scale-down.`,
     };
   }
 
@@ -225,7 +225,7 @@ export async function applyScheduledScaling(
       targetVcpu: slot.targetVcpu,
       executed: false,
       skippedReason: 'scale-failed',
-      message: `예약 스케일링 실패: ${result.message}`,
+      message: `Scheduled scaling failed: ${result.message}`,
     };
   }
 
@@ -243,7 +243,6 @@ export async function applyScheduledScaling(
     previousVcpu: currentVcpu,
     targetVcpu: slot.targetVcpu,
     executed: true,
-    message: `예약 스케일링 적용: ${currentVcpu} → ${slot.targetVcpu} vCPU`,
+    message: `Scheduled scaling applied: ${currentVcpu} → ${slot.targetVcpu} vCPU`,
   };
 }
-

@@ -1,59 +1,59 @@
-# Proposal 3: Root Cause Analysis Engine - 구현 명세서
+# Proposal 3: Root Cause Analysis Engine - Implementation Specification
 
-> **문서 버전**: 1.0.0
-> **작성일**: 2026-02-06
-> **대상 독자**: Claude Opus 4.6 구현 에이전트
-> **선행 조건**: Proposal 1 (MetricsStore), Proposal 2 (AnomalyDetector) 구현 완료
-
----
-
-## 목차
-
-1. [개요](#1-개요)
-2. [타입 정의](#2-타입-정의)
-3. [신규 파일 명세](#3-신규-파일-명세)
-4. [기존 파일 수정](#4-기존-파일-수정)
-5. [API 명세](#5-api-명세)
-6. [AI 프롬프트 전문](#6-ai-프롬프트-전문)
-7. [환경 변수](#7-환경-변수)
-8. [테스트 검증](#8-테스트-검증)
-9. [의존관계](#9-의존관계)
-10. [UI 상세 - Causal Chain Diagram](#10-ui-상세---causal-chain-diagram)
+> **Document version**: 1.0.0
+> **Created date**: 2026-02-06
+> **Target audience**: Claude Opus 4.6 Implementation Agent
+> **Prerequisite**: Completed implementation of Proposal 1 (MetricsStore), Proposal 2 (AnomalyDetector)
 
 ---
 
-## 1. 개요
+## index
 
-### 1.1 배경
+1. [Overview](#1-Overview)
+2. [Type Definition](#2-Type-Definition)
+3. [New file specification](#3-new-file-specification)
+4. [Edit existing file](#4-Existing-file-Edit)
+5. [API specification](#5-api-specification)
+6. [AI Prompt Full Text](#6-ai-Prompt-Full Text)
+7. [Environment Variables](#7-Environment-Variables)
+8. [Test Verification](#8-Test-Verification)
+9. [Dependency](#9-Dependency)
+10. [UI Details - Causal Chain Diagram](#10-ui-Details---causal-chain-diagram)
 
-현재 SentinAI의 `ai-analyzer.ts`는 로그를 분석하여 `summary`와 `action_item`을 반환한다. 이 방식은 "무엇이 잘못됐는지"는 알려주지만, "왜 잘못됐는지"와 "어떤 순서로 문제가 전파됐는지"는 제공하지 않는다.
+---
 
-### 1.2 목표
+## 1. Overview
 
-**Root Cause Analysis (RCA) Engine**은 다음 기능을 제공한다:
+### 1.1 Background
 
-1. **이벤트 타임라인 구성**: 로그와 메트릭 이상치를 시간순으로 정렬
-2. **컴포넌트 의존관계 매핑**: Optimism Rollup 컴포넌트 간 의존성 그래프 활용
-3. **AI 기반 인과 추론**: Claude를 활용하여 근본 원인을 식별하고 전파 경로를 추적
-4. **조치 권고 제공**: 즉시 조치 사항과 재발 방지 대책 제안
+Currently, SentinAI's `ai-analyzer.ts` analyzes logs and returns `summary` and `action_item`. This method tells you “what went wrong” but not “why it went wrong” or “in what order the problem propagated.”
 
-### 1.3 트리거 방식
+### 1.2 Goal
 
-RCA는 두 가지 방식으로 트리거된다:
+**Root Cause Analysis (RCA) Engine** provides the following features:
 
-1. **수동 트리거**: UI의 "ROOT CAUSE ANALYSIS" 버튼 클릭
-2. **자동 트리거**: Proposal 2의 심층 분석에서 `severity === 'critical'` 감지 시 (선택적)
+1. **Configure event timeline**: Sort logs and metric outliers chronologically.
+2. **Component dependency mapping**: Utilizing the dependency graph between Optimism Rollup components
+3. **AI-based causal inference**: Leverage Claude to identify root causes and trace propagation paths
+4. **Provide action recommendations**: Propose immediate actions and measures to prevent recurrence
 
-### 1.4 의존 모듈
+### 1.3 Trigger method
 
-| 모듈 | 용도 | 출처 |
+RCA is triggered in two ways:
+
+1. **Manual trigger**: Click the “ROOT CAUSE ANALYSIS” button in the UI
+2. **Auto trigger**: When detecting `severity === 'critical'` in deep analysis of Proposal 2 (optional)
+
+### 1.4 Dependent modules
+
+| module | Use | Source |
 |------|------|------|
-| `MetricsStore` | 최근 메트릭 히스토리 조회 | Proposal 1 (`src/lib/metrics-store.ts`) |
-| `AnomalyDetector` | 통계 기반 이상치 탐지 | Proposal 2 (`src/lib/anomaly-detector.ts`) |
-| `LogIngester` | 컴포넌트별 로그 수집 | 기존 (`src/lib/log-ingester.ts`) |
-| `AnomalyResult` | 이상 탐지 결과 타입 | Proposal 2 (`src/types/anomaly.ts`) |
+| `MetricsStore` | View recent metric history | Proposal 1 (`src/lib/metrics-store.ts`) |
+| `AnomalyDetector` | Statistically based outlier detection | Proposal 2 (`src/lib/anomaly-detector.ts`) |
+| `LogIngester` | Log collection by component | existing (`src/lib/log-ingester.ts`) |
+| `AnomalyResult` | Anomaly detection result type | Proposal 2 (`src/types/anomaly.ts`) |
 
-### 1.5 아키텍처 다이어그램
+### 1.5 Architecture diagram
 
 ```
 ┌──────────────────────────────────────────────────────────────────────────┐
@@ -106,26 +106,26 @@ RCA는 두 가지 방식으로 트리거된다:
 
 ---
 
-## 2. 타입 정의
+## 2. Type definition
 
-### 2.1 신규 파일: `src/types/rca.ts`
+### 2.1 New file: `src/types/rca.ts`
 
 ```typescript
 /**
  * Root Cause Analysis Types
- * Optimism Rollup 장애 분석을 위한 타입 정의
+* Type definition for Optimism Rollup failure analysis
  */
 
 import type { AISeverity } from './scaling';
 
 /**
- * Optimism Rollup 컴포넌트 식별자
- * - op-geth: Execution Client (L2 블록 실행)
- * - op-node: Consensus Client / Derivation Driver (L1에서 L2 상태 파생)
- * - op-batcher: Transaction Batch Submitter (L2 트랜잭션을 L1에 제출)
- * - op-proposer: State Root Proposer (L2 상태 루트를 L1에 제출)
- * - l1: L1 Ethereum (외부 의존성)
- * - system: 시스템 레벨 이벤트 (K8s, 네트워크 등)
+* Optimism Rollup component identifier
+* - op-geth: Execution Client (L2 block execution)
+* - op-node: Consensus Client / Derivation Driver (derivation of L2 state from L1)
+* - op-batcher: Transaction Batch Submitter (submits L2 transactions to L1)
+* - op-proposer: State Root Proposer (submits L2 state root to L1)
+* - l1: L1 Ethereum (external dependency)
+* - system: system level events (K8s, network, etc.)
  */
 export type RCAComponent =
   | 'op-geth'
@@ -136,167 +136,167 @@ export type RCAComponent =
   | 'system';
 
 /**
- * RCA 이벤트 유형
- * - error: 에러 로그 또는 치명적 실패
- * - warning: 경고 로그 또는 주의 필요 상태
- * - metric_anomaly: 메트릭 이상치 (Z-Score 기반)
- * - state_change: 상태 변화 (스케일링, 재시작 등)
+* RCA event type
+* - error: error log or fatal failure
+* - warning: warning log or attention-needs status
+* - metric_anomaly: Metric outliers (based on Z-Score)
+* - state_change: State change (scaling, restart, etc.)
  */
 export type RCAEventType = 'error' | 'warning' | 'metric_anomaly' | 'state_change';
 
 /**
- * RCA 이벤트
- * 타임라인을 구성하는 개별 이벤트
+* RCA Events
+* Individual events that make up the timeline
  */
 export interface RCAEvent {
   /** Unix timestamp (milliseconds) */
   timestamp: number;
 
-  /** 이벤트 발생 컴포넌트 */
+/** Event generating component */
   component: RCAComponent;
 
-  /** 이벤트 유형 */
+/** Event type */
   type: RCAEventType;
 
-  /** 이벤트 설명 (사람이 읽을 수 있는 형태) */
+/** Event description (in human-readable form) */
   description: string;
 
-  /** 원본 로그 라인 (있는 경우) */
+/** Original log line (if any) */
   rawLog?: string;
 
-  /** 이벤트 심각도 (있는 경우) */
+/** Event severity (if any) */
   severity?: AISeverity;
 }
 
 /**
- * 컴포넌트 의존관계
- * Optimism Rollup 아키텍처 기반 정의
+* Component dependencies
+* Optimism Rollup architecture-based definition
  */
 export interface ComponentDependency {
-  /** 이 컴포넌트가 의존하는 컴포넌트 목록 (upstream) */
+/** List of components this component depends on (upstream) */
   dependsOn: RCAComponent[];
 
-  /** 이 컴포넌트에 의존하는 컴포넌트 목록 (downstream) */
+/** List of components that depend on this component (downstream) */
   feeds: RCAComponent[];
 }
 
 /**
- * 근본 원인 정보
+* Root cause information
  */
 export interface RootCauseInfo {
-  /** 근본 원인 컴포넌트 */
+/** Root cause component */
   component: RCAComponent;
 
-  /** 근본 원인 설명 */
+/** Root cause explanation */
   description: string;
 
-  /** 분석 신뢰도 (0-1) */
+/** Analysis reliability (0-1) */
   confidence: number;
 }
 
 /**
- * 조치 권고
+* Action recommendations
  */
 export interface RemediationAdvice {
-  /** 즉시 조치 사항 */
+/** Immediate action */
   immediate: string[];
 
-  /** 재발 방지 대책 */
+/** Measures to prevent recurrence */
   preventive: string[];
 }
 
 /**
- * RCA 분석 결과
+* RCA analysis results
  */
 export interface RCAResult {
-  /** 고유 식별자 (UUID) */
+/** Unique identifier (UUID) */
   id: string;
 
-  /** 근본 원인 정보 */
+/** Root cause information */
   rootCause: RootCauseInfo;
 
-  /** 인과 체인 (근본 원인 → 최종 증상 순서) */
+/** Causal chain (root cause → final symptom sequence) */
   causalChain: RCAEvent[];
 
-  /** 영향 받은 컴포넌트 목록 */
+/** List of affected components */
   affectedComponents: RCAComponent[];
 
-  /** 전체 이벤트 타임라인 (시간순) */
+/** Full event timeline (in chronological order) */
   timeline: RCAEvent[];
 
-  /** 조치 권고 */
+/** Recommend action */
   remediation: RemediationAdvice;
 
-  /** 분석 완료 시각 (ISO 8601) */
+/** Analysis completion time (ISO 8601) */
   generatedAt: string;
 }
 
 /**
- * RCA 히스토리 엔트리
+* RCA history entry
  */
 export interface RCAHistoryEntry {
-  /** RCAResult의 id와 동일 */
+/** Same as id of RCAResult */
   id: string;
 
-  /** RCA 분석 결과 */
+/** RCA analysis results */
   result: RCAResult;
 
-  /** 트리거 방식 */
+/** Trigger method */
   triggeredBy: 'manual' | 'auto';
 
-  /** 트리거 시각 (ISO 8601) */
+/** Trigger time (ISO 8601) */
   triggeredAt: string;
 }
 
 /**
- * RCA API 요청 본문
+* RCA API request body
  */
 export interface RCARequest {
-  /** 자동 트리거 여부 (Proposal 2 연동 시 사용) */
+/** Automatic trigger (used when linking Proposal 2) */
   autoTriggered?: boolean;
 }
 
 /**
- * RCA API 응답
+* RCA API response
  */
 export interface RCAResponse {
-  /** 성공 여부 */
+/** Success or not */
   success: boolean;
 
-  /** RCA 결과 (성공 시) */
+/** RCA result (if successful) */
   result?: RCAResult;
 
-  /** 에러 메시지 (실패 시) */
+/** Error message (in case of failure) */
   error?: string;
 
-  /** 상세 에러 (디버깅용) */
+/** Detailed error (for debugging) */
   message?: string;
 }
 
 /**
- * RCA 히스토리 API 응답
+* RCA History API response
  */
 export interface RCAHistoryResponse {
-  /** RCA 히스토리 목록 */
+/** RCA history list */
   history: RCAHistoryEntry[];
 
-  /** 전체 히스토리 수 */
+/** Total history count */
   total: number;
 }
 ```
 
 ---
 
-## 3. 신규 파일 명세
+## 3. New file specification
 
 ### 3.1 `src/lib/rca-engine.ts`
 
-RCA의 핵심 로직을 담당하는 모듈이다.
+This module is responsible for the core logic of RCA.
 
 ```typescript
 /**
  * Root Cause Analysis Engine
- * Optimism Rollup 장애의 근본 원인을 분석하고 인과 체인을 추적
+* Optimism Rollup Analyze the root cause of failures and trace the causal chain
  */
 
 import type { AnomalyResult } from '@/types/anomaly';
@@ -317,21 +317,21 @@ import type { AISeverity } from '@/types/scaling';
 // ============================================================================
 
 /**
- * AI Gateway 설정
+* AI Gateway settings
  */
 const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://api.ai.tokamak.network';
 const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
 /**
- * Optimism Rollup 컴포넌트 의존관계 그래프
+* Optimism Rollup component dependency graph
  *
- * 데이터 흐름:
- * - L1 → op-node: L1 블록 데이터를 읽어 L2 상태 파생
- * - op-node → op-geth: 파생된 블록을 실행 클라이언트에 전달
- * - op-node → op-batcher: 배치 제출 트리거
- * - op-node → op-proposer: 상태 루트 제출 트리거
- * - op-batcher → L1: 트랜잭션 배치를 L1에 제출
- * - op-proposer → L1: 상태 루트를 L1에 제출
+* Data flow:
+* - L1 → op-node: Derive L2 state by reading L1 block data
+* - op-node → op-geth: Pass the derived block to the execution client.
+* - op-node → op-batcher: trigger batch submission
+* - op-node → op-proposer: trigger state route submission
+* - op-batcher → L1: Submit transaction batch to L1
+* - op-proposer → L1: submit state root to L1
  */
 export const DEPENDENCY_GRAPH: Record<RCAComponent, ComponentDependency> = {
   'op-geth': {
@@ -361,7 +361,7 @@ export const DEPENDENCY_GRAPH: Record<RCAComponent, ComponentDependency> = {
 };
 
 /**
- * 로그 레벨과 RCAEventType 매핑
+* Mapping log levels and RCAEventType
  */
 const LOG_LEVEL_MAP: Record<string, 'error' | 'warning'> = {
   'ERROR': 'error',
@@ -372,7 +372,7 @@ const LOG_LEVEL_MAP: Record<string, 'error' | 'warning'> = {
 };
 
 /**
- * 컴포넌트 이름 정규화 맵
+* Component name normalization map
  */
 const COMPONENT_NAME_MAP: Record<string, RCAComponent> = {
   'op-geth': 'op-geth',
@@ -386,7 +386,7 @@ const COMPONENT_NAME_MAP: Record<string, RCAComponent> = {
 };
 
 /**
- * RCA 히스토리 최대 보관 수
+* Maximum number of RCA history storage
  */
 const MAX_HISTORY_SIZE = 20;
 
@@ -395,8 +395,8 @@ const MAX_HISTORY_SIZE = 20;
 // ============================================================================
 
 /**
- * RCA 히스토리 저장소 (in-memory)
- * 실제 운영 환경에서는 Redis 또는 DB 사용 권장
+* RCA history storage (in-memory)
+* In actual operating environments, use of Redis or DB is recommended
  */
 let rcaHistory: RCAHistoryEntry[] = [];
 
@@ -405,17 +405,17 @@ let rcaHistory: RCAHistoryEntry[] = [];
 // ============================================================================
 
 /**
- * 로그 라인에서 타임스탬프 추출
- * 지원 포맷:
+* Extract timestamps from log lines
+* Supported formats:
  * - ISO 8601: 2026-02-06T12:34:56.789Z
- * - Geth 스타일: [02-06|12:34:56.789]
- * - 일반: 2026-02-06 12:34:56
+* - Geth style: [02-06|12:34:56.789]
+* - General: 2026-02-06 12:34:56
  *
- * @param logLine - 로그 라인
- * @returns Unix timestamp (ms) 또는 null
+* @param logLine - log line
+* @returns Unix timestamp (ms) 또는 null
  */
 function extractTimestamp(logLine: string): number | null {
-  // ISO 8601 포맷
+// ISO 8601 format
   const isoMatch = logLine.match(/(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z?)/);
   if (isoMatch) {
     const date = new Date(isoMatch[1]);
@@ -424,7 +424,7 @@ function extractTimestamp(logLine: string): number | null {
     }
   }
 
-  // Geth 스타일 [MM-DD|HH:mm:ss.mmm]
+// Geth style [MM-DD|HH:mm:ss.mmm]
   const gethMatch = logLine.match(/\[(\d{2})-(\d{2})\|(\d{2}):(\d{2}):(\d{2})(?:\.(\d{3}))?\]/);
   if (gethMatch) {
     const now = new Date();
@@ -441,7 +441,7 @@ function extractTimestamp(logLine: string): number | null {
     return date.getTime();
   }
 
-  // 일반 포맷 YYYY-MM-DD HH:mm:ss
+// General format YYYY-MM-DD HH:mm:ss
   const generalMatch = logLine.match(/(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2}:\d{2})/);
   if (generalMatch) {
     const date = new Date(`${generalMatch[1]}T${generalMatch[2]}Z`);
@@ -454,16 +454,16 @@ function extractTimestamp(logLine: string): number | null {
 }
 
 /**
- * 로그 라인에서 로그 레벨 추출
+* Extract log levels from log lines
  *
- * @param logLine - 로그 라인
- * @returns 로그 레벨 또는 null
+* @param logLine - log line
+* @returns log level or null
  */
 function extractLogLevel(logLine: string): 'error' | 'warning' | null {
   const upperLine = logLine.toUpperCase();
 
   for (const [levelStr, eventType] of Object.entries(LOG_LEVEL_MAP)) {
-    // 단어 경계로 매칭하여 오탐 방지
+// Prevent false positives by matching on word boundaries
     const regex = new RegExp(`\\b${levelStr}\\b`);
     if (regex.test(upperLine)) {
       return eventType;
@@ -474,10 +474,10 @@ function extractLogLevel(logLine: string): 'error' | 'warning' | null {
 }
 
 /**
- * 컴포넌트 이름 정규화
+* Component name normalization
  *
- * @param name - 원본 컴포넌트 이름
- * @returns 정규화된 RCAComponent
+* @param name - Original component name
+* @returns Normalized RCAComponent
  */
 function normalizeComponentName(name: string): RCAComponent {
   const lowered = name.toLowerCase().trim();
@@ -485,10 +485,10 @@ function normalizeComponentName(name: string): RCAComponent {
 }
 
 /**
- * 로그에서 RCAEvent 목록 파싱
+* Parse RCAEvent list from log
  *
- * @param logs - 컴포넌트별 로그 (key: 컴포넌트 이름, value: 로그 텍스트)
- * @returns RCAEvent 배열
+* @param logs - Logs by component (key: component name, value: log text)
+* @returns RCAEvent array
  */
 function parseLogsToEvents(logs: Record<string, string>): RCAEvent[] {
   const events: RCAEvent[] = [];
@@ -500,13 +500,13 @@ function parseLogsToEvents(logs: Record<string, string>): RCAEvent[] {
     for (const line of lines) {
       const level = extractLogLevel(line);
 
-      // ERROR 또는 WARN 로그만 이벤트로 추출
+// Extract only ERROR or WARN logs as events
       if (!level) continue;
 
       const timestamp = extractTimestamp(line) || Date.now();
 
-      // 로그 메시지에서 의미 있는 부분 추출
-      // 타임스탬프와 레벨을 제거한 나머지
+// Extract meaningful parts from log messages
+// Remainder after removing timestamp and level
       const description = line
         .replace(/\[\d{2}-\d{2}\|\d{2}:\d{2}:\d{2}(?:\.\d{3})?\]/g, '')
         .replace(/\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z?/g, '')
@@ -528,26 +528,26 @@ function parseLogsToEvents(logs: Record<string, string>): RCAEvent[] {
 }
 
 /**
- * AnomalyResult를 RCAEvent로 변환
+* Convert AnomalyResult to RCAEvent
  *
- * @param anomalies - 이상 탐지 결과 배열
- * @returns RCAEvent 배열
+* @param anomalies - Anomaly detection result array
+* @returns RCAEvent array
  */
 function anomaliesToEvents(anomalies: AnomalyResult[]): RCAEvent[] {
   return anomalies
     .filter(a => a.isAnomaly)
     .map(anomaly => {
-      // 메트릭 이름에서 컴포넌트 추론
+// Infer component from metric name
       let component: RCAComponent = 'system';
       if (anomaly.metric.includes('cpu') || anomaly.metric.includes('memory')) {
-        component = 'op-geth'; // CPU/Memory는 주로 geth 관련
+component = 'op-geth'; // CPU/Memory mainly related to geth
       } else if (anomaly.metric.includes('txPool') || anomaly.metric.includes('gas')) {
         component = 'op-geth';
       } else if (anomaly.metric.includes('block')) {
         component = 'op-node';
       }
 
-      // 방향에 따른 심각도 결정
+// Determine severity based on direction
       let severity: AISeverity = 'medium';
       if (Math.abs(anomaly.zScore) > 3.5) {
         severity = 'critical';
@@ -566,32 +566,32 @@ function anomaliesToEvents(anomalies: AnomalyResult[]): RCAEvent[] {
 }
 
 /**
- * 이벤트 타임라인 구성
+* Event timeline configuration
  *
- * @param anomalies - 이상 탐지 결과 배열
- * @param logs - 컴포넌트별 로그
- * @param minutes - 분석할 시간 범위 (분)
- * @returns 시간순 정렬된 RCAEvent 배열
+* @param anomalies - Anomaly detection result array
+* @param logs - logs for each component
+* @param minutes - Time range to analyze (minutes)
+* @returns Array of RCAEvents sorted by time.
  */
 export function buildTimeline(
   anomalies: AnomalyResult[],
   logs: Record<string, string>,
   minutes: number = 5
 ): RCAEvent[] {
-  // 로그에서 이벤트 추출
+// Extract events from log
   const logEvents = parseLogsToEvents(logs);
 
-  // 이상치를 이벤트로 변환
+// Convert outliers to events
   const anomalyEvents = anomaliesToEvents(anomalies);
 
-  // 모든 이벤트 병합
+// Merge all events
   const allEvents = [...logEvents, ...anomalyEvents];
 
-  // 시간 범위 필터링
+// Filter time range
   const cutoffTime = Date.now() - minutes * 60 * 1000;
   const filteredEvents = allEvents.filter(e => e.timestamp >= cutoffTime);
 
-  // 시간순 정렬 (오래된 것 먼저)
+// Sort chronologically (oldest first)
   filteredEvents.sort((a, b) => a.timestamp - b.timestamp);
 
   return filteredEvents;
@@ -602,10 +602,10 @@ export function buildTimeline(
 // ============================================================================
 
 /**
- * 특정 컴포넌트로부터 영향받는 모든 downstream 컴포넌트 탐색
+* Explore all downstream components affected by a specific component
  *
- * @param rootComponent - 근본 원인 컴포넌트
- * @returns 영향받는 컴포넌트 목록
+* @param rootComponent - root cause component
+* @returns list of affected components
  */
 export function findAffectedComponents(rootComponent: RCAComponent): RCAComponent[] {
   const affected = new Set<RCAComponent>();
@@ -614,12 +614,12 @@ export function findAffectedComponents(rootComponent: RCAComponent): RCAComponen
   while (queue.length > 0) {
     const current = queue.shift()!;
 
-    // 이미 처리된 컴포넌트는 스킵
+// Skip components that have already been processed
     if (affected.has(current) && current !== rootComponent) {
       continue;
     }
 
-    // downstream 컴포넌트 탐색
+// Explore downstream components
     const deps = DEPENDENCY_GRAPH[current];
     if (deps) {
       for (const downstream of deps.feeds) {
@@ -635,10 +635,10 @@ export function findAffectedComponents(rootComponent: RCAComponent): RCAComponen
 }
 
 /**
- * 특정 컴포넌트의 upstream 의존성 조회
+* Check upstream dependency of a specific component
  *
- * @param component - 대상 컴포넌트
- * @returns upstream 컴포넌트 목록
+* @param component - target component
+* @returns upstream component list
  */
 export function findUpstreamComponents(component: RCAComponent): RCAComponent[] {
   const deps = DEPENDENCY_GRAPH[component];
@@ -650,7 +650,7 @@ export function findUpstreamComponents(component: RCAComponent): RCAComponent[] 
 // ============================================================================
 
 /**
- * RCA 시스템 프롬프트
+* RCA system prompt
  */
 const RCA_SYSTEM_PROMPT = `You are performing Root Cause Analysis (RCA) for an Optimism L2 Rollup incident.
 
@@ -756,7 +756,7 @@ Respond ONLY with a valid JSON object (no markdown code blocks):
 }`;
 
 /**
- * RCA 사용자 프롬프트 생성
+* Generate RCA user prompt
  */
 function buildUserPrompt(
   timeline: RCAEvent[],
@@ -764,7 +764,7 @@ function buildUserPrompt(
   metrics: MetricDataPoint[],
   logs: Record<string, string>
 ): string {
-  // 타임라인 JSON
+// Timeline JSON
   const timelineJson = JSON.stringify(
     timeline.map(e => ({
       time: new Date(e.timestamp).toISOString(),
@@ -776,13 +776,13 @@ function buildUserPrompt(
     2
   );
 
-  // 이상치 요약
+// Summary of outliers
   const anomalySummary = anomalies
     .filter(a => a.isAnomaly)
     .map(a => `- ${a.metric}: ${a.value.toFixed(2)} (z-score: ${a.zScore.toFixed(2)}, ${a.direction})`)
     .join('\n');
 
-  // 최근 메트릭 (마지막 5개)
+// Recent metrics (last 5)
   const recentMetrics = metrics.slice(-5).map(m => ({
     time: new Date(m.timestamp).toISOString(),
     cpu: m.cpuUsage.toFixed(1),
@@ -790,7 +790,7 @@ function buildUserPrompt(
     gasRatio: m.gasUsedRatio.toFixed(3),
   }));
 
-  // 로그 요약 (각 컴포넌트 마지막 20줄)
+// Log summary (last 20 lines of each component)
   const logSummary = Object.entries(logs)
     .map(([comp, log]) => {
       const lines = log.split('\n').filter(l => l.trim());
@@ -815,7 +815,7 @@ Analyze the above data and identify the root cause of the incident.`;
 }
 
 /**
- * AI Gateway를 통한 RCA 분석 수행
+* Perform RCA analysis through AI Gateway
  */
 async function callAIForRCA(
   timeline: RCAEvent[],
@@ -856,11 +856,11 @@ async function callAIForRCA(
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || data.output || '{}';
 
-    // JSON 파싱 (markdown 코드 블록 제거)
+// Parse JSON (remove markdown code blocks)
     const jsonStr = content.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(jsonStr);
 
-    // 응답 구조 검증 및 변환
+// Verify and convert response structure
     return {
       rootCause: {
         component: parsed.rootCause?.component || 'system',
@@ -883,13 +883,13 @@ async function callAIForRCA(
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[RCA Engine] AI analysis failed:', errorMessage);
 
-    // Fallback: 타임라인 기반 휴리스틱 분석
+// Fallback: Timeline-based heuristic analysis
     return generateFallbackAnalysis(timeline, anomalies);
   }
 }
 
 /**
- * AI 호출 실패 시 폴백 분석
+* Fallback analysis when AI call fails
  */
 function generateFallbackAnalysis(
   timeline: RCAEvent[],
@@ -900,7 +900,7 @@ function generateFallbackAnalysis(
   affectedComponents: RCAComponent[];
   remediation: RemediationAdvice;
 } {
-  // 가장 오래된 에러 이벤트를 근본 원인으로 가정
+// Assume the oldest error event as the root cause
   const errorEvents = timeline.filter(e => e.type === 'error');
   const firstError = errorEvents[0] || timeline[0];
 
@@ -911,7 +911,7 @@ function generateFallbackAnalysis(
     rootCause: {
       component: rootCauseComponent,
       description: firstError?.description || 'Unable to determine root cause (AI unavailable)',
-      confidence: 0.3, // 낮은 신뢰도
+confidence: 0.3, // low confidence
     },
     causalChain: errorEvents.slice(0, 5),
     affectedComponents,
@@ -935,18 +935,18 @@ function generateFallbackAnalysis(
 // ============================================================================
 
 /**
- * UUID 생성 (crypto.randomUUID가 없는 환경용 폴백)
+* Generate UUID (fallback for environments without crypto.randomUUID)
  */
 function generateId(): string {
   return 'rca-' + Date.now().toString(36) + '-' + Math.random().toString(36).substring(2, 9);
 }
 
 /**
- * RCA 수행
+* Perform RCA
  *
- * @param anomalies - 이상 탐지 결과 (Proposal 2)
- * @param logs - 컴포넌트별 로그
- * @param metrics - 메트릭 데이터 포인트 (Proposal 1)
+* @param anomalies - Anomaly detection results (Proposal 2)
+* @param logs - logs for each component
+* @param metrics - Metric data point (Proposal 1)
  * @returns RCAResult
  */
 export async function performRCA(
@@ -957,14 +957,14 @@ export async function performRCA(
   const startTime = Date.now();
   console.log('[RCA Engine] Starting root cause analysis...');
 
-  // 1. 이벤트 타임라인 구성
+// 1. Event timeline configuration
   const timeline = buildTimeline(anomalies, logs, 5);
   console.log(`[RCA Engine] Built timeline with ${timeline.length} events`);
 
-  // 2. AI를 통한 인과 분석
+// 2. Causal analysis through AI
   const aiResult = await callAIForRCA(timeline, anomalies, metrics, logs);
 
-  // 3. 결과 구성
+// 3. Configure results
   const result: RCAResult = {
     id: generateId(),
     rootCause: aiResult.rootCause,
@@ -988,7 +988,7 @@ export async function performRCA(
 // ============================================================================
 
 /**
- * RCA 히스토리에 엔트리 추가
+* Add entry to RCA history
  */
 export function addRCAHistory(result: RCAResult, triggeredBy: 'manual' | 'auto'): void {
   const entry: RCAHistoryEntry = {
@@ -1000,34 +1000,34 @@ export function addRCAHistory(result: RCAResult, triggeredBy: 'manual' | 'auto')
 
   rcaHistory.unshift(entry);
 
-  // 최대 보관 수 초과 시 오래된 항목 제거
+// Remove old items when maximum storage number is exceeded
   if (rcaHistory.length > MAX_HISTORY_SIZE) {
     rcaHistory = rcaHistory.slice(0, MAX_HISTORY_SIZE);
   }
 }
 
 /**
- * RCA 히스토리 조회
+* RCA history search
  *
- * @param limit - 반환할 최대 항목 수
- * @returns RCAHistoryEntry 배열
+* @param limit - Maximum number of items to return
+* @returns RCAHistoryEntry 배열
  */
 export function getRCAHistory(limit: number = 10): RCAHistoryEntry[] {
   return rcaHistory.slice(0, Math.min(limit, MAX_HISTORY_SIZE));
 }
 
 /**
- * 특정 RCA 결과 조회
+* Query specific RCA results
  *
- * @param id - RCA 결과 ID
- * @returns RCAHistoryEntry 또는 undefined
+* @param id - RCA result ID
+* @returns RCAHistoryEntry 또는 undefined
  */
 export function getRCAById(id: string): RCAHistoryEntry | undefined {
   return rcaHistory.find(entry => entry.id === id);
 }
 
 /**
- * 히스토리 전체 수 조회
+* View total history count
  */
 export function getRCAHistoryCount(): number {
   return rcaHistory.length;
@@ -1036,7 +1036,7 @@ export function getRCAHistoryCount(): number {
 
 ### 3.2 `src/app/api/rca/route.ts`
 
-RCA API 엔드포인트 구현.
+RCA API endpoint implementation.
 
 ```typescript
 /**
@@ -1188,120 +1188,120 @@ export async function GET(request: NextRequest): Promise<NextResponse<RCAHistory
 
 ---
 
-## 4. 기존 파일 수정
+## 4. Edit existing files
 
-### 4.1 `src/types/anomaly.ts` (Proposal 2에서 생성)
+### 4.1 `src/types/anomaly.ts` (created in Proposal 2)
 
-RCA 엔진이 의존하는 AnomalyResult 타입. Proposal 2 구현 시 이 파일이 생성되어야 한다.
+AnomalyResult type that the RCA engine relies on. This file must be created when implementing Proposal 2.
 
 ```typescript
 /**
  * Anomaly Detection Types
- * (Proposal 2에서 생성됨)
+* (Created from Proposal 2)
  */
 
 /**
- * 이상 탐지 결과
+* Anomaly detection results
  */
 export interface AnomalyResult {
-  /** 이상 여부 */
+/** Is there a problem */
   isAnomaly: boolean;
 
-  /** 메트릭 이름 */
+/** Metric name */
   metric: string;
 
-  /** 현재 값 */
+/** Current value */
   value: number;
 
-  /** Z-Score (|z| > 2.5이면 이상) */
+/** Z-Score (greater than |z| > 2.5) */
   zScore: number;
 
-  /** 이상 방향 */
+/** Ideal direction */
   direction: 'spike' | 'drop' | 'plateau';
 
-  /** 설명 */
+/** explanation */
   description: string;
 }
 ```
 
-### 4.2 `src/types/metrics.ts` (Proposal 1에서 생성)
+### 4.2 `src/types/metrics.ts` (created in Proposal 1)
 
-RCA 엔진이 의존하는 MetricDataPoint 타입. Proposal 1 구현 시 이 파일이 생성되어야 한다.
+MetricDataPoint type that the RCA engine relies on. This file must be created when implementing Proposal 1.
 
 ```typescript
 /**
  * Metrics Store Types
- * (Proposal 1에서 생성됨)
+* (Created from Proposal 1)
  */
 
 /**
- * 메트릭 데이터 포인트
+* Metric data points
  */
 export interface MetricDataPoint {
   /** Unix timestamp (milliseconds) */
   timestamp: number;
 
-  /** CPU 사용률 (0-100) */
+/** CPU utilization (0-100) */
   cpuUsage: number;
 
-  /** 트랜잭션 풀 대기 수 */
+/** Transaction pool wait count */
   txPoolPending: number;
 
-  /** 가스 사용 비율 (0-1) */
+/** Gas ​​usage rate (0-1) */
   gasUsedRatio: number;
 
-  /** L2 블록 높이 */
+/** L2 block height */
   l2BlockHeight: number;
 
-  /** L2 블록 간 시간 간격 (초) */
+/** Time interval between L2 blocks (seconds) */
   l2BlockInterval: number;
 }
 ```
 
-### 4.3 `src/lib/metrics-store.ts` (Proposal 1에서 생성)
+### 4.3 `src/lib/metrics-store.ts` (created in Proposal 1)
 
-RCA 엔진이 의존하는 MetricsStore의 `getRecent` 함수. Proposal 1 구현 시 이 파일이 생성되어야 한다.
+The `getRecent` function of MetricsStore that the RCA engine depends on. This file must be created when implementing Proposal 1.
 
 ```typescript
 /**
  * Metrics Store
- * (Proposal 1에서 생성됨)
+* (Created from Proposal 1)
  *
- * 최소 필요 인터페이스:
+* Minimum required interface:
  */
 
 import type { MetricDataPoint } from '@/types/metrics';
 
 /**
- * 최근 N분 동안의 메트릭 조회
+* View metrics for the last N minutes
  *
- * @param minutes - 조회할 시간 범위 (분)
- * @returns MetricDataPoint 배열
+* @param minutes - Time range to query (minutes)
+* @returns MetricDataPoint 배열
  */
 export function getRecent(minutes: number): MetricDataPoint[];
 ```
 
-### 4.4 `src/lib/anomaly-detector.ts` (Proposal 2에서 생성)
+### 4.4 `src/lib/anomaly-detector.ts` (generated in Proposal 2)
 
-RCA 엔진이 의존하는 AnomalyDetector의 `detectAnomalies` 함수. Proposal 2 구현 시 이 파일이 생성되어야 한다.
+AnomalyDetector's `detectAnomalies` function that the RCA engine relies on. This file must be created when implementing Proposal 2.
 
 ```typescript
 /**
  * Anomaly Detector
- * (Proposal 2에서 생성됨)
+* (Created from Proposal 2)
  *
- * 최소 필요 인터페이스:
+* Minimum required interface:
  */
 
 import type { MetricDataPoint } from '@/types/metrics';
 import type { AnomalyResult } from '@/types/anomaly';
 
 /**
- * 현재 메트릭에서 이상 탐지
+* Detect anomalies in current metrics
  *
- * @param current - 현재 메트릭 데이터
- * @param history - 과거 메트릭 데이터 (최근 30분)
- * @returns AnomalyResult 배열
+* @param current - Current metric data
+* @param history - Past metric data (last 30 minutes)
+* @returns AnomalyResult array
  */
 export function detectAnomalies(
   current: MetricDataPoint,
@@ -1309,20 +1309,20 @@ export function detectAnomalies(
 ): AnomalyResult[];
 ```
 
-### 4.5 `src/app/page.tsx` 수정
+### 4.5 Modify `src/app/page.tsx`
 
-기존 UI에 RCA 기능을 추가한다.
+Add RCA function to existing UI.
 
-#### 4.5.1 상태 추가 (state 선언부)
+#### 4.5.1 Add state (state declaration part)
 
-**기존 코드** (라인 62-63 근처):
+**Original code** (near lines 62-63):
 
 ```typescript
 const [logInsight, setLogInsight] = useState<{ summary: string; severity: string; timestamp: string; action_item?: string } | null>(null);
 const [isAnalyzing, setIsAnalyzing] = useState(false);
 ```
 
-**수정 후**:
+**After modification**:
 
 ```typescript
 const [logInsight, setLogInsight] = useState<{ summary: string; severity: string; timestamp: string; action_item?: string } | null>(null);
@@ -1334,9 +1334,9 @@ const [isRunningRCA, setIsRunningRCA] = useState(false);
 const [rcaError, setRcaError] = useState<string | null>(null);
 ```
 
-#### 4.5.2 Import 추가 (파일 상단)
+#### 4.5.2 Add Import (top of file)
 
-**기존 코드** (라인 9-11 근처):
+**Original code** (near lines 9-11):
 
 ```typescript
 import {
@@ -1345,7 +1345,7 @@ import {
 } from 'lucide-react';
 ```
 
-**수정 후**:
+**After modification**:
 
 ```typescript
 import {
@@ -1356,9 +1356,9 @@ import {
 import type { RCAResult, RCAEvent, RCAComponent } from '@/types/rca';
 ```
 
-#### 4.5.3 RCA 함수 추가 (checkLogs 함수 뒤)
+#### 4.5.3 Add RCA function (after checkLogs function)
 
-**기존 코드** (라인 79 근처):
+**Original code** (near line 79):
 
 ```typescript
   } finally {
@@ -1369,7 +1369,7 @@ import type { RCAResult, RCAEvent, RCAComponent } from '@/types/rca';
 // Track current stressMode for async operations
 ```
 
-**수정 후**:
+**After modification**:
 
 ```typescript
   } finally {
@@ -1405,9 +1405,9 @@ const runRCA = async () => {
 // Track current stressMode for async operations
 ```
 
-#### 4.5.4 RCA 버튼 추가 (Controls 섹션)
+#### 4.5.4 Add RCA button (Controls section)
 
-**기존 코드** (라인 401-416 근처, CHECK HEALTH 버튼):
+**Old code** (near lines 401-416, CHECK HEALTH button):
 
 ```typescript
 <button
@@ -1427,7 +1427,7 @@ const runRCA = async () => {
 </button>
 ```
 
-**수정 후**:
+**After modification**:
 
 ```typescript
 <button
@@ -1464,9 +1464,9 @@ const runRCA = async () => {
 </button>
 ```
 
-#### 4.5.5 RCA 결과 표시 영역 추가 (Log Stream 영역 내부)
+#### 4.5.5 Add RCA result display area (inside Log Stream area)
 
-**기존 코드** (라인 370-393 근처, AI Result Injection 부분):
+**Existing code** (near lines 370-393, AI Result Injection section):
 
 ```typescript
 {/* AI Result Injection */}
@@ -1477,7 +1477,7 @@ const runRCA = async () => {
 )}
 ```
 
-**수정 후** (AI Result 다음에 RCA Result 추가):
+**After modification** (add RCA Result after AI Result):
 
 ```typescript
 {/* AI Result Injection */}
@@ -1514,7 +1514,7 @@ const runRCA = async () => {
 )}
 ```
 
-#### 4.5.6 RCA 결과 컴포넌트 추가 (파일 최하단, LogBlock 다음)
+#### 4.5.6 Addition of RCA result component (bottom of file, after LogBlock)
 
 ```typescript
 // --- Sub Components ---
@@ -1700,27 +1700,27 @@ function RCAResultDisplay({ result }: { result: RCAResult }) {
 }
 ```
 
-#### 4.5.7 RCAResultDisplay 컴포넌트에 useState import 추가
+#### 4.5.7 Add useState import to RCAResultDisplay component
 
-**주의**: `RCAResultDisplay`가 `useState`를 사용하므로, 파일 상단의 import를 확인하여 `useState`가 이미 포함되어 있는지 확인한다. 이미 포함되어 있다면 추가 수정 불필요.
+**Caution**: Since `RCAResultDisplay` uses `useState`, check the import at the top of the file to see if `useState` is already included. If it is already included, no further modifications are required.
 
 ```typescript
 import { useEffect, useState, useRef } from 'react';
 ```
 
-### 4.6 `src/lib/anomaly-ai-analyzer.ts` (Proposal 2) - 선택적 자동 트리거
+### 4.6 `src/lib/anomaly-ai-analyzer.ts` (Proposal 2) - Optional automatic triggering
 
-Proposal 2의 심층 분석에서 `critical` 심각도 발견 시 자동으로 RCA를 트리거하는 기능. **선택적 구현**이며 필수 아님.
+Ability to automatically trigger RCA when `critical` severity is found in deep analysis of Proposal 2. **Optional implementation** and not required.
 
 ```typescript
-// anomaly-ai-analyzer.ts 내부 (Proposal 2)
-// performDeepAnalysis 함수 끝부분에 추가
+// internal anomaly-ai-analyzer.ts (Proposal 2)
+// Add at the end of the performDeepAnalysis function
 
 import { performRCA, addRCAHistory } from '@/lib/rca-engine';
 
 // ... existing code ...
 
-// Deep analysis 결과가 critical인 경우 자동 RCA 트리거
+// Automatic RCA trigger if deep analysis result is critical
 if (deepAnalysisResult.severity === 'critical') {
   console.log('[Anomaly AI] Critical severity detected, triggering auto-RCA...');
 
@@ -1737,11 +1737,11 @@ if (deepAnalysisResult.severity === 'critical') {
 
 ---
 
-## 5. API 명세
+## 5. API Specification
 
-### 5.1 POST `/api/rca` - RCA 분석 트리거
+### 5.1 POST `/api/rca` - RCA analysis trigger
 
-#### 요청
+#### request
 
 ```http
 POST /api/rca HTTP/1.1
@@ -1752,11 +1752,11 @@ Content-Type: application/json
 }
 ```
 
-| 필드 | 타입 | 필수 | 설명 |
+| field | Type | Required | Description |
 |------|------|------|------|
-| `autoTriggered` | `boolean` | 아니오 | 자동 트리거 여부 (기본값: `false`) |
+| `autoTriggered` | `boolean` | No | Whether to automatically trigger (default: `false`) |
 
-#### 응답 (성공)
+#### Response (success)
 
 ```json
 {
@@ -1832,7 +1832,7 @@ Content-Type: application/json
 }
 ```
 
-#### 응답 (실패)
+#### Response (failed)
 
 ```json
 {
@@ -1842,19 +1842,19 @@ Content-Type: application/json
 }
 ```
 
-### 5.2 GET `/api/rca` - RCA 히스토리 조회
+### 5.2 GET `/api/rca` - RCA history query
 
-#### 요청
+#### request
 
 ```http
 GET /api/rca?limit=5 HTTP/1.1
 ```
 
-| 쿼리 파라미터 | 타입 | 필수 | 설명 |
+| query parameters | Type | Required | Description |
 |---------------|------|------|------|
-| `limit` | `number` | 아니오 | 반환할 최대 항목 수 (기본값: 10, 최대: 20) |
+| `limit` | `number` | No | Maximum number of items to return (default: 10, maximum: 20) |
 
-#### 응답
+#### Response
 
 ```json
 {
@@ -1878,9 +1878,9 @@ GET /api/rca?limit=5 HTTP/1.1
 
 ---
 
-## 6. AI 프롬프트 전문
+## 6. AI Prompt Professional
 
-### 6.1 시스템 프롬프트 (전체)
+### 6.1 System Prompt (All)
 
 ```
 You are performing Root Cause Analysis (RCA) for an Optimism L2 Rollup incident.
@@ -1987,7 +1987,7 @@ Respond ONLY with a valid JSON object (no markdown code blocks):
 }
 ```
 
-### 6.2 사용자 프롬프트 템플릿
+### 6.2 User Prompt Template
 
 ```
 == Event Timeline (chronological) ==
@@ -2005,7 +2005,7 @@ Respond ONLY with a valid JSON object (no markdown code blocks):
 Analyze the above data and identify the root cause of the incident.
 ```
 
-### 6.3 예상 AI 응답 예시
+### 6.3 Example of expected AI response
 
 ```json
 {
@@ -2058,32 +2058,32 @@ Analyze the above data and identify the root cause of the incident.
 
 ---
 
-## 7. 환경 변수
+## 7. Environment variables
 
-RCA Engine은 **추가 환경 변수가 필요하지 않다**. 기존 AI Gateway 환경 변수를 그대로 사용한다.
+RCA Engine **requires no additional environment variables**. Use the existing AI Gateway environment variables as is.
 
-| 환경 변수 | 설명 | 출처 |
+| environment variables | Description | Source |
 |-----------|------|------|
-| `AI_GATEWAY_URL` | AI Gateway URL (기본값: `https://api.ai.tokamak.network`) | 기존 |
-| `ANTHROPIC_API_KEY` | Anthropic API 키 | 기존 |
-| `K8S_NAMESPACE` | K8s 네임스페이스 (로그 수집용) | 기존 |
-| `K8S_APP_PREFIX` | K8s 앱 라벨 프리픽스 | 기존 |
+| `AI_GATEWAY_URL` | AI Gateway URL (default: `https://api.ai.tokamak.network`) | existing |
+| `ANTHROPIC_API_KEY` | Anthropic API Key | existing |
+| `K8S_NAMESPACE` | K8s namespace (for log collection) | existing |
+| `K8S_APP_PREFIX` | K8s app label prefix | existing |
 
 ---
 
-## 8. 테스트 검증
+## 8. Test verification
 
-### 8.1 API 테스트 (curl)
+### 8.1 API testing (curl)
 
-#### RCA 트리거 (수동)
+#### RCA trigger (manual)
 
 ```bash
-# RCA 분석 실행
+# Run RCA analysis
 curl -X POST http://localhost:3002/api/rca \
   -H "Content-Type: application/json" \
   -d '{"autoTriggered": false}'
 
-# 예상 응답
+# Expected response
 # {
 #   "success": true,
 #   "result": {
@@ -2094,67 +2094,67 @@ curl -X POST http://localhost:3002/api/rca \
 # }
 ```
 
-#### RCA 히스토리 조회
+#### RCA History View
 
 ```bash
-# 최근 5개 RCA 결과 조회
+# View the most recent 5 RCA results
 curl "http://localhost:3002/api/rca?limit=5"
 
-# 예상 응답
+# Expected response
 # {
 #   "history": [ ... ],
 #   "total": 5
 # }
 ```
 
-### 8.2 UI 테스트
+### 8.2 UI testing
 
-1. **정상 동작 확인**
-   - 대시보드 접속 (`http://localhost:3002`)
-   - AI Monitor 영역의 Controls 섹션 확인
-   - "ROOT CAUSE ANALYSIS" 버튼 확인 (주황색)
-   - 버튼 클릭 → 로딩 상태 표시 ("ANALYZING...")
-   - 분석 완료 후 결과 표시 확인
+1. **Check normal operation**
+- Access dashboard (`http://localhost:3002`)
+- Check the Controls section in the AI ​​Monitor area.
+- Check the “ROOT CAUSE ANALYSIS” button (orange)
+- Click button → Show loading status ("ANALYZING...")
+- Check result display after completion of analysis
 
-2. **결과 UI 확인**
-   - Root Cause 카드: 빨간색 테두리, 컴포넌트 이름, 설명, 신뢰도
-   - Causal Chain: 수직 타임라인, 컴포넌트 배지, 화살표
-   - Affected Components: 컴포넌트 배지 목록
-   - Remediation: 즉시 조치 + 예방 조치 목록
+2. **Check the result UI**
+- Root Cause card: red border, component name, description, reliability
+- Causal Chain: vertical timeline, component badges, arrows
+- Affected Components: List of component badges
+- Remediation: Immediate action + list of preventive actions
 
-3. **에러 처리 확인**
-   - AI Gateway 연결 실패 시 에러 메시지 표시
-   - 네트워크 오류 시 fallback 분석 결과 표시
+3. **Check error handling**
+- Error message displayed when AI Gateway connection fails
+- Display fallback analysis results in case of network error
 
-### 8.3 Mock 시나리오 테스트
+### 8.3 Mock scenario testing
 
-**시나리오: Batcher 장애로 인한 TxPool 축적**
+**Scenario: TxPool accumulation due to Batcher failure**
 
-1. 스트레스 모드 활성화 ("Simulate Load" 버튼)
-2. "ROOT CAUSE ANALYSIS" 버튼 클릭
-3. 결과 확인:
-   - Root Cause: `op-batcher` 또는 `l1`
+1. Activate stress mode (“Simulate Load” button)
+2. Click the “ROOT CAUSE ANALYSIS” button
+3. Check the results:
+- Root Cause: `op-batcher` or `l1`
    - Causal Chain: L1 gas spike → Batcher failure → TxPool growth
    - Affected Components: `op-geth`, `op-batcher`
 
-### 8.4 통합 테스트 체크리스트
+### 8.4 Integration testing checklist
 
-| 항목 | 확인 방법 | 예상 결과 |
+| Item | How to check | Expected results |
 |------|-----------|-----------|
-| API 엔드포인트 | POST /api/rca 호출 | 200 OK, RCAResult 반환 |
-| 히스토리 저장 | POST 후 GET /api/rca 호출 | 방금 실행한 RCA가 목록에 포함 |
-| UI 버튼 렌더링 | 대시보드 접속 | "ROOT CAUSE ANALYSIS" 버튼 표시 |
-| 로딩 상태 | 버튼 클릭 | 버튼 비활성화, 로딩 애니메이션 |
-| 결과 표시 | 분석 완료 | Causal Chain 다이어그램 표시 |
-| 에러 처리 | AI Gateway 오프라인 | 에러 메시지 또는 fallback 결과 |
-| MetricsStore 연동 | Proposal 1 구현 후 | 최근 메트릭 데이터 사용 |
-| AnomalyDetector 연동 | Proposal 2 구현 후 | 이상 탐지 결과 사용 |
+| API endpoint | POST /api/rca call | 200 OK, return RCAResult |
+| Save History | Call GET /api/rca after POST | The RCA you just ran is included in the list |
+| UI button rendering | Dashboard access | Show "ROOT CAUSE ANALYSIS" button |
+| loading status | button click | Button disable, loading animation |
+| Show results | Analysis complete | Show Causal Chain Diagram |
+| error handling | AI Gateway offline | Error message or fallback result |
+| MetricsStore integration | After implementing Proposal 1 | Use recent metric data |
+| AnomalyDetector integration | After implementing Proposal 2 | Using anomaly detection results |
 
 ---
 
-## 9. 의존관계
+## 9. Dependencies
 
-### 9.1 필수 의존성 (Proposal 구현 순서)
+### 9.1 Required dependencies (Proposal implementation order)
 
 ```
 Proposal 1 (MetricsStore)
@@ -2163,37 +2163,37 @@ Proposal 1 (MetricsStore)
 Proposal 2 (AnomalyDetector)
         │
         ▼
-Proposal 3 (RCA Engine) ← 현재 문서
+Proposal 3 (RCA Engine) ← Current Document
 ```
 
-### 9.2 선행 구현 필요 항목
+### 9.2 Prerequisites for implementation
 
-| 의존 모듈 | 파일 | 필요 함수/타입 |
+| dependent modules | file | Required function/type |
 |-----------|------|----------------|
 | MetricsStore | `src/lib/metrics-store.ts` | `getRecent(minutes: number)` |
 | AnomalyDetector | `src/lib/anomaly-detector.ts` | `detectAnomalies(current, history)` |
-| MetricDataPoint | `src/types/metrics.ts` | 전체 인터페이스 |
-| AnomalyResult | `src/types/anomaly.ts` | 전체 인터페이스 |
+| MetricDataPoint | `src/types/metrics.ts` | Full interface |
+| AnomalyResult | `src/types/anomaly.ts` | Full interface |
 
-### 9.3 기존 모듈 의존성 (수정 불필요)
+### 9.3 Existing module dependencies (no modification required)
 
-| 모듈 | 파일 | 사용 함수 |
+| module | file | Use function |
 |------|------|-----------|
 | LogIngester | `src/lib/log-ingester.ts` | `getAllLiveLogs()`, `generateMockLogs()` |
-| AISeverity | `src/types/scaling.ts` | 타입 정의 |
+| AISeverity | `src/types/scaling.ts` | type definition |
 
-### 9.4 독립적 구현 가능 항목
+### 9.4 Independently Implementable Items
 
-- **Proposal 4 (Cost Optimizer)**: RCA와 무관
-- **Proposal 5 (NLOps)**: RCA API를 호출하는 소비자 역할
+- **Proposal 4 (Cost Optimizer)**: Not related to RCA
+- **Proposal 5 (NLOps)**: Consumer role calling RCA API
 
 ---
 
-## 10. UI 상세 - Causal Chain Diagram
+## 10. UI Details - Causal Chain Diagram
 
-### 10.1 디자인 컨셉
+### 10.1 Design concept
 
-Causal Chain은 **수직 타임라인** 형태로 표시된다. 상단에 근본 원인, 하단으로 갈수록 최근 이벤트/증상이 나타난다.
+The Causal Chain is displayed in the form of a **vertical timeline**. The root cause appears at the top, and more recent events/symptoms appear toward the bottom.
 
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -2247,9 +2247,9 @@ Causal Chain은 **수직 타임라인** 형태로 표시된다. 상단에 근본
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 10.2 컴포넌트 색상 매핑
+### 10.2 Component color mapping
 
-| 컴포넌트 | Tailwind Class | HEX 코드 |
+| component | Tailwind Class | HEX code |
 |----------|----------------|----------|
 | `op-geth` | `bg-blue-500` | `#3B82F6` |
 | `op-node` | `bg-green-500` | `#22C55E` |
@@ -2258,48 +2258,48 @@ Causal Chain은 **수직 타임라인** 형태로 표시된다. 상단에 근본
 | `l1` | `bg-red-500` | `#EF4444` |
 | `system` | `bg-gray-500` | `#6B7280` |
 
-### 10.3 이벤트 타입 아이콘
+### 10.3 Event type icon
 
-| 이벤트 타입 | 아이콘 | 색상 |
+| Event Type | Icon | color |
 |-------------|--------|------|
 | `error` | `XCircle` | `text-red-400` |
 | `warning` | `AlertTriangle` | `text-yellow-400` |
 | `metric_anomaly` | `Activity` | `text-orange-400` |
 | `state_change` | `GitBranch` | `text-blue-400` |
 
-### 10.4 애니메이션
+### 10.4 Animation
 
-- **로딩 바**: `animate-loading-bar` (기존 CSS 애니메이션 재사용)
-- **결과 슬라이드인**: `animate-slideIn` (기존 CSS 애니메이션 재사용)
-- **근본 원인 펄스**: `animate-pulse` (Tailwind 기본)
+- **Loading Bar**: `animate-loading-bar` (reuse existing CSS animation)
+- **Result SlideIn**: `animate-slideIn` (reuse existing CSS animation)
+- **Root Cause Pulse**: `animate-pulse` (Tailwind default)
 
-### 10.5 반응형 동작
+### 10.5 Responsive behavior
 
-- **데스크톱 (lg 이상)**: Causal Chain 완전 펼침 기본
-- **모바일**: Causal Chain 접힘 기본, 클릭으로 토글
+- **Desktop (LG or higher)**: Causal Chain fully expanded by default
+- **Mobile**: Causal Chain collapse default, toggle with click
 
 ---
 
-## 부록 A: 전체 파일 목록
+## Appendix A: Complete File List
 
-### 신규 생성 파일
+### Newly created file
 
-| 파일 경로 | 설명 |
+| file path | Description |
 |-----------|------|
-| `src/types/rca.ts` | RCA 관련 타입 정의 |
-| `src/lib/rca-engine.ts` | RCA 핵심 로직 (타임라인 빌더, AI 연동, 히스토리 관리) |
-| `src/app/api/rca/route.ts` | RCA API 엔드포인트 (POST, GET) |
+| `src/types/rca.ts` | RCA-related type definitions |
+| `src/lib/rca-engine.ts` | RCA core logic (timeline builder, AI linkage, history management) |
+| `src/app/api/rca/route.ts` | RCA API endpoint (POST, GET) |
 
-### 수정 파일
+### Modify file
 
-| 파일 경로 | 수정 내용 |
+| file path | Edit details |
 |-----------|-----------|
-| `src/app/page.tsx` | RCA 상태, 버튼, 결과 컴포넌트 추가 |
-| `src/lib/anomaly-ai-analyzer.ts` | (선택) 자동 RCA 트리거 연동 |
+| `src/app/page.tsx` | Add RCA status, button, and result components |
+| `src/lib/anomaly-ai-analyzer.ts` | (Optional) Automatic RCA trigger linkage |
 
-### 의존 파일 (Proposal 1, 2에서 생성)
+### Dependent files (generated in Proposal 1 and 2)
 
-| 파일 경로 | 출처 |
+| file path | Source |
 |-----------|------|
 | `src/types/metrics.ts` | Proposal 1 |
 | `src/types/anomaly.ts` | Proposal 2 |
@@ -2308,37 +2308,37 @@ Causal Chain은 **수직 타임라인** 형태로 표시된다. 상단에 근본
 
 ---
 
-## 부록 B: 코드 품질 체크리스트
+## Appendix B: Code Quality Checklist
 
-구현 완료 후 다음 항목을 확인한다:
+After completing implementation, check the following items:
 
-- [ ] `npm run lint` 통과
-- [ ] `npm run build` 통과
-- [ ] TypeScript strict mode 에러 없음
-- [ ] `any` 타입 사용 없음
-- [ ] 모든 함수에 JSDoc 주석 존재
-- [ ] 에러 핸들링이 `error instanceof Error` 패턴 사용
-- [ ] API 응답이 `NextResponse.json()` 패턴 사용
-- [ ] Import alias `@/*` 사용
-
----
-
-## 부록 C: 구현 순서 권장
-
-1. **타입 정의** (`src/types/rca.ts`)
-2. **RCA 엔진 핵심 로직** (`src/lib/rca-engine.ts`)
-   - 상수 및 의존관계 그래프
-   - 타임라인 빌더 함수
-   - AI 연동 함수
-   - 히스토리 관리 함수
-3. **API 엔드포인트** (`src/app/api/rca/route.ts`)
-4. **UI 컴포넌트** (`src/app/page.tsx`)
-   - 상태 및 import 추가
-   - 버튼 추가
-   - 결과 표시 컴포넌트
-5. **통합 테스트**
-6. **(선택) 자동 트리거 연동** (`src/lib/anomaly-ai-analyzer.ts`)
+- [ ] `npm run lint` passed
+- [ ] Pass `npm run build`
+- [ ] TypeScript strict mode no errors
+- [ ] No use of `any` type
+- [ ] JSDoc comments present in all functions
+- [ ] Error handling uses the `error instanceof Error` pattern.
+- [ ] API response uses `NextResponse.json()` pattern
+- [ ] Use import alias `@/*`
 
 ---
 
-**문서 끝**
+## Appendix C: Recommended Implementation Order
+
+1. **Type definition** (`src/types/rca.ts`)
+2. **RCA engine core logic** (`src/lib/rca-engine.ts`)
+- Constants and dependency graph
+- Timeline builder function
+- AI linked function
+- History management function
+3. **API Endpoint** (`src/app/api/rca/route.ts`)
+4. **UI component** (`src/app/page.tsx`)
+- Add status and import
+- Add button
+- Result display component
+5. **Integration Testing**
+6. **(Optional) Automatic trigger integration** (`src/lib/anomaly-ai-analyzer.ts`)
+
+---
+
+**End of document**

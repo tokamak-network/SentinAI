@@ -1,45 +1,45 @@
-# Proposal 1: Predictive Scaling (예측 기반 스케일링)
+# Proposal 1: Predictive Scaling
 
-## 문서 정보
+## Document information
 
-| 항목 | 내용 |
+| Item | Content |
 |------|------|
-| 버전 | 1.0.0 |
-| 작성일 | 2026-02-06 |
-| 대상 | Claude Opus 4.6 구현 에이전트 |
-| 의존성 | 없음 (독립 구현 가능) |
+| version | 1.0.0 |
+| Created date | 2026-02-06 |
+| target | Claude Opus 4.6 Implementation Agent |
+| Dependency | None (can be implemented independently) |
 
 ---
 
-## 1. 개요 (Overview)
+## 1. Overview
 
-### 1.1 기능 요약
+### 1.1 Feature Summary
 
-Predictive Scaling은 과거 메트릭 데이터의 시계열 패턴을 AI가 분석하여 **향후 부하를 예측**하고, 실제 부하가 발생하기 **전에 선제적으로 스케일링**을 수행하는 기능이다.
+Predictive Scaling is a function that uses AI to analyze time series patterns of past metric data to predict **future load** and perform preemptive scaling** before actual load occurs.
 
-### 1.2 해결하는 문제
+### 1.2 Solving Problems
 
-현재 SentinAI의 스케일링 로직(`src/lib/scaling-decision.ts`)은 **현재 시점의 메트릭**만을 기반으로 결정을 내린다. 이로 인해:
+Currently, SentinAI's scaling logic (`src/lib/scaling-decision.ts`) makes decisions based only on **current metrics**. This causes:
 
-1. **반응형 스케일링의 한계**: 부하가 급증한 후에야 스케일업이 시작되어 사용자 경험 저하
-2. **쿨다운 지연**: 5분 쿨다운 동안 추가 스케일링 불가
-3. **예측 가능한 패턴 미활용**: 일간/주간 트래픽 패턴을 학습하지 않음
+Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+2. **Cooldown Delay**: No further scaling during 5 minute cooldown.
+3. **Not utilizing predictable patterns**: Not learning daily/weekly traffic patterns.
 
-### 1.3 핵심 가치
+### 1.3 Core Values
 
-- **선제적 스케일링**: 부하 발생 5분 전에 리소스 확보
-- **비용 최적화**: 불필요한 오버프로비저닝 방지
-- **신뢰도 기반 의사결정**: AI 예측의 confidence가 임계값(0.7) 이상일 때만 실행
+- **Proactive scaling**: Reserve resources 5 minutes before load occurs
+- **Cost Optimization**: Avoid unnecessary overprovisioning
+- **Confidence-based decision making**: Executed only when the confidence of the AI ​​prediction is above the threshold (0.7)
 
-### 1.4 의존 관계
+### 1.4 Dependencies
 
-이 제안서는 **독립적으로 구현 가능**하다. 단, `MetricsStore` 모듈은 향후 Proposal 2, 3, 4에서도 공유 사용될 예정이므로, 확장성을 고려한 설계가 필요하다.
+This proposal **can be implemented independently**. However, since the `MetricsStore` module will be shared and used in Proposals 2, 3, and 4 in the future, it needs to be designed with scalability in mind.
 
 ---
 
-## 2. 타입 정의 (Type Definitions)
+## 2. Type Definitions
 
-### 2.1 신규 파일: `src/types/prediction.ts`
+### 2.1 New file: `src/types/prediction.ts`
 
 ```typescript
 /**
@@ -214,13 +214,13 @@ export const DEFAULT_PREDICTION_CONFIG: PredictionConfig = {
 
 ---
 
-## 3. 신규 파일 명세 (New Files)
+## 3. New file specifications (New Files)
 
-### 3.1 `src/lib/metrics-store.ts` (공유 모듈)
+### 3.1 `src/lib/metrics-store.ts` (shared module)
 
-이 모듈은 시계열 메트릭 데이터를 관리하는 **Ring Buffer**를 구현한다. 메모리 효율성을 위해 최대 60개의 데이터 포인트만 유지한다 (1분 간격 수집 시 1시간 분량).
+This module implements **Ring Buffer**, which manages time series metric data. For memory efficiency, only a maximum of 60 data points are maintained (1 hour's worth when collected at 1-minute intervals).
 
-#### 전체 구현 코드
+#### Full implementation code
 
 ```typescript
 /**
@@ -393,23 +393,23 @@ export function getMetricsCount(): number {
 export const METRICS_BUFFER_CAPACITY = MAX_DATA_POINTS;
 ```
 
-#### 함수 시그니처 요약
+#### Function signature summary
 
-| 함수 | 입력 | 출력 | 설명 |
+| function | input | output | Description |
 |------|------|------|------|
-| `pushMetric(dataPoint)` | `MetricDataPoint` | `void` | 새 데이터 포인트 추가, 60개 초과 시 가장 오래된 데이터 제거 |
-| `getRecentMetrics(count?)` | `number \| undefined` | `MetricDataPoint[]` | 최근 N개 데이터 반환 (기본: 전체) |
-| `getMetricsStats()` | - | `MetricsStoreStats` | 통계 요약 (평균, 표준편차, 추세) |
-| `clearMetrics()` | - | `void` | 버퍼 초기화 |
-| `getMetricsCount()` | - | `number` | 현재 저장된 데이터 포인트 수 |
+| `pushMetric(dataPoint)` | `MetricDataPoint` | `void` | Add new data points, remove oldest data if more than 60 |
+| `getRecentMetrics(count?)` | `number \| undefined` | `MetricDataPoint[]` | Returns the most recent N data (default: all) |
+| `getMetricsStats()` | - | `MetricsStoreStats` | Statistical Summary (Mean, Standard Deviation, Trend) |
+| `clearMetrics()` | - | `void` | buffer initialization |
+| `getMetricsCount()` | - | `number` | Number of currently stored data points |
 
 ---
 
 ### 3.2 `src/lib/predictive-scaler.ts`
 
-AI를 활용하여 시계열 데이터를 분석하고 향후 스케일링 필요성을 예측하는 모듈이다.
+This is a module that uses AI to analyze time series data and predict the need for future scaling.
 
-#### 전체 구현 코드
+#### Full implementation code
 
 ```typescript
 /**
@@ -724,23 +724,23 @@ export function resetPredictionState(): void {
 }
 ```
 
-#### 함수 시그니처 요약
+#### Function signature summary
 
-| 함수 | 입력 | 출력 | 설명 |
+| function | input | output | Description |
 |------|------|------|------|
-| `predictScaling(currentVcpu, config?)` | `number`, `PredictionConfig?` | `Promise<PredictionResult \| null>` | AI 예측 실행 (5분 쿨다운) |
-| `getLastPrediction()` | - | `PredictionResult \| null` | 마지막 예측 결과 반환 |
-| `canMakePrediction(config?)` | `PredictionConfig?` | `boolean` | 예측 가능 여부 (rate limit 체크) |
-| `getNextPredictionIn(config?)` | `PredictionConfig?` | `number` | 다음 예측까지 남은 시간 (초) |
-| `resetPredictionState()` | - | `void` | 테스트용 상태 초기화 |
+| `predictScaling(currentVcpu, config?)` | `number`, `PredictionConfig?` | `Promise<PredictionResult\| null>` | AI Predictive Execution (5 minute cooldown) |
+| `getLastPrediction()` | - | `PredictionResult\| null` | Return last prediction result |
+| `canMakePrediction(config?)` | `PredictionConfig?` | `boolean` | Predictability (check rate limit) |
+| `getNextPredictionIn(config?)` | `PredictionConfig?` | `number` | Seconds until next prediction |
+| `resetPredictionState()` | - | `void` | Initializing state for testing |
 
 ---
 
 ### 3.3 `src/lib/prediction-tracker.ts`
 
-예측의 정확도를 추적하여 시스템의 신뢰성을 모니터링하는 모듈이다.
+This module monitors the reliability of the system by tracking the accuracy of predictions.
 
-#### 전체 구현 코드
+#### Full implementation code
 
 ```typescript
 /**
@@ -897,30 +897,30 @@ export function clearPredictionRecords(): void {
 }
 ```
 
-#### 함수 시그니처 요약
+#### Function signature summary
 
-| 함수 | 입력 | 출력 | 설명 |
+| function | input | output | Description |
 |------|------|------|------|
-| `recordPrediction(prediction)` | `PredictionResult` | `string` | 예측 기록, ID 반환 |
-| `recordActual(id, actualVcpu)` | `string`, `TargetVcpu` | `boolean` | 실제 결과 기록 |
-| `recordActualForRecent(actualVcpu)` | `TargetVcpu` | `boolean` | 최근 미검증 예측에 결과 기록 |
-| `getAccuracy()` | - | `AccuracyStats` | 정확도 통계 반환 |
-| `getPredictionRecords(limit?)` | `number?` | `PredictionRecord[]` | 예측 기록 조회 |
-| `getUnverifiedPredictions()` | - | `PredictionRecord[]` | 미검증 예측 목록 |
-| `clearPredictionRecords()` | - | `void` | 테스트용 초기화 |
+| `recordPrediction(prediction)` | `PredictionResult` | `string` | prediction history, return id |
+| `recordActual(id, actualVcpu)` | `string`, `TargetVcpu` | `boolean` | RECORD OF ACTUAL RESULTS |
+| `recordActualForRecent(actualVcpu)` | `TargetVcpu` | `boolean` | Record results in recent untested predictions |
+| `getAccuracy()` | - | `AccuracyStats` | return accuracy statistics |
+| `getPredictionRecords(limit?)` | `number?` | `PredictionRecord[]` | Forecast History View |
+| `getUnverifiedPredictions()` | - | `PredictionRecord[]` | List of unverified predictions |
+| `clearPredictionRecords()` | - | `void` | Initialization for testing |
 
 ---
 
-## 4. 기존 파일 수정 (Existing File Modifications)
+## 4. Existing File Modifications
 
-### 4.1 `src/app/api/metrics/route.ts` 수정
+### 4.1 Modify `src/app/api/metrics/route.ts`
 
-#### 4.1.1 Import 추가
+#### 4.1.1 Add Import
 
-**파일 상단 (기존 import 다음에 추가)**
+**Top of file (added after existing import)**
 
 ```typescript
-// 기존 코드 (lines 1-11)
+// existing code (lines 1-11)
 import { createPublicClient, http } from 'viem';
 import { mainnet, sepolia } from 'viem/chains';
 import { NextResponse } from 'next/server';
@@ -933,36 +933,36 @@ import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
-// ====== 여기에 추가 ======
+// ====== Add here ======
 import { pushMetric } from '@/lib/metrics-store';
 import { MetricDataPoint } from '@/types/prediction';
 // ========================
 ```
 
-#### 4.1.2 블록 간격 추적 변수 추가
+#### 4.1.2 Add block interval tracking variable
 
-**`k8sTokenCache` 선언 이후에 추가 (line 18 근처)**
+**Added after declaration of `k8sTokenCache` (near line 18)**
 
 ```typescript
-// 기존 코드 (lines 17-18)
+// existing code (lines 17-18)
 // Global Cache for K8s Token to avoid expensive executables per request
 let k8sTokenCache: { token: string; expiresAt: number } | null = null;
 
-// ====== 여기에 추가 ======
+// ====== Add here ======
 // Block interval tracking for metrics store
 let lastL2BlockHeight: bigint | null = null;
 let lastL2BlockTime: number | null = null;
 // ========================
 ```
 
-#### 4.1.3 메트릭 수집 후 MetricsStore에 저장
+#### 4.1.3 Collect metrics and save them to MetricsStore
 
-**GET 핸들러 내부, response 생성 직전에 추가**
+**Inside GET handler, added just before creating response**
 
-위치: `const response = NextResponse.json({...})` 직전 (line 422 근처)
+Location: Just before `const response = NextResponse.json({...})` (near line 422)
 
 ```typescript
-        // 기존 코드 (lines 400-420)
+// existing code (lines 400-420)
         const FARGATE_VCPU_HOUR = 0.04656;
         const FARGATE_MEM_GB_HOUR = 0.00511;
         const HOURS_PER_MONTH = 730;
@@ -985,7 +985,7 @@ let lastL2BlockTime: number | null = null;
 
         const currentHourlyCost = opGethMonthlyCost / HOURS_PER_MONTH;
 
-        // ====== 여기에 추가 ======
+// ====== Add here ======
         // Calculate block interval and push to metrics store
         const now = Date.now();
         let blockInterval = 2.0; // Default block interval (L2 typical)
@@ -1023,14 +1023,14 @@ let lastL2BlockTime: number | null = null;
 
 ---
 
-### 4.2 `src/app/api/scaler/route.ts` 수정
+### 4.2 Modify `src/app/api/scaler/route.ts`
 
-#### 4.2.1 Import 추가
+#### 4.2.1 Add Import
 
-**파일 상단 import 섹션에 추가**
+**Add to the import section at the top of the file**
 
 ```typescript
-// 기존 코드 (lines 1-29)
+// existing code (lines 1-29)
 /**
  * Scaler API Endpoint
  * GET: Get current scaling state
@@ -1061,16 +1061,16 @@ import {
   DEFAULT_SCALING_CONFIG,
 } from '@/types/scaling';
 
-// ====== 여기에 추가 ======
+// ====== Add here ======
 import { predictScaling, getLastPrediction, getNextPredictionIn } from '@/lib/predictive-scaler';
 import { getMetricsCount } from '@/lib/metrics-store';
 import { PredictionResult, DEFAULT_PREDICTION_CONFIG } from '@/types/prediction';
 // ========================
 ```
 
-#### 4.2.2 GET 핸들러 수정 (예측 데이터 추가)
+#### 4.2.2 Modify GET handler (add prediction data)
 
-**GET 함수 전체 교체**
+**Replace entire GET function**
 
 ```typescript
 /**
@@ -1139,11 +1139,11 @@ export async function GET(_request: NextRequest) {
 }
 ```
 
-#### 4.2.3 POST 핸들러 수정 (예측 기반 스케일링 지원)
+#### 4.2.3 Modify POST handler (support prediction-based scaling)
 
-**POST 함수의 auto-scaling 섹션 수정**
+**Modify auto-scaling section of POST function**
 
-기존 auto-scaling 섹션 (line 146-175 근처)을 다음으로 교체:
+Replace the existing auto-scaling section (near lines 146-175) with:
 
 ```typescript
     } else {
@@ -1208,14 +1208,14 @@ export async function GET(_request: NextRequest) {
 
 ---
 
-### 4.3 `src/app/page.tsx` 수정
+### 4.3 Modify `src/app/page.tsx`
 
-#### 4.3.1 예측 관련 인터페이스 추가
+#### 4.3.1 Addition of prediction related interface
 
-**MetricData 인터페이스 다음에 추가 (line 38 근처)**
+**Added after the MetricData interface (near line 38)**
 
 ```typescript
-// 기존 코드 (lines 14-38)
+// existing code (lines 14-38)
 interface MetricData {
   timestamp: string;
   metrics: {
@@ -1242,7 +1242,7 @@ interface MetricData {
   };
 }
 
-// ====== 여기에 추가 ======
+// ====== Add here ======
 interface PredictionFactor {
   name: string;
   impact: number;
@@ -1279,12 +1279,12 @@ interface ScalerState {
 // ========================
 ```
 
-#### 4.3.2 예측 상태 변수 추가
+#### 4.3.2 Add prediction state variable
 
-**Dashboard 컴포넌트 내부, 기존 state 선언 다음에 추가**
+**Inside Dashboard component, added after existing state declaration**
 
 ```typescript
-// 기존 코드 (lines 56-63)
+// existing code (lines 56-63)
 export default function Dashboard() {
   // State
   const [dataHistory, setDataHistory] = useState<{ name: string; cpu: number; gethVcpu: number; gethMemGiB: number; saving: number; cost: number }[]>([]);
@@ -1294,18 +1294,18 @@ export default function Dashboard() {
   const [logInsight, setLogInsight] = useState<{ summary: string; severity: string; timestamp: string; action_item?: string } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // ====== 여기에 추가 ======
+// ====== Add here ======
   const [prediction, setPrediction] = useState<PredictionInfo | null>(null);
   const [predictionMeta, setPredictionMeta] = useState<PredictionMeta | null>(null);
   // ========================
 ```
 
-#### 4.3.3 예측 데이터 폴링 추가
+#### 4.3.3 Add forecast data polling
 
-**fetchData 함수 내부, setCurrent(data) 다음에 추가**
+**Inside the fetchData function, added after setCurrent(data)**
 
 ```typescript
-        // 기존 코드 (lines 117-128)
+// existing code (lines 117-128)
         setCurrent(data);
 
         const point = {
@@ -1318,7 +1318,7 @@ export default function Dashboard() {
         };
         setDataHistory(prev => [...prev.slice(-20), point]);
 
-        // ====== 여기에 추가 ======
+// ====== Add here ======
         // Fetch scaler state with prediction (every 10 seconds to avoid overload)
         if (timestamp % 10000 < 1000) {
           try {
@@ -1340,11 +1340,11 @@ export default function Dashboard() {
         setIsLoading(false);
 ```
 
-#### 4.3.4 Scaling Forecast 카드 UI 수정
+#### 4.3.4 Scaling Forecast card UI modifications
 
-**Scaling Forecast 카드 전체 교체 (lines 241-261)**
+**Replace entire Scaling Forecast card (lines 241-261)**
 
-기존 코드:
+Existing code:
 
 ```typescript
           {/* Scaling Forecast Card */}
@@ -1371,7 +1371,7 @@ export default function Dashboard() {
           </div>
 ```
 
-교체 코드:
+Replacement Code:
 
 ```typescript
           {/* Scaling Forecast Card */}
@@ -1488,9 +1488,9 @@ export default function Dashboard() {
           </div>
 ```
 
-#### 4.3.5 예측 차트 추가 (선택적)
+#### 4.3.5 Add forecast chart (optional)
 
-**System Health 섹션 다음, Total Saved Card 이전에 추가** (line 302 근처)
+**Added after System Health section but before Total Saved Card** (near line 302)
 
 ```typescript
           {/* System Health */}
@@ -1498,7 +1498,7 @@ export default function Dashboard() {
             {/* ... existing System Health code ... */}
           </div>
 
-          {/* ====== 여기에 추가 ====== */}
+{/* ====== Add here ====== */}
           {/* Prediction Trend Chart */}
           {dataHistory.length > 5 && (
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 mb-4">
@@ -1576,7 +1576,7 @@ export default function Dashboard() {
 
 ## 5. API 명세 (API Specification)
 
-### 5.1 GET /api/scaler (확장)
+### 5.1 GET /api/scaler (extension)
 
 #### Request
 
@@ -1584,11 +1584,11 @@ export default function Dashboard() {
 GET /api/scaler
 ```
 
-#### Response (확장됨)
+#### Response (extended)
 
 ```typescript
 interface ScalerGetResponse {
-  // 기존 필드
+// existing field
   currentVcpu: number;
   currentMemoryGiB: number;
   lastScalingTime: string | null;
@@ -1598,7 +1598,7 @@ interface ScalerGetResponse {
   simulationMode: boolean;
   timestamp: string;
 
-  // 신규 필드: 예측 정보
+// New field: prediction information
   prediction: {
     predictedVcpu: 1 | 2 | 4;
     confidence: number;
@@ -1614,7 +1614,7 @@ interface ScalerGetResponse {
     }[];
   } | null;
 
-  // 신규 필드: 예측 메타데이터
+// New field: Predicted metadata
   predictionMeta: {
     metricsCount: number;
     minRequired: number;
@@ -1624,7 +1624,7 @@ interface ScalerGetResponse {
 }
 ```
 
-#### 응답 예시
+#### Example response
 
 ```json
 {
@@ -1668,7 +1668,7 @@ interface ScalerGetResponse {
 
 ---
 
-## 6. AI 프롬프트 전문 (Complete AI Prompts)
+## 6. Complete AI Prompts
 
 ### 6.1 System Prompt
 
@@ -1761,37 +1761,37 @@ Based on this data, predict the optimal vCPU for the next 5 minutes.
 
 ---
 
-## 7. 환경 변수 (Environment Variables)
+## 7. Environment Variables
 
-이 제안서는 **기존 환경 변수만 사용**하므로 추가 환경 변수가 필요하지 않다.
+This proposal **only uses existing environment variables**, so no additional environment variables are required.
 
-**사용되는 기존 환경 변수:**
+**Existing environment variables used:**
 
-| 변수 | 용도 | 필수 |
+| variable | Use | Required |
 |------|------|------|
-| `AI_GATEWAY_URL` | AI Gateway 엔드포인트 | Yes |
-| `ANTHROPIC_API_KEY` | AI API 인증 키 | Yes |
+| `AI_GATEWAY_URL` | AI Gateway Endpoint | Yes |
+| `ANTHROPIC_API_KEY` | AI API authentication key | Yes |
 
 ---
 
-## 8. 테스트 검증 (Verification)
+## 8. Test Verification
 
-### 8.1 API 테스트 (curl)
+### 8.1 API testing (curl)
 
-#### MetricsStore 데이터 수집 확인
+#### Verify MetricsStore data collection
 
 ```bash
-# 메트릭 수집 시작 (1분마다 자동 수집됨, 개발 시 수동 호출 가능)
+# Start collecting metrics (collected automatically every minute, can be called manually during development)
 for i in {1..15}; do
   curl -s http://localhost:3002/api/metrics | jq '.metrics.cpuUsage'
   sleep 5
 done
 ```
 
-#### 예측 API 테스트
+#### Predictive API testing
 
 ```bash
-# 예측 데이터 포함 스케일러 상태 조회
+# Check scaler status including prediction data
 curl -s http://localhost:3002/api/scaler | jq '{
   currentVcpu: .currentVcpu,
   prediction: .prediction,
@@ -1799,7 +1799,7 @@ curl -s http://localhost:3002/api/scaler | jq '{
 }'
 ```
 
-#### 예상 출력 (데이터 충분 시)
+#### Expected output (if there is enough data)
 
 ```json
 {
@@ -1820,7 +1820,7 @@ curl -s http://localhost:3002/api/scaler | jq '{
 }
 ```
 
-#### 예상 출력 (데이터 부족 시)
+#### Expected output (when data is insufficient)
 
 ```json
 {
@@ -1835,109 +1835,109 @@ curl -s http://localhost:3002/api/scaler | jq '{
 }
 ```
 
-### 8.2 UI 검증 시나리오
+### 8.2 UI verification scenario
 
-#### 시나리오 1: 데이터 수집 중
+#### Scenario 1: Collecting data
 
-1. 애플리케이션 시작 직후 대시보드 접속
-2. "Scaling Forecast" 카드에 "Collecting Data..." 표시 확인
-3. 프로그레스 바가 `metricsCount/minRequired` 비율로 채워짐
-4. 10분 후 예측 데이터 표시 시작
+1. Access the dashboard immediately after starting the application
+2. Check the display of “Collecting Data...” in the “Scaling Forecast” card.
+3. The progress bar is filled with the ratio `metricsCount/minRequired`
+4. Start displaying predicted data after 10 minutes
 
-#### 시나리오 2: 정상 예측 표시
+#### Scenario 2: Normal forecast display
 
-1. 충분한 데이터 수집 후 (10+ 데이터 포인트)
-2. "Scaling Forecast" 카드에 예측 vCPU 표시
-3. Current → Predicted 시각화 확인
-4. Trend 방향 화살표 아이콘 동작 확인
-5. Key Factors 목록 표시 확인
+1. After collecting sufficient data (10+ data points)
+2. Show forecast vCPUs in “Scaling Forecast” card
+3. Check Current → Predicted visualization
+4. Check the operation of the trend direction arrow icon
+5. Check the Key Factors list display
 
-#### 시나리오 3: 스케일업 예측 시
+#### Scenario 3: When predicting scale-up
 
-1. Stress Mode 활성화
-2. CPU 사용량 급증 시뮬레이션
-3. 예측이 "scale_up" 권장으로 변경되는지 확인
-4. 배지 색상이 주황색으로 변경되는지 확인
+1. Activate Stress Mode
+2. Simulate CPU usage spikes
+3. Verify that the forecast changes to the “scale_up” recommendation
+4. Verify that the badge color changes to orange
 
 ### 8.3 Edge Cases
 
-| 케이스 | 예상 동작 |
+| case | Expected Behavior |
 |--------|----------|
-| AI Gateway 연결 실패 | Fallback 예측 사용 (confidence 0.5) |
-| 데이터 10개 미만 | prediction: null, isReady: false |
-| 5분 쿨다운 내 재요청 | 캐시된 예측 반환 |
-| 모든 메트릭 0 | stable 예측, confidence 낮음 |
-| AI가 잘못된 JSON 반환 | Fallback 예측 사용 |
+| AI Gateway connection failure | Use fallback prediction (confidence 0.5) |
+| Less than 10 data | prediction: null, isReady: false |
+| Re-request within 5 minutes cooldown | return cached prediction |
+| All metrics 0 | stable prediction, low confidence |
+| AI returns incorrect JSON | Use fallback prediction |
 
 ---
 
-## 9. 의존 관계 (Dependencies)
+## 9. Dependencies
 
-### 9.1 공유 모듈
+### 9.1 Shared modules
 
-`src/lib/metrics-store.ts`는 다음 제안서들에서 공유 사용될 예정:
+`src/lib/metrics-store.ts` will be shared and used in the following proposals:
 
-| 제안서 | 사용 목적 |
+| Proposal | Purpose of use |
 |--------|----------|
-| Proposal 2: Anomaly Detection | 이상 징후 패턴 분석 |
-| Proposal 3: Resource Analytics | 리소스 사용량 통계 |
-| Proposal 4: Cost Optimization | 비용 최적화 분석 |
+| Proposal 2: Anomaly Detection | Anomaly pattern analysis |
+| Proposal 3: Resource Analytics | Resource Usage Statistics |
+| Proposal 4: Cost Optimization | Cost Optimization Analysis |
 
-### 9.2 독립 구현 가능
+### 9.2 Independent implementation possible
 
-이 제안서(Proposal 1)는 **다른 제안서에 의존하지 않으며**, 완전히 독립적으로 구현 가능하다.
+This proposal (Proposal 1) **does not depend on any other proposals** and can be implemented completely independently.
 
-### 9.3 구현 순서 권장
+### 9.3 Recommended implementation order
 
-1. `src/types/prediction.ts` - 타입 정의
-2. `src/lib/metrics-store.ts` - 공유 모듈
-3. `src/lib/predictive-scaler.ts` - 예측 로직
-4. `src/lib/prediction-tracker.ts` - 정확도 추적
-5. `src/app/api/metrics/route.ts` 수정
-6. `src/app/api/scaler/route.ts` 수정
-7. `src/app/page.tsx` 수정
-
----
-
-## 10. 체크리스트 (Implementation Checklist)
-
-구현 완료 후 다음 항목을 확인:
-
-- [ ] TypeScript strict mode 오류 없음
-- [ ] `npm run lint` 통과
-- [ ] `npm run build` 성공
-- [ ] MetricsStore에 데이터 축적 확인 (console.log로 count 출력)
-- [ ] 10개 이상 데이터 포인트 후 예측 생성 확인
-- [ ] AI Gateway 호출 성공 (또는 fallback 동작)
-- [ ] UI에 예측 정보 정상 표시
-- [ ] 5분 쿨다운 동작 확인
-- [ ] 에러 발생 시 적절한 fallback 처리
+1. `src/types/prediction.ts` - Type definitions
+2. `src/lib/metrics-store.ts` - shared module
+3. `src/lib/predictive-scaler.ts` - Prediction logic
+4. `src/lib/prediction-tracker.ts` - Accuracy tracking
+5. Modify `src/app/api/metrics/route.ts`
+6. Modify `src/app/api/scaler/route.ts`
+7. Edit `src/app/page.tsx`
 
 ---
 
-## 부록: 파일 구조
+## 10. Checklist (Implementation Checklist)
+
+After completing implementation, check the following items:
+
+- [ ] TypeScript strict mode no errors
+- [ ] `npm run lint` passed
+- [ ] `npm run build` success
+- [ ] Check data accumulation in MetricsStore (count output to console.log)
+- [ ] Check prediction creation after 10 or more data points
+- [ ] AI Gateway call succeeds (or fallback operation)
+- [ ] Normal display of forecast information in UI
+- [ ] Check 5 minute cooldown operation
+- [ ] Appropriate fallback processing when an error occurs
+
+---
+
+## Appendix: File Structure
 
 ```
 src/
 ├── types/
-│   ├── scaling.ts          # 기존 (변경 없음)
-│   └── prediction.ts       # 신규
+│ ├── scaling.ts # existing (no changes)
+│ └── prediction.ts # New
 ├── lib/
-│   ├── scaling-decision.ts # 기존 (변경 없음)
-│   ├── k8s-scaler.ts       # 기존 (변경 없음)
-│   ├── ai-analyzer.ts      # 기존 (변경 없음)
-│   ├── metrics-store.ts    # 신규 (공유 모듈)
-│   ├── predictive-scaler.ts # 신규
-│   └── prediction-tracker.ts # 신규
+│ ├── scaling-decision.ts # existing (no changes)
+│ ├── k8s-scaler.ts # Existing (no changes)
+│ ├── ai-analyzer.ts # existing (no changes)
+│ ├── metrics-store.ts # New (shared module)
+│ ├── predictive-scaler.ts # new
+│ └── prediction-tracker.ts # New
 ├── app/
 │   ├── api/
 │   │   ├── metrics/
-│   │   │   └── route.ts    # 수정
+│ │ │ └── route.ts # Edit
 │   │   └── scaler/
-│   │       └── route.ts    # 수정
-│   └── page.tsx            # 수정
+│ │ └── route.ts # edit
+│ └── page.tsx # Edit
 ```
 
 ---
 
-*문서 끝*
+*End of document*

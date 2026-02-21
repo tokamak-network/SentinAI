@@ -1,14 +1,14 @@
-# Proposal 5: NLOps 구현 검증 리포트
+# Proposal 5: NLOps implementation verification report
 
-**일시:** 2026-02-10 11:50 KST
-**환경:** macOS, EKS 실제 클러스터 (thanos-sepolia), Anthropic Direct API
-**검증 대상:** NLOps Natural Language Operations (Proposal 5)
+**Date:** 2026-02-10 11:50 KST
+**Environment:** macOS, EKS physical cluster (thanos-sepolia), Anthropic Direct API
+**Verification subject:** NLOps Natural Language Operations (Proposal 5)
 
 ---
 
-## 1. 빌드 결과
+## 1. Build results
 
-**빌드 성공** (`npm run build`)
+**Build Success** (`npm run build`)
 
 ```
 Route (app)
@@ -20,32 +20,32 @@ Route (app)
 ├ ƒ /api/health
 ├ ƒ /api/metrics
 ├ ƒ /api/metrics/seed
-├ ƒ /api/nlops              ← P5 신규
+├ ƒ /api/nlops ← P5 new
 ├ ƒ /api/rca
 ├ ƒ /api/reports/daily
 └ ƒ /api/scaler
 ```
 
-- TypeScript 타입 체크 통과
-- 56/56 단위 테스트 통과
+- Pass TypeScript type check
+- 56/56 unit tests passed
 
 ---
 
-## 2. 생성된 파일 목록
+## 2. List of created files
 
-| 파일 | 줄수 | 내용 |
+| file | Number of lines | Content |
 |------|------|------|
-| `src/types/nlops.ts` | ~115 | NLOps 타입 정의 (NLOpsIntent 유니온, Request/Response, ChatMessage 등) |
-| `src/lib/nlops-engine.ts` | ~535 | 핵심 엔진: 인텐트 분류, 액션 라우팅, 명령 처리 |
-| `src/lib/nlops-responder.ts` | ~167 | 응답 생성기: 정적/AI/폴백 3단계 응답 |
-| `src/app/api/nlops/route.ts` | ~69 | POST/GET API 엔드포인트 |
-| `src/app/page.tsx` | (수정) | 채팅 UI: 토글 버튼, 메시지 패널, 확인 플로우 |
+| `src/types/nlops.ts` | ~115 | NLOps type definition (NLOpsIntent union, Request/Response, ChatMessage, etc.) |
+| `src/lib/nlops-engine.ts` | ~535 | Core Engine: Intent Classification, Action Routing, Command Processing |
+| `src/lib/nlops-responder.ts` | ~167 | Response Generator: Static/AI/Fallback 3-step response |
+| `src/app/api/nlops/route.ts` | ~69 | POST/GET API endpoint |
+| `src/app/page.tsx` | (Edited) | Chat UI: Toggle buttons, message panel, confirmation flow |
 
 ---
 
-## 3. 기능 검증
+## 3. Functional verification
 
-### 3.1 API 상태 확인 (GET)
+### 3.1 Check API status (GET)
 
 ```bash
 curl -s http://localhost:3002/api/nlops | jq
@@ -60,247 +60,247 @@ curl -s http://localhost:3002/api/nlops | jq
 }
 ```
 
-**결과:** PASS
+**Result:** PASS
 
 ---
 
-### 3.2 인텐트 분류 테스트
+### 3.2 Intent classification test
 
-#### 3.2.1 query/status - 상태 조회
+#### 3.2.1 query/status - Status query
 
 ```bash
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "현재 상태 알려줘"}'
+-d '{"message": "Tell me the current status"}'
 ```
 
-| 항목 | 결과 |
+| Item | Results |
 |------|------|
 | Intent type | `query` |
 | Intent target | `status` |
 | Executed | `true` |
-| 실제 K8s 데이터 | L1 block 10,228,625 / L2 block 6,308,034 |
-| 컴포넌트 목록 | L2 Client, Consensus Node, Batcher, Proposer |
-| 비용 정보 | 월 $41.45 (절감 $124.35) |
-| AI 응답 품질 | 한국어, 구조화된 요약, 주요 지표 포함 |
+| Real K8s Data | L1 block 10,228,625 / L2 block 6,308,034 |
+| Component list | L2 Client, Consensus Node, Batcher, Proposer |
+| Cost Information | $41.45 per month (save $124.35) |
+| AI response quality | Korean, structured summary, including key indicators |
 
-**결과:** PASS
+**Result:** PASS
 
-#### 3.2.2 query/cost - 비용 조회
+#### 3.2.2 query/cost - Cost inquiry
 
 ```bash
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "비용 확인해줘"}'
+-d '{"message": "Check cost"}'
 ```
 
-| 항목 | 결과 |
+| Item | Results |
 |------|------|
 | Intent type | `query` |
 | Intent target | `cost` |
 | Executed | `true` |
-| 월간 비용 | $41.45 |
-| 최적화 가능 | $10.36 (75% 절감 가능) |
-| 추천 포함 | O (downscale, schedule 등) |
+| Monthly Expenses | $41.45 |
+| Optimization possible | $10.36 (75% savings) |
+| Featured Included | O (downscale, schedule, etc.) |
 
-**결과:** PASS
+**Result:** PASS
 
-#### 3.2.3 query/anomalies - 이상 현황
+#### 3.2.3 query/anomalies - Abnormal status
 
 ```bash
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "이상 현황 보여줘"}'
+-d '{"message": "Show me the status of an error"}'
 ```
 
-| 항목 | 결과 |
+| Item | Results |
 |------|------|
 | Intent type | `query` |
 | Intent target | `anomalies` |
 | Executed | `true` |
-| 이상 징후 | 0건 (정상) |
-| 응답 | "감지된 이상 징후가 없습니다" |
+| abnormal signs | 0 cases (normal) |
+| Reply | “No abnormalities detected” |
 
-**결과:** PASS
+**Result:** PASS
 
-#### 3.2.4 query/history - 스케일링 히스토리
+#### 3.2.4 query/history - Scaling history
 
 ```bash
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "스케일링 히스토리 보여줘"}'
+-d '{"message": "Show scaling history"}'
 ```
 
-| 항목 | 결과 |
+| Item | Results |
 |------|------|
 | Intent type | `query` |
 | Intent target | `history` |
 | Executed | `true` |
-| 스케일러 상태 포함 | O (vCPU, prediction, zeroDowntime) |
+| Includes scaler status | O (vCPU, prediction, zeroDowntime) |
 
-**결과:** PASS
+**Result:** PASS
 
 ---
 
-### 3.3 액션 인텐트 테스트
+### 3.3 Action intent testing
 
-#### 3.3.1 scale - 스케일링 (확인 필요)
+#### 3.3.1 scale - Scaling (requires confirmation)
 
 ```bash
-# Step 1: 확인 요청
+# Step 1: Request confirmation
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "2 vCPU로 스케일해줘"}'
+-d '{"message": "Scale to 2 vCPU"}'
 ```
 
-| 항목 | 결과 |
+| Item | Results |
 |------|------|
 | Intent type | `scale` |
 | targetVcpu | `2` |
-| Executed | `false` (확인 대기) |
+| Executed | `false` (wait for confirmation) |
 | needsConfirmation | `true` |
-| 응답 | "2 vCPU로 스케일링하려고 합니다. 계속하시려면 '확인'을 눌러주세요." |
+| Reply | "You are about to scale to 2 vCPU. Please press 'OK' to continue." |
 
 ```bash
-# Step 2: 확인 후 실행
+# Step 2: Confirm and run
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "2 vCPU로 스케일해줘", "confirmAction": true}'
+-d '{"message": "Scale to 2 vCPU", "confirmAction": true}'
 ```
 
-| 항목 | 결과 |
+| Item | Results |
 |------|------|
 | Executed | `true` |
-| 스케일링 결과 | 1 → 2 vCPU |
-| 메모리 | 4 GiB |
-| 쿨다운 | 300초 적용 |
-| 시뮬레이션 모드 | 활성 (실제 K8s 변경 없음) |
+| Scaling results | 1 → 2 vCPU |
+| memory | 4 GiB |
+| Cooldown | Apply for 300 seconds |
+| simulation mode | Active (no actual K8s changes) |
 
-**결과:** PASS (2단계 확인 플로우 정상)
+**Result:** PASS (2-step confirmation flow normal)
 
-#### 3.3.2 config - 설정 변경 (확인 필요)
+#### 3.3.2 config - Change settings (requires confirmation)
 
 ```bash
-# Step 1: 확인 요청
+# Step 1: Request confirmation
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "자동 스케일링 꺼줘"}'
+-d '{"message": "Turn off automatic scaling"}'
 ```
 
-| 항목 | 결과 |
+| Item | Results |
 |------|------|
 | Intent type | `config` |
 | setting | `autoScaling` |
 | value | `false` |
 | needsConfirmation | `true` |
-| 응답 | "자동 스케일링을(를) 비활성화하려고 합니다. 계속하시려면 '확인'을 눌러주세요." |
+| Reply | "You are about to disable automatic scaling. Please press 'OK' to continue." |
 
 ```bash
-# Step 2: 확인 후 실행
+# Step 2: Confirm and run
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "자동 스케일링 꺼줘", "confirmAction": true}'
+-d '{"message": "Turn off automatic scaling", "confirmAction": true}'
 ```
 
-| 항목 | 결과 |
+| Item | Results |
 |------|------|
 | Executed | `true` |
-| autoScalingEnabled | `false` → 정상 변경 |
-| 응답 | 변경된 설정 상태 요약 포함 |
+| autoScalingEnabled | `false` → normal change |
+| Reply | Includes summary of changed settings status |
 
 ```bash
-# 복원
+# restore
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "자동 스케일링 켜줘", "confirmAction": true}'
+-d '{"message": "Turn on auto scaling", "confirmAction": true}'
 ```
 
-**결과:** PASS (변경 + 복원 모두 정상)
+**Result:** PASS (change + restore both normal)
 
 ---
 
-### 3.4 분석 인텐트 테스트
+### 3.4 Analysis intent testing
 
-#### 3.4.1 analyze - 로그 분석
+#### 3.4.1 analyze - log analysis
 
 ```bash
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "로그 분석 해줘"}'
+-d '{"message": "Please analyze the log"}'
 ```
 
-| 항목 | 결과 |
+| Item | Results |
 |------|------|
 | Intent type | `analyze` |
 | mode | `live` |
 | Executed | `true` |
-| 분석 소스 | `ai-analyzer` (실제 AI 호출) |
-| 컴포넌트 분석 | op-proposer, op-batcher, op-node, op-geth |
-| 응답 | "네트워크가 정상적으로 운영 중" + 주요 지표 |
+| Analysis Source | `ai-analyzer` (actual AI call) |
+| Component Analysis | op-proposer, op-batcher, op-node, op-geth |
+| Reply | “Network is operating normally” + Key Indicators |
 
-**결과:** PASS
+**Result:** PASS
 
-#### 3.4.2 rca - 근본 원인 분석
+#### 3.4.2 rca - root cause analysis
 
 ```bash
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "근본 원인 분석해줘"}'
+-d '{"message": "Analyze the root cause"}'
 ```
 
-| 항목 | 결과 |
+| Item | Results |
 |------|------|
 | Intent type | `rca` |
 | Executed | `true` |
-| rootCause | 시스템 정상 (문제 없음) |
-| 컴포넌트 상태 | op-node, op-geth, op-batcher, op-proposer 정상 |
-| AI 분석 | 한국어 요약 포함 |
+| rootCause | System OK (no problem) |
+| component status | op-node, op-geth, op-batcher, op-proposer normal |
+| AI analysis | Includes Korean summary |
 
-**결과:** PASS
+**Result:** PASS
 
 ---
 
-### 3.5 설명 인텐트 테스트
+### 3.5 Testing the description intent
 
-#### 3.5.1 explain - 사전 등록 키워드
+#### 3.5.1 explain - Pre-registered keywords
 
 ```bash
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "CPU가 뭐야?"}'
+-d '{"message": "What is a CPU?"}'
 ```
 
-| 항목 | 결과 |
+| Item | Results |
 |------|------|
 | Intent type | `explain` |
-| topic | `CPU 사용률` (또는 유사) |
-| 매칭 키워드 | `cpu` |
-| 응답 | 정적 설명 반환 (AI 호출 없음) |
+| topic | `CPU Utilization` (or similar) |
+| matching keywords | `cpu` |
+| Reply | return static description (no AI calls) |
 
-**결과:** PASS
+**Result:** PASS
 
-#### 3.5.2 explain - 미등록 키워드
+#### 3.5.2 explain - Unregistered keyword
 
 ```bash
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "블록 타임이 뭐야?"}'
+-d '{"message": "What is block time?"}'
 ```
 
-| 항목 | 결과 |
+| Item | Results |
 |------|------|
 | Intent type | `explain` |
-| topic | `블록 타임 (block time)` |
-| 매칭 키워드 | 없음 |
-| 응답 | 사용 가능한 키워드 목록 안내 |
+| topic | `block time` |
+| matching keywords | None |
+| Reply | Guide to the list of available keywords |
 
-**결과:** PASS (기대 동작: 사전에 없는 topic은 키워드 안내)
+**Result:** PASS (Expected action: Keyword information for topics not in the dictionary)
 
 ---
 
-### 3.6 에러 처리 테스트
+### 3.6 Error handling test
 
-#### 3.6.1 빈 메시지
+#### 3.6.1 Empty message
 
 ```bash
 curl -s -X POST http://localhost:3002/api/nlops \
@@ -312,9 +312,9 @@ curl -s -X POST http://localhost:3002/api/nlops \
 { "error": "Message cannot be empty" }
 ```
 
-HTTP 400 반환. **결과:** PASS
+Returns HTTP 400. **Result:** PASS
 
-#### 3.6.2 메시지 누락
+#### 3.6.2 Missing messages
 
 ```bash
 curl -s -X POST http://localhost:3002/api/nlops \
@@ -326,141 +326,141 @@ curl -s -X POST http://localhost:3002/api/nlops \
 { "error": "Message is required" }
 ```
 
-HTTP 400 반환. **결과:** PASS
+Returns HTTP 400. **Result:** PASS
 
-#### 3.6.3 이해 불가 명령
+#### 3.6.3 Unintelligible command
 
 ```bash
 curl -s -X POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
-  -d '{"message": "잘 모르겠는 명령어"}'
+-d '{"message": "Unknown command"}'
 ```
 
-| 항목 | 결과 |
+| Item | Results |
 |------|------|
 | Intent type | `unknown` |
 | Executed | `false` |
-| 응답 | 사용 가능한 명령어 예시 안내 |
+| Reply | Guide to examples of available commands |
 
-**결과:** PASS
+**Result:** PASS
 
 ---
 
-## 4. 결과 요약
+## 4. Summary of results
 
-### 전체 성공률: 14/14 (100%)
+### Overall success rate: 14/14 (100%)
 
-| # | 시나리오 | Intent | 결과 |
+| # | Scenario | Intent | Results |
 |---|---------|--------|------|
-| 1 | GET /api/nlops (상태) | — | **PASS** |
-| 2 | "현재 상태 알려줘" | query/status | **PASS** |
-| 3 | "비용 확인해줘" | query/cost | **PASS** |
-| 4 | "이상 현황 보여줘" | query/anomalies | **PASS** |
-| 5 | "스케일링 히스토리 보여줘" | query/history | **PASS** |
-| 6 | "로그 분석 해줘" | analyze/live | **PASS** |
-| 7 | "2 vCPU로 스케일해줘" (미확인) | scale/2 | **PASS** |
-| 8 | "2 vCPU로 스케일해줘" (확인) | scale/2 + confirm | **PASS** |
-| 9 | "자동 스케일링 꺼줘" (미확인) | config/autoScaling | **PASS** |
-| 10 | "자동 스케일링 꺼줘" (확인) | config/autoScaling + confirm | **PASS** |
-| 11 | "근본 원인 분석해줘" | rca | **PASS** |
-| 12 | "블록 타임이 뭐야?" | explain | **PASS** |
-| 13 | "잘 모르겠는 명령어" | unknown | **PASS** |
-| 14 | 빈 메시지 / 누락 | (validation) | **PASS** |
+| 1 | GET /api/nlops (status) | — | **PASS** |
+| 2 | “Tell me your current status” | query/status | **PASS** |
+| 3 | “Check the cost” | query/cost | **PASS** |
+| 4 | “Show me the status of the problem” | query/anomalies | **PASS** |
+| 5 | “Show scaling history” | query/history | **PASS** |
+| 6 | “Analyze logs” | analyze/live | **PASS** |
+| 7 | “Please scale to 2 vCPU” (unconfirmed) | scale/2 | **PASS** |
+| 8 | "scale to 2 vCPU" (confirmed) | scale/2 + confirm | **PASS** |
+| 9 | “Turn off automatic scaling” (unconfirmed) | config/autoScaling | **PASS** |
+| 10 | “Turn off auto scaling” (OK) | config/autoScaling + confirm | **PASS** |
+| 11 | “Analyze the root cause” | rca | **PASS** |
+| 12 | “What is block time?” | explain | **PASS** |
+| 13 | “Unknown command” | unknown | **PASS** |
+| 14 | Blank message/missing | (validation) | **PASS** |
 
-### 검증된 기능
+### Proven features
 
-| 기능 | 상태 |
+| Features | status |
 |------|------|
-| AI 인텐트 분류 (한국어) | 정상 |
-| 7가지 인텐트 타입 라우팅 | 정상 |
-| 2단계 확인 플로우 (scale, config) | 정상 |
-| 실제 K8s 클러스터 데이터 연동 | 정상 |
-| AI 응답 생성 (한국어) | 정상 |
-| 정적 응답 (확인, unknown, explain) | 정상 |
-| 후속 추천 (suggestedFollowUp) | 정상 |
-| 입력 검증 (빈값, 길이 제한) | 정상 |
+| AI Intent Classification (Korean) | summit |
+| Routing 7 Intent Types | summit |
+| Step 2 confirmation flow (scale, config) | summit |
+| Actual K8s cluster data integration | summit |
+| AI Response Generation (Korean) | summit |
+| static response (ok, unknown, explain) | summit |
+| Follow-Up Recommendations (suggestedFollowUp) | summit |
+| Input validation (empty value, length limit) | summit |
 
-### API 호출 체인
+### API call chain
 
 ```
 POST /api/nlops
-  → classifyIntent() → chatCompletion(fast) → Intent 분류
+→ classifyIntent() → chatCompletion(fast) → Intent 분류
   → executeAction()
     ├─ query/status  → GET /api/metrics + GET /api/scaler
     ├─ query/cost    → GET /api/cost-report?days=7
     ├─ query/anomalies → GET /api/anomalies
     ├─ query/history → GET /api/scaler
-    ├─ scale         → POST /api/scaler (확인 필요)
-    ├─ config        → PATCH /api/scaler (확인 필요)
-    ├─ analyze       → analyzeLogChunk() (직접 호출)
+├─ scale → POST /api/scaler (requires confirmation)
+├─ config → PATCH /api/scaler (requires confirmation)
+├─ analyze → analyzeLogChunk() (direct call)
     ├─ rca           → POST /api/rca
-    └─ explain       → 정적 사전 조회
-  → generateResponse() → chatCompletion(fast) 또는 정적/폴백
-  → NLOpsResponse 반환
+└─ explain → static dictionary lookup
+→ generateResponse() → chatCompletion(fast) or static/fallback
+→ Return NLOpsResponse
 ```
 
 ---
 
-## 5. 테스트 재현 스크립트
+## 5. Test reproduction script
 
 ```bash
 BASE=http://localhost:3002
 
-# 1. 상태 확인
+# 1. Check status
 curl -s $BASE/api/nlops | jq
 
-# 2. 상태 조회
+# 2. Status inquiry
 curl -s -X POST $BASE/api/nlops -H "Content-Type: application/json" \
-  -d '{"message": "현재 상태 알려줘"}' | jq '{intent, executed}'
+-d '{"message": "Tell me the current status"}' | jq '{intent, executed}'
 
-# 3. 비용 조회
+# 3. Cost Inquiry
 curl -s -X POST $BASE/api/nlops -H "Content-Type: application/json" \
-  -d '{"message": "비용 확인해줘"}' | jq '{intent, executed}'
+-d '{"message": "Check cost"}' | jq '{intent, executed}'
 
-# 4. 이상 현황
+# 4. Abnormal Status
 curl -s -X POST $BASE/api/nlops -H "Content-Type: application/json" \
-  -d '{"message": "이상 현황 보여줘"}' | jq '{intent, executed}'
+-d '{"message": "Show me the status of an error"}' | jq '{intent, executed}'
 
-# 5. 로그 분석
+# 5. Log analysis
 curl -s -X POST $BASE/api/nlops -H "Content-Type: application/json" \
-  -d '{"message": "로그 분석 해줘"}' | jq '{intent, executed}'
+-d '{"message": "Please analyze the log"}' | jq '{intent, executed}'
 
-# 6. 스케일링 (확인 요청)
+#6. Scaling (request confirmation)
 curl -s -X POST $BASE/api/nlops -H "Content-Type: application/json" \
-  -d '{"message": "2 vCPU로 스케일해줘"}' | jq '{intent, executed, needsConfirmation}'
+-d '{"message": "Please scale to 2 vCPU"}' | jq '{intent, executed, needsConfirmation}'
 
-# 7. 스케일링 (확인 실행)
+#7. Scaling (Run Confirmation)
 curl -s -X POST $BASE/api/nlops -H "Content-Type: application/json" \
-  -d '{"message": "2 vCPU로 스케일해줘", "confirmAction": true}' | jq '{intent, executed}'
+-d '{"message": "Scale to 2 vCPU", "confirmAction": true}' | jq '{intent, executed}'
 
-# 8. 설정 변경 (확인 요청)
+# 8. Change settings (ask for confirmation)
 curl -s -X POST $BASE/api/nlops -H "Content-Type: application/json" \
-  -d '{"message": "자동 스케일링 꺼줘"}' | jq '{intent, executed, needsConfirmation}'
+-d '{"message": "Turn off automatic scaling"}' | jq '{intent, executed, needsConfirmation}'
 
 # 9. RCA
 curl -s -X POST $BASE/api/nlops -H "Content-Type: application/json" \
-  -d '{"message": "근본 원인 분석해줘"}' | jq '{intent, executed}'
+-d '{"message": "Analyze the root cause"}' | jq '{intent, executed}'
 
-# 10. 설명
+# 10. Description
 curl -s -X POST $BASE/api/nlops -H "Content-Type: application/json" \
-  -d '{"message": "CPU가 뭐야?"}' | jq '{intent, executed}'
+-d '{"message": "What is a CPU?"}' | jq '{intent, executed}'
 
 # 11. Unknown
 curl -s -X POST $BASE/api/nlops -H "Content-Type: application/json" \
-  -d '{"message": "잘 모르겠는 명령어"}' | jq '{intent, executed}'
+-d '{"message": "Unknown command"}' | jq '{intent, executed}'
 
-# 12. 빈 메시지 (400 에러)
+#12. Empty message (400 error)
 curl -s -X POST $BASE/api/nlops -H "Content-Type: application/json" \
   -d '{"message": ""}' | jq
 ```
 
 ---
 
-## 6. 참고 사항
+## 6. Notes
 
 - **AI Provider:** Anthropic Direct (claude-haiku-4-5-20251001)
-- **시뮬레이션 모드:** 활성 (실제 K8s StatefulSet 변경 없음)
-- **인텐트 분류 정확도:** 14/14 (100%) — 테스트된 입력 모두 올바른 인텐트로 분류
-- **응답 언어:** 모두 한국어로 반환
-- **AI 호출 횟수:** 인텐트 분류 1회 + 응답 생성 1회 = 명령당 최대 2회 (정적 응답은 0회)
+- **Simulation Mode:** Enabled (no actual K8s StatefulSet changes)
+- **Intent classification accuracy:** 14/14 (100%) — All tested inputs are classified as correct intents
+- **Response language:** All returned in Korean
+- **Number of AI calls:** 1 intent classification + 1 response generation = maximum 2 times per command (0 for static responses)
 - **explain 사전:** cpu, vcpu, txpool, autoscaling, cooldown, fargate, optimism, scaling, rca, anomaly, zerodowntime (11개)

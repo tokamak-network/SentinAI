@@ -1,74 +1,74 @@
-# Proposal 12: Sequencer Health Watchdog — 시퀀서 종합 건강 감시
+# Proposal 12: Sequencer Health Watchdog — Sequencer Comprehensive Health Surveillance
 
-> **작성일**: 2026-02-11
-> **선행 조건**: Proposal 1 (Scaling), Proposal 2 (Anomaly Detection) 구현 완료
-> **목적**: op-geth(sequencer)의 다차원 건강 점수를 산출하여 "살아있지만 비정상"인 상태를 감지
-
----
-
-## 목차
-
-1. [개요](#1-개요)
-2. [아키텍처](#2-아키텍처)
-3. [Agent Act — 자동 실행 액션](#3-agent-act--자동-실행-액션)
-4. [구현 명세](#4-구현-명세)
-5. [Playbook 정의](#5-playbook-정의)
-6. [안전장치](#6-안전장치)
-7. [환경 변수](#7-환경-변수)
-8. [타입 정의](#8-타입-정의)
-9. [기존 모듈 수정](#9-기존-모듈-수정)
-10. [테스트 계획](#10-테스트-계획)
+> **Created date**: 2026-02-11
+> **Prerequisite**: Proposal 1 (Scaling), Proposal 2 (Anomaly Detection) implementation completed
+> **Purpose**: Detect the “alive but abnormal” state by calculating a multidimensional health score of op-geth (sequencer)
 
 ---
 
-## 1. 개요
+## index
 
-### 1.1 문제
+1. [Overview](#1-Overview)
+2. [Architecture](#2-Architecture)
+3. [Agent Act — auto-run action](#3-agent-act--auto-run-action)
+4. [Implementation Specification](#4-Implementation-Specification)
+5. [Playbook definition](#5-playbook-definition)
+6. [Safety device](#6-Safety device)
+7. [Environment Variables](#7-Environment-Variables)
+8. [Type-Definition](#8-Type-Definition)
+9. [Modify existing module](#9-Existing-module-Modify)
+10. [Test Plan](#10-Test-Plan)
 
-op-geth(sequencer)가 "살아있지만 비정상"인 soft failure 상태가 존재한다:
+---
 
-| 증상 | 원인 | 현재 감지 여부 |
+## 1. Overview
+
+### 1.1 Problem
+
+A soft failure state exists where the op-geth(sequencer) is "alive but unhealthy":
+
+| Symptoms | Cause | Current detection status |
 |------|------|-------------|
-| **Empty blocks** | P2P 고립, 트랜잭션 미수신 | ⚠️ gasUsedRatio Z-Score로 간접 감지 가능 |
-| **P2P 네트워크 고립** | 모든 피어 연결 끊김 | ❌ 미감지 |
-| **디스크 포화** | State DB 증가 (90%+) | ❌ 미감지 |
-| **RPC 응답 지연** | 리소스 부족, GC 부하 | ❌ 미감지 |
-| **TxPool 비정상** | Nonce gap, queued 축적 | ❌ 미감지 |
+| **Empty blocks** | P2P isolation, transaction not received | ⚠️ gasUsedRatio can be detected indirectly with Z-Score |
+| **P2P Network Isolation** | All peers disconnected | ❌ Not detected |
+| **Disc Saturation** | State DB increase (90%+) | ❌ Not detected |
+| **RPC response delay** | Resource shortage, GC load | ❌ Not detected |
+| **TxPool abnormal** | Nonce gap, queued accumulation | ❌ Not detected |
 
-현재 시스템은 CPU/메모리 Z-Score만으로 판단하므로 이런 soft failure를 놓친다.
+The current system only judges CPU/memory Z-Score, so it misses these soft failures.
 
-### 1.2 목표
+### 1.2 Goal
 
-1. 5개 차원의 건강 점수를 종합하여 0-100 점수 산출
-2. 점수 기반 이상 탐지 및 원인별 자동 복구
-3. 대시보드에 시퀀서 건강 상태 표시
+1. Calculate a score of 0-100 by combining health scores in five dimensions
+2. Score-based abnormality detection and automatic recovery by cause
+3. Display sequencer health status on dashboard
 
-### 1.3 핵심 원칙
+### 1.3 Core principles
 
-- **다차원 평가**: 단일 메트릭이 아닌 5가지 차원의 종합 점수
-- **원인별 대응**: 점수가 낮은 원인 차원에 따라 다른 플레이북 실행
-- **Graceful Degradation**: 일부 probe 실패 시 해당 차원 제외하고 나머지로 평가
+- **Multidimensional Assessment**: Composite score across five dimensions rather than a single metric
+- **Response by cause**: Execute different playbooks depending on the cause dimension of the low score
+- **Graceful Degradation**: If some probes fail, evaluate to the rest excluding the relevant dimension.
 
 ---
 
-## 2. 아키텍처
+## 2. Architecture
 
-### 2.1 Health Score 계산
+### 2.1 Health Score Calculation
 
 ```
 Sequencer Health Score (0-100)
   │
-  ├── Block Fullness (25%) ────── gasUsedRatio 최근 5분 평균
-  │   100: ratio > 0.3   (정상적으로 트랜잭션 포함)
-  │   50:  ratio 0.01-0.3 (저활동)
+├── Block Fullness (25%) ────── gasUsedRatio Last 5 minutes average
+│ 100: ratio > 0.3 (including transactions normally)
+│ 50: ratio 0.01-0.3 (low activity)
   │   0:   ratio < 0.01   (empty blocks)
   │
   ├── Peer Count (20%) ────────── net_peerCount RPC
   │   100: peers >= 5
   │   50:  peers 1-4
-  │   0:   peers = 0 (네트워크 고립)
+│ 0: peers = 0 (network isolation)
   │
-  ├── RPC Latency (20%) ──────── eth_blockNumber 응답 시간
+├── RPC Latency (20%) ──────── eth_blockNumber response time
   │   100: < 100ms
   │   50:  100-500ms
   │   0:   > 500ms or timeout
@@ -78,61 +78,61 @@ Sequencer Health Score (0-100)
   │   50:  70-85%
   │   0:   > 85%
   │
-  └── TxPool Health (15%) ────── pending vs queued 비율
-      100: queued < pending * 0.1 (정상)
+└── TxPool Health (15%) ────── pending vs queued 비율
+100: queued < pending * 0.1 (normal)
       50:  queued < pending * 0.5
-      0:   queued > pending (nonce gap 다수)
+0:   queued > pending (nonce gap 다수)
 ```
 
-### 2.2 데이터 플로우
+### 2.2 Data flow
 
 ```
-Agent Loop (60s — 매 2번째 cycle)
+Agent Loop (60s — every 2nd cycle)
   │
   ├── Observe ──────────────────────────────────────────────
-  │   Probes (병렬 실행, 각 probe 실패 시 해당 차원 skip):
-  │     ├── Block Fullness: MetricsStore에서 최근 5분 gasUsedRatio 평균
+│ Probes (run in parallel, skipping the corresponding dimension if each probe fails):
+│ ├── Block Fullness: average gasUsedRatio over the last 5 minutes in MetricsStore
   │     ├── Peer Count: l2Client.request({method: 'net_peerCount'})
-  │     ├── RPC Latency: l2Client.getBlockNumber() 응답 시간 측정
+│ ├── RPC Latency: l2Client.getBlockNumber() response time measurement
   │     ├── Disk Usage: kubectl exec op-geth-0 -- df -h /data
-  │     └── TxPool Health: txpool_status에서 pending/queued 비율
+│ └── TxPool Health: pending/queued ratio in txpool_status
   │
   ├── Detect ──────────────────────────────────────────────
   │   sequencer-health.ts
-  │     ├── score < 60 → WARNING anomaly (어떤 차원이 낮은지 포함)
+│ ├── score < 60 → WARNING anomaly (including which dimension is low)
   │     └── score < 30 → CRITICAL anomaly
   │
   ├── Decide ──────────────────────────────────────────────
-  │   낮은 차원을 기준으로 플레이북 선택:
+│ Select playbooks based on lower dimensions:
   │     ├── peers = 0 → sequencer-network-isolation
   │     ├── disk > 90% → sequencer-disk-pressure
   │     ├── latency > 500ms → sequencer-rpc-degradation
   │     └── queued >> pending → sequencer-txpool-corruption
   │
-  └── Act (원인별 분기) ────────────────────────────────────
+└── Act (quarter by cause) ─────────────────────────────────────
       ├── Network isolation → restart_pod(op-geth)
-      ├── Disk pressure → escalate_operator (pruning 필요)
+├── Disk pressure → escalate_operator (pruning 필요)
       ├── RPC degradation → scale_up(op-geth)
       └── TxPool corruption → flush_txpool
 ```
 
 ---
 
-## 3. Agent Act — 자동 실행 액션
+## 3. Agent Act — Auto-execute action
 
-### 3.1 원인별 액션 매핑
+### 3.1 Action mapping by cause
 
-| 원인 | Action | Safety | Description |
+| Cause | Action | Safety | Description |
 |------|--------|--------|-------------|
-| **P2P 고립** (peers = 0) | `restart_pod` | Guarded | op-geth 재시작으로 P2P 재연결 |
-| **디스크 포화** (> 90%) | `escalate_operator` | Safe | State pruning 필요 → 운영자 알림 |
-| **RPC 지연** (> 500ms) | `scale_up` | Guarded | vCPU 스케일업으로 리소스 확보 |
-| **TxPool 비정상** | `flush_txpool` | Guarded | txpool 초기화 (nonce gap 해소) |
-| **복합 장애** (score < 30) | `collect_logs` + `escalate_operator` | Safe | 로그 수집 + 운영자 알림 |
+| **P2P Isolation** (peers = 0) | `restart_pod` | Guarded | P2P reconnection with op-geth restart |
+| **Disc Saturation** (> 90%) | `escalate_operator` | Safe | State pruning required → Operator notification |
+| **RPC Latency** (> 500ms) | `scale_up` | Guarded | Free up resources with vCPU scale-up |
+| **TxPool abnormal** | `flush_txpool` | Guarded | Initialize txpool (resolve nonce gap) |
+| **Multiple Disabilities** (score < 30) | `collect_logs` + `escalate_operator` | Safe | Log collection + operator notification |
 
-### 3.2 실행 흐름 예시
+### 3.2 Execution flow example
 
-**시나리오: P2P 네트워크 고립 (peers = 0, health score = 25)**
+**Scenario: P2P network isolation (peers = 0, health score = 25)**
 
 ```
 [Observe] Health Probes:
@@ -163,7 +163,7 @@ Agent Loop (60s — 매 2번째 cycle)
 [Log] Sequencer P2P isolation resolved: peers 0→4, health 50→78
 ```
 
-**시나리오: 디스크 포화 (92%)**
+**Scenario: Disk Saturation (92%)**
 
 ```
 [Observe] Disk Usage: 92% → score: 0/20
@@ -180,14 +180,14 @@ Agent Loop (60s — 매 2번째 cycle)
     → Slack: "⚠️ op-geth disk usage 92%.
        State pruning recommended. Current data dir: /data (92% of 100Gi).
        Run: kubectl exec op-geth-0 -- geth snapshot prune-state"
-  (자동 복구 불가 — pruning은 manual action)
+(Automatic recovery not possible — pruning is a manual action)
 
 [Log] Sequencer disk pressure alert: 92% → operator notified
 ```
 
 ---
 
-## 4. 구현 명세
+## 4. Implementation Specification
 
 ### 4.1 `src/lib/sequencer-health.ts` (~280 LOC)
 
@@ -244,11 +244,11 @@ export function calculateDimensionScore(
 ): number;
 ```
 
-**Probe 실패 처리:**
+**Probe failure handling:**
 
 ```typescript
-// 각 probe를 Promise.allSettled로 병렬 실행
-// 실패한 probe는 해당 차원 제외하고 나머지 weight 재분배
+// Run each probe in parallel with Promise.allSettled
+// For failed probes, the remaining weights are redistributed except for that dimension.
 const results = await Promise.allSettled([
   probeBlockFullness(),
   probePeerCount(rpcUrl),
@@ -257,13 +257,13 @@ const results = await Promise.allSettled([
   probeTxPoolHealth(rpcUrl),
 ]);
 
-// 성공한 probe만으로 weighted score 계산
-// Weight 재분배: 실패 probe의 weight를 성공 probe에 비례 분배
+// Calculate weighted score only with successful probes
+// Weight redistribution: Proportionally distribute the weight of failed probes to successful probes
 ```
 
 ---
 
-## 5. Playbook 정의
+## 5. Playbook definition
 
 ### 5.1 Playbook: `sequencer-network-isolation`
 
@@ -335,50 +335,50 @@ maxAttempts: 1
 
 ---
 
-## 6. 안전장치
+## 6. Safety device
 
-### 6.1 Probe 보안
+### 6.1 Probe security
 
-| Probe | 요구 사항 | Fallback |
+| Probe | Requirements | Fallback |
 |-------|----------|----------|
-| `net_peerCount` | op-geth `--http.api` 에 `net` 포함 필요 | probe skip, weight 재분배 |
-| `admin_peers` | `admin` API 활성화 필요 | `net_peerCount` 사용 |
-| Disk Usage | kubectl exec 권한 필요 | probe skip |
-| TxPool | `txpool` API 활성화 필요 | 기존 txpool_status로 fallback |
+| `net_peerCount` | op-geth `--http.api` needs to include `net` | probe skip, weight redistribution |
+| `admin_peers` | `admin` API activation required | Use `net_peerCount` |
+| Disk Usage | kubectl exec permission required | probe skip |
+| TxPool | `txpool` API needs to be enabled | Fallback to existing txpool_status |
 
-### 6.2 액션별 제한
+### 6.2 Action-specific restrictions
 
-| 액션 | 제한 |
+| action | Limited |
 |------|------|
-| `restart_pod` (P2P isolation) | Cooldown 5분, 시간당 최대 2회 |
-| `scale_up` (RPC degradation) | 기존 scaling cooldown (5분) 적용 |
+| `restart_pod` (P2P isolation) | Cooldown 5 minutes, up to 2 times per hour |
+| `scale_up` (RPC degradation) | Apply existing scaling cooldown (5 minutes) |
 | `flush_txpool` | Cooldown 30분, safety level `guarded` |
-| Disk pressure | 자동 복구 불가 → 운영자 알림만 |
+| Disk pressure | No automatic recovery → Only operator notification |
 
-### 6.3 Health Check 간격
+### 6.3 Health Check Interval
 
-- 기본: 매 2번째 agent cycle (60초 간격)
-- `SEQUENCER_HEALTH_CHECK_INTERVAL`로 조정 가능
-- Disk probe는 5분 간격 (kubectl exec 비용 절감)
+- Default: every 2nd agent cycle (60 second intervals)
+- Can be adjusted with `SEQUENCER_HEALTH_CHECK_INTERVAL`
+- Disk probe every 5 minutes (kubectl exec cost savings)
 
 ---
 
-## 7. 환경 변수
+## 7. Environment variables
 
-| 변수 | 기본값 | 설명 |
+| variable | default | Description |
 |------|--------|------|
 | `SEQUENCER_HEALTH_THRESHOLD` | `60` | Health score WARNING threshold |
 | `SEQUENCER_HEALTH_CRITICAL` | `30` | Health score CRITICAL threshold |
 | `SEQUENCER_HEALTH_CHECK_INTERVAL` | `60` | Check interval (seconds) |
 | `SEQUENCER_DISK_CHECK_INTERVAL` | `300` | Disk probe interval (seconds) |
 
-**기존 환경변수 재사용:**
+**Reuse of existing environment variables:**
 - `L2_RPC_URL` → RPC probes
 - `K8S_NAMESPACE` → kubectl exec for disk check
 
 ---
 
-## 8. 타입 정의
+## 8. Type definition
 
 ### 8.1 `src/types/sequencer-health.ts` (~80 LOC)
 
@@ -421,18 +421,18 @@ export interface HealthScore {
 
 ---
 
-## 9. 기존 모듈 수정
+## 9. Modify existing modules
 
 ### 9.1 `src/lib/agent-loop.ts`
 
-`runAgentCycle()`에 health check 호출 추가 (매 2번째 cycle):
+Add health check call to `runAgentCycle()` (every 2nd cycle):
 
 ```typescript
 // After collectMetrics() and runDetectionPipeline()
 const cycleCount = /* track cycle number */;
 if (cycleCount % 2 === 0) {
   const healthResult = await checkSequencerHealth(rpcUrl);
-  // health anomaly를 detection 결과에 합침
+// Combine health anomaly with detection results
 }
 ```
 
@@ -446,24 +446,24 @@ export type AnomalyMetric =
 
 ### 9.3 `src/lib/playbook-matcher.ts`
 
-3개 플레이북 추가 + `identifyComponent()`에 sequencer health 케이스 추가:
+Added 3 playbooks + added sequencer health case to `identifyComponent()`:
 
 ```typescript
-// sequencerHealth anomaly → 원인 차원에 따라 component 결정
+// sequencerHealth anomaly → determine component according to cause dimension
 if (metrics.includes('sequencerHealth')) {
-  // anomaly description에서 원인 파싱
-  // 또는 별도의 healthCheckResult를 참조
+// Parse cause from anomaly description
+// or refer to separate healthCheckResult
   return 'op-geth';
 }
 ```
 
 ### 9.4 `src/lib/action-executor.ts`
 
-`flush_txpool` 액션 추가:
+Add `flush_txpool` action:
 
 ```typescript
 case 'flush_txpool':
-  // RPC: txpool.flush() 또는 debug_setHead
+// RPC: txpool.flush() 또는 debug_setHead
   const response = await fetch(rpcUrl, {
     method: 'POST',
     body: JSON.stringify({ jsonrpc: '2.0', method: 'debug_setHead', params: ['latest'], id: 1 }),
@@ -481,52 +481,52 @@ export type RemediationActionType =
 
 ---
 
-## 10. 테스트 계획
+## 10. Test plan
 
-### 10.1 유닛 테스트 (`sequencer-health.test.ts`)
+### 10.1 Unit tests (`sequencer-health.test.ts`)
 
-| # | 테스트 | 검증 |
+| # | test | verification |
 |---|--------|------|
-| 1 | Score calculation | 5차원 weighted 점수 정확 계산 |
-| 2 | Dimension scoring | 각 차원별 rawValue → score 변환 |
-| 3 | Probe failure handling | 일부 probe 실패 시 weight 재분배 |
-| 4 | Lowest dimension | 가장 낮은 차원 정확 식별 |
+| 1 | Score calculation | Accurate calculation of 5-dimensional weighted scores |
+| 2 | Dimension scoring | rawValue → score conversion for each dimension |
+| 3 | Probe failure handling | Weight redistribution when some probes fail |
+| 4 | Lowest dimension | Lowest dimension correct identification |
 | 5 | Threshold detection | score < 60 → WARNING, < 30 → CRITICAL |
-| 6 | Peer count = 0 | 즉시 network isolation 플레이북 매칭 |
-| 7 | Disk > 90% | manual escalation 확인 |
+| 6 | Peer count = 0 | Instant network isolation playbook matching |
+| 7 | Disk > 90% | Check manual escalation |
 | 8 | All probes fail | graceful degradation (unknown state) |
 
-### 10.2 통합 테스트 시나리오
+### 10.2 Integration test scenario
 
 ```
-시나리오 1: peers=0 + empty blocks → restart op-geth → peers 복구 확인
-시나리오 2: disk 92% → operator 알림 (자동 복구 안 함)
-시나리오 3: RPC latency 800ms → scale_up → latency 개선 확인
-시나리오 4: queued >> pending → flush_txpool → txpool 정상화
-시나리오 5: 복합 장애 (score=20) → collect_logs + operator 알림
-시나리오 6: net_peerCount RPC 비활성화 → probe skip, 4차원으로 평가
+Scenario 1: peers=0 + empty blocks → restart op-geth → check peers recovery
+Scenario 2: disk 92% → operator notification (no automatic recovery)
+Scenario 3: RPC latency 800ms → scale_up → confirmation of latency improvement
+Scenario 4: queued >> pending → flush_txpool → txpool normalization
+Scenario 5: Complex failure (score=20) → collect_logs + operator notification
+Scenario 6: net_peerCount RPC disabled → probe skip, evaluated in 4 dimensions
 ```
 
 ---
 
-## 의존관계
+## Dependencies
 
 ```
-신규 모듈:
+New modules:
   ├── src/lib/sequencer-health.ts
   └── src/types/sequencer-health.ts
 
-수정 모듈:
-  ├── src/lib/agent-loop.ts          → health check 호출 추가
-  ├── src/lib/anomaly-detector.ts    → sequencerHealth anomaly 추가
-  ├── src/lib/playbook-matcher.ts    → 3개 플레이북 추가
-  ├── src/lib/action-executor.ts     → flush_txpool 액션 추가
-  ├── src/types/anomaly.ts           → AnomalyMetric 확장
-  └── src/types/remediation.ts       → RemediationActionType 확장
+Modification module:
+├── src/lib/agent-loop.ts → Add health check call
+├── src/lib/anomaly-detector.ts    → sequencerHealth anomaly 추가
+├── src/lib/playbook-matcher.ts → Add 3 playbooks
+├── src/lib/action-executor.ts → Add flush_txpool action
+├── src/types/anomaly.ts           → AnomalyMetric 확장
+└── src/types/remediation.ts       → RemediationActionType 확장
 
-의존 라이브러리:
-  └── viem (이미 설치됨) → custom RPC calls (net_peerCount, txpool)
+Dependent libraries:
+└── viem (already installed) → custom RPC calls (net_peerCount, txpool)
 
-선택적:
-  └── src/app/page.tsx → 대시보드에 Health Score 게이지 추가
+Optional:
+└── src/app/page.tsx → Add Health Score gauge to dashboard
 ```

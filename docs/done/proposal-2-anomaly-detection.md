@@ -1,26 +1,26 @@
-# Proposal 2: Anomaly Detection Pipeline - 구현 명세서
+# Proposal 2: Anomaly Detection Pipeline - Implementation Specification
 
-> 버전: 1.0.0
-> 작성일: 2026-02-06
-> 대상 독자: Claude Opus 4.6 구현 에이전트
-> 의존성: Proposal 1 (MetricsStore) 필수
+> Version: 1.0.0
+> Creation date: 2026-02-06
+> Target audience: Claude Opus 4.6 Implementation Agent
+> Dependency: Proposal 1 (MetricsStore) required
 
 ---
 
-## 1. 개요
+## 1. Overview
 
-### 1.1 목적
+### 1.1 Purpose
 
-이 문서는 SentinAI의 **다층 이상 탐지 파이프라인(Multi-Layer Anomaly Detection Pipeline)**을 처음부터 구현하기 위한 완전한 명세서이다. 이 문서만으로 전체 기능을 구현할 수 있어야 한다.
+This document is a complete specification for implementing SentinAI's **Multi-Layer Anomaly Detection Pipeline** from scratch. You should be able to implement the entire functionality with just this document.
 
-### 1.2 아키텍처 개요
+### 1.2 Architecture Overview
 
 ```
 Layer 1: Statistical Detector        Layer 2: AI Semantic Analyzer
 ┌─────────────────────────┐          ┌───────────────────────────┐
-│ Z-Score 기반             │          │ Claude 기반 로그+메트릭    │
-│ 메트릭 이상치 탐지        │─────────▶│ 컨텍스트 분석              │
-│ (로컬 연산, 저비용)       │  이상 시  │ (API 호출, 고비용)         │
+│ Z-Score based │ │ Claude based log+metric │
+│ Metric outlier detection │─────────▶│ Context analysis │
+│ (Local operation, low cost) │ In case of abnormality │ (API call, high cost) │
 └─────────────────────────┘          └─────────────┬─────────────┘
                                                     │
                                      ┌──────────────▼──────────────┐
@@ -29,29 +29,29 @@ Layer 1: Statistical Detector        Layer 2: AI Semantic Analyzer
                                      └─────────────────────────────┘
 ```
 
-### 1.3 핵심 원칙
+### 1.3 Core principles
 
-1. **비용 효율성**: Layer 1 통계 필터로 불필요한 AI 호출 70-90% 절감
-2. **실시간성**: 매 메트릭 폴링 주기(1초)마다 Layer 1 탐지 수행
-3. **정확성**: AI 시맨틱 분석으로 오탐(false positive) 최소화
-4. **운영 편의성**: Slack/Webhook 알림으로 즉각적인 인지
+1. **Cost-effective**: Reduce unnecessary AI calls by 70-90% with Layer 1 statistical filters
+2. **Real-time**: Layer 1 detection performed every metric polling cycle (1 second)
+3. **Accuracy**: Minimize false positives through AI semantic analysis
+4. **Operation convenience**: Instant recognition with Slack/Webhook notifications
 
-### 1.4 의존관계
+### 1.4 Dependencies
 
-- **필수**: `src/lib/metrics-store.ts` (Proposal 1에서 구현)
-- **필수**: `src/types/prediction.ts` (Proposal 1에서 정의한 `MetricDataPoint`)
-- **제공**: Proposal 3 (RCA Engine)에서 이상 탐지 결과를 입력으로 사용
+- **Required**: `src/lib/metrics-store.ts` (implemented in Proposal 1)
+- **Required**: `src/types/prediction.ts` (`MetricDataPoint` defined in Proposal 1)
+- **Provided**: Anomaly detection results are used as input in Proposal 3 (RCA Engine)
 
 ---
 
-## 2. 타입 정의
+## 2. Type definition
 
-### 2.1 파일: `src/types/anomaly.ts` (신규)
+### 2.1 File: `src/types/anomaly.ts` (new)
 
 ```typescript
 /**
  * Anomaly Detection Pipeline Types
- * 다층 이상 탐지 시스템을 위한 타입 정의
+* Type definition for multi-layer anomaly detection system
  */
 
 import { AISeverity } from './scaling';
@@ -61,15 +61,15 @@ import { AISeverity } from './scaling';
 // ============================================================================
 
 /**
- * 이상 방향
- * - spike: 급격한 상승
- * - drop: 급격한 하락
- * - plateau: 장시간 변화 없음 (정체)
+* Ideal direction
+* - spike: sudden rise
+* - drop: sudden drop
+* - plateau: no change for a long time (stagnation)
  */
 export type AnomalyDirection = 'spike' | 'drop' | 'plateau';
 
 /**
- * 탐지 대상 메트릭
+* Metrics to be detected
  */
 export type AnomalyMetric =
   | 'cpuUsage'
@@ -79,22 +79,22 @@ export type AnomalyMetric =
   | 'l2BlockInterval';
 
 /**
- * Layer 1 통계 기반 이상 탐지 결과
+* Layer 1 statistics-based anomaly detection results
  */
 export interface AnomalyResult {
-  /** 이상 여부 */
+/** Is there a problem */
   isAnomaly: boolean;
-  /** 이상이 감지된 메트릭 */
+/** Metric with anomaly detected */
   metric: AnomalyMetric;
-  /** 현재 값 */
+/** Current value */
   value: number;
-  /** Z-Score (평균으로부터 표준편차 단위 거리) */
+/** Z-Score (distance in standard deviation from the mean) */
   zScore: number;
-  /** 이상 방향 */
+/** Ideal direction */
   direction: AnomalyDirection;
-  /** 사람이 읽을 수 있는 설명 */
+/** Human-readable description */
   description: string;
-  /** 탐지 규칙 (어떤 규칙에 의해 탐지되었는지) */
+/** Detection rule (by which rule it was detected) */
   rule: 'z-score' | 'zero-drop' | 'plateau' | 'monotonic-increase';
 }
 
@@ -103,29 +103,29 @@ export interface AnomalyResult {
 // ============================================================================
 
 /**
- * 이상 유형 분류
+* Classification of abnormality types
  */
 export type AnomalyType = 'performance' | 'security' | 'consensus' | 'liveness';
 
 /**
- * Layer 2 AI 심층 분석 결과
+* Layer 2 AI in-depth analysis results
  */
 export interface DeepAnalysisResult {
-  /** AI가 판단한 심각도 */
+/** Severity determined by AI */
   severity: AISeverity;
-  /** 이상 유형 */
+/** abnormal type */
   anomalyType: AnomalyType;
-  /** 연관된 메트릭/로그 패턴 */
+/** Associated metrics/log patterns */
   correlations: string[];
-  /** 예상 영향도 */
+/** Expected impact */
   predictedImpact: string;
-  /** 권장 조치 목록 */
+/** List of recommended actions */
   suggestedActions: string[];
-  /** 영향받는 컴포넌트 */
+/** Affected components */
   relatedComponents: string[];
-  /** 분석 타임스탬프 */
+/** Analysis timestamp */
   timestamp: string;
-  /** AI 모델 응답의 원본 (디버깅용) */
+/** Source of AI model response (for debugging) */
   rawResponse?: string;
 }
 
@@ -134,73 +134,73 @@ export interface DeepAnalysisResult {
 // ============================================================================
 
 /**
- * 알림 채널 유형
+* Notification channel type
  */
 export type AlertChannel = 'slack' | 'webhook' | 'dashboard';
 
 /**
- * 알림 설정
+* Notification settings
  */
 export interface AlertConfig {
-  /** Slack/Discord 웹훅 URL (선택) */
+/** Slack/Discord webhook URL (optional) */
   webhookUrl?: string;
-  /** 알림 임계값 설정 */
+/** Set notification threshold */
   thresholds: {
-    /** 이 심각도 이상에서 알림 발송 */
+/** Send notifications at this severity or higher */
     notifyOn: AISeverity[];
-    /** 동일 유형 이상에 대한 알림 간격 (분) */
+/** Notification interval for the same type or more (minutes) */
     cooldownMinutes: number;
   };
-  /** 알림 활성화 여부 */
+/** Whether to enable notifications */
   enabled: boolean;
 }
 
 /**
- * 발송된 알림 기록
+* Records of notifications sent
  */
 export interface AlertRecord {
-  /** 고유 ID */
+/** Unique ID */
   id: string;
-  /** 원인이 된 이상 탐지 결과 */
+/** Caused abnormality detection result */
   anomaly: AnomalyResult;
-  /** AI 심층 분석 결과 (있는 경우) */
+/** AI deep analysis results (if any) */
   analysis?: DeepAnalysisResult;
-  /** 발송 시간 */
+/** Shipping time */
   sentAt: string;
-  /** 발송 채널 */
+/** Shipping channel */
   channel: AlertChannel;
-  /** 발송 성공 여부 */
+/** Whether sending was successful */
   success: boolean;
-  /** 실패 시 에러 메시지 */
+/** Error message in case of failure */
   error?: string;
 }
 
 // ============================================================================
-// Anomaly Event (통합)
+// Anomaly Event (integrated)
 // ============================================================================
 
 /**
- * 이상 이벤트 상태
+* Abnormal event status
  */
 export type AnomalyEventStatus = 'active' | 'resolved' | 'acknowledged';
 
 /**
- * 이상 이벤트 (Layer 1~3 결과 통합)
+* Abnormal event (Integration of Layer 1~3 results)
  */
 export interface AnomalyEvent {
-  /** 고유 ID (UUID v4) */
+/** Unique ID (UUID v4) */
   id: string;
-  /** 최초 탐지 시간 (Unix timestamp ms) */
+/** First detection time (Unix timestamp ms) */
   timestamp: number;
-  /** Layer 1에서 탐지된 이상 목록 */
+/** List of anomalies detected in Layer 1 */
   anomalies: AnomalyResult[];
-  /** Layer 2 AI 심층 분석 결과 (수행된 경우) */
+/** Layer 2 AI in-depth analysis results (if performed) */
   deepAnalysis?: DeepAnalysisResult;
-  /** 이벤트 상태 */
+/** Event status */
   status: AnomalyEventStatus;
-  /** 해결 시간 (있는 경우) */
+/** Resolution time (if any) */
   resolvedAt?: number;
-  /** 발송된 알림 기록 */
+/** Log of sent notifications */
   alerts: AlertRecord[];
 }
 
@@ -209,30 +209,30 @@ export interface AnomalyEvent {
 // ============================================================================
 
 /**
- * GET /api/anomalies 응답
+* GET /api/anomalies response
  */
 export interface AnomaliesResponse {
-  /** 이상 이벤트 목록 (최신순) */
+/** List of abnormal events (in order of most recent) */
   events: AnomalyEvent[];
-  /** 전체 이벤트 수 */
+/** Total number of events */
   total: number;
-  /** 현재 활성 이상 수 */
+/** Current active anomaly count */
   activeCount: number;
 }
 
 /**
- * GET /api/anomalies/config 응답
+* GET /api/anomalies/config response
  */
 export interface AlertConfigResponse {
   config: AlertConfig;
-  /** 최근 24시간 알림 발송 수 */
+/** Number of notifications sent in the last 24 hours */
   alertsSent24h: number;
-  /** 다음 알림 가능 시간 (쿨다운 중인 경우) */
+/** Next notification time (if on cooldown) */
   nextAlertAvailableAt?: string;
 }
 
 /**
- * POST /api/anomalies/config 요청 바디
+* POST /api/anomalies/config request body
  */
 export interface AlertConfigUpdateRequest {
   webhookUrl?: string;
@@ -244,32 +244,32 @@ export interface AlertConfigUpdateRequest {
 }
 
 /**
- * Metrics API 확장 - anomalies 필드
+* Metrics API extension - anomalies field
  */
 export interface MetricsAnomalyExtension {
-  /** Layer 1 이상 탐지 결과 (실시간) */
+/** Layer 1 abnormality detection results (real-time) */
   anomalies: AnomalyResult[];
-  /** 현재 활성 이상 이벤트 ID (있는 경우) */
+/** Currently active anomaly event ID (if any) */
   activeEventId?: string;
 }
 ```
 
 ---
 
-## 3. 신규 파일 명세
+## 3. New file specification
 
-### 3.1 `src/lib/anomaly-detector.ts` (Layer 1 - 통계 기반 탐지기)
+### 3.1 `src/lib/anomaly-detector.ts` (Layer 1 - statistics-based detector)
 
-#### 3.1.1 목적
+#### 3.1.1 Purpose
 
-매 메트릭 수집 시 로컬에서 실행되는 저비용 통계 기반 이상 탐지기. Z-Score와 규칙 기반 탐지를 조합하여 이상 여부를 판단한다.
+A low-cost, statistics-based anomaly detector that runs locally at every metric collection. Anomalies are determined by combining Z-Score and rule-based detection.
 
-#### 3.1.2 전체 코드
+#### 3.1.2 Full code
 
 ```typescript
 /**
  * Layer 1: Statistical Anomaly Detector
- * Z-Score 및 규칙 기반 메트릭 이상 탐지
+* Z-Score and rule-based metric anomaly detection
  */
 
 import { MetricDataPoint } from '@/types/prediction';
@@ -279,16 +279,16 @@ import { AnomalyResult, AnomalyMetric, AnomalyDirection } from '@/types/anomaly'
 // Configuration
 // ============================================================================
 
-/** Z-Score 이상 판단 임계값 (|z| > 2.5이면 이상) */
+/** Z-Score abnormality judgment threshold (if |z| > 2.5) */
 const Z_SCORE_THRESHOLD = 2.5;
 
-/** 블록 정체 판단 시간 (초) - 2분 이상 변화 없으면 이상 */
+/** Block congestion determination time (seconds) - If there is no change for more than 2 minutes, it is abnormal */
 const BLOCK_PLATEAU_SECONDS = 120;
 
-/** TxPool 단조 증가 판단 시간 (초) - 5분간 계속 증가하면 이상 */
+/** TxPool monotonically increasing judgment time (seconds) - abnormal if it continues to increase for 5 minutes */
 const TXPOOL_MONOTONIC_SECONDS = 300;
 
-/** 최소 히스토리 데이터 포인트 수 (이보다 적으면 탐지 스킵) */
+/** Minimum number of historical data points (skip detection if less) */
 const MIN_HISTORY_POINTS = 5;
 
 // ============================================================================
@@ -296,11 +296,11 @@ const MIN_HISTORY_POINTS = 5;
 // ============================================================================
 
 /**
- * Z-Score 계산
- * @param value 현재 값
- * @param mean 평균
- * @param stdDev 표준편차
- * @returns Z-Score (표준편차가 0이면 0 반환)
+* Z-Score calculation
+* @param value Current value
+* @param mean mean
+* @param stdDev standard deviation
+* @returns Z-Score (if standard deviation is 0, 0 is returned)
  */
 export function calculateZScore(value: number, mean: number, stdDev: number): number {
   if (stdDev === 0) return 0;
@@ -308,7 +308,7 @@ export function calculateZScore(value: number, mean: number, stdDev: number): nu
 }
 
 /**
- * 평균 계산
+* Calculate average
  */
 function calculateMean(values: number[]): number {
   if (values.length === 0) return 0;
@@ -316,7 +316,7 @@ function calculateMean(values: number[]): number {
 }
 
 /**
- * 표준편차 계산
+* Standard deviation calculation
  */
 function calculateStdDev(values: number[], mean: number): number {
   if (values.length === 0) return 0;
@@ -325,7 +325,7 @@ function calculateStdDev(values: number[], mean: number): number {
 }
 
 /**
- * Z-Score 기반 이상 탐지
+* Z-Score based anomaly detection
  */
 function detectZScoreAnomaly(
   metric: AnomalyMetric,
@@ -346,7 +346,7 @@ function detectZScoreAnomaly(
       value: currentValue,
       zScore,
       direction,
-      description: `${metric} ${direction === 'spike' ? '급증' : '급락'}: 현재 ${currentValue.toFixed(2)}, 평균 ${mean.toFixed(2)}, Z-Score ${zScore.toFixed(2)}`,
+description: `${metric} ${direction === 'spike' ? 'Surge' : 'Plumb'}: Current ${currentValue.toFixed(2)}, Average ${mean.toFixed(2)}, Z-Score ${zScore.toFixed(2)}`,
       rule: 'z-score',
     };
   }
@@ -355,7 +355,7 @@ function detectZScoreAnomaly(
 }
 
 /**
- * CPU 0% 급락 탐지 (프로세스 크래시 의심)
+* 0% CPU drop detected (suspicious process crash)
  */
 function detectCpuZeroDrop(
   currentCpu: number,
@@ -363,7 +363,7 @@ function detectCpuZeroDrop(
 ): AnomalyResult | null {
   if (history.length < 3) return null;
 
-  // 이전 3개 데이터 포인트의 CPU 평균이 10% 이상이었는데 갑자기 0%로 떨어진 경우
+// If the CPU average for the previous 3 data points was above 10% but suddenly dropped to 0%
   const recentCpuValues = history.slice(-3).map(p => p.cpuUsage);
   const recentMean = calculateMean(recentCpuValues);
 
@@ -372,9 +372,9 @@ function detectCpuZeroDrop(
       isAnomaly: true,
       metric: 'cpuUsage',
       value: currentCpu,
-      zScore: -10, // 임의의 큰 음수 (0으로 급락)
+zScore: -10, // arbitrarily large negative number (plummets to 0)
       direction: 'drop',
-      description: `CPU 사용률 0%로 급락: 이전 평균 ${recentMean.toFixed(1)}% → 현재 ${currentCpu.toFixed(1)}%. 프로세스 크래시 의심.`,
+description: `CPU utilization plummets to 0%: previous average ${recentMean.toFixed(1)}% → current ${currentCpu.toFixed(1)}%. Suspected process crash.`,
       rule: 'zero-drop',
     };
   }
@@ -383,7 +383,7 @@ function detectCpuZeroDrop(
 }
 
 /**
- * L2 블록 높이 정체 탐지 (Sequencer 중단 의심)
+* L2 block height congestion detection (suspected sequencer interruption)
  */
 function detectBlockPlateau(
   currentHeight: number,
@@ -394,11 +394,11 @@ function detectBlockPlateau(
   const now = Date.now();
   const oldestRelevant = now - BLOCK_PLATEAU_SECONDS * 1000;
 
-  // BLOCK_PLATEAU_SECONDS 내의 데이터만 필터링
+// Filter only data within BLOCK_PLATEAU_SECONDS
   const recentHistory = history.filter(p => p.timestamp >= oldestRelevant);
   if (recentHistory.length < 2) return null;
 
-  // 모든 블록 높이가 동일한지 확인
+// Check if all blocks have the same height
   const allSameHeight = recentHistory.every(p => p.l2BlockHeight === currentHeight);
 
   if (allSameHeight && recentHistory.length >= 2) {
@@ -411,7 +411,7 @@ function detectBlockPlateau(
         value: currentHeight,
         zScore: 0,
         direction: 'plateau',
-        description: `L2 블록 높이 ${durationSec.toFixed(0)}초간 변화 없음 (높이: ${currentHeight}). Sequencer 중단 의심.`,
+description: `L2 block height does not change for ${durationSec.toFixed(0)} seconds (height: ${currentHeight}). Sequencer interruption suspected.`,
         rule: 'plateau',
       };
     }
@@ -421,7 +421,7 @@ function detectBlockPlateau(
 }
 
 /**
- * TxPool 단조 증가 탐지 (Batcher 장애 의심)
+* TxPool monotonic increase detection (suspected Batcher failure)
  */
 function detectTxPoolMonotonicIncrease(
   currentTxPool: number,
@@ -432,11 +432,11 @@ function detectTxPoolMonotonicIncrease(
   const now = Date.now();
   const oldestRelevant = now - TXPOOL_MONOTONIC_SECONDS * 1000;
 
-  // TXPOOL_MONOTONIC_SECONDS 내의 데이터만 필터링
+// Filter only data within TXPOOL_MONOTONIC_SECONDS
   const recentHistory = history.filter(p => p.timestamp >= oldestRelevant);
   if (recentHistory.length < 5) return null;
 
-  // 단조 증가 여부 확인 (모든 연속 쌍에서 후자가 전자 이상)
+// Check if monotonically increasing (the latter is greater than the former in all consecutive pairs)
   let isMonotonic = true;
   for (let i = 1; i < recentHistory.length; i++) {
     if (recentHistory[i].txPoolPending < recentHistory[i - 1].txPoolPending) {
@@ -445,7 +445,7 @@ function detectTxPoolMonotonicIncrease(
     }
   }
 
-  // 현재 값도 마지막 값보다 크거나 같아야 함
+// The current value must also be greater than or equal to the last value
   const lastHistoryValue = recentHistory[recentHistory.length - 1].txPoolPending;
   if (currentTxPool < lastHistoryValue) {
     isMonotonic = false;
@@ -462,7 +462,7 @@ function detectTxPoolMonotonicIncrease(
       value: currentTxPool,
       zScore: 0,
       direction: 'spike',
-      description: `TxPool ${durationSec.toFixed(0)}초간 단조 증가: ${startValue} → ${currentTxPool} (+${increase}). Batcher 장애 의심.`,
+description: `TxPool Monotonically increase in ${durationSec.toFixed(0)} seconds: ${startValue} → ${currentTxPool} (+${increase}). Suspected Batcher failure.`,
       rule: 'monotonic-increase',
     };
   }
@@ -475,11 +475,11 @@ function detectTxPoolMonotonicIncrease(
 // ============================================================================
 
 /**
- * 현재 메트릭 데이터에서 모든 이상을 탐지
+* Detect all anomalies in current metric data
  *
- * @param current 현재 메트릭 데이터 포인트
- * @param history 최근 히스토리 (최소 5개 권장, 최대 30분)
- * @returns 탐지된 이상 목록 (없으면 빈 배열)
+* @param current Current metric data point
+* @param history Recent history (minimum 5 recommended, maximum 30 minutes)
+* @returns list of detected anomalies (empty array if none)
  *
  * @example
  * ```typescript
@@ -487,11 +487,11 @@ function detectTxPoolMonotonicIncrease(
  * import { getRecent } from '@/lib/metrics-store';
  *
  * const current: MetricDataPoint = { ... };
- * const history = getRecent(30); // 최근 30분
+* const history = getRecent(30); // Last 30 minutes
  * const anomalies = detectAnomalies(current, history);
  *
  * if (anomalies.length > 0) {
- *   // Layer 2 AI 분석 트리거
+* // Layer 2 AI analysis trigger
  * }
  * ```
  */
@@ -501,30 +501,30 @@ export function detectAnomalies(
 ): AnomalyResult[] {
   const anomalies: AnomalyResult[] = [];
 
-  // 히스토리가 너무 적으면 탐지 스킵
+// Skip detection if history is too small
   if (history.length < MIN_HISTORY_POINTS) {
     return anomalies;
   }
 
-  // 1. CPU 0% 급락 탐지 (가장 심각한 상황, 먼저 체크)
+// 1. CPU 0% drop detection (most serious situation, check first)
   const cpuZeroDrop = detectCpuZeroDrop(current.cpuUsage, history);
   if (cpuZeroDrop) {
     anomalies.push(cpuZeroDrop);
   }
 
-  // 2. L2 블록 높이 정체 탐지
+// 2. L2 block height congestion detection
   const blockPlateau = detectBlockPlateau(current.l2BlockHeight, history);
   if (blockPlateau) {
     anomalies.push(blockPlateau);
   }
 
-  // 3. TxPool 단조 증가 탐지
+// 3. TxPool monotonically increasing detection
   const txPoolMonotonic = detectTxPoolMonotonicIncrease(current.txPoolPending, history);
   if (txPoolMonotonic) {
     anomalies.push(txPoolMonotonic);
   }
 
-  // 4. Z-Score 기반 이상 탐지 (위 규칙에서 이미 탐지되지 않은 메트릭에 대해)
+// 4. Z-Score based anomaly detection (for metrics not already detected by the above rules)
   const detectedMetrics = new Set(anomalies.map(a => a.metric));
 
   // CPU Usage Z-Score
@@ -567,7 +567,7 @@ export function detectAnomalies(
 }
 
 /**
- * 이상 탐지 설정을 기본값으로 반환 (테스트/설정 UI용)
+* Return anomaly detection settings to default (for testing/settings UI)
  */
 export function getDetectorConfig() {
   return {
@@ -581,18 +581,18 @@ export function getDetectorConfig() {
 
 ---
 
-### 3.2 `src/lib/anomaly-ai-analyzer.ts` (Layer 2 - AI 시맨틱 분석기)
+### 3.2 `src/lib/anomaly-ai-analyzer.ts` (Layer 2 - AI Semantic Analyzer)
 
-#### 3.2.1 목적
+#### 3.2.1 Purpose
 
-Layer 1에서 이상으로 판단된 경우에만 호출되는 AI 기반 심층 분석기. 이상 메트릭 + 로그를 Claude에 전달하여 컨텍스트 기반 분석을 수행한다.
+AI-based deep analyzer that is called only when an abnormality is determined at Layer 1. Anomaly metrics + logs are delivered to Claude to perform context-based analysis.
 
-#### 3.2.2 전체 코드
+#### 3.2.2 Full code
 
 ```typescript
 /**
  * Layer 2: AI Semantic Anomaly Analyzer
- * Claude 기반 이상 컨텍스트 분석
+* Claude-based abnormal context analysis
  */
 
 import { MetricDataPoint } from '@/types/prediction';
@@ -606,20 +606,20 @@ import { AISeverity } from '@/types/scaling';
 const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://api.ai.tokamak.network';
 const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
-/** AI 호출 최소 간격 (밀리초) - 1분 */
+/** Minimum interval between AI calls (milliseconds) - 1 minute */
 const MIN_AI_CALL_INTERVAL_MS = 60 * 1000;
 
-/** 최근 분석 결과 캐시 TTL (밀리초) - 5분 */
+/** Latest analysis result cache TTL (milliseconds) - 5 minutes */
 const ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 // ============================================================================
 // In-Memory State
 // ============================================================================
 
-/** 마지막 AI 호출 시간 */
+/** Last AI call time */
 let lastAICallTime = 0;
 
-/** 최근 분석 결과 캐시 */
+/** Cache recent analysis results */
 interface AnalysisCache {
   result: DeepAnalysisResult;
   anomalyHash: string;
@@ -672,7 +672,7 @@ Return ONLY a JSON object (no markdown code blocks):
 // ============================================================================
 
 /**
- * 이상 목록의 해시 생성 (캐시 키용)
+* Generate a hash of the anomaly list (for cache keys)
  */
 function hashAnomalies(anomalies: AnomalyResult[]): string {
   const sorted = anomalies
@@ -683,7 +683,7 @@ function hashAnomalies(anomalies: AnomalyResult[]): string {
 }
 
 /**
- * 이상 목록을 AI 프롬프트용 텍스트로 변환
+* Convert anomaly list to text for AI prompts
  */
 function formatAnomaliesForPrompt(anomalies: AnomalyResult[]): string {
   return anomalies
@@ -692,7 +692,7 @@ function formatAnomaliesForPrompt(anomalies: AnomalyResult[]): string {
 }
 
 /**
- * 메트릭을 AI 프롬프트용 텍스트로 변환
+* Convert metrics to text for AI prompts
  */
 function formatMetricsForPrompt(metrics: MetricDataPoint): string {
   return `
@@ -705,12 +705,12 @@ function formatMetricsForPrompt(metrics: MetricDataPoint): string {
 }
 
 /**
- * 로그를 AI 프롬프트용 텍스트로 변환
+* Convert logs to text for AI prompts
  */
 function formatLogsForPrompt(logs: Record<string, string>): string {
   let result = '';
   for (const [component, log] of Object.entries(logs)) {
-    // 로그가 너무 길면 마지막 1000자만
+// If the log is too long, only the last 1000 characters
     const truncatedLog = log.length > 1000 ? '...' + log.slice(-1000) : log;
     result += `\n[${component}]\n${truncatedLog}\n`;
   }
@@ -718,16 +718,16 @@ function formatLogsForPrompt(logs: Record<string, string>): string {
 }
 
 /**
- * AI 응답 파싱
+* AI response parsing
  */
 function parseAIResponse(content: string): DeepAnalysisResult {
-  // Markdown 코드 블록 제거
+// Remove Markdown code block
   const jsonStr = content.replace(/```json/g, '').replace(/```/g, '').trim();
 
   try {
     const parsed = JSON.parse(jsonStr);
 
-    // 필수 필드 검증 및 기본값
+// Required field validation and default values
     const severity: AISeverity =
       ['low', 'medium', 'high', 'critical'].includes(parsed.severity)
         ? parsed.severity
@@ -749,13 +749,13 @@ function parseAIResponse(content: string): DeepAnalysisResult {
       rawResponse: content,
     };
   } catch {
-    // JSON 파싱 실패 시 기본 응답
+// Default response when JSON parsing fails
     return {
       severity: 'medium',
       anomalyType: 'performance',
       correlations: [],
-      predictedImpact: 'AI 응답 파싱 실패. 원본: ' + content.substring(0, 200),
-      suggestedActions: ['수동으로 로그 확인 필요'],
+predictedImpact: 'AI response parsing failed. Original: ' + content.substring(0, 200);
+suggestedActions: ['Require manual checking of logs'],
       relatedComponents: [],
       timestamp: new Date().toISOString(),
       rawResponse: content,
@@ -768,17 +768,17 @@ function parseAIResponse(content: string): DeepAnalysisResult {
 // ============================================================================
 
 /**
- * 탐지된 이상에 대한 AI 심층 분석 수행
+* Perform AI in-depth analysis of detected anomalies
  *
- * @param anomalies Layer 1에서 탐지된 이상 목록
- * @param metrics 현재 메트릭 데이터
- * @param logs 컴포넌트별 로그 (op-geth, op-node 등)
- * @returns AI 심층 분석 결과
+* @param anomalies List of anomalies detected in Layer 1
+* @param metrics Current metrics data
+* @param logs Logs for each component (op-geth, op-node, etc.)
+* @returns AI in-depth analysis results
  *
  * @remarks
- * - 최소 1분 간격으로만 AI 호출 (rate limiting)
- * - 동일한 이상 패턴은 5분간 캐시된 결과 반환
- * - AI Gateway 호출 실패 시 기본 응답 반환
+* - AI call only at intervals of at least 1 minute (rate limiting)
+* - The same abnormal pattern returns results cached for 5 minutes
+* - Return default response when AI Gateway call fails
  *
  * @example
  * ```typescript
@@ -798,7 +798,7 @@ export async function analyzeAnomalies(
 ): Promise<DeepAnalysisResult> {
   const now = Date.now();
 
-  // 1. 캐시 확인: 동일 이상 패턴이면 캐시된 결과 반환
+// 1. Cache check: If the pattern is the same or higher, cached results are returned.
   const anomalyHash = hashAnomalies(anomalies);
   if (analysisCache &&
       analysisCache.anomalyHash === anomalyHash &&
@@ -807,7 +807,7 @@ export async function analyzeAnomalies(
     return analysisCache.result;
   }
 
-  // 2. Rate limiting: 최소 간격 미달 시 캐시된 결과 반환 또는 기본 응답
+// 2. Rate limiting: Return cached results or default response when the minimum interval is not met.
   if (now - lastAICallTime < MIN_AI_CALL_INTERVAL_MS) {
     console.log('[AnomalyAIAnalyzer] Rate limited, returning cached or default');
     if (analysisCache) {
@@ -817,14 +817,14 @@ export async function analyzeAnomalies(
       severity: 'medium',
       anomalyType: 'performance',
       correlations: [],
-      predictedImpact: 'Rate limited - 분석 대기 중',
-      suggestedActions: ['잠시 후 다시 시도'],
+predictedImpact: 'Rate limited - awaiting analysis',
+suggestedActions: ['Try again later'],
       relatedComponents: [],
       timestamp: new Date().toISOString(),
     };
   }
 
-  // 3. User 프롬프트 구성
+// 3. Configure User prompt
   const userPrompt = `## Detected Anomalies
 ${formatAnomaliesForPrompt(anomalies)}
 
@@ -836,7 +836,7 @@ ${formatLogsForPrompt(logs)}
 
 Analyze these anomalies and provide your assessment.`;
 
-  // 4. AI Gateway 호출
+// 4. Call AI Gateway
   try {
     console.log(`[AnomalyAIAnalyzer] Calling AI Gateway with ${anomalies.length} anomalies...`);
     lastAICallTime = now;
@@ -866,7 +866,7 @@ Analyze these anomalies and provide your assessment.`;
 
     const result = parseAIResponse(content);
 
-    // 5. 캐시 업데이트
+// 5. Cache update
     analysisCache = {
       result,
       anomalyHash,
@@ -880,13 +880,13 @@ Analyze these anomalies and provide your assessment.`;
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[AnomalyAIAnalyzer] AI Gateway Error:', errorMessage);
 
-    // 실패 시 기본 응답
+// default response in case of failure
     return {
       severity: 'medium',
       anomalyType: 'performance',
       correlations: anomalies.map(a => a.description),
-      predictedImpact: `AI 분석 실패: ${errorMessage}`,
-      suggestedActions: ['수동으로 로그 및 메트릭 확인 필요', 'AI Gateway 연결 상태 확인'],
+predictedImpact: `AI analysis failed: ${errorMessage}`,
+suggestedActions: ['Require manual checking of logs and metrics', 'Check AI Gateway connection status'],
       relatedComponents: [],
       timestamp: new Date().toISOString(),
     };
@@ -894,7 +894,7 @@ Analyze these anomalies and provide your assessment.`;
 }
 
 /**
- * 분석 캐시 초기화 (테스트용)
+* Initialize analysis cache (for testing)
  */
 export function clearAnalysisCache(): void {
   analysisCache = null;
@@ -902,7 +902,7 @@ export function clearAnalysisCache(): void {
 }
 
 /**
- * 현재 rate limit 상태 조회
+* Check current rate limit status
  */
 export function getRateLimitStatus(): { canCall: boolean; nextAvailableAt: number } {
   const now = Date.now();
@@ -914,18 +914,18 @@ export function getRateLimitStatus(): { canCall: boolean; nextAvailableAt: numbe
 
 ---
 
-### 3.3 `src/lib/alert-dispatcher.ts` (Layer 3 - 알림 발송기)
+### 3.3 `src/lib/alert-dispatcher.ts` (Layer 3 - Notification dispatcher)
 
-#### 3.3.1 목적
+#### 3.3.1 Purpose
 
-이상 분석 결과를 Slack/Webhook으로 발송하고, 쿨다운 및 중복 알림 방지를 관리한다.
+Anomaly analysis results are sent to Slack/Webhook, and cooldown and duplicate notification prevention are managed.
 
-#### 3.3.2 전체 코드
+#### 3.3.2 Full code
 
 ```typescript
 /**
  * Layer 3: Alert Dispatcher
- * Slack/Webhook 알림 발송 및 쿨다운 관리
+* Slack/Webhook notification sending and cooldown management
  */
 
 import { MetricDataPoint } from '@/types/prediction';
@@ -955,13 +955,13 @@ const DEFAULT_ALERT_CONFIG: AlertConfig = {
 // In-Memory State
 // ============================================================================
 
-/** 현재 알림 설정 */
+/** Current notification settings */
 let currentConfig: AlertConfig = { ...DEFAULT_ALERT_CONFIG };
 
-/** 알림 발송 기록 (최근 24시간) */
+/** Notification sending record (last 24 hours) */
 let alertHistory: AlertRecord[] = [];
 
-/** 이상 유형별 마지막 알림 시간 */
+/** Last notification time by anomaly type */
 const lastAlertByType: Map<string, number> = new Map();
 
 // ============================================================================
@@ -969,7 +969,7 @@ const lastAlertByType: Map<string, number> = new Map();
 // ============================================================================
 
 /**
- * Slack Block Kit 형식의 메시지 생성
+* Create message in Slack Block Kit format
  */
 export function formatSlackMessage(
   analysis: DeepAnalysisResult,
@@ -1081,7 +1081,7 @@ export function formatSlackMessage(
 // ============================================================================
 
 /**
- * UUID v4 생성 (간단 구현)
+* UUID v4 generation (simple implementation)
  */
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -1092,7 +1092,7 @@ function generateUUID(): string {
 }
 
 /**
- * 쿨다운 체크
+* Cooldown check
  */
 function isInCooldown(anomalyType: string): boolean {
   const lastAlert = lastAlertByType.get(anomalyType);
@@ -1103,14 +1103,14 @@ function isInCooldown(anomalyType: string): boolean {
 }
 
 /**
- * 심각도가 알림 대상인지 확인
+* Check if the severity is subject to notification
  */
 function shouldNotifyForSeverity(severity: AISeverity): boolean {
   return currentConfig.thresholds.notifyOn.includes(severity);
 }
 
 /**
- * 오래된 알림 기록 정리 (24시간 이상 된 것)
+* Clean up old notification records (older than 24 hours)
  */
 function cleanupOldAlerts(): void {
   const cutoff = Date.now() - 24 * 60 * 60 * 1000;
@@ -1122,18 +1122,18 @@ function cleanupOldAlerts(): void {
 // ============================================================================
 
 /**
- * 알림 발송
+* Send notifications
  *
- * @param analysis AI 심층 분석 결과
- * @param metrics 현재 메트릭
- * @param anomalies 탐지된 이상 목록
- * @returns 발송된 알림 기록 (발송하지 않은 경우 null)
+* @param analysis AI in-depth analysis results
+* @param metrics Current metrics
+* @param anomalies List of detected anomalies
+* @returns Record of notifications sent (null if not sent)
  *
  * @remarks
- * - 설정이 비활성화되어 있으면 발송하지 않음
- * - 심각도가 notifyOn에 포함되지 않으면 발송하지 않음
- * - 동일 유형 이상에 대해 쿨다운 시간 내 재발송하지 않음
- * - webhookUrl이 없으면 dashboard 채널로만 기록
+* - Do not send if the setting is disabled
+* - Do not send if severity is not included in notifyOn
+* - Does not resend within cooldown time for the same type or higher
+* - If there is no webhookUrl, it is recorded only as a dashboard channel.
  */
 export async function dispatchAlert(
   analysis: DeepAnalysisResult,
@@ -1142,35 +1142,35 @@ export async function dispatchAlert(
 ): Promise<AlertRecord | null> {
   cleanupOldAlerts();
 
-  // 1. 활성화 체크
+// 1. Check activation
   if (!currentConfig.enabled) {
     console.log('[AlertDispatcher] Alerts disabled, skipping');
     return null;
   }
 
-  // 2. 심각도 체크
+// 2. Check severity
   if (!shouldNotifyForSeverity(analysis.severity)) {
     console.log(`[AlertDispatcher] Severity ${analysis.severity} not in notify list, skipping`);
     return null;
   }
 
-  // 3. 쿨다운 체크
+// 3. Cooldown check
   if (isInCooldown(analysis.anomalyType)) {
     console.log(`[AlertDispatcher] Anomaly type ${analysis.anomalyType} in cooldown, skipping`);
     return null;
   }
 
-  // 4. 알림 레코드 생성
+// 4. Create notification record
   const record: AlertRecord = {
     id: generateUUID(),
-    anomaly: anomalies[0], // 대표 이상
+anomaly: anomalies[0], // more than representative
     analysis,
     sentAt: new Date().toISOString(),
     channel: currentConfig.webhookUrl ? 'slack' : 'dashboard',
     success: false,
   };
 
-  // 5. Webhook 발송 (URL이 있는 경우)
+// 5. Send webhook (if URL exists)
   if (currentConfig.webhookUrl) {
     try {
       const slackMessage = formatSlackMessage(analysis, metrics, anomalies);
@@ -1193,12 +1193,12 @@ export async function dispatchAlert(
       console.error('[AlertDispatcher] Webhook error:', errorMessage);
     }
   } else {
-    // Dashboard 전용 알림
+// Dashboard-only notifications
     record.success = true;
     console.log(`[AlertDispatcher] Dashboard alert recorded: ${analysis.severity} ${analysis.anomalyType}`);
   }
 
-  // 6. 상태 업데이트
+// 6. Status update
   lastAlertByType.set(analysis.anomalyType, Date.now());
   alertHistory.push(record);
 
@@ -1210,14 +1210,14 @@ export async function dispatchAlert(
 // ============================================================================
 
 /**
- * 현재 알림 설정 조회
+* View current notification settings
  */
 export function getAlertConfig(): AlertConfig {
   return { ...currentConfig };
 }
 
 /**
- * 알림 설정 업데이트
+* Updated notification settings
  */
 export function updateAlertConfig(updates: Partial<AlertConfig>): AlertConfig {
   if (updates.webhookUrl !== undefined) {
@@ -1238,7 +1238,7 @@ export function updateAlertConfig(updates: Partial<AlertConfig>): AlertConfig {
 }
 
 /**
- * 최근 24시간 알림 기록 조회
+* Check recent 24-hour notification history
  */
 export function getAlertHistory(): AlertRecord[] {
   cleanupOldAlerts();
@@ -1246,7 +1246,7 @@ export function getAlertHistory(): AlertRecord[] {
 }
 
 /**
- * 다음 알림 가능 시간 조회 (쿨다운 중인 경우)
+* Check the next available notification time (if on cooldown)
  */
 export function getNextAlertAvailableAt(anomalyType: string): number | null {
   const lastAlert = lastAlertByType.get(anomalyType);
@@ -1259,7 +1259,7 @@ export function getNextAlertAvailableAt(anomalyType: string): number | null {
 }
 
 /**
- * 알림 기록 초기화 (테스트용)
+* Reset notification history (for testing)
  */
 export function clearAlertHistory(): void {
   alertHistory = [];
@@ -1269,18 +1269,18 @@ export function clearAlertHistory(): void {
 
 ---
 
-### 3.4 `src/lib/anomaly-event-store.ts` (이상 이벤트 저장소)
+### 3.4 `src/lib/anomaly-event-store.ts` (anomaly event store)
 
-#### 3.4.1 목적
+#### 3.4.1 Purpose
 
-탐지된 이상 이벤트를 메모리에 저장하고 관리한다. API에서 조회 및 상태 업데이트에 사용된다.
+Detected abnormal events are stored and managed in memory. Used for queries and status updates in the API.
 
-#### 3.4.2 전체 코드
+#### 3.4.2 Full code
 
 ```typescript
 /**
  * Anomaly Event Store
- * 탐지된 이상 이벤트 메모리 저장소
+* Detected abnormal event memory storage
  */
 
 import { AnomalyEvent, AnomalyResult, DeepAnalysisResult, AlertRecord, AnomalyEventStatus } from '@/types/anomaly';
@@ -1289,20 +1289,20 @@ import { AnomalyEvent, AnomalyResult, DeepAnalysisResult, AlertRecord, AnomalyEv
 // Configuration
 // ============================================================================
 
-/** 최대 이벤트 저장 수 */
+/** Maximum number of events stored */
 const MAX_EVENTS = 100;
 
-/** 이벤트 자동 해결 시간 (밀리초) - 30분간 새로운 이상 없으면 해결 처리 */
+/** Event automatic resolution time (milliseconds) - If there are no new issues for 30 minutes, resolution will be processed */
 const AUTO_RESOLVE_MS = 30 * 60 * 1000;
 
 // ============================================================================
 // In-Memory State
 // ============================================================================
 
-/** 이벤트 저장소 (최신순) */
+/** Event repository (most recent) */
 let events: AnomalyEvent[] = [];
 
-/** 현재 활성 이벤트 ID */
+/** Current active event ID */
 let activeEventId: string | null = null;
 
 // ============================================================================
@@ -1310,7 +1310,7 @@ let activeEventId: string | null = null;
 // ============================================================================
 
 /**
- * UUID v4 생성
+* Generate UUID v4
  */
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -1321,15 +1321,15 @@ function generateUUID(): string {
 }
 
 /**
- * 오래된 이벤트 정리
+* Clean up old events
  */
 function cleanup(): void {
-  // 최대 개수 초과 시 오래된 것부터 제거
+// If the maximum number is exceeded, remove the oldest ones first.
   if (events.length > MAX_EVENTS) {
     events = events.slice(0, MAX_EVENTS);
   }
 
-  // 자동 해결 처리
+// automatic resolution processing
   const now = Date.now();
   for (const event of events) {
     if (event.status === 'active' && now - event.timestamp > AUTO_RESOLVE_MS) {
@@ -1338,7 +1338,7 @@ function cleanup(): void {
     }
   }
 
-  // 활성 이벤트 ID 업데이트
+// Update active event ID
   const activeEvent = events.find(e => e.status === 'active');
   activeEventId = activeEvent?.id || null;
 }
@@ -1348,20 +1348,20 @@ function cleanup(): void {
 // ============================================================================
 
 /**
- * 새 이상 이벤트 생성 또는 기존 활성 이벤트에 추가
+* Create a new anomaly event or add to an existing active event
  *
- * @param anomalies Layer 1에서 탐지된 이상 목록
- * @returns 생성/업데이트된 이벤트
+* @param anomalies List of anomalies detected in Layer 1
+* @returns Created/updated event
  */
 export function createOrUpdateEvent(anomalies: AnomalyResult[]): AnomalyEvent {
   cleanup();
   const now = Date.now();
 
-  // 활성 이벤트가 있으면 이상 목록 업데이트
+// Update anomaly list if there are active events
   if (activeEventId) {
     const activeEvent = events.find(e => e.id === activeEventId);
     if (activeEvent) {
-      // 기존 이상에 없는 새로운 메트릭의 이상만 추가
+// Only add abnormalities of new metrics that are not present in existing abnormalities
       const existingMetrics = new Set(activeEvent.anomalies.map(a => a.metric));
       const newAnomalies = anomalies.filter(a => !existingMetrics.has(a.metric));
 
@@ -1369,7 +1369,7 @@ export function createOrUpdateEvent(anomalies: AnomalyResult[]): AnomalyEvent {
         activeEvent.anomalies.push(...newAnomalies);
       }
 
-      // 기존 이상 업데이트 (같은 메트릭이면 최신 값으로)
+// Update existing error (if the metric is the same, use the latest value)
       for (const anomaly of anomalies) {
         const existingIndex = activeEvent.anomalies.findIndex(a => a.metric === anomaly.metric);
         if (existingIndex >= 0) {
@@ -1381,7 +1381,7 @@ export function createOrUpdateEvent(anomalies: AnomalyResult[]): AnomalyEvent {
     }
   }
 
-  // 새 이벤트 생성
+// create new event
   const newEvent: AnomalyEvent = {
     id: generateUUID(),
     timestamp: now,
@@ -1397,7 +1397,7 @@ export function createOrUpdateEvent(anomalies: AnomalyResult[]): AnomalyEvent {
 }
 
 /**
- * 이벤트에 AI 분석 결과 추가
+* Add AI analysis results to events
  */
 export function addDeepAnalysis(eventId: string, analysis: DeepAnalysisResult): void {
   const event = events.find(e => e.id === eventId);
@@ -1407,7 +1407,7 @@ export function addDeepAnalysis(eventId: string, analysis: DeepAnalysisResult): 
 }
 
 /**
- * 이벤트에 알림 기록 추가
+* Added notification history to events
  */
 export function addAlertRecord(eventId: string, alert: AlertRecord): void {
   const event = events.find(e => e.id === eventId);
@@ -1417,7 +1417,7 @@ export function addAlertRecord(eventId: string, alert: AlertRecord): void {
 }
 
 /**
- * 이벤트 상태 업데이트
+* Event status updates
  */
 export function updateEventStatus(eventId: string, status: AnomalyEventStatus): void {
   const event = events.find(e => e.id === eventId);
@@ -1433,7 +1433,7 @@ export function updateEventStatus(eventId: string, status: AnomalyEventStatus): 
 }
 
 /**
- * 활성 이벤트 해결 처리 (이상이 더 이상 탐지되지 않을 때 호출)
+* Handle active event resolution (called when anomaly is no longer detected)
  */
 export function resolveActiveEventIfExists(): void {
   if (activeEventId) {
@@ -1442,7 +1442,7 @@ export function resolveActiveEventIfExists(): void {
 }
 
 /**
- * 이벤트 목록 조회 (페이지네이션)
+* Event list inquiry (pagination)
  */
 export function getEvents(limit: number = 20, offset: number = 0): { events: AnomalyEvent[]; total: number; activeCount: number } {
   cleanup();
@@ -1458,14 +1458,14 @@ export function getEvents(limit: number = 20, offset: number = 0): { events: Ano
 }
 
 /**
- * 특정 이벤트 조회
+* Look up specific events
  */
 export function getEventById(eventId: string): AnomalyEvent | null {
   return events.find(e => e.id === eventId) || null;
 }
 
 /**
- * 현재 활성 이벤트 ID 조회
+* Look up currently active event ID
  */
 export function getActiveEventId(): string | null {
   cleanup();
@@ -1473,7 +1473,7 @@ export function getActiveEventId(): string | null {
 }
 
 /**
- * 저장소 초기화 (테스트용)
+* Initialize storage (for testing)
  */
 export function clearEvents(): void {
   events = [];
@@ -1483,14 +1483,14 @@ export function clearEvents(): void {
 
 ---
 
-### 3.5 `src/app/api/anomalies/route.ts` (이상 이벤트 API)
+### 3.5 `src/app/api/anomalies/route.ts` (anomaly event API)
 
-#### 3.5.1 전체 코드
+#### 3.5.1 Full code
 
 ```typescript
 /**
  * Anomalies API
- * GET: 이상 이벤트 목록 조회
+* GET: View abnormal event list
  */
 
 import { NextResponse } from 'next/server';
@@ -1504,7 +1504,7 @@ export async function GET(request: Request): Promise<NextResponse<AnomaliesRespo
   const limit = parseInt(url.searchParams.get('limit') || '20', 10);
   const offset = parseInt(url.searchParams.get('offset') || '0', 10);
 
-  // 유효성 검증
+// Validation
   const validLimit = Math.min(Math.max(1, limit), 100);
   const validOffset = Math.max(0, offset);
 
@@ -1520,15 +1520,15 @@ export async function GET(request: Request): Promise<NextResponse<AnomaliesRespo
 
 ---
 
-### 3.6 `src/app/api/anomalies/config/route.ts` (알림 설정 API)
+### 3.6 `src/app/api/anomalies/config/route.ts` (Notification Settings API)
 
-#### 3.6.1 전체 코드
+#### 3.6.1 Full code
 
 ```typescript
 /**
  * Anomaly Alert Config API
- * GET: 현재 알림 설정 조회
- * POST: 알림 설정 업데이트
+* GET: View current notification settings
+* POST: Update notification settings
  */
 
 import { NextResponse } from 'next/server';
@@ -1546,10 +1546,10 @@ export async function GET(): Promise<NextResponse<AlertConfigResponse>> {
   const config = getAlertConfig();
   const history = getAlertHistory();
 
-  // 최근 24시간 알림 수 계산
+// Count the number of notifications in the last 24 hours
   const alertsSent24h = history.length;
 
-  // 다음 알림 가능 시간 (가장 최근 알림 기준)
+// Next notification time (based on most recent notification)
   let nextAlertAvailableAt: string | undefined;
   if (history.length > 0) {
     const lastAlert = history[history.length - 1];
@@ -1573,7 +1573,7 @@ export async function POST(request: Request): Promise<NextResponse<AlertConfigRe
   try {
     const body: AlertConfigUpdateRequest = await request.json();
 
-    // 유효성 검증
+// Validation
     if (body.thresholds?.notifyOn) {
       const validSeverities: AISeverity[] = ['low', 'medium', 'high', 'critical'];
       const invalidSeverities = body.thresholds.notifyOn.filter(s => !validSeverities.includes(s));
@@ -1594,7 +1594,7 @@ export async function POST(request: Request): Promise<NextResponse<AlertConfigRe
       }
     }
 
-    // 설정 업데이트
+// update settings
     const updatedConfig = updateAlertConfig({
       webhookUrl: body.webhookUrl,
       enabled: body.enabled,
@@ -1620,20 +1620,20 @@ export async function POST(request: Request): Promise<NextResponse<AlertConfigRe
 
 ---
 
-## 4. 기존 파일 수정
+## 4. Edit existing files
 
-### 4.1 `src/app/api/metrics/route.ts` 수정
+### 4.1 Modify `src/app/api/metrics/route.ts`
 
-#### 4.1.1 수정 목적
+#### 4.1.1 Purpose of modification
 
-매 메트릭 수집 시 Layer 1 이상 탐지를 수행하고, 이상 발견 시 Layer 2 AI 분석을 비동기로 트리거한다.
+When collecting every metric, Layer 1 anomaly detection is performed, and when an anomaly is detected, Layer 2 AI analysis is triggered asynchronously.
 
-#### 4.1.2 수정 내용
+#### 4.1.2 Changes
 
-**파일 상단에 import 추가:**
+**Add import at the top of the file:**
 
 ```typescript
-// 기존 import 아래에 추가
+// Add below existing import
 import { MetricDataPoint } from '@/types/prediction';
 import { push as pushToMetricsStore, getRecent } from '@/lib/metrics-store';
 import { detectAnomalies } from '@/lib/anomaly-detector';
@@ -1650,16 +1650,16 @@ import { getAllLiveLogs } from '@/lib/log-ingester';
 import { AnomalyResult } from '@/types/anomaly';
 ```
 
-**환경 변수 체크 추가 (파일 상단):**
+**Add environment variable check (top of file):**
 
 ```typescript
-// 이상 탐지 활성화 여부 (기본: 활성화)
+// Whether to enable anomaly detection (default: enabled)
 const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'false';
 ```
 
-**GET 함수 내부, 응답 반환 직전에 이상 탐지 로직 추가:**
+**Inside the GET function, add anomaly detection logic just before returning the response:**
 
-아래 코드를 `const response = NextResponse.json({...})` 직전에 삽입한다.
+Insert the code below just before `const response = NextResponse.json({...})`.
 
 ```typescript
         // ================================================================
@@ -1670,11 +1670,11 @@ const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'fal
 
         if (ANOMALY_DETECTION_ENABLED && !isStressTest) {
           try {
-            // 1. MetricsStore에 데이터 푸시
+// 1. Push data to MetricsStore
             const previousBlock = await l2RpcClient.getBlock({ blockNumber: blockNumber - 1n }).catch(() => null);
             const blockInterval = previousBlock
               ? Number(block.timestamp) - Number(previousBlock.timestamp)
-              : 2; // 기본값 2초
+: 2; // default 2 seconds
 
             const dataPoint: MetricDataPoint = {
               timestamp: Date.now(),
@@ -1687,19 +1687,19 @@ const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'fal
 
             pushToMetricsStore(dataPoint);
 
-            // 2. Layer 1: 통계 기반 이상 탐지
-            const history = getRecent(30); // 최근 30분
+// 2. Layer 1: Statistics-based anomaly detection
+const history = getRecent(30); // Last 30 minutes
             detectedAnomalies = detectAnomalies(dataPoint, history);
 
             if (detectedAnomalies.length > 0) {
               console.log(`[Anomaly] Detected ${detectedAnomalies.length} anomalies`);
 
-              // 3. 이벤트 저장소에 기록
+// 3. Record to event store
               const event = createOrUpdateEvent(detectedAnomalies);
               activeAnomalyEventId = event.id;
 
-              // 4. Layer 2: AI 심층 분석 (비동기, 응답 블로킹 안 함)
-              // 첫 번째 이상 또는 심층 분석이 아직 없는 경우에만 트리거
+// 4. Layer 2: AI deep analysis (asynchronous, no response blocking)
+// Trigger only if there is no first anomaly or deep dive yet
               if (!event.deepAnalysis) {
                 (async () => {
                   try {
@@ -1707,7 +1707,7 @@ const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'fal
                     const analysis = await analyzeAnomalies(detectedAnomalies, dataPoint, logs);
                     addDeepAnalysis(event.id, analysis);
 
-                    // 5. Layer 3: 알림 발송
+// 5. Layer 3: Send notification
                     const alertRecord = await dispatchAlert(analysis, dataPoint, detectedAnomalies);
                     if (alertRecord) {
                       addAlertRecord(event.id, alertRecord);
@@ -1718,7 +1718,7 @@ const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'fal
                 })();
               }
             } else {
-              // 이상이 없으면 활성 이벤트 해결 처리
+// If all goes well, handle active event resolution
               resolveActiveEventIfExists();
               activeAnomalyEventId = getActiveEventId() || undefined;
             }
@@ -1728,23 +1728,23 @@ const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'fal
         }
 ```
 
-**응답 객체에 anomalies 필드 추가:**
+**Add anomalies field to response object:**
 
-기존 응답 JSON에 다음 필드를 추가한다.
+Add the following fields to the existing response JSON.
 
 ```typescript
         const response = NextResponse.json({
             timestamp: new Date().toISOString(),
             metrics: {
-                // ... 기존 필드 유지 ...
+// ...keep existing fields...
             },
             components,
             cost: {
-                // ... 기존 필드 유지 ...
+// ...keep existing fields...
             },
             status: "healthy",
             stressMode: isStressTest,
-            // === 신규 필드 추가 ===
+// === Add new field ===
             anomalies: detectedAnomalies,
             activeAnomalyEventId,
         });
@@ -1752,29 +1752,29 @@ const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'fal
 
 ---
 
-### 4.2 `src/app/page.tsx` 수정
+### 4.2 Modify `src/app/page.tsx`
 
-#### 4.2.1 수정 목적
+#### 4.2.1 Purpose of modification
 
-- 활성 이상 이벤트가 있을 때 상단에 알림 배너 표시
-- AI Monitor 섹션에 이상 탐지 피드 추가
+- Display notification banner at the top when there is an active abnormal event
+- Added anomaly detection feed to AI Monitor section
 
-#### 4.2.2 인터페이스 확장
+#### 4.2.2 Interface extensions
 
-**MetricData 인터페이스에 필드 추가:**
+**Add fields to the MetricData interface:**
 
 ```typescript
 interface MetricData {
-  // ... 기존 필드 유지 ...
+// ...keep existing fields...
   anomalies?: AnomalyResult[];
   activeAnomalyEventId?: string;
 }
 ```
 
-**AnomalyResult 타입 import (또는 로컬 정의):**
+**AnomalyResult type import (or local definition):**
 
 ```typescript
-// 파일 상단에 추가
+// add to top of file
 interface AnomalyResult {
   isAnomaly: boolean;
   metric: string;
@@ -1786,17 +1786,17 @@ interface AnomalyResult {
 }
 ```
 
-#### 4.2.3 상태 추가
+#### 4.2.3 Add status
 
 ```typescript
-// 기존 상태 아래에 추가
+// add below existing state
 const [activeAnomalies, setActiveAnomalies] = useState<AnomalyResult[]>([]);
 ```
 
-#### 4.2.4 fetchData 함수 수정
+#### 4.2.4 Modification of fetchData function
 
 ```typescript
-        // 기존 setCurrent(data) 아래에 추가
+// Add below existing setCurrent(data)
         if (data.anomalies && data.anomalies.length > 0) {
           setActiveAnomalies(data.anomalies);
         } else {
@@ -1804,7 +1804,7 @@ const [activeAnomalies, setActiveAnomalies] = useState<AnomalyResult[]>([]);
         }
 ```
 
-#### 4.2.5 이상 알림 배너 컴포넌트 추가 (header 바로 아래)
+#### 4.2.5 or later Add notification banner component (just below header)
 
 ```typescript
       {/* Anomaly Alert Banner */}
@@ -1831,9 +1831,9 @@ const [activeAnomalies, setActiveAnomalies] = useState<AnomalyResult[]>([]);
       )}
 ```
 
-#### 4.2.6 AI Monitor 섹션 내 이상 피드 추가
+#### 4.2.6 Add anomaly feed in AI Monitor section
 
-AI Monitor 영역의 Log Stream 부분에 이상 탐지 피드를 추가한다.
+Add an anomaly detection feed to the Log Stream section of the AI ​​Monitor area.
 
 ```typescript
             {/* 1. Log Stream (Left) */}
@@ -1842,7 +1842,7 @@ AI Monitor 영역의 Log Stream 부분에 이상 탐지 피드를 추가한다.
 
               <div className="space-y-4">
 
-                {/* === Anomaly Detection Feed (신규 추가) === */}
+{/* === Anomaly Detection Feed (new addition) === */}
                 {activeAnomalies.length > 0 && (
                   <div className="mb-4 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
                     <div className="flex items-center gap-2 mb-2">
@@ -1865,24 +1865,24 @@ AI Monitor 영역의 Log Stream 부분에 이상 탐지 피드를 추가한다.
                   </div>
                 )}
 
-                {/* ... 기존 Stress Logs, Analyzing State, AI Result 등 유지 ... */}
+{/* ... Maintain existing Stress Logs, Analyzing State, AI Result, etc. ... */}
 ```
 
 ---
 
-## 5. API 명세
+## 5. API Specification
 
 ### 5.1 GET /api/anomalies
 
-**설명**: 이상 이벤트 목록 조회
+**Description**: View a list of abnormal events
 
-**요청 파라미터:**
-| 파라미터 | 타입 | 기본값 | 설명 |
+**Request Parameters:**
+| parameters | Type | default | Description |
 |---------|------|--------|------|
-| limit | number | 20 | 반환할 이벤트 수 (1-100) |
-| offset | number | 0 | 건너뛸 이벤트 수 |
+| limit | number | 20 | Number of events to return (1-100) |
+| offset | number | 0 | Number of events to skip |
 
-**응답 예시:**
+**Example response:**
 ```json
 {
   "events": [
@@ -1896,7 +1896,7 @@ AI Monitor 영역의 Log Stream 부분에 이상 탐지 피드를 추가한다.
           "value": 0.5,
           "zScore": -8.5,
           "direction": "drop",
-          "description": "CPU 사용률 0%로 급락: 이전 평균 45.2% → 현재 0.5%. 프로세스 크래시 의심.",
+"description": "CPU utilization plummets to 0%: previous average 45.2% → current 0.5%. Process crash suspected.",
           "rule": "zero-drop"
         }
       ],
@@ -1904,8 +1904,8 @@ AI Monitor 영역의 Log Stream 부분에 이상 탐지 피드를 추가한다.
         "severity": "critical",
         "anomalyType": "liveness",
         "correlations": ["CPU crash detected", "Process termination suspected"],
-        "predictedImpact": "L2 노드 완전 중단, 트랜잭션 처리 불가",
-        "suggestedActions": ["op-geth 프로세스 상태 확인", "kubectl logs 확인", "노드 재시작 고려"],
+"predictedImpact": "L2 node completely crashed, unable to process transactions",
+"suggestedActions": ["Check op-geth process status", "Check kubectl logs", "Consider restarting node"],
         "relatedComponents": ["op-geth"],
         "timestamp": "2026-02-06T12:00:00.000Z"
       },
@@ -1929,9 +1929,9 @@ AI Monitor 영역의 Log Stream 부분에 이상 탐지 피드를 추가한다.
 
 ### 5.2 GET /api/anomalies/config
 
-**설명**: 현재 알림 설정 조회
+**Description**: View current notification settings
 
-**응답 예시:**
+**Example response:**
 ```json
 {
   "config": {
@@ -1949,9 +1949,9 @@ AI Monitor 영역의 Log Stream 부분에 이상 탐지 피드를 추가한다.
 
 ### 5.3 POST /api/anomalies/config
 
-**설명**: 알림 설정 업데이트
+**Description**: Updated notification settings
 
-**요청 바디:**
+**Request Body:**
 ```json
 {
   "webhookUrl": "https://hooks.slack.com/services/new/webhook/url",
@@ -1963,11 +1963,11 @@ AI Monitor 영역의 Log Stream 부분에 이상 탐지 피드를 추가한다.
 }
 ```
 
-**응답**: GET /api/anomalies/config과 동일한 형식
+**Response**: Same format as GET /api/anomalies/config
 
-### 5.4 GET /api/metrics (확장)
+### 5.4 GET /api/metrics (extension)
 
-**기존 응답에 추가된 필드:**
+**Fields added to existing response:**
 
 ```json
 {
@@ -1984,7 +1984,7 @@ AI Monitor 영역의 Log Stream 부분에 이상 탐지 피드를 추가한다.
       "value": 1500,
       "zScore": 3.2,
       "direction": "spike",
-      "description": "TxPool 300초간 단조 증가: 200 → 1500 (+1300). Batcher 장애 의심.",
+"description": "TxPool monotonic increase for 300 seconds: 200 → 1500 (+1300). Suspected Batcher failure.",
       "rule": "monotonic-increase"
     }
   ],
@@ -1994,9 +1994,9 @@ AI Monitor 영역의 Log Stream 부분에 이상 탐지 피드를 추가한다.
 
 ---
 
-## 6. AI 프롬프트 전문
+## 6. AI Prompt Professional
 
-### 6.1 Layer 2 System Prompt (전문)
+### 6.1 Layer 2 System Prompt (Full text)
 
 ```
 You are a Senior SRE for an Optimism L2 Rollup Network performing anomaly analysis.
@@ -2040,8 +2040,8 @@ Return ONLY a JSON object (no markdown code blocks):
 
 ```
 ## Detected Anomalies
-1. [cpuUsage] CPU 사용률 0%로 급락: 이전 평균 45.2% → 현재 0.5%. 프로세스 크래시 의심. (rule: zero-drop, z-score: -8.50)
-2. [txPoolPending] TxPool 300초간 단조 증가: 200 → 1500 (+1300). Batcher 장애 의심. (rule: monotonic-increase, z-score: 0.00)
+1. [cpuUsage] CPU usage plummets to 0%: previous average 45.2% → current 0.5%. Suspected process crash. (rule: zero-drop, z-score: -8.50)
+2. [txPoolPending] TxPool monotonic increase for 300 seconds: 200 → 1500 (+1300). Suspected Batcher disorder. (rule: monotonic-increase, z-score: 0.00)
 
 ## Current Metrics
 - CPU Usage: 0.50%
@@ -2073,62 +2073,62 @@ Analyze these anomalies and provide your assessment.
 
 ---
 
-## 7. 환경 변수
+## 7. Environment variables
 
-### 7.1 신규 환경 변수
+### 7.1 New environment variables
 
-`.env.local`에 다음을 추가한다:
+Add the following to `.env.local`:
 
 ```bash
 # ========================================
 # Anomaly Detection Configuration
 # ========================================
 
-# 이상 탐지 활성화 여부 (기본: true)
-# 'false'로 설정 시 이상 탐지 파이프라인 비활성화
+# Whether to enable anomaly detection (default: true)
+# Disable anomaly detection pipeline when set to 'false'
 ANOMALY_DETECTION_ENABLED=true
 
-# Slack/Discord 웹훅 URL (선택사항)
-# 설정 시 high/critical 이상에 대해 알림 발송
+# Slack/Discord webhook URL (optional)
+# Send notification for high/critical abnormalities when setting
 ALERT_WEBHOOK_URL=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
 ```
 
-### 7.2 기존 환경 변수 (참조)
+### 7.2 Existing environment variables (reference)
 
-이미 정의되어 있어야 하는 환경 변수:
+Environment variables that should already be defined:
 
 ```bash
-# AI Gateway (필수)
+# AI Gateway (required)
 AI_GATEWAY_URL=https://api.ai.tokamak.network
 ANTHROPIC_API_KEY=your-api-key
 
-# K8s (로그 수집용)
+# K8s (for log collection)
 K8S_NAMESPACE=default
 K8S_APP_PREFIX=op
 ```
 
 ---
 
-## 8. 테스트 검증
+## 8. Test verification
 
-### 8.1 curl 테스트 명령어
+### 8.1 curl test command
 
-**이상 이벤트 목록 조회:**
+**View list of abnormal events:**
 ```bash
 curl -s http://localhost:3002/api/anomalies | jq
 ```
 
-**이상 이벤트 페이지네이션:**
+**Above event pagination:**
 ```bash
 curl -s "http://localhost:3002/api/anomalies?limit=5&offset=0" | jq
 ```
 
-**알림 설정 조회:**
+**View notification settings:**
 ```bash
 curl -s http://localhost:3002/api/anomalies/config | jq
 ```
 
-**알림 설정 업데이트:**
+**Updated notification settings:**
 ```bash
 curl -s -X POST http://localhost:3002/api/anomalies/config \
   -H "Content-Type: application/json" \
@@ -2142,122 +2142,122 @@ curl -s -X POST http://localhost:3002/api/anomalies/config \
   }' | jq
 ```
 
-**메트릭 API에서 이상 필드 확인:**
+**Check for anomaly fields in Metrics API:**
 ```bash
 curl -s http://localhost:3002/api/metrics | jq '.anomalies, .activeAnomalyEventId'
 ```
 
-### 8.2 UI 테스트 시나리오
+### 8.2 UI Test Scenario
 
-**시나리오 1: 정상 상태**
-1. 대시보드 접속
-2. 이상 알림 배너가 표시되지 않음
-3. AI Monitor의 "Real-time Anomalies" 섹션이 없음
+**Scenario 1: Steady State**
+1. Access dashboard
+2. Anomaly notification banner is not displayed
+3. No “Real-time Anomalies” section in AI Monitor
 
-**시나리오 2: 이상 탐지**
-1. 메트릭에서 이상이 탐지됨 (예: TxPool 급증)
-2. 상단에 빨간색 이상 알림 배너 표시
-3. AI Monitor에 "Real-time Anomalies" 섹션 표시
-4. "Analyze Now" 버튼 클릭 시 AI 분석 트리거
+**Scenario 2: Anomaly Detection**
+1. An anomaly is detected in a metric (e.g. TxPool spike)
+2. Display a red abnormality notification banner at the top
+3. Show “Real-time Anomalies” section in AI Monitor
+4. Trigger AI analysis when clicking the “Analyze Now” button
 
-**시나리오 3: 이상 해결**
-1. 이상 원인이 해결됨
-2. 30분 후 또는 다음 메트릭 수집 시 이상 배너 사라짐
-3. /api/anomalies에서 해당 이벤트 status가 "resolved"로 변경
+**Scenario 3: Troubleshooting**
+1. The cause of the problem has been resolved
+2. The anomaly banner disappears after 30 minutes or when the next metric is collected.
+3. The event status changes to “resolved” in /api/anomalies.
 
-### 8.3 엣지 케이스
+### 8.3 Edge cases
 
-**빈 히스토리:**
-- MetricsStore에 데이터가 5개 미만일 때
-- 이상 탐지 스킵, 빈 배열 반환
+**Empty History:**
+- When there are less than 5 data in MetricsStore
+- Skip anomaly detection, return empty array
 
-**모든 메트릭 정상:**
-- Z-Score가 임계값 미만
-- 규칙 기반 탐지도 해당 없음
-- 빈 배열 반환, 활성 이벤트 해결 처리
+**All metrics normal:**
+- Z-Score is below the threshold
+- Rule-based detection is also not applicable
+- Return empty array, handle active event resolution
 
-**연속 이상 탐지:**
-- 첫 번째 이상 → 새 이벤트 생성, AI 분석 트리거
-- 두 번째 이상 (1초 후) → 기존 이벤트에 추가, AI 분석 재트리거 안 함 (rate limit)
-- AI 분석 완료 → 알림 발송 (쿨다운 시작)
-- 세 번째 이상 (5분 후) → 기존 이벤트에 추가, 알림 쿨다운으로 재발송 안 함
+**Continuous anomaly detection:**
+- First abnormality → create new event, trigger AI analysis
+- Second or later (after 1 second) → Add to existing event, do not retrigger AI analysis (rate limit)
+- AI analysis completed → Notification sent (cooldown begins)
+- Third time or more (after 5 minutes) → Added to existing event, does not resend due to notification cooldown
 
 ---
 
-## 9. 의존관계 및 구현 순서
+## 9. Dependencies and implementation order
 
-### 9.1 전제 조건
+### 9.1 Prerequisites
 
-이 Proposal을 구현하기 전에 **Proposal 1 (MetricsStore)**이 먼저 구현되어 있어야 한다:
+Before implementing this Proposal, **Proposal 1 (MetricsStore)** must be implemented first:
 
 - `src/lib/metrics-store.ts` - `push()`, `getRecent()` 함수
 - `src/types/prediction.ts` - `MetricDataPoint` 타입
 
-### 9.2 구현 순서
+### 9.2 Implementation order
 
-| 단계 | 파일 | 설명 |
+| steps | file | Description |
 |------|------|------|
-| 1 | `src/types/anomaly.ts` | 타입 정의 |
-| 2 | `src/lib/anomaly-detector.ts` | Layer 1 통계 탐지기 |
-| 3 | `src/lib/anomaly-ai-analyzer.ts` | Layer 2 AI 분석기 |
-| 4 | `src/lib/alert-dispatcher.ts` | Layer 3 알림 발송기 |
-| 5 | `src/lib/anomaly-event-store.ts` | 이벤트 저장소 |
-| 6 | `src/app/api/anomalies/route.ts` | 이벤트 API |
-| 7 | `src/app/api/anomalies/config/route.ts` | 설정 API |
-| 8 | `src/app/api/metrics/route.ts` | 메트릭 API 수정 |
-| 9 | `src/app/page.tsx` | 프론트엔드 수정 |
+| 1 | `src/types/anomaly.ts` | type definition |
+| 2 | `src/lib/anomaly-detector.ts` | Layer 1 statistical detector |
+| 3 | `src/lib/anomaly-ai-analyzer.ts` | Layer 2 AI Analyzer |
+| 4 | `src/lib/alert-dispatcher.ts` | Layer 3 notification sender |
+| 5 | `src/lib/anomaly-event-store.ts` | Event Store |
+| 6 | `src/app/api/anomalies/route.ts` | Event API |
+| 7 | `src/app/api/anomalies/config/route.ts` | Settings API |
+| 8 | `src/app/api/metrics/route.ts` | Metric API Modification |
+| 9 | `src/app/page.tsx` | Frontend Edit |
 
-### 9.3 후속 Proposal과의 연동
+### 9.3 Linkage with follow-up proposals
 
-**Proposal 3 (RCA Engine)에서 활용:**
-- `AnomalyEvent`의 `deepAnalysis` 결과를 RCA Engine의 입력으로 사용
-- 심각한 이상(critical) 탐지 시 자동으로 RCA 트리거 가능
+**Used in Proposal 3 (RCA Engine):**
+- Use `deepAnalysis` results of `AnomalyEvent` as input to RCA Engine
+- Automatically triggers RCA when critical abnormality is detected
 
 ---
 
-## 10. 파일 구조 요약
+## 10. Summary of file structure
 
 ```
 src/
 ├── types/
-│   ├── scaling.ts        # 기존 (AISeverity 등)
-│   ├── prediction.ts     # Proposal 1에서 추가 (MetricDataPoint)
-│   └── anomaly.ts        # ★ 신규
+│ ├── scaling.ts # Existing (AISeverity, etc.)
+│ ├── prediction.ts # Added from Proposal 1 (MetricDataPoint)
+│ └── anomaly.ts # ★ New
 ├── lib/
-│   ├── ai-analyzer.ts        # 기존 (로그 분석)
-│   ├── log-ingester.ts       # 기존 (로그 수집)
-│   ├── metrics-store.ts      # Proposal 1에서 추가
-│   ├── anomaly-detector.ts   # ★ 신규 (Layer 1)
-│   ├── anomaly-ai-analyzer.ts # ★ 신규 (Layer 2)
-│   ├── alert-dispatcher.ts   # ★ 신규 (Layer 3)
-│   └── anomaly-event-store.ts # ★ 신규
+│ ├── ai-analyzer.ts # Existing (log analysis)
+│ ├── log-ingester.ts # existing (log collection)
+│ ├── metrics-store.ts # Added in Proposal 1
+│ ├── anomaly-detector.ts # ★ New (Layer 1)
+│ ├── anomaly-ai-analyzer.ts # ★ New (Layer 2)
+│ ├── alert-dispatcher.ts # ★ New (Layer 3)
+│ └── anomaly-event-store.ts # ★ New
 └── app/
     ├── api/
-    │   ├── metrics/route.ts     # ★ 수정
+│ ├── metrics/route.ts # ★ Edit
     │   └── anomalies/
-    │       ├── route.ts         # ★ 신규
-    │       └── config/route.ts  # ★ 신규
-    └── page.tsx                 # ★ 수정
+│ ├── route.ts # ★ New
+│ └── config/route.ts # ★ New
+└── page.tsx #★ Edit
 ```
 
 ---
 
-## 11. 체크리스트
+## 11. Checklist
 
-구현 완료 후 다음 항목을 확인한다:
+After completing implementation, check the following items:
 
-- [ ] `npm run lint` 오류 없음
-- [ ] `npm run build` 성공
-- [ ] GET /api/anomalies 정상 응답
-- [ ] GET /api/anomalies/config 정상 응답
-- [ ] POST /api/anomalies/config 설정 업데이트 동작
-- [ ] GET /api/metrics에 `anomalies` 필드 포함
-- [ ] 정상 상태에서 이상 배너 미표시
-- [ ] 이상 시뮬레이션 시 배너 표시
-- [ ] AI 분석 트리거 및 결과 표시
-- [ ] Slack 웹훅 알림 발송 (설정 시)
-- [ ] 쿨다운 동작 확인
+- [ ] No error with `npm run lint`
+- [ ] `npm run build` success
+- [ ] GET /api/anomalies Normal response
+- [ ] GET /api/anomalies/config Normal response
+- [ ] POST /api/anomalies/config configuration update operation
+- [ ] Include `anomalies` field in GET /api/metrics
+- [ ] Abnormal banner not displayed in normal state
+- Display banner when simulating above [ ]
+- [ ] AI analysis trigger and result display
+- [ ] Send Slack webhook notification (if set)
+- [ ] Check cooldown operation
 
 ---
 
-**문서 끝**
+**End of document**

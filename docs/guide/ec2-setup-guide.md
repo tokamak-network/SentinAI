@@ -1,248 +1,248 @@
-# SentinAI EC2 설치 가이드 (비개발자용)
+# SentinAI EC2 Installation Guide (for non-developers)
 
-AWS EC2에 SentinAI를 설치하고, 외부에서 HTTPS로 대시보드에 접근할 수 있도록 하는 전체 과정을 안내합니다.
+We will guide you through the entire process of installing SentinAI on AWS EC2 and making your dashboard accessible externally via HTTPS.
 
 ---
 
-## 시나리오 선택
+## Scenario selection
 
-설치 전에 사용 환경을 확인하세요.
+Please check your usage environment before installation.
 
-| 시나리오 | 설명 | 건너뛰는 단계 |
+| Scenario | Description | Skipping Steps |
 |----------|------|-------------|
-| **A. EKS 모니터링** | EKS 클러스터의 L2 노드를 모니터링 + 자동 스케일링 | 없음 (전체 진행) |
-| **B. AI 모니터링 전용** | EKS 없이 L2 체인 모니터링 + AI 분석만 사용 | 2단계 (IAM), 홉 제한 설정 |
+| **A. EKS Monitoring** | Monitoring + auto-scaling of L2 nodes in EKS cluster | None (full progress) |
+| **B. AI monitoring only** | L2 chain monitoring without EKS + AI analysis only | Step 2 (IAM), set hop limits |
 
-> **시나리오 B 사용 시**: K8s Pod 상태 패널에 "Error" 표시가 나타나지만 정상입니다.
-> L1/L2 블록 모니터링, AI 이상 탐지, 비용 추적, NLOps 채팅 등 핵심 기능은 모두 작동합니다.
+> **When using Scenario B**: K8s Pod status panel shows "Error", but this is normal.
+> Core features such as L1/L2 block monitoring, AI anomaly detection, cost tracking, NLOps chat, etc. are all functional.
 
 ---
 
-## 시작 전 준비물
+## Preparation before starting
 
-| 항목 | 시나리오 A | 시나리오 B | 어디서 얻나요? |
+| Item | Scenario A | Scenario B | Where do you get it? |
 |------|:---------:|:---------:|--------------|
-| AWS 계정 | 필수 | 필수 | https://aws.amazon.com |
-| L2 RPC URL | 필수 | 필수 | 인프라 팀에서 제공 (예: `https://rpc.titok.tokamak.network`) |
-| AI API Key | 필수 | 필수 | https://console.anthropic.com (Anthropic 권장) |
-| EKS 클러스터 이름 | 필수 | 불필요 | 인프라 팀에서 제공 (예: `my-l2-cluster`) |
-| Cloudflare 계정 | 필수 | 필수 | https://dash.cloudflare.com (무료) |
-| 도메인 1개 | 필수 | 필수 | Cloudflare에서 직접 구매 가능 (연 $2~$10) |
+| AWS Account | Required | Required | https://aws.amazon.com |
+| L2 RPC URL | Required | Required | Provided by the infrastructure team (e.g. `https://rpc.titok.tokamak.network`) |
+| AI API Key | Required | Required | https://console.anthropic.com (Anthropic recommended) |
+| EKS cluster name | Required | Not necessary | Provided by the infrastructure team (e.g. `my-l2-cluster`) |
+| Cloudflare Account | Required | Required | https://dash.cloudflare.com (free) |
+| 1 domain | Required | Required | Available directly from Cloudflare ($2-$10 per year) |
 
-> AI API Key가 없다면 https://console.anthropic.com 에서 회원가입 후 API Keys 메뉴에서 생성합니다.
-
----
-
-## 전체 흐름
-
-**시나리오 A (EKS 모니터링)**:
-```
-[1] EC2 생성 → [2] IAM 설정 → [3] Cloudflare 준비 → [4] SSH 접속 → [5] 설치 실행 → 완료
-    (5분)         (5분)          (10분)              (1분)           (10분)
-```
-
-**시나리오 B (AI 모니터링 전용)**:
-```
-[1] EC2 생성 → [3] Cloudflare 준비 → [4] SSH 접속 → [5] 설치 실행 → 완료
-    (5분)         (10분)              (1분)           (10분)
-```
+> If you do not have an AI API Key, sign up at https://console.anthropic.com and create one from the API Keys menu.
 
 ---
 
-## 1단계: EC2 인스턴스 생성
+## Entire flow
 
-### 1-1. EC2 콘솔 접속
+**Scenario A (EKS Monitoring)**:
+```
+[1] Create EC2 → [2] IAM settings → [3] Prepare Cloudflare → [4] SSH connection → [5] Execute installation → Complete
+(5 minutes) (5 minutes) (10 minutes) (1 minute) (10 minutes)
+```
 
-1. https://console.aws.amazon.com 로그인
-2. 상단 검색창에 **EC2** 입력 → 클릭
-3. 리전 확인: 우측 상단에서 **서울 (ap-northeast-2)** 선택
-4. 좌측 메뉴 **인스턴스** → **인스턴스 시작** 버튼 클릭
+**Scenario B (AI monitoring only)**:
+```
+[1] Create EC2 → [3] Prepare Cloudflare → [4] SSH connection → [5] Execute installation → Complete
+(5 minutes) (10 minutes) (1 minute) (10 minutes)
+```
 
-### 1-2. 인스턴스 설정
+---
 
-| 항목 | 설정값 | 설명 |
+## Step 1: Create an EC2 instance
+
+### 1-1. EC2 console access
+
+1. Log in to https://console.aws.amazon.com
+2. Enter **EC2** in the search box at the top → Click
+3. Check region: Select **Seoul (ap-northeast-2)** in the upper right corner
+4. Left menu **Instance** → Click **Start Instance** button
+
+### 1-2. Instance Settings
+
+| Item | Setting value | Description |
 |------|--------|------|
-| 이름 | `SentinAI` | 원하는 이름 |
-| AMI | **Amazon Linux 2023** | 기본 선택된 것 사용 |
-| 인스턴스 유형 | **t3.medium** | 2 vCPU, 4 GiB 메모리 (월 ~$36) |
-| 키 페어 | 새로 생성 또는 기존 선택 | SSH 접속에 필요. 새로 생성 시 `.pem` 파일 다운로드 필수 |
-| 스토리지 | **20 GiB gp3** | 기본 8 → 20으로 변경 (Docker 이미지 빌드 공간) |
+| Name | `SentinAI` | desired name |
+| AMI | **Amazon Linux 2023** | Use default selection |
+| instance type | **t3.medium** | 2 vCPU, 4 GiB memory (~$36 per month) |
+| key pair | Create new or select existing | Required for SSH connection. When creating a new file, `.pem` file must be downloaded |
+| Storage | **20 GiB gp3** | Change default 8 → 20 (Docker image build space) |
 
-### 1-3. 네트워크 설정
+### 1-3. network settings
 
-**인스턴스 시작** 화면에서 **네트워크 설정** 섹션의 **편집** 버튼을 클릭합니다.
+On the **Launch Instance** screen, click the **Edit** button in the **Network Settings** section.
 
-**VPC**: 시나리오 A는 EKS 클러스터와 같은 VPC를 선택합니다. 시나리오 B는 기본 VPC를 사용합니다.
-> EKS API가 Private Endpoint인 경우 반드시 같은 VPC에 있어야 합니다.
-> 어떤 VPC인지 모르겠으면 인프라 팀에 문의하세요.
+**VPC**: Scenario A selects the same VPC as the EKS cluster. Scenario B uses a default VPC.
+> If the EKS API is a Private Endpoint, it must be in the same VPC.
+> If you are not sure which VPC you have, contact your infrastructure team.
 
-**보안 그룹**: "보안 그룹 생성"을 선택하고 다음 규칙을 추가합니다:
+**Security Group**: Select “Create Security Group” and add the following rules:
 
-| 유형 | 포트 | 소스 | 용도 |
+| Type | port | Source | Use |
 |------|------|------|------|
-| SSH | 22 | 내 IP | EC2 관리용 접속 |
+| SSH | 22 | My IP | EC2 management access |
 
-> Cloudflare Tunnel을 사용하므로 대시보드 포트(3002)를 열 필요가 없습니다.
-> Tunnel은 아웃바운드 443 포트만 사용하며, 인바운드 포트를 열지 않아도 외부 접속이 가능합니다.
+> Since we use the Cloudflare Tunnel, there is no need to open the dashboard port (3002).
+> Tunnel only uses outbound port 443, and external connection is possible without opening the inbound port.
 
-**아웃바운드 규칙**은 기본값(모든 트래픽 허용)을 유지합니다.
+**Outbound Rules** keep the default (allow all traffic).
 
-### 1-4. 고급 세부 정보
+### 1-4. Advanced details
 
-같은 화면 하단의 **고급 세부 정보**를 펼칩니다.
+Expand **Advanced Details** at the bottom of the same screen.
 
-**IAM 인스턴스 프로파일**: 다음 단계(2단계)에서 생성한 역할을 선택합니다.
-> 먼저 인스턴스를 생성하고, 2단계에서 역할을 만든 뒤 나중에 연결해도 됩니다.
-> **시나리오 B**: IAM 역할이 필요 없으므로 비워둡니다.
+**IAM Instance Profile**: Select the role you created in the next step (step 2).
+> You can create an instance first, create a role in step 2, and connect it later.
+> **Scenario B**: IAM role is not required, so leave blank.
 
-**메타데이터 버전**: V2만 (토큰 필요)
+**Metadata version**: V2 only (token required)
 
-**메타데이터 응답 홉 제한**: **시나리오 A만** `2`로 변경 (기본값 1에서 변경)
-> Docker 컨테이너에서 AWS 인증이 작동하려면 반드시 **2**로 설정해야 합니다.
-> **시나리오 B**: 기본값(1)을 유지합니다.
+**Metadata Response Hop Limit**: **Scenario A only** Changed to `2` (from default 1)
+> Must be set to **2** for AWS authentication to work in Docker containers.
+> **Scenario B**: Keep default (1).
 
-### 1-5. 인스턴스 시작
+### 1-5. Instance launch
 
-**인스턴스 시작** 버튼을 클릭합니다. 1~2분 후 인스턴스가 실행됩니다.
+Click the **Launch Instance** button. After a minute or two, your instance will be running.
 
-인스턴스 목록에서 SentinAI 인스턴스를 클릭하면 **퍼블릭 IPv4 주소**를 확인할 수 있습니다 (예: `3.35.xxx.xxx`).
-
----
-
-## 2단계: IAM 역할 생성 (EKS 접근 권한)
-
-> **시나리오 B**: 이 단계를 건너뛰고 [3단계](#3단계-cloudflare-설정-https-공개-접근)로 이동합니다.
-
-SentinAI가 EKS 클러스터를 모니터링하려면 AWS 권한이 필요합니다.
-
-### 2-1. IAM 역할 만들기
-
-1. AWS 콘솔 상단 검색창 → **IAM** → 클릭
-2. 좌측 메뉴 **역할** → **역할 생성** 버튼
-3. 설정:
-   - 신뢰할 수 있는 엔터티: **AWS 서비스**
-   - 사용 사례: **EC2** 선택 → 다음
-4. 권한 정책 추가:
-   - 검색창에 `EKS` 입력
-   - **AmazonEKSClusterPolicy** 체크
-   - 검색창에 `STS` 입력
-   - **AWSSecurityTokenServiceFullAccess** 체크
-   - 다음
-5. 역할 이름: `SentinAI-EC2-Role` → **역할 생성**
-
-### 2-2. EC2에 역할 연결
-
-1. EC2 콘솔 → 인스턴스 목록 → SentinAI 인스턴스 선택
-2. **작업** → **보안** → **IAM 역할 수정**
-3. `SentinAI-EC2-Role` 선택 → **IAM 역할 업데이트**
-
-### 2-3. EKS 클러스터에 권한 매핑 (인프라 팀 요청)
-
-인프라 팀에게 다음 내용을 전달하여 EKS 클러스터에 SentinAI의 접근 권한을 추가해달라고 요청합니다:
-
-```
-SentinAI EC2의 IAM 역할을 EKS aws-auth ConfigMap에 추가해주세요.
-
-역할 ARN: arn:aws:iam::<계정ID>:role/SentinAI-EC2-Role
-(IAM → 역할 → SentinAI-EC2-Role → ARN 복사)
-
-필요 권한: Pod 조회, StatefulSet 조회/패치
-```
-
-> 이 단계를 건너뛰면 SentinAI는 K8s 모니터링 없이 AI 분석 기능만 사용할 수 있습니다.
+Click on your SentinAI instance in the instance list to see its **public IPv4 address** (e.g. `3.35.xxx.xxx`).
 
 ---
 
-## 3단계: Cloudflare 설정 (HTTPS 공개 접근)
+## Step 2: Create IAM role (EKS access)
 
-Cloudflare Tunnel을 사용하면:
-- `https://sentinai.yourdomain.com` 같은 주소로 접근
-- HTTPS 자동 적용 (암호화)
-- 이메일 인증 (허가된 사람만 접근)
-- EC2의 인바운드 포트를 열지 않아도 됨
+> **Scenario B**: Skip this step and go to [Step 3](#Step 3-cloudflare-settings-https-public-access).
 
-> 이 단계에서 **Tunnel 토큰**을 복사해둡니다. 5단계 설치 시 입력합니다.
+SentinAI requires AWS permissions to monitor your EKS cluster.
 
-### 3-1. Cloudflare 계정 생성 및 도메인 추가
+### 2-1. Create an IAM role
 
-1. https://dash.cloudflare.com 접속 → 계정 생성 (무료)
-2. **도메인 추가** 또는 **도메인 등록**
-   - 도메인이 없으면: 좌측 메뉴 **도메인 등록** → 원하는 도메인 검색 → 구매 (`.xyz`는 연 ~$2)
-   - 이미 있으면: **사이트 추가** → 도메인 입력 → Free 플랜 선택 → 네임서버 변경 안내 따르기
+1. Search box at the top of AWS console → **IAM** → Click
+2. Left menu **Role** → **Create role** button
+3. Settings:
+- Trusted Entity: **AWS Service**
+- Use case: Select **EC2** → Next
+4. Add permission policy:
+- Enter ‘EKS’ in the search box
+- Check **AmazonEKSClusterPolicy**
+- Enter ‘STS’ in the search box
+- **AWSSecurityTokenServiceFullAccess** 체크
+- next
+5. Role name: `SentinAI-EC2-Role` → **Create role**
 
-### 3-2. Tunnel 생성
+### 2-2. Associate role to EC2
 
-1. Cloudflare 대시보드 좌측 메뉴 → **Zero Trust** 클릭
-   (처음이면 Zero Trust 팀 이름 설정 필요 — 아무 이름이나 입력)
+1. EC2 Console → Instance List → Select SentinAI instance
+2. **Actions** → **Security** → **Edit IAM Role**
+3. Select `SentinAI-EC2-Role` → **Update IAM role**
+
+### 2-3. Mapping permissions to EKS clusters (infrastructure team request)
+
+Ask your infrastructure team to add SentinAI access to your EKS cluster by providing the following:
+
+```
+Please add SentinAI EC2's IAM role to EKS aws-auth ConfigMap.
+
+Role ARN: arn:aws:iam::<AccountID>:role/SentinAI-EC2-Role
+(IAM → Role → SentinAI-EC2-Role → Copy ARN)
+
+Required permissions: Pod query, StatefulSet query/patch
+```
+
+> If you skip this step, SentinAI will only be able to use AI analysis features without K8s monitoring.
+
+---
+
+## Step 3: Set up Cloudflare (HTTPS public access)
+
+Using Cloudflare Tunnel:
+- Access an address such as `https://sentinai.yourdomain.com`
+- Automatically apply HTTPS (encryption)
+- Email authentication (only authorized people access)
+- No need to open inbound ports on EC2
+
+> Copy the **Tunnel token** in this step. Enter during Step 5 installation.
+
+### 3-1. Create a Cloudflare account and add a domain
+
+1. Access https://dash.cloudflare.com → Create account (free)
+2. **Add domain** or **Register domain**
+- If you do not have a domain: Left menu **Register domain** → Search for desired domain → Purchase (`.xyz` costs ~$2 per year)
+- If you already have one: **Add site** → Enter domain → Select Free plan → Follow name server change instructions
+
+### 3-2. Tunnel creation
+
+1. Left menu of Cloudflare dashboard → Click **Zero Trust**
+(If this is your first time, you will need to set a Zero Trust team name — enter any name)
 2. **Networks** → **Tunnels** → **Create a tunnel** 클릭
-3. **Cloudflared** 선택 → 다음
-4. Tunnel 이름: `sentinai` → **Save tunnel**
-5. **Install and run a connector** 화면이 나타남
-   - 여기서 토큰을 복사합니다
-   - `cloudflared service install` 뒤에 나오는 긴 문자열이 토큰입니다
-   - 예: `eyJhIjoiYWJjMTIz...` (매우 긴 문자열)
-   - 이 토큰을 메모장에 복사해둡니다 (5단계에서 사용)
-   - **다음** 클릭
-6. **Public Hostname** 설정:
-   - Subdomain: `sentinai` (또는 원하는 이름)
-   - Domain: 드롭다운에서 도메인 선택
+3. Select **Cloudflared** → Next
+4. Tunnel name: `sentinai` → **Save tunnel**
+5. The **Install and run a connector** screen appears.
+- Copy the token here
+- The long string following `cloudflared service install` is the token.
+- Example: `eyJhIjoiYWJjMTIz...` (very long string)
+- Copy this token to notepad (used in step 5)
+- Click **Next**
+6. **Public Hostname** Settings:
+- Subdomain: `sentinai` (or desired name)
+- Domain: Select domain from dropdown
    - Type: `HTTP`
    - URL: `sentinai:8080`
-   - **Save tunnel** 클릭
+- Click **Save tunnel**
 
-> URL에 `sentinai:8080`을 정확히 입력하세요. `http://`는 붙이지 않습니다.
-> `sentinai`는 Docker 컨테이너 이름이고, `8080`은 내부 포트입니다.
+> Enter `sentinai:8080` exactly in the URL. `http://` is not appended.
+> `sentinai` is the Docker container name, and `8080` is the internal port.
 
-### 3-3. Access 정책 설정 (인증)
+### 3-3. Access policy settings (authentication)
 
 1. Zero Trust 좌측 메뉴 → **Access** → **Applications** → **Add an application**
-2. **Self-hosted** 선택
-3. 설정:
+2. Select **Self-hosted**
+3. Settings:
    - Application name: `SentinAI Dashboard`
    - Session Duration: `24 hours`
    - Application domain:
      - Subdomain: `sentinai`
-     - Domain: 드롭다운에서 선택
-4. 다음 → **Add a policy**:
+- Domain: Select from dropdown
+4. Next → **Add a policy**:
    - Policy name: `Allowed Users`
    - Action: **Allow**
-   - Include 규칙:
+- Include rules:
      - Selector: **Emails**
-     - Value: 접근을 허용할 이메일 주소 입력 (예: `admin@company.com`)
-     - 여러 명이면 하나씩 추가
-5. 다음 → **Add application**
+- Value: Enter the email address to allow access (e.g. `admin@company.com`)
+- If there are multiple people, add one by one.
+5. Next → **Add application**
 
-> 이제 `https://sentinai.yourdomain.com` 접속 시 이메일 입력 화면이 나타나고,
-> 허용된 이메일로 OTP 코드를 받아야만 대시보드에 접근할 수 있습니다.
+> Now, when you access `https://sentinai.yourdomain.com`, an email input screen appears,
+> You must receive an OTP code to your permitted email address to access the dashboard.
 
 ---
 
-## 4단계: EC2에 SSH 접속
+## Step 4: SSH into EC2
 
 ### Mac/Linux
 
-터미널을 열고 다음 명령어를 실행합니다:
+Open a terminal and run the following command:
 
 ```bash
-# 키 파일 권한 설정 (최초 1회)
-chmod 400 ~/Downloads/키파일이름.pem
+# Set key file permissions (first time)
+chmod 400 ~/Downloads/keyfilename.pem
 
-# SSH 접속
-ssh -i ~/Downloads/키파일이름.pem ec2-user@퍼블릭IP주소
+# SSH connection
+ssh -i ~/Downloads/Key file name.pem ec2-user@public IP address
 ```
 
-예시:
+example:
 ```bash
 ssh -i ~/Downloads/SentinAI-key.pem ec2-user@3.35.123.456
 ```
 
 ### Windows
 
-1. PuTTY 다운로드: https://www.putty.org
-2. PuTTYgen으로 `.pem` → `.ppk` 변환
-3. PuTTY에서 호스트: `ec2-user@퍼블릭IP주소`, 인증에 `.ppk` 파일 지정
+1. Download PuTTY: https://www.putty.org
+2. Convert `.pem` → `.ppk` with PuTTYgen
+3. Host in PuTTY: `ec2-user@publicIP address`, specify `.ppk` file for authentication.
 
-접속에 성공하면 다음과 같은 화면이 표시됩니다:
+If the connection is successful, the following screen will be displayed:
 
 ```
    ,     #_
@@ -257,101 +257,101 @@ ssh -i ~/Downloads/SentinAI-key.pem ec2-user@3.35.123.456
 
 ---
 
-## 5단계: SentinAI 설치
+## Step 5: Install SentinAI
 
-SSH로 접속한 상태에서 아래 명령어를 실행합니다.
+While connected via SSH, run the command below.
 
-### 5-1. 설치 스크립트 실행
+### 5-1. Run the installation script
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/tokamak-network/SentinAI/main/scripts/install.sh | bash
 ```
 
-스크립트가 자동으로 Docker, Docker Compose, Git을 설치하고, SentinAI 소스 코드를 다운로드합니다.
+The script automatically installs Docker, Docker Compose, Git, and downloads SentinAI source code.
 
-### 5-2. 설정 입력
+### 5-2. Enter settings
 
-스크립트가 다음 정보를 순서대로 물어봅니다.
+The script asks for the following information in order:
 
-**시나리오 A (EKS 모니터링)**:
+**Scenario A (EKS Monitoring)**:
 ```
---- SentinAI 환경 설정 ---
+--- SentinAI Preferences ---
 
-  L2 RPC URL (필수): https://rpc.titok.tokamak.network    ← L2 체인 주소 입력
+L2 RPC URL (required): https://rpc.titok.tokamak.network ← Enter L2 chain address
 
-  AI Provider 선택:
-    1) Anthropic (권장)
+Select AI Provider:
+1) Anthropic (recommended)
     2) OpenAI
     3) Gemini
-  선택 [1]: 1                                               ← Enter 또는 1 입력
+Select [1]: 1 ← Enter or Enter 1
 
-  Anthropic API Key:                                        ← API 키 입력 (화면에 표시되지 않음)
+Anthropic API Key: ← Enter API key (not displayed on screen)
 
-  AWS EKS Cluster Name (K8s 모니터링용, Enter로 건너뛰기): my-l2-cluster
-                                                            ← EKS 클러스터 이름 입력
+AWS EKS Cluster Name (for K8s monitoring, press Enter to skip): my-l2-cluster
+← Enter EKS cluster name
 
-  Cloudflare Tunnel Token (선택, Enter로 건너뛰기):          ← 3단계에서 복사한 토큰 붙여넣기
+Cloudflare Tunnel Token (select, skip to Enter): ← Paste the token copied in step 3
 
-  Slack Webhook URL (선택, Enter로 건너뛰기):                ← Enter로 건너뛰기
+Slack Webhook URL (select, press Enter to skip): ← Enter to skip
 ```
 
-**시나리오 B (AI 모니터링 전용)**:
+**Scenario B (AI monitoring only)**:
 ```
---- SentinAI 환경 설정 ---
+--- SentinAI Preferences ---
 
-  L2 RPC URL (필수): https://rpc.titok.tokamak.network    ← L2 체인 주소 입력
+L2 RPC URL (required): https://rpc.titok.tokamak.network ← Enter L2 chain address
 
-  AI Provider 선택:
-    1) Anthropic (권장)
-  선택 [1]: 1                                               ← Enter
+Select AI Provider:
+1) Anthropic (recommended)
+Select [1]: 1 ← Enter
 
-  Anthropic API Key:                                        ← API 키 입력
+Anthropic API Key: ← Enter API key
 
-  AWS EKS Cluster Name (K8s 모니터링용, Enter로 건너뛰기):   ← Enter로 건너뛰기
-  [WARNING] AWS_CLUSTER_NAME 미설정. K8s 모니터링 없이 시뮬레이션 모드로 실행됩니다.
-  [SentinAI] EKS 클러스터 미설정 → 시뮬레이션 모드 활성화 (SCALING_SIMULATION_MODE=true)
+AWS EKS Cluster Name (for K8s monitoring, press Enter to skip): ← Enter to skip
+[WARNING] AWS_CLUSTER_NAME not set. K8s runs in simulation mode without monitoring.
+[SentinAI] EKS cluster not set → Simulation mode enabled (SCALING_SIMULATION_MODE=true)
 
-  Cloudflare Tunnel Token (선택, Enter로 건너뛰기):          ← 3단계에서 복사한 토큰 붙여넣기
+Cloudflare Tunnel Token (select, skip to Enter): ← Paste the token copied in step 3
 
-  Slack Webhook URL (선택, Enter로 건너뛰기):                ← Enter로 건너뛰기
+Slack Webhook URL (select, press Enter to skip): ← Enter to skip
 ```
 
-### 5-3. 빌드 및 실행
+### 5-3. Build and run
 
-설정 입력이 끝나면 자동으로 Docker 이미지 빌드가 시작됩니다. Tunnel 토큰을 입력했으면 Cloudflare Tunnel도 자동으로 활성화됩니다.
+After entering the settings, the Docker image build will automatically start. Once you have entered the Tunnel token, Cloudflare Tunnel will also be automatically enabled.
 
 ```
-[SentinAI] Cloudflare Tunnel 활성화됨.
-[SentinAI] Docker 이미지 빌드 중... (첫 빌드 시 5-10분 소요)
-[SentinAI] 서비스 시작 중...
-[SentinAI] 서비스 시작 대기 (30초)...
+[SentinAI] Cloudflare Tunnel enabled.
+[SentinAI] Building Docker image... (First build takes 5-10 minutes)
+[SentinAI] Service starting...
+[SentinAI] Waiting for service to start (30 seconds)...
 [SentinAI] ============================================
-[SentinAI]   SentinAI 설치 완료!
+[SentinAI] SentinAI installation complete!
 [SentinAI] ============================================
-[INFO] 대시보드: Cloudflare Tunnel 경유 (HTTPS)
+[INFO] Dashboard: Via Cloudflare Tunnel (HTTPS)
 ```
 
-### 5-4. 접속 확인
+### 5-4. Check connection
 
-브라우저에서 `https://sentinai.yourdomain.com` 에 접속합니다.
+Access `https://sentinai.yourdomain.com` in your browser.
 
-1. Cloudflare Access 로그인 화면이 나타남
-2. 허용된 이메일 주소 입력
-3. 이메일로 받은 6자리 코드 입력
-4. SentinAI 대시보드가 표시되면 성공
+1. Cloudflare Access login screen appears
+2. Enter permitted email addresses
+3. Enter the 6-digit code received by email
+4. Success when SentinAI dashboard is displayed
 
 ---
 
-## 자동화 배포 (선택)
+## Automated deployment (optional)
 
-CI/CD, Terraform user-data, 또는 반복 배포 시 대화형 입력 없이 자동 설치할 수 있습니다.
+Install silently without interactive input for CI/CD, Terraform user-data, or recurring deployments.
 
-### 환경변수 기반 비대화형 모드
+### Non-interactive mode based on environment variables
 
-필수 환경변수(`SENTINAI_L2_RPC_URL` + `SENTINAI_AI_KEY`)가 설정되면 대화형 프롬프트를 건너뛰고 자동으로 설치합니다.
+Once the required environment variables (`SENTINAI_L2_RPC_URL` + `SENTINAI_AI_KEY`) are set, it will skip the interactive prompt and install silently.
 
 ```bash
-# 비대화형 설치 (시나리오 A: EKS 모니터링)
+# Non-interactive installation (Scenario A: EKS monitoring)
 SENTINAI_L2_RPC_URL="https://rpc.titok.tokamak.network" \
 SENTINAI_AI_PROVIDER=anthropic \
 SENTINAI_AI_KEY="sk-ant-api03-..." \
@@ -361,7 +361,7 @@ bash <(curl -sSL https://raw.githubusercontent.com/tokamak-network/SentinAI/main
 ```
 
 ```bash
-# 비대화형 설치 (시나리오 B: AI 모니터링 전용)
+# Non-interactive installation (Scenario B: AI monitoring only)
 SENTINAI_L2_RPC_URL="https://rpc.titok.tokamak.network" \
 SENTINAI_AI_PROVIDER=anthropic \
 SENTINAI_AI_KEY="sk-ant-api03-..." \
@@ -369,24 +369,24 @@ SENTINAI_TUNNEL_TOKEN="eyJhIjoiYWJj..." \
 bash <(curl -sSL https://raw.githubusercontent.com/tokamak-network/SentinAI/main/scripts/install.sh)
 ```
 
-> `SENTINAI_CLUSTER_NAME`을 생략하면 자동으로 `SCALING_SIMULATION_MODE=true`가 설정됩니다.
+> If you omit `SENTINAI_CLUSTER_NAME`, `SCALING_SIMULATION_MODE=true` will be automatically set.
 
-### 환경변수 목록
+### List of environment variables
 
-| 환경변수 | 필수 | 설명 |
+| Environment variables | Required | Description |
 |---------|:----:|------|
-| `SENTINAI_L2_RPC_URL` | 필수 | L2 체인 RPC 주소 |
-| `SENTINAI_AI_KEY` | 필수 | AI API 키 |
-| `SENTINAI_AI_PROVIDER` | 선택 | `anthropic`(기본), `openai`, `gemini` |
-| `SENTINAI_CLUSTER_NAME` | 선택 | EKS 클러스터 이름 (미설정 시 시뮬레이션 모드) |
-| `SENTINAI_TUNNEL_TOKEN` | 선택 | Cloudflare Tunnel 토큰 |
-| `SENTINAI_WEBHOOK_URL` | 선택 | Slack 알림 웹훅 URL |
-| `SENTINAI_DIR` | 선택 | 설치 경로 (기본: `/opt/sentinai`) |
-| `SENTINAI_BRANCH` | 선택 | Git 브랜치 (기본: `main`) |
+| `SENTINAI_L2_RPC_URL` | Required | L2 chain RPC address |
+| `SENTINAI_AI_KEY` | Required | AI API Key |
+| `SENTINAI_AI_PROVIDER` | Select | `anthropic` (default), `openai`, `gemini` |
+| `SENTINAI_CLUSTER_NAME` | Select | EKS cluster name (simulation mode if not set) |
+| `SENTINAI_TUNNEL_TOKEN` | Select | Cloudflare Tunnel Token |
+| `SENTINAI_WEBHOOK_URL` | Select | Slack notification webhook URL |
+| `SENTINAI_DIR` | Select | Installation path (default: `/opt/sentinai`) |
+| `SENTINAI_BRANCH` | Select | Git branch (default: `main`) |
 
-### EC2 User Data 예시
+### EC2 User Data Example
 
-EC2 인스턴스 생성 시 **고급 세부 정보 → 사용자 데이터**에 아래 스크립트를 입력하면 인스턴스 시작 시 자동 설치됩니다:
+When creating an EC2 instance, enter the script below in **Advanced Details → User Data** and it will be automatically installed when the instance starts:
 
 ```bash
 #!/bin/bash
@@ -397,40 +397,40 @@ SENTINAI_TUNNEL_TOKEN="eyJhIjoiYWJj..." \
 bash <(curl -sSL https://raw.githubusercontent.com/tokamak-network/SentinAI/main/scripts/install.sh)
 ```
 
-> User Data에 API 키를 직접 입력하면 AWS 콘솔에서 누구나 확인할 수 있습니다.
-> 프로덕션에서는 AWS Secrets Manager 또는 SSM Parameter Store 사용을 권장합니다.
+> If you enter the API key directly in User Data, anyone can check it in the AWS console.
+> In production, we recommend using AWS Secrets Manager or SSM Parameter Store.
 
 ---
 
-## 일상 운영
+## Daily operations
 
-SSH로 EC2에 접속한 후 `/opt/sentinai` 디렉토리에서 실행합니다.
+After connecting to EC2 via SSH, run it from the `/opt/sentinai` directory.
 
-### 서비스 상태 확인
+### Check service status
 
 ```bash
 cd /opt/sentinai
 sudo docker compose --profile tunnel ps
 ```
 
-### 로그 보기
+### View log
 
 ```bash
-# 전체 로그 (실시간)
+# Full log (real time)
 sudo docker compose --profile tunnel logs -f
 
-# SentinAI 로그만
+# SentinAI log only
 sudo docker compose logs -f sentinai
 
-# Tunnel 로그만
+# Tunnel log only
 sudo docker compose logs -f cloudflared
 ```
 
-`Ctrl + C`로 로그 보기를 종료합니다.
+Exit log view with `Ctrl + C`.
 
-### SentinAI 업데이트
+### SentinAI updates
 
-새 버전이 배포되었을 때:
+When a new version is released:
 
 ```bash
 cd /opt/sentinai
@@ -439,14 +439,14 @@ sudo docker compose --profile tunnel build
 sudo docker compose --profile tunnel up -d
 ```
 
-### 서비스 중지
+### Service stop
 
 ```bash
 cd /opt/sentinai
 sudo docker compose --profile tunnel down
 ```
 
-### 서비스 재시작
+### Restart service
 
 ```bash
 cd /opt/sentinai
@@ -455,84 +455,84 @@ sudo docker compose --profile tunnel restart
 
 ---
 
-## 문제 해결
+## Troubleshooting
 
-### "Cloudflare Tunnel 접속이 안 됩니다"
+### "Can't access Cloudflare Tunnel"
 
-| 확인 사항 | 명령어 또는 방법 |
+| Checklist | Command or method |
 |-----------|---------------|
-| Tunnel 컨테이너 실행 중? | `sudo docker compose --profile tunnel ps` → sentinai-tunnel 확인 |
-| SentinAI healthy? | 같은 명령으로 sentinai가 `healthy`인지 확인 |
-| Tunnel 에러 로그 | `sudo docker compose logs cloudflared` |
-| 토큰이 올바른가? | `grep CLOUDFLARE_TUNNEL_TOKEN /opt/sentinai/.env.local` |
-| DNS 설정 완료? | Cloudflare 대시보드 → DNS에 CNAME 레코드가 있는지 확인 |
+| Tunnel container running? | `sudo docker compose --profile tunnel ps` → check sentinai-tunnel |
+| Is SentinAI healthy? | Check if sentinai is `healthy` with the same command |
+| Tunnel error log | `sudo docker compose logs cloudflared` |
+| Is the token correct? | `grep CLOUDFLARE_TUNNEL_TOKEN /opt/sentinai/.env.local` |
+| DNS setup complete? | Cloudflare Dashboard → Check if CNAME record exists in DNS |
 
-### "K8s 모니터링이 작동하지 않습니다"
+### "K8s monitoring is not working"
 
-**시나리오 B (EKS 없이 사용) 시**: Components 패널에 "Error" 표시가 나타나는 것은 정상입니다. K8s 연결 없이는 Pod 상태를 조회할 수 없지만, 나머지 기능(블록 모니터링, AI 분석, 비용 추적 등)은 정상 작동합니다.
+**For Scenario B (Used without EKS)**: It is normal for an "Error" indicator to appear in the Components panel. You cannot query Pod status without a K8s connection, but the remaining functions (block monitoring, AI analysis, cost tracking, etc.) will work normally.
 
-**시나리오 A (EKS 모니터링) 시**:
+**Scenario A (EKS monitoring)**:
 
-| 확인 사항 | 명령어 또는 방법 |
+| Checklist | Command or method |
 |-----------|---------------|
-| IAM 역할 연결? | EC2 콘솔 → 인스턴스 → 보안 탭 → IAM 역할 확인 |
-| EKS RBAC 매핑? | 인프라 팀에 2-3단계 완료 여부 확인 |
-| 메타데이터 홉 제한? | EC2 콘솔 → 인스턴스 → 작업 → 인스턴스 설정 → 인스턴스 메타데이터 옵션 수정 → 응답 홉 제한 = 2 |
-| 같은 VPC인가? | EC2와 EKS가 같은 VPC에 있는지 인프라 팀에 확인 |
+| IAM role association? | EC2 Console → Instance → Security tab → Check IAM role |
+| EKS RBAC mapping? | Verify with your infrastructure team that steps 2-3 have been completed |
+| Metadata hop limit? | EC2 Console → Instances → Operations → Instance Settings → Edit Instance Metadata Options → Response Hop Limit = 2 |
+| Is it the same VPC? | Verify with your infrastructure team that EC2 and EKS are in the same VPC |
 
-### "Docker 빌드가 실패합니다"
+### "Docker build fails"
 
 ```bash
-# 디스크 용량 확인
+# Check disk capacity
 df -h
 
-# 용량 부족 시 Docker 캐시 정리
+Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
 sudo docker system prune -af
 ```
 
-스토리지가 부족하면 EC2 콘솔에서 볼륨 크기를 늘릴 수 있습니다:
-EC2 → 볼륨 → 수정 → 크기 변경 → `sudo growpart /dev/xvda 1 && sudo xfs_growfs /`
+If you run out of storage, you can increase the volume size from the EC2 console:
+EC2 → Volume → Modify → Change size → `sudo growpart /dev/xvda 1 && sudo xfs_growfs /`
 
 ---
 
-## 비용 참고
+## Cost Note
 
-| 항목 | 월 예상 비용 |
+| Item | Estimated monthly costs |
 |------|------------|
-| EC2 t3.medium (서울) | ~$36 |
+| EC2 t3.medium (Seoul) | ~$36 |
 | EBS 20 GiB gp3 | ~$2 |
-| 데이터 전송 (아웃바운드) | ~$1-5 |
-| Cloudflare (Free 플랜) | 무료 |
-| 도메인 (.xyz) | ~$2/년 |
-| Anthropic API (Haiku 위주) | ~$5-20 (사용량에 따라) |
-| **합계** | **~$45-65/월** |
+| Data transfer (outbound) | ~$1-5 |
+| Cloudflare (Free plan) | Free |
+| domain (.xyz) | ~$2/year |
+| Anthropic API (mainly Haiku) | ~$5-20 (depending on usage) |
+| **Total** | **~$45-65/month** |
 
-> EC2를 사용하지 않을 때 중지(Stop)하면 인스턴스 비용이 발생하지 않습니다 (EBS 스토리지 비용만 과금).
-> 중지: EC2 콘솔 → 인스턴스 선택 → 인스턴스 상태 → 인스턴스 중지
-> 재시작: 인스턴스 상태 → 인스턴스 시작 → SSH 접속 후 `cd /opt/sentinai && sudo docker compose --profile tunnel up -d`
+> If you stop EC2 when not in use, no instance costs are incurred (only EBS storage costs are charged).
+> Stop: EC2 console → Select instance → Instance status → Stop instance
+> Restart: Instance status → Start instance → After connecting to SSH, `cd /opt/sentinai && sudo docker compose --profile tunnel up -d`
 
 ---
 
-## 요약 체크리스트
+## Summary Checklist
 
-### 시나리오 A (EKS 모니터링)
+### Scenario A (EKS monitoring)
 
-- [ ] EC2 인스턴스 생성 (t3.medium, Amazon Linux 2023, 20 GiB, 홉 제한 2)
-- [ ] IAM 역할 생성 및 EC2에 연결
-- [ ] 인프라 팀에 EKS RBAC 매핑 요청
-- [ ] Cloudflare 계정 + 도메인 설정
-- [ ] Cloudflare Tunnel 생성 + 토큰 복사
-- [ ] Cloudflare Access 정책 설정 (허용 이메일)
-- [ ] SSH로 EC2 접속
-- [ ] install.sh 실행 (L2 RPC URL, AI API Key, EKS 클러스터 이름, Tunnel 토큰 입력)
-- [ ] https://sentinai.도메인.com 접속 확인
+- [ ] Create EC2 instance (t3.medium, Amazon Linux 2023, 20 GiB, hop limit 2)
+- [ ] Create IAM role and connect to EC2
+- [ ] Request EKS RBAC mapping from infrastructure team
+- [ ] Cloudflare account + domain settings
+- [ ] Create Cloudflare Tunnel + Copy Token
+- [ ] Cloudflare Access policy settings (allowed emails)
+- [ ] Connect to EC2 via SSH
+- [ ] Run install.sh (enter L2 RPC URL, AI API Key, EKS cluster name, Tunnel token)
+- [ ] Check connection to https://sentinai.domain.com
 
-### 시나리오 B (AI 모니터링 전용)
+### Scenario B (AI monitoring only)
 
-- [ ] EC2 인스턴스 생성 (t3.medium, Amazon Linux 2023, 20 GiB)
-- [ ] Cloudflare 계정 + 도메인 설정
-- [ ] Cloudflare Tunnel 생성 + 토큰 복사
-- [ ] Cloudflare Access 정책 설정 (허용 이메일)
-- [ ] SSH로 EC2 접속
-- [ ] install.sh 실행 (L2 RPC URL, AI API Key, Tunnel 토큰 입력 — EKS 클러스터 이름은 Enter로 건너뛰기)
-- [ ] https://sentinai.도메인.com 접속 확인
+- [ ] Create EC2 instance (t3.medium, Amazon Linux 2023, 20 GiB)
+- [ ] Cloudflare account + domain settings
+- [ ] Create Cloudflare Tunnel + Copy Token
+- [ ] Cloudflare Access policy settings (allowed emails)
+- [ ] Connect to EC2 via SSH
+- [ ] Run install.sh (Enter L2 RPC URL, AI API Key, Tunnel token — Skip EKS cluster name with Enter)
+- [ ] Check connection to https://sentinai.domain.com

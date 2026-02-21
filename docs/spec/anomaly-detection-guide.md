@@ -1,251 +1,251 @@
-# Anomaly Detection 기준 및 동작 방식
+# Anomaly Detection standards and operation method
 
-## 📋 개요
+## 📋 Overview
 
-SentinAI의 이상 탐지(Anomaly Detection)는 **3계층 파이프라인**으로 구성되어 있습니다:
+Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
 
-1. **Layer 1**: 통계 기반 이상 탐지 (Z-Score + Rule-based)
-2. **Layer 2**: AI 의미 분석 (Claude 기반 근본원인 분석)
-3. **Layer 3**: 알림 발송 (Slack/Webhook)
+1. **Layer 1**: Statistical-based anomaly detection (Z-Score + Rule-based)
+2. **Layer 2**: AI semantic analysis (Claude-based root cause analysis)
+3. **Layer 3**: Send notification (Slack/Webhook)
 
 ---
 
-## 🔍 Layer 1: 통계 기반 이상 탐지
+## 🔍 Layer 1: Statistics-based anomaly detection
 
-### 개요
+### outline
 
-Layer 1은 **실시간 메트릭 데이터**를 분석하여 즉각적인 이상을 탐지합니다.
+Layer 1 analyzes **real-time metric data** to detect immediate anomalies.
 
 **파일**: `src/lib/anomaly-detector.ts`
 
-### 감지 메트릭
+### Detection Metrics
 
-| 메트릭 | 단위 | 설명 |
+| metrics | Unit | Description |
 |--------|------|------|
-| **cpuUsage** | % | L2 노드 CPU 사용률 (0~100%) |
-| **txPoolPending** | 개 | 대기 중인 트랜잭션 개수 |
-| **gasUsedRatio** | % | 블록의 가스 사용 비율 (0~1) |
-| **l2BlockHeight** | 번호 | L2 최신 블록 높이 |
-| **l2BlockInterval** | 초 | 연속 블록 생성 간격 |
+| **cpuUsage** | % | L2 node CPU utilization (0~100%) |
+| **txPoolPending** | dog | Number of pending transactions |
+| **gasUsedRatio** | % | Block's gas usage rate (0~1) |
+| **l2BlockHeight** | number | L2 latest block height |
+| **l2BlockInterval** | seconds | Consecutive block generation interval |
 
-### 탐지 규칙
+### Detection rules
 
-#### 1️⃣ Z-Score 기반 탐지 (가장 일반적)
+#### 1️⃣ Z-Score based detection (most common)
 
-**기준**: 평균으로부터 표준편차의 2.5배 이상 벗어남
+**Criteria**: Deviating from the mean by more than 2.5 times the standard deviation
 
 ```
-Z-Score = (현재값 - 평균) / 표준편차
+Z-Score = (Current value - Average) / Standard deviation
 
-탐지 조건: |Z-Score| > 2.5
+Detection Condition: |Z-Score| > 2.5
 ```
 
-**예시**:
+**example**:
 ```
-CPU 사용률 평균: 30%
-표준편차: 5%
-현재값: 50%
+Average CPU utilization: 30%
+Standard deviation: 5%
+Current value: 50%
 
 Z-Score = (50 - 30) / 5 = 4.0
-→ 4.0 > 2.5 이므로 이상 탐지! (Spike)
+→ Since 4.0 > 2.5, anomaly detected! (Spike)
 ```
 
-**설정값**:
+**Settings**:
 ```typescript
-const Z_SCORE_THRESHOLD = 2.5;  // 신뢰도 99.3%
-const MIN_HISTORY_POINTS = 5;   // 최소 이력 데이터 5개
+const Z_SCORE_THRESHOLD = 2.5;  // Confidence 99.3%
+const MIN_HISTORY_POINTS = 5;   // Minimum 5 historical data
 ```
 
-**적용 대상**:
-- CPU Usage (Z-Score 이용)
-- TxPool Pending (Z-Score 이용)
-- Gas Used Ratio (Z-Score 이용)
-- L2 Block Interval (Z-Score 이용)
+**Applies to**:
+- CPU Usage (using Z-Score)
+- TxPool Pending (using Z-Score)
+- Gas Used Ratio (using Z-Score)
+- L2 Block Interval (using Z-Score)
 
 ---
 
-#### 2️⃣ CPU 0% Drop (프로세스 크래시)
+#### 2️⃣ CPU 0% Drop (Process Crash)
 
-**기준**: CPU가 갑자기 0%로 떨어짐
+**Baseline**: CPU suddenly drops to 0%
 
 ```
-최근 3개 데이터의 평균 CPU >= 10%
-→ 현재 CPU < 1%
-→ 프로세스 크래시 의심
+Average CPU >= 10% for last 3 data
+→ Current CPU < 1%
+→ Suspected process crash
 ```
 
-**설정값**:
+**Settings**:
 ```typescript
 if (currentCpu < 1 && recentMean >= 10) {
-  // 프로세스 크래시로 판단
+// Determined as a process crash
 }
 ```
 
-**예시**:
+**example**:
 ```
-최근 CPU 변화: 35% → 32% → 38% (평균 35%)
-현재 CPU: 0%
+Recent CPU change: 35% → 32% → 38% (average 35%)
+Current CPU: 0%
 
-→ 이상 탐지! (Drop, rule: zero-drop)
-→ 심각도: Critical (프로세스 중단)
+→ Anomaly detection! (Drop, rule: zero-drop)
+→ Severity: Critical (process aborted)
 ```
 
 ---
 
 #### 3️⃣ L2 Block Height Plateau (Sequencer 정지)
 
-**기준**: 블록 높이가 2분 이상 변화 없음
+**Criteria**: Block height does not change for more than 2 minutes
 
 ```
-최근 2분간 모든 블록 높이 동일
-→ Sequencer 정지 의심
+All blocks have the same height for the last 2 minutes
+→ Sequencer stoppage suspicion
 ```
 
-**설정값**:
+**Settings**:
 ```typescript
 const BLOCK_PLATEAU_SECONDS = 120;  // 2분
 
-// 검사
-if (모든_최근_높이가_동일 && 지속시간 >= 120초) {
-  // Sequencer 정지로 판단
+// test
+if (all_recent_heights_same_&& duration >= 120 seconds) {
+// Judged as Sequencer stop
 }
 ```
 
-**예시**:
+**example**:
 ```
-시간    블록높이  상태
+time block height state
 14:00  12340    ✓
 14:30  12340    ✓
-15:00  12340    ✓ ← 60분 동안 변화 없음
+15:00 12340 ✓ ← No change for 60 minutes
 
-→ 이상 탐지! (Plateau, rule: plateau)
-→ 심각도: High (Sequencer 정지)
+→ Anomaly detection! (Plateau, rule: plateau)
+→ Severity: High (Sequencer stopped)
 ```
 
 ---
 
-#### 4️⃣ TxPool 단조 증가 (Batcher 실패)
+#### 4️⃣ Monotonically increase TxPool (Batcher fails)
 
-**기준**: 트랜잭션 풀이 5분 이상 계속 증가
+**Criteria**: Transaction pool continues to grow for more than 5 minutes
 
 ```
-최근 5분간 모든 txPool 값이 증가하거나 같음
-→ Batcher 실패 의심 (트랜잭션 배치 미처리)
+All txPool values ​​increase or remain the same for the last 5 minutes
+→ Suspected batcher failure (transaction batch not processed)
 ```
 
-**설정값**:
+**Settings**:
 ```typescript
 const TXPOOL_MONOTONIC_SECONDS = 300;  // 5분
 
-// 검사
+// test
 for (let i = 1; i < history.length; i++) {
-  if (현재[i] < 현재[i-1]) {
-    isMonotonic = false;  // 한 번이라도 감소하면 정상
+if (current[i] < current[i-1]) {
+isMonotonic = false;  // If it decreases even once, it is normal.
   }
 }
 
-if (isMonotonic && 증가량 > 0) {
-  // Batcher 실패로 판단
+if (isMonotonic && increment > 0) {
+// Judgment as batcher failure
 }
 ```
 
-**예시**:
+**example**:
 ```
-시간    TxPool  상태
+Time TxPool Status
 00:00  100     ✓
-01:00  150     ✓ (증가)
-02:00  180     ✓ (증가)
-03:00  190     ✓ (증가)
-04:00  195     ✓ (증가)
-05:00  200     ✓ (증가) ← 5분 동안 계속 증가
+01:00 150 ✓ (increase)
+02:00 180 ✓ (increased)
+03:00 190 ✓ (increased)
+04:00 195 ✓ (increased)
+05:00 200 ✓ (Increase) ← Continue to increase for 5 minutes
 
-→ 이상 탐지! (Spike, rule: monotonic-increase)
-→ 심각도: High (Batcher 배치 미처리)
+→ Anomaly detection! (Spike, rule: monotonic-increase)
+→ Severity: High (Batcher batch not processed)
 ```
 
 ---
 
-### 탐지 우선순위
+### Detection priority
 
-탐지 순서 (충돌 방지):
+Detection order (collision avoidance):
 
 ```typescript
-1. CPU 0% Drop (가장 심각)
+1. CPU 0% Drop (most severe)
 2. L2 Block Height Plateau
 3. TxPool Monotonic Increase
-4. Z-Score 기반 탐지 (위의 규칙에서 이미 탐지된 메트릭 제외)
+4. Z-Score based detection (excluding metrics already detected in the rules above)
 ```
 
-### 예외 처리
+### Exception handling
 
-| 조건 | 동작 |
+| Conditions | Action |
 |------|------|
-| 이력 데이터 < 5개 | 탐지 스킵 (데이터 부족) |
-| 표준편차 = 0 | Z-Score = 0 (정상, 변동 없음) |
-| 메트릭이 이미 탐지됨 | 중복 탐지 방지 |
+| Historical data < 5 | Skip detection (insufficient data) |
+| standard deviation = 0 | Z-Score = 0 (normal, no change) |
+| Metric already detected | Avoid duplicate detection |
 
 ---
 
-## 🧠 Layer 2: AI 의미 분석
+## 🧠 Layer 2: AI semantic analysis
 
-### 개요
+### outline
 
-Layer 1에서 이상을 탐지하면, Layer 2에서 **Claude AI**를 사용하여 근본 원인을 분석합니다.
+When an anomaly is detected at Layer 1, Layer 2 uses **Claude AI** to analyze the root cause.
 
-**파일**: `src/lib/anomaly-ai-analyzer.ts`
+**File**: `src/lib/anomaly-ai-analyzer.ts`
 
-### 프롬프트 구조
+### Prompt Structure
 
 ```
 System Prompt:
-├─ SRE 역할 정의
-├─ Optimism 컴포넌트 관계도
-├─ 일반적인 실패 패턴 (5가지)
-└─ 분석 가이드라인
+├─ SRE role definition
+├─ Optimism component relationship diagram
+├─ Common failure patterns (5 types)
+└─ Analysis guidelines
 
 User Prompt:
-├─ 탐지된 이상 목록
-├─ 현재 메트릭 데이터
-└─ 관련 로그 (op-geth, op-node, op-batcher, op-proposer)
+├─ List of detected abnormalities
+├─ Current metric data
+└─ related logs (op-geth, op-node, op-batcher, op-proposer)
 ```
 
-### Optimism 컴포넌트 실패 패턴
+### Optimism component failure patterns
 
-| 패턴 | 원인 | 증상 | 영향 |
+| pattern | Cause | Symptoms | Impact |
 |------|------|------|------|
-| **L1 Reorg** | L1 체인 재조직 | op-node 유도 상태 리셋 → 임시 동기화 정지 | 블록 높이 정체 |
-| **L1 Gas Spike** | L1 가스비 급등 | Batcher가 L1에 배치 전송 못함 | TxPool 증가 |
-| **op-geth Crash** | op-geth 프로세스 중단 | CPU 0% 급락 | 모든 다운스트림 영향 |
-| **Network Partition** | P2P 네트워크 단절 | 동료 노드와 통신 불가 | Unsafe head 발산 |
-| **Sequencer Stall** | Sequencer 정지 | 블록 생성 멈춤 | 블록 높이 정체, TxPool 증가 |
+| **L1 Reorg** | L1 chain reorganization | op-node induced state reset → temporary synchronization stop | block height stagnation |
+| **L1 Gas Spike** | L1 gas prices soar | Batcher fails to send batch to L1 | Increase TxPool |
+| **op-geth Crash** | op-geth process crash | CPU plummets to 0% | All downstream impacts |
+| **Network Partition** | P2P network disconnection | Unable to communicate with fellow nodes | Unsafe head divergence |
+| **Sequencer Stall** | Sequencer stop | Block creation stopped | Block height stagnates, TxPool increases |
 
-### AI 분석 결과
+### AI analysis results
 
 ```typescript
 interface DeepAnalysisResult {
   severity: 'low' | 'medium' | 'high' | 'critical';
   anomalyType: 'performance' | 'security' | 'consensus' | 'liveness';
-  correlations: string[];           // 연관된 증상들
-  predictedImpact: string;          // 예상 영향
-  suggestedActions: string[];       // 권장 조치
-  relatedComponents: string[];      // 영향받는 컴포넌트
+correlations: string[];           // related symptoms
+predictedImpact: string;          // expected impact
+suggestedActions: string[];       // 권장 조치
+relatedComponents: string[];      // Affected Components
 }
 ```
 
-**예시**:
+**example**:
 ```json
 {
   "severity": "critical",
   "anomalyType": "liveness",
   "correlations": [
-    "CPU 0% 급락 감지됨",
-    "TxPool 단조 증가 시작 (배치 미처리)"
+"CPU 0% drop detected",
+"Start TxPool monotonically increasing (batch unprocessed)"
   ],
-  "predictedImpact": "op-geth가 중단되었으므로 모든 트랜잭션 처리 중단. 사용자 트래픽 영향.",
+"predictedImpact": "Op-geth is down, so all transaction processing is halted. User traffic impacted.",
   "suggestedActions": [
-    "op-geth 프로세스 재시작",
-    "메모리/디스크 여유 확인",
-    "최근 로그 검토"
+"Restart op-geth process",
+"Check memory/disk space",
+“Review recent logs”
   ],
   "relatedComponents": [
     "op-geth",
@@ -255,98 +255,98 @@ interface DeepAnalysisResult {
 }
 ```
 
-### 성능 최적화
+### Performance optimization
 
-**캐싱**:
+**Caching**:
 ```typescript
 const ANALYSIS_CACHE_TTL_MS = 5 * 60 * 1000;  // 5분
 
-// 동일한 이상에 대해 5분 내 재분석하지 않음
+// Do not reanalyze the same anomaly within 5 minutes
 ```
 
 **Rate Limiting**:
 ```typescript
 const MIN_AI_CALL_INTERVAL_MS = 60 * 1000;  // 1분
 
-// 분당 최대 1회 AI 호출
+// AI call up to 1 time per minute
 ```
 
 ---
 
-## 📢 Layer 3: 알림 발송
+## 📢 Layer 3: Sending notifications
 
-### 알림 필터링
+### Notification filtering
 
-**조건**:
-1. AI 분석 severity >= 설정된 임계값
-2. 마지막 알림 이후 cooldown 경과
+**condition**:
+1. AI analysis severity >= set threshold
+2. Cooldown elapsed since last notification
 
-**설정값**:
+**Settings**:
 ```typescript
 interface AlertConfig {
-  enabled: boolean;                    // 알림 활성화 여부
+enabled: boolean;                    // Whether to enable notifications
   webhookUrl?: string;                 // Slack/Discord URL
   thresholds: {
-    notifyOn: AISeverity[];            // 알림 대상 심각도 (low/medium/high/critical)
-    cooldownMinutes: number;           // 중복 알림 방지 (분)
+notifyOn: AISeverity[];            // Notification target severity (low/medium/high/critical)
+cooldownMinutes: number;           // Prevent duplicate notifications (minutes)
   };
 }
 ```
 
-**기본값**:
+**Default**:
 ```typescript
-notifyOn: ['high', 'critical']        // High 이상만 알림
+notifyOn: ['high', 'critical'] // Notify only when high or higher
 cooldownMinutes: 10                   // 10분 cooldown
 ```
 
-### 알림 채널
+### Notification Channel
 
-| 채널 | 용도 | 설정 |
+| Channel | Use | Settings |
 |------|------|------|
-| **Slack** | 운영팀 통보 | `ALERT_WEBHOOK_URL` |
-| **Webhook** | 외부 시스템 연동 | Custom URL |
-| **Dashboard** | 대시보드 표시 | 자동 기록 |
+| **Slack** | Operation Team Notification | `ALERT_WEBHOOK_URL` |
+| **Webhook** | External system integration | Custom URL |
+| **Dashboard** | Show dashboard | automatic recording |
 
 ---
 
-## 📊 전체 파이프라인
+## 📊 Entire pipeline
 
 ```
-메트릭 수집 (1분 간격)
+Metric collection (1 minute interval)
     ↓
-Layer 1: 통계 탐지 (즉시)
-    ├─ Z-Score 검사
-    ├─ CPU 0% Drop 검사
-    ├─ Block Plateau 검사
-    ├─ TxPool Monotonic 검사
+Layer 1: Statistical detection (on the fly)
+├─ Z-Score test
+├─ CPU 0% Drop check
+├─ Block plateau inspection
+├─ TxPool Monotonic Check
     ↓
-[이상 탐지됨?]
+[Anomaly detected?]
     │
-    ├─ YES → Layer 2: AI 분석 (1분마다 1회만)
-    │         ├─ 근본 원인 분석
-    │         ├─ 심각도 평가
-    │         └─ 권장 조치 제시
+├─ YES → Layer 2: AI analysis (only once per minute)
+│ ├─ Root cause analysis
+│ ├─ Severity assessment
+│ └─ Provide recommended actions
     │            ↓
-    │         Layer 3: 알림 발송 (설정 기반)
-    │         └─ Severity >= 임계값 이고 Cooldown 경과
+│ Layer 3: Sending notifications (based on settings)
+│ └─ Severity >= threshold and cooldown elapses
     │
-    └─ NO → 정상 (계속 모니터링)
+└─ NO → Normal (continue monitoring)
 ```
 
 ---
 
-## 🧪 테스트 예시
+## 🧪 Test example
 
-### Quick Test: Z-Score 탐지
+### Quick Test: Z-Score detection
 
 ```bash
-# 1. Mock 데이터 생성 (상승 추세)
+# 1. Create Mock Data (Rising Trend)
 curl -X POST "http://localhost:3002/api/metrics/seed?scenario=rising"
 
-# 2. 이상 확인
+# 2. Check for abnormalities
 curl -s "http://localhost:3002/api/metrics" | jq '.anomalies'
 
-# 예상 결과:
+# Expected results:
 # [
 #   {
 #     "isAnomaly": true,
@@ -358,21 +358,21 @@ curl -s "http://localhost:3002/api/metrics" | jq '.anomalies'
 # ]
 ```
 
-### Deep Test: AI 분석
+### Deep Test: AI Analytics
 
 ```bash
-# 1. 이상 이벤트 조회
+# 1. Abnormal event inquiry
 curl -s "http://localhost:3002/api/anomalies" | jq '.events[0]'
 
-# 2. Layer 2 AI 분석 확인
+# 2. Check Layer 2 AI analytics
 curl -s "http://localhost:3002/api/anomalies" | jq '.events[0].deepAnalysis'
 
-# 예상 결과:
+# Expected results:
 # {
 #   "severity": "high",
 #   "anomalyType": "performance",
-#   "correlations": ["CPU 스파이크 지속"],
-#   "predictedImpact": "블록 생성 지연 가능성",
+# "correlations": ["CPU spikes persist"],
+# "predictedImpact": "Possible block creation delay",
 #   "suggestedActions": ["..."],
 #   "relatedComponents": ["op-geth", "op-node"]
 # }
@@ -380,27 +380,27 @@ curl -s "http://localhost:3002/api/anomalies" | jq '.events[0].deepAnalysis'
 
 ---
 
-## ⚙️ 설정 커스터마이징
+## ⚙️ Customize settings
 
-### 환경변수
+### Environment variables
 
 ```bash
-# .env.local에서 설정 가능
+# Can be set in .env.local
 
-# Z-Score 임계값 조정 (기본 2.5)
-# anomaly-detector.ts에서 Z_SCORE_THRESHOLD 수정
+# Adjust Z-Score threshold (default 2.5)
+# Fix Z_SCORE_THRESHOLD in anomaly-detector.ts
 
-# Block Plateau 시간 (기본 120초)
+# Block Plateau Time (default 120 seconds)
 # BLOCK_PLATEAU_SECONDS = 120
 
-# TxPool Monotonic 시간 (기본 300초)
+# TxPool Monotonic time (default 300 seconds)
 # TXPOOL_MONOTONIC_SECONDS = 300
 
-# 알림 설정
-# /api/anomalies/config에서 설정 가능
+# Notification settings
+# Can be configured in /api/anomalies/config
 ```
 
-### API로 알림 설정 변경
+### Change notification settings with API
 
 ```bash
 curl -X PUT "http://localhost:3002/api/anomalies/config" \
@@ -417,49 +417,49 @@ curl -X PUT "http://localhost:3002/api/anomalies/config" \
 
 ---
 
-## 📈 메트릭별 참고값
+## 📈 Reference values ​​for each metric
 
 ### CPU Usage
 
-| 상태 | CPU % | 설명 |
+| status | CPU% | Description |
 |------|-------|------|
-| 정상 | 20~40 | 일반적인 L2 노드 |
-| 부하 | 40~70 | 높은 트래픽 |
-| 위험 | 70~99 | 임박한 오버로드 |
-| 크래시 | 0~1 | 프로세스 중단 |
+| summit | 20~40 | Typical L2 node |
+| load | 40~70 | high traffic |
+| danger | 70~99 | Impending Overload |
+| crash | 0~1 | process abort |
 
 ### Block Interval
 
-| 상태 | 간격 | 설명 |
+| status | spacing | Description |
 |------|------|------|
-| 정상 | 2~4초 | Optimism 표준 |
-| 느림 | 4~10초 | 네트워크 지연 |
-| 매우 느림 | 10~60초 | 심각한 정체 |
-| 정지 | 60초+ | Sequencer 정지 |
+| summit | 2~4 seconds | Optimism standard |
+| slow | 4~10 seconds | network delay |
+| very slow | 10~60 seconds | serious congestion |
+| stop | 60 seconds+ | Sequencer stop |
 
 ### TxPool Pending
 
-| 상태 | 개수 | 설명 |
+| status | count | Description |
 |------|------|------|
-| 정상 | 0~1000 | 일반 부하 |
-| 높음 | 1000~10000 | Batcher 지연 |
-| 매우 높음 | 10000+ | Batcher 실패 |
+| summit | 0~1000 | Normal load |
+| High | 1000~10000 | Batcher delay |
+| very high | 10000+ | Batcher failure |
 
 ---
 
-## 🔗 관련 파일
+## 🔗 Related files
 
-| 파일 | 역할 |
+| file | Role |
 |------|------|
-| `src/lib/anomaly-detector.ts` | Layer 1 통계 탐지 |
-| `src/lib/anomaly-ai-analyzer.ts` | Layer 2 AI 분석 |
-| `src/lib/alert-dispatcher.ts` | Layer 3 알림 발송 |
-| `src/types/anomaly.ts` | 타입 정의 |
-| `src/app/api/anomalies/route.ts` | API 엔드포인트 |
+| `src/lib/anomaly-detector.ts` | Layer 1 statistical detection |
+| `src/lib/anomaly-ai-analyzer.ts` | Layer 2 AI analysis |
+| `src/lib/alert-dispatcher.ts` | Layer 3 notification sending |
+| `src/types/anomaly.ts` | type definition |
+| `src/app/api/anomalies/route.ts` | API endpoint |
 
 ---
 
-## 📚 추가 자료
+## 📚 Additional Resources
 
 - [Anomaly Detection Proposal](./done/proposal-2-anomaly-detection.md)
 - [RCA Engine Guide](./done/proposal-3-rca-engine.md)

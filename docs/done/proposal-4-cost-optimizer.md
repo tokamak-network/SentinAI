@@ -1,227 +1,227 @@
-# Proposal 4: AI Cost Optimizer - 구현 명세서
+# Proposal 4: AI Cost Optimizer - Implementation Specification
 
-> 작성일: 2026-02-06
-> 대상 독자: Claude Opus 4.6 구현 에이전트
-> 목표: 이 문서만으로 기능을 처음부터 끝까지 구현 가능하도록 함
-
----
-
-## 목차
-
-1. [개요](#1-개요)
-2. [타입 정의](#2-타입-정의)
-3. [신규 파일 명세](#3-신규-파일-명세)
-4. [기존 파일 수정](#4-기존-파일-수정)
-5. [API 명세](#5-api-명세)
-6. [AI 프롬프트 전문](#6-ai-프롬프트-전문)
-7. [환경 변수](#7-환경-변수)
-8. [테스트 검증](#8-테스트-검증)
-9. [의존관계](#9-의존관계)
-10. [UI 상세 - Usage Heatmap](#10-ui-상세---usage-heatmap)
+> Creation date: 2026-02-06
+> Target audience: Claude Opus 4.6 Implementation Agent
+> Goal: Enable functionality to be implemented from start to finish using only this document
 
 ---
 
-## 1. 개요
+## index
 
-### 1.1 기능 설명
+1. [Overview](#1-Overview)
+2. [Type Definition](#2-Type-Definition)
+3. [New file specification](#3-new-file-specification)
+4. [Edit existing file](#4-Existing-file-Edit)
+5. [API specification](#5-api-specification)
+6. [AI Prompt Full Text](#6-ai-Prompt-Full Text)
+7. [Environment Variables](#7-Environment-Variables)
+8. [Test Verification](#8-Test-Verification)
+9. [Dependency](#9-Dependency)
+10. [UI Details - Usage Heatmap](#10-ui-Details---usage-heatmap)
 
-**AI Cost Optimizer**는 Optimism L2 노드의 vCPU 사용 패턴을 분석하여 비용 절감 기회를 자동으로 식별하고, AI 기반 추천을 제공하는 기능이다.
+---
 
-**핵심 기능:**
-- 시간대별 vCPU 사용 패턴 추적 (7일간)
-- 요일 x 시간 히트맵으로 사용 패턴 시각화
-- Claude AI를 통한 비용 최적화 추천 생성
-- 예상 절감액 및 구현 방법 제시
+## 1. Overview
 
-### 1.2 현재 시스템 한계
+### 1.1 Function description
 
-현재 `src/app/api/metrics/route.ts`의 비용 계산은 정적 공식 기반이다:
+**AI Cost Optimizer** is a feature that automatically identifies cost-saving opportunities and provides AI-based recommendations by analyzing vCPU usage patterns of Optimism L2 nodes.
+
+**Key Features:**
+- Track vCPU usage patterns over time (7 days)
+- Visualize usage patterns with day x time heatmap
+- Generate cost-optimized recommendations with Claude AI
+- Present expected savings and implementation methods
+
+### 1.2 Current system limitations
+
+Currently cost calculations in `src/app/api/metrics/route.ts` are based on a static formula:
 
 ```typescript
-// 현재 방식: 고정된 평균 사용 패턴 가정
+// Current approach: assumes a fixed average usage pattern
 const avgVcpu = 0.7 * 1 + 0.2 * 2 + 0.1 * 4; // 1.5 vCPU Average
 const dynamicMonthlyCost = (avgVcpu * FARGATE_VCPU_HOUR + avgMemory * FARGATE_MEM_GB_HOUR) * HOURS_PER_MONTH;
 ```
 
-**문제점:**
-- 실제 시간대별 패턴 분석 없음 (새벽에도 동일 리소스 할당)
-- Reserved vs On-Demand 비교 없음
-- 스케일링 이력 기반 최적화 없음
-- 실제 비용 vs 최적 비용 갭 분석 없음
+**Problem:**
+- No pattern analysis by actual time zone (same resource allocation even in the early morning)
+- No comparison between Reserved vs On-Demand
+- No scaling history based optimization
+- No actual cost vs optimal cost gap analysis
 
-### 1.3 의존관계
+### 1.3 Dependencies
 
-| 의존 대상 | 설명 | 상태 |
+| Depends on | Description | status |
 |-----------|------|------|
-| MetricsStore (P1) | 시계열 메트릭 저장소. `getStats()` 함수 활용 | Proposal 1에서 구현 필요 |
-| ScalingHistory | 스케일링 이력 조회. `getScalingHistory()` 함수 | 기존 `k8s-scaler.ts`에 존재 |
-| AI Gateway | Claude API 호출 | 기존 패턴 존재 (`ai-analyzer.ts`) |
+| MetricsStore (P1) | Time series metrics store. Utilizing the `getStats()` function | Implementation required in Proposal 1 |
+| ScalingHistory | Check scaling history. `getScalingHistory()` function | Existing in existing `k8s-scaler.ts` |
+| AI Gateway | Claude API call | Existing pattern exists (`ai-analyzer.ts`) |
 
-**독립적:** Proposal 2, 3, 5와 독립적으로 구현 가능
+**Independent:** Can be implemented independently of Proposal 2, 3, and 5
 
 ---
 
-## 2. 타입 정의
+## 2. Type definition
 
-### 2.1 파일 생성: `src/types/cost.ts`
+### 2.1 Create file: `src/types/cost.ts`
 
 ```typescript
 /**
  * AI Cost Optimizer Types
- * vCPU 사용 패턴 분석 및 비용 최적화 추천을 위한 타입 정의
+* Type definition for analyzing vCPU usage patterns and recommending cost optimization
  */
 
 /**
- * 시간대별 사용 패턴
- * 7일 x 24시간 매트릭스의 각 셀에 대한 통계
+* Usage patterns by time zone
+* Statistics for each cell in the 7-day x 24-hour matrix
  */
 export interface UsagePattern {
-  /** 시간 (0-23) */
+/** Time (0-23) */
   hourOfDay: number;
-  /** 요일 (0=일요일, 1=월요일, ..., 6=토요일) */
+/** Day of the week (0=Sunday, 1=Monday, ..., 6=Saturday) */
   dayOfWeek: number;
-  /** 해당 시간대의 평균 vCPU */
+/** Average vCPU for that time period */
   avgVcpu: number;
-  /** 해당 시간대의 최대 vCPU */
+/** Maximum vCPU for that time period */
   peakVcpu: number;
-  /** 해당 시간대의 평균 CPU 사용률 (0-100) */
+/** Average CPU utilization for that time period (0-100) */
   avgUtilization: number;
-  /** 해당 시간대에 수집된 샘플 수 */
+/** Number of samples collected during that time period */
   sampleCount: number;
 }
 
 /**
- * 비용 최적화 추천 항목
+* Cost optimization recommendations
  */
 export interface CostRecommendation {
-  /** 추천 유형 */
+/** Recommendation type */
   type: 'downscale' | 'schedule' | 'reserved' | 'right-size';
-  /** 추천 제목 (한글) */
+/** Recommended title (Korean) */
   title: string;
-  /** 상세 설명 (한글) */
+/** Detailed description (Korean) */
   description: string;
-  /** 현재 월간 비용 (USD) */
+/** Current monthly cost (USD) */
   currentCost: number;
-  /** 적용 후 예상 월간 비용 (USD) */
+/** Estimated monthly cost after application (USD) */
   projectedCost: number;
-  /** 절감률 (0-100) */
+/** Savings rate (0-100) */
   savingsPercent: number;
-  /** AI 추천 신뢰도 (0-1) */
+/** AI recommendation confidence (0-1) */
   confidence: number;
-  /** 구현 방법 설명 (한글) */
+/** Description of implementation method (Korean) */
   implementation: string;
-  /** 위험도 */
+/** Risk */
   risk: 'low' | 'medium' | 'high';
 }
 
 /**
- * 비용 분석 리포트
+* Cost analysis report
  */
 export interface CostReport {
-  /** 리포트 고유 ID (UUID) */
+/** Report unique ID (UUID) */
   id: string;
-  /** 생성 시각 (ISO 8601) */
+/** Creation time (ISO 8601) */
   generatedAt: string;
-  /** 현재 예상 월간 비용 (USD) */
+/** Current estimated monthly cost (USD) */
   currentMonthly: number;
-  /** 최적화 후 예상 월간 비용 (USD) */
+/** Estimated monthly cost after optimization (USD) */
   optimizedMonthly: number;
-  /** 총 절감률 (0-100) */
+/** Total savings (0-100) */
   totalSavingsPercent: number;
-  /** 추천 목록 */
+/** Recommended list */
   recommendations: CostRecommendation[];
-  /** 시간대별 사용 패턴 (7x24=168개) */
+/** Usage patterns by time zone (7x24=168) */
   usagePatterns: UsagePattern[];
-  /** AI가 생성한 자연어 인사이트 (한글) */
+/** Natural language insights generated by AI (Korean) */
   aiInsight: string;
-  /** 분석 기간 (일) */
+/** Analysis period (days) */
   periodDays: number;
 }
 
 /**
- * 사용량 데이터 포인트 (내부 저장용)
+* Usage data points (for internal storage)
  */
 export interface UsageDataPoint {
   /** Unix timestamp (ms) */
   timestamp: number;
-  /** 할당된 vCPU */
+/** vCPU allocated */
   vcpu: number;
-  /** CPU 사용률 (0-100) */
+/** CPU utilization (0-100) */
   cpuUtilization: number;
 }
 
 /**
- * 24시간 프로파일 (시간대별 요약)
+* 24-hour profile (summary by time zone)
  */
 export interface HourlyProfile {
-  /** 시간 (0-23) */
+/** Time (0-23) */
   hour: number;
-  /** 평균 vCPU */
+/** Average vCPU */
   avgVcpu: number;
-  /** 평균 CPU 사용률 */
+/** Average CPU utilization */
   avgUtilization: number;
 }
 
 /**
- * 비용 계산 상수
+* Cost calculation constants
  */
 export const FARGATE_PRICING = {
-  /** vCPU 시간당 비용 (USD) - 서울 리전 */
+/** Cost per vCPU hour (USD) - Seoul Region */
   vcpuPerHour: 0.04656,
-  /** 메모리 GB 시간당 비용 (USD) - 서울 리전 */
+/** Cost per GB of memory (USD) - Seoul region */
   memGbPerHour: 0.00511,
-  /** 리전 */
+/** Region */
   region: 'ap-northeast-2' as const,
 } as const;
 
 /**
- * 시간 상수
+* time constant
  */
 export const TIME_CONSTANTS = {
-  /** 월간 시간 */
+/** Monthly Time */
   HOURS_PER_MONTH: 730,
-  /** 일간 시간 */
+/** Daily time */
   HOURS_PER_DAY: 24,
-  /** 주간 일수 */
+/** Number of days per week */
   DAYS_PER_WEEK: 7,
-  /** 분당 밀리초 */
+/** Milliseconds per minute */
   MS_PER_MINUTE: 60 * 1000,
-  /** 일당 밀리초 */
+/** Milliseconds per day */
   MS_PER_DAY: 24 * 60 * 60 * 1000,
 } as const;
 
 /**
- * 추천 유형별 레이블 (UI 표시용)
+* Labels for each recommendation type (for UI display)
  */
 export const RECOMMENDATION_TYPE_LABELS: Record<CostRecommendation['type'], string> = {
-  downscale: '리소스 축소',
-  schedule: '시간 기반 스케줄링',
-  reserved: '예약 인스턴스',
-  'right-size': '적정 사이징',
+downscale: 'Reduce resources',
+schedule: 'Time-based scheduling',
+reserved: 'reserved instance',
+'right-size': 'Right sizing',
 } as const;
 
 /**
- * 위험도별 스타일 (UI 표시용)
+* Style by risk level (for UI display)
  */
 export const RISK_STYLES: Record<CostRecommendation['risk'], { bg: string; text: string; label: string }> = {
-  low: { bg: 'bg-green-100', text: 'text-green-700', label: '낮음' },
-  medium: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '중간' },
-  high: { bg: 'bg-red-100', text: 'text-red-700', label: '높음' },
+low: { bg: 'bg-green-100', text: 'text-green-700', label: '낮음' },
+medium: { bg: 'bg-yellow-100', text: 'text-yellow-700', label: '중간' },
+high: { bg: 'bg-red-100', text: 'text-red-700', label: '높음' },
 } as const;
 ```
 
 ---
 
-## 3. 신규 파일 명세
+## 3. New file specification
 
-### 3.1 파일 생성: `src/lib/usage-tracker.ts`
+### 3.1 Create file: `src/lib/usage-tracker.ts`
 
-vCPU 사용 패턴을 추적하고 분석하는 모듈.
+A module that tracks and analyzes vCPU usage patterns.
 
 ```typescript
 /**
  * Usage Tracker Module
- * vCPU 사용 패턴을 추적하여 비용 최적화 분석에 활용
+* Track vCPU usage patterns and use them for cost optimization analysis
  */
 
 import {
@@ -236,15 +236,15 @@ import {
 // ============================================================
 
 /**
- * 사용량 데이터 저장소
- * - 최대 7일간 데이터 보관
- * - 1분 간격 수집 시 최대 10,080개 (7 * 24 * 60)
+* Usage data storage
+* - Data retention for up to 7 days
+* - Up to 10,080 items collected at 1-minute intervals (7 * 24 * 60)
  */
 const MAX_DATA_POINTS = 10080;
 let usageData: UsageDataPoint[] = [];
 
 /**
- * 환경 변수로 추적 활성화 여부 결정
+* Determine whether to enable tracking with environment variables
  */
 function isTrackingEnabled(): boolean {
   return process.env.COST_TRACKING_ENABLED !== 'false';
@@ -255,14 +255,14 @@ function isTrackingEnabled(): boolean {
 // ============================================================
 
 /**
- * 사용량 데이터 기록
+* Record usage data
  *
- * @param vcpu - 현재 할당된 vCPU (1, 2, 4, 8 등)
- * @param cpuUtilization - 현재 CPU 사용률 (0-100)
+* @param vcpu - Currently allocated vCPU (1, 2, 4, 8, etc.)
+* @param cpuUtilization - Current CPU utilization (0-100)
  *
  * @example
  * ```typescript
- * // metrics API에서 호출
+* // Called from metrics API
  * recordUsage(currentVcpu, effectiveCpu);
  * ```
  */
@@ -271,8 +271,8 @@ export function recordUsage(vcpu: number, cpuUtilization: number): void {
     return;
   }
 
-  // 스트레스 테스트 모드의 시뮬레이션 데이터는 제외 (vcpu가 8인 경우)
-  // 실제 운영에서는 8 vCPU도 가능하므로, 필요시 이 조건 수정
+// Excluding simulation data in stress test mode (if vcpu is 8)
+// In actual operation, 8 vCPU is also possible, so modify this condition if necessary
   if (vcpu === 8) {
     return;
   }
@@ -280,22 +280,22 @@ export function recordUsage(vcpu: number, cpuUtilization: number): void {
   const dataPoint: UsageDataPoint = {
     timestamp: Date.now(),
     vcpu,
-    cpuUtilization: Math.min(Math.max(cpuUtilization, 0), 100), // 0-100 범위로 클램프
+cpuUtilization: Math.min(Math.max(cpuUtilization, 0), 100), // clamp to range 0-100
   };
 
   usageData.push(dataPoint);
 
-  // 최대 크기 초과 시 오래된 데이터 제거
+// Remove old data when maximum size is exceeded
   if (usageData.length > MAX_DATA_POINTS) {
     usageData = usageData.slice(-MAX_DATA_POINTS);
   }
 }
 
 /**
- * 지정된 기간의 사용량 데이터 조회
+* View usage data for a specified period
  *
- * @param days - 조회할 기간 (일)
- * @returns 해당 기간의 UsageDataPoint 배열
+* @param days - Number of days to search
+* @returns an array of UsageDataPoint for the period.
  */
 export function getUsageData(days: number): UsageDataPoint[] {
   const cutoff = Date.now() - days * TIME_CONSTANTS.MS_PER_DAY;
@@ -303,14 +303,14 @@ export function getUsageData(days: number): UsageDataPoint[] {
 }
 
 /**
- * 전체 사용량 데이터 개수 조회 (디버깅용)
+* View total usage data count (for debugging)
  */
 export function getUsageDataCount(): number {
   return usageData.length;
 }
 
 /**
- * 사용량 데이터 초기화 (테스트용)
+* Initialize usage data (for testing)
  */
 export function clearUsageData(): void {
   usageData = [];
@@ -321,19 +321,19 @@ export function clearUsageData(): void {
 // ============================================================
 
 /**
- * 시간대별 사용 패턴 분석
+* Analysis of usage patterns by time zone
  *
- * 7일 x 24시간 = 168개의 버킷으로 그룹화하여 통계 계산
+* Calculate statistics by grouping into 7 days x 24 hours = 168 buckets
  *
- * @param days - 분석할 기간 (일), 기본값 7
- * @returns UsagePattern 배열 (최대 168개)
+* @param days - Number of days to analyze, default 7
+* @returns UsagePattern array (maximum 168)
  *
  * @example
  * ```typescript
  * const patterns = analyzePatterns(7);
- * // 월요일 오전 10시 패턴
+* // Monday 10:00 AM pattern
  * const mondayMorning = patterns.find(p => p.dayOfWeek === 1 && p.hourOfDay === 10);
- * console.log(`평균 vCPU: ${mondayMorning?.avgVcpu}`);
+* console.log(`평그 vCPU: ${mondayMorning?.avgVcpu}`);
  * ```
  */
 export function analyzePatterns(days: number = 7): UsagePattern[] {
@@ -343,7 +343,7 @@ export function analyzePatterns(days: number = 7): UsagePattern[] {
     return [];
   }
 
-  // 버킷 초기화: [dayOfWeek][hourOfDay] = { vcpuSum, vcpuMax, utilSum, count }
+// Initialize bucket: [dayOfWeek][hourOfDay] = { vcpuSum, vcpuMax, utilSum, count }
   type Bucket = {
     vcpuSum: number;
     vcpuMax: number;
@@ -353,7 +353,7 @@ export function analyzePatterns(days: number = 7): UsagePattern[] {
 
   const buckets: Map<string, Bucket> = new Map();
 
-  // 데이터를 버킷에 분류
+// Sort data into buckets
   for (const point of data) {
     const date = new Date(point.timestamp);
     const dayOfWeek = date.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
@@ -375,7 +375,7 @@ export function analyzePatterns(days: number = 7): UsagePattern[] {
     buckets.set(key, bucket);
   }
 
-  // 버킷을 UsagePattern으로 변환
+// Convert bucket to UsagePattern
   const patterns: UsagePattern[] = [];
 
   buckets.forEach((bucket, key) => {
@@ -393,7 +393,7 @@ export function analyzePatterns(days: number = 7): UsagePattern[] {
     });
   });
 
-  // 정렬: 요일 → 시간 순
+// Sort: Day of the week → Time order
   patterns.sort((a, b) => {
     if (a.dayOfWeek !== b.dayOfWeek) {
       return a.dayOfWeek - b.dayOfWeek;
@@ -405,17 +405,17 @@ export function analyzePatterns(days: number = 7): UsagePattern[] {
 }
 
 /**
- * 24시간 프로파일 생성 (요일 무관)
+* Create 24-hour profile (regardless of day of the week)
  *
- * 모든 요일의 같은 시간대 데이터를 합쳐서 시간별 평균 계산
+* Calculate hourly average by combining data from the same time zone for all days of the week
  *
- * @returns 24개의 HourlyProfile
+* @returns 24 HourlyProfiles
  */
 export function getHourlyBreakdown(): HourlyProfile[] {
-  const data = getUsageData(7); // 최근 7일 데이터
+const data = getUsageData(7); // Last 7 days data
 
   if (data.length === 0) {
-    // 데이터가 없으면 기본값 반환
+// If there is no data, return default value
     return Array.from({ length: 24 }, (_, hour) => ({
       hour,
       avgVcpu: 1,
@@ -423,7 +423,7 @@ export function getHourlyBreakdown(): HourlyProfile[] {
     }));
   }
 
-  // 시간별 누적
+// Accumulated by time
   const hourlyBuckets: Array<{ vcpuSum: number; utilSum: number; count: number }> =
     Array.from({ length: 24 }, () => ({ vcpuSum: 0, utilSum: 0, count: 0 }));
 
@@ -446,10 +446,10 @@ export function getHourlyBreakdown(): HourlyProfile[] {
 }
 
 /**
- * 사용 패턴 요약 통계
+* Summary statistics on usage patterns
  *
- * @param days - 분석 기간
- * @returns 요약 통계
+* @param days - analysis period
+* @returns summary statistics
  */
 export function getUsageSummary(days: number = 7): {
   avgVcpu: number;
@@ -495,14 +495,14 @@ export function getUsageSummary(days: number = 7): {
 
 ---
 
-### 3.2 파일 생성: `src/lib/cost-optimizer.ts`
+### 3.2 Create file: `src/lib/cost-optimizer.ts`
 
-AI 기반 비용 분석 및 추천 생성 모듈.
+AI-based cost analysis and recommendation generation module.
 
 ```typescript
 /**
  * AI Cost Optimizer Module
- * Claude AI를 활용한 비용 최적화 분석 및 추천 생성
+* Cost optimization analysis and recommendation generation using Claude AI
  */
 
 import {
@@ -528,10 +528,10 @@ const API_KEY = process.env.ANTHROPIC_API_KEY || '';
 // ============================================================
 
 /**
- * 주어진 평균 vCPU로 월간 비용 계산
+* Calculate monthly cost given average vCPU
  *
- * @param avgVcpu - 평균 vCPU
- * @returns 월간 비용 (USD)
+* @param avgVcpu - average vCPU
+* @returns Monthly Cost (USD)
  */
 export function calculateMonthlyCost(avgVcpu: number): number {
   const memoryGiB = avgVcpu * 2; // Memory = vCPU * 2
@@ -543,24 +543,24 @@ export function calculateMonthlyCost(avgVcpu: number): number {
 }
 
 /**
- * 고정 4 vCPU 기준 월간 비용 (베이스라인)
+* Monthly cost per fixed 4 vCPU (baseline)
  */
 export function getBaselineMonthlyCost(): number {
   return calculateMonthlyCost(4);
 }
 
 /**
- * 추천 적용 시 예상 월간 비용 계산
+* Calculate estimated monthly cost when applying recommendations
  *
- * @param recommendations - 적용할 추천 목록
- * @returns 총 예상 절감 후 월간 비용
+* @param recommendations - List of recommendations to apply
+* @returns monthly cost after total estimated savings
  */
 export function calculateProjectedCost(recommendations: CostRecommendation[]): number {
   if (recommendations.length === 0) {
     return getBaselineMonthlyCost();
   }
 
-  // 가장 낮은 projectedCost 반환 (추천들이 겹칠 수 있으므로)
+// Return the lowest projectedCost (since recommendations may overlap)
   const lowestProjected = Math.min(...recommendations.map(r => r.projectedCost));
   return lowestProjected;
 }
@@ -570,7 +570,7 @@ export function calculateProjectedCost(recommendations: CostRecommendation[]): n
 // ============================================================
 
 /**
- * AI 프롬프트용 시스템 메시지
+* System messages for AI prompts
  */
 const SYSTEM_PROMPT = `You are a cloud cost optimization advisor for an Optimism L2 Rollup infrastructure running on AWS Fargate.
 
@@ -607,7 +607,7 @@ Analyze vCPU usage patterns and scaling history to identify cost optimization op
 Respond ONLY in valid JSON format without markdown code blocks.`;
 
 /**
- * 사용자 프롬프트 템플릿 생성
+* Create user prompt templates
  */
 function buildUserPrompt(
   patterns: UsagePattern[],
@@ -615,7 +615,7 @@ function buildUserPrompt(
   summary: { avgVcpu: number; peakVcpu: number; avgUtilization: number; dataPointCount: number },
   days: number
 ): string {
-  // 시간대별 패턴을 읽기 쉽게 포맷팅
+// Format patterns by time zone to make them easier to read
   const patternSummary = patterns.map(p => ({
     day: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][p.dayOfWeek],
     hour: p.hourOfDay,
@@ -625,7 +625,7 @@ function buildUserPrompt(
     samples: p.sampleCount,
   }));
 
-  // 스케일링 이력 요약
+// Summary of scaling history
   const historyEvents = scalingHistory.slice(0, 20).map(entry => ({
     time: entry.timestamp,
     from: entry.fromVcpu,
@@ -634,7 +634,7 @@ function buildUserPrompt(
     trigger: entry.triggeredBy,
   }));
 
-  // 현재 비용 계산
+// calculate current cost
   const currentMonthlyCost = calculateMonthlyCost(summary.avgVcpu);
   const baselineCost = getBaselineMonthlyCost();
 
@@ -663,13 +663,13 @@ Analyze the above data and provide cost optimization recommendations.
 
 For each recommendation, include:
 1. type: 'downscale' | 'schedule' | 'reserved' | 'right-size'
-2. title: 추천 제목 (Korean, 20자 이내)
-3. description: 상세 설명 (Korean, 100자 이내)
-4. currentCost: 현재 월간 비용 (USD)
-5. projectedCost: 적용 후 예상 월간 비용 (USD)
-6. savingsPercent: 절감률 (0-100)
-7. confidence: 신뢰도 (0-1)
-8. implementation: 구현 방법 (Korean, 상세히)
+2. title: Recommended title (Korean, within 20 characters)
+3. description: Detailed description (Korean, within 100 characters)
+4. currentCost: Current monthly cost (USD)
+5. projectedCost: Estimated monthly cost after application (USD)
+6. savingsPercent: savings percentage (0-100)
+7. confidence: confidence (0-1)
+8. implementation: implementation method (Korean, in detail)
 9. risk: 'low' | 'medium' | 'high'
 
 Also provide an overall insight summary in Korean.
@@ -689,12 +689,12 @@ Respond in this exact JSON format:
       "risk": "low"
     }
   ],
-  "insight": "전체 인사이트 요약 (Korean)"
+"insight": "Full Insight Summary (Korean)"
 }`;
 }
 
 /**
- * AI에서 추천 생성 요청
+* Request AI to generate recommendations
  */
 async function getAIRecommendations(
   patterns: UsagePattern[],
@@ -728,14 +728,14 @@ async function getAIRecommendations(
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || data.output || '{}';
 
-    // JSON 파싱 (마크다운 코드 블록 제거)
+// JSON parsing (removing markdown code blocks)
     const jsonStr = content.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(jsonStr);
 
-    // 응답 검증
+// Verify response
     const recommendations: CostRecommendation[] = (parsed.recommendations || []).map((r: Record<string, unknown>) => ({
       type: validateRecommendationType(r.type as string),
-      title: String(r.title || '추천 사항'),
+title: String(r.title || 'Recommendations'),
       description: String(r.description || ''),
       currentCost: Number(r.currentCost) || calculateMonthlyCost(summary.avgVcpu),
       projectedCost: Number(r.projectedCost) || calculateMonthlyCost(summary.avgVcpu),
@@ -745,20 +745,20 @@ async function getAIRecommendations(
       risk: validateRisk(r.risk as string),
     }));
 
-    const insight = String(parsed.insight || '데이터 분석을 완료했습니다.');
+const insight = String(parsed.insight || 'Data analysis completed.');
 
     return { recommendations, insight };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[Cost Optimizer] AI Gateway Error:', errorMessage);
 
-    // Fallback: 기본 추천 생성
+// Fallback: Generate default recommendation
     return generateFallbackRecommendations(summary, days);
   }
 }
 
 /**
- * 추천 유형 검증
+* Verification of recommendation type
  */
 function validateRecommendationType(type: string): CostRecommendation['type'] {
   const validTypes: CostRecommendation['type'][] = ['downscale', 'schedule', 'reserved', 'right-size'];
@@ -769,7 +769,7 @@ function validateRecommendationType(type: string): CostRecommendation['type'] {
 }
 
 /**
- * 위험도 검증
+* Risk verification
  */
 function validateRisk(risk: string): CostRecommendation['risk'] {
   const validRisks: CostRecommendation['risk'][] = ['low', 'medium', 'high'];
@@ -780,7 +780,7 @@ function validateRisk(risk: string): CostRecommendation['risk'] {
 }
 
 /**
- * Fallback 추천 생성 (AI 실패 시)
+* Generate fallback recommendation (in case of AI failure)
  */
 function generateFallbackRecommendations(
   summary: { avgVcpu: number; peakVcpu: number; avgUtilization: number; dataPointCount: number },
@@ -789,44 +789,44 @@ function generateFallbackRecommendations(
   const recommendations: CostRecommendation[] = [];
   const currentCost = calculateMonthlyCost(summary.avgVcpu);
 
-  // 평균 사용률이 낮으면 축소 추천
+// Recommend scaling down if average utilization is low
   if (summary.avgUtilization < 30 && summary.avgVcpu > 1) {
     const projectedCost = calculateMonthlyCost(Math.max(summary.avgVcpu - 1, 1));
     recommendations.push({
       type: 'downscale',
-      title: '유휴 리소스 축소',
-      description: `평균 CPU 사용률이 ${summary.avgUtilization.toFixed(0)}%로 낮습니다. 최소 vCPU를 줄여 비용을 절감할 수 있습니다.`,
+title: 'Reduce idle resources',
+description: `Average CPU utilization is low at ${summary.avgUtilization.toFixed(0)}%. You can save money by reducing the minimum vCPU.`,
       currentCost,
       projectedCost,
       savingsPercent: Math.round(((currentCost - projectedCost) / currentCost) * 100),
       confidence: 0.7,
-      implementation: 'ScalingConfig의 minVcpu를 1로 유지하고, idle threshold를 현재 사용률 기준으로 조정하세요.',
+implementation: 'Keep minVcpu in ScalingConfig at 1 and adjust idle threshold based on current utilization.',
       risk: 'low',
     });
   }
 
-  // 데이터가 충분하면 스케줄링 추천
+// Recommend scheduling if there is enough data
   if (days >= 3 && summary.dataPointCount > 100) {
     const nightCost = calculateMonthlyCost(1);
     const dayCost = calculateMonthlyCost(2);
-    const scheduledCost = (nightCost * 10 + dayCost * 14) / 24; // 10시간 야간, 14시간 주간
+const scheduledCost = (nightCost * 10 + dayCost * 14) / 24; // 10 hours night, 14 hours day
 
     recommendations.push({
       type: 'schedule',
-      title: '시간 기반 스케줄링',
-      description: '야간(22시-8시)에는 1 vCPU, 주간에는 2 vCPU로 자동 조정하여 비용을 최적화합니다.',
+title: 'Time-based scheduling',
+description: 'Optimizes costs by automatically adjusting to 1 vCPU at night (22:00-8:00) and 2 vCPU during the day.',
       currentCost,
       projectedCost: Math.round(scheduledCost * 100) / 100,
       savingsPercent: Math.round(((currentCost - scheduledCost) / currentCost) * 100),
       confidence: 0.6,
-      implementation: 'K8s CronJob을 설정하여 시간대별 vCPU를 자동으로 조정합니다. 또는 AWS EventBridge 스케줄러를 사용할 수 있습니다.',
+implementation: 'Set up a K8s CronJob to automatically adjust vCPUs based on time of day. Alternatively, you can use the AWS EventBridge scheduler.',
       risk: 'medium',
     });
   }
 
-  const insight = `${days}일간 ${summary.dataPointCount}개의 데이터를 분석했습니다. ` +
-    `평균 vCPU ${summary.avgVcpu}, 최대 ${summary.peakVcpu}, 평균 CPU 사용률 ${summary.avgUtilization.toFixed(1)}%입니다. ` +
-    `AI 분석이 실패하여 기본 추천을 제공합니다.`;
+const insight = Analyzed ${summary.dataPointCount} data for `${days} days. ` +
+`Average vCPU ${summary.avgVcpu}, peak ${summary.peakVcpu}, average CPU utilization ${summary.avgUtilization.toFixed(1)}%. ` +
+`AI analysis failed, providing default recommendations`;
 
   return { recommendations, insight };
 }
@@ -836,30 +836,30 @@ function generateFallbackRecommendations(
 // ============================================================
 
 /**
- * 비용 분석 리포트 생성
+* Generate cost analysis report
  *
- * @param days - 분석 기간 (기본값: 7, 최대: 30)
- * @returns CostReport 객체
+* @param days - Analysis period (default: 7, maximum: 30)
+* @returns CostReport object
  *
  * @example
  * ```typescript
  * const report = await generateCostReport(7);
- * console.log(`총 절감 가능: ${report.totalSavingsPercent}%`);
+* console.log(`Total savings possible: ${report.totalSavingsPercent}%`);
  * ```
  */
 export async function generateCostReport(days: number = 7): Promise<CostReport> {
-  // 기간 제한
+// period limit
   const effectiveDays = Math.min(Math.max(days, 1), 30);
 
-  // 데이터 수집
+// data collection
   const patterns = analyzePatterns(effectiveDays);
   const summary = getUsageSummary(effectiveDays);
   const scalingHistory = getScalingHistory(50);
 
-  // 현재 비용 계산
+// calculate current cost
   const currentMonthly = calculateMonthlyCost(summary.avgVcpu);
 
-  // AI 추천 생성
+// Generate AI recommendation
   const { recommendations, insight } = await getAIRecommendations(
     patterns,
     scalingHistory,
@@ -867,17 +867,17 @@ export async function generateCostReport(days: number = 7): Promise<CostReport> 
     effectiveDays
   );
 
-  // 최적화 비용 계산
+// Calculate optimization cost
   const optimizedMonthly = recommendations.length > 0
     ? Math.min(...recommendations.map(r => r.projectedCost))
     : currentMonthly;
 
-  // 총 절감률 계산
+// Calculate total savings
   const totalSavingsPercent = currentMonthly > 0
     ? Math.round(((currentMonthly - optimizedMonthly) / currentMonthly) * 100)
     : 0;
 
-  // UUID 생성 (간단한 버전)
+// Generate UUID (simple version)
   const id = `cost-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
   return {
@@ -896,20 +896,20 @@ export async function generateCostReport(days: number = 7): Promise<CostReport> 
 
 ---
 
-### 3.3 파일 생성: `src/app/api/cost-report/route.ts`
+### 3.3 Create file: `src/app/api/cost-report/route.ts`
 
-비용 분석 API 엔드포인트.
+Cost Analysis API endpoint.
 
 ```typescript
 /**
  * Cost Report API
- * GET /api/cost-report - 비용 분석 리포트 생성
+* GET /api/cost-report - Create a cost analysis report
  */
 
 import { NextResponse } from 'next/server';
 import { generateCostReport } from '@/lib/cost-optimizer';
 
-// 동적 라우트로 설정 (캐싱 비활성화)
+// set to dynamic route (disable caching)
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
@@ -917,7 +917,7 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const daysParam = url.searchParams.get('days');
 
-    // 기본값 7일, 최대 30일
+// Default 7 days, maximum 30 days
     let days = 7;
     if (daysParam) {
       const parsed = parseInt(daysParam, 10);
@@ -955,25 +955,25 @@ export async function GET(request: Request) {
 
 ---
 
-## 4. 기존 파일 수정
+## 4. Edit existing files
 
-### 4.1 수정: `src/app/api/metrics/route.ts`
+### 4.1 Fix: `src/app/api/metrics/route.ts`
 
-사용량 데이터를 usage-tracker에 기록하도록 수정.
+Modified to record usage data in usage-tracker.
 
-**위치:** 파일 상단 import 영역에 추가
+**Location:** Added to the import area at the top of the file
 
 ```typescript
-// 기존 import들...
+// Existing imports...
 import { createPublicClient, http } from 'viem';
 import { mainnet, sepolia } from 'viem/chains';
 import { NextResponse } from 'next/server';
 
-// === 추가 ===
+// === Add ===
 import { recordUsage } from '@/lib/usage-tracker';
 ```
 
-**위치:** GET 핸들러 내부, 비용 계산 이후 (약 420-425 라인 사이)
+**Location:** Inside the GET handler, after cost calculation (approximately between lines 420-425)
 
 **Before:**
 ```typescript
@@ -986,8 +986,8 @@ import { recordUsage } from '@/lib/usage-tracker';
 ```typescript
         const currentHourlyCost = opGethMonthlyCost / HOURS_PER_MONTH;
 
-        // === 추가: 사용량 데이터 기록 ===
-        // 스트레스 테스트 모드가 아닐 때만 기록 (실제 운영 데이터만 수집)
+// === Add: Usage data recording ===
+// Log only when not in stress test mode (collect only actual operational data)
         if (!isStressTest) {
           recordUsage(currentVcpu, effectiveCpu);
         }
@@ -995,31 +995,31 @@ import { recordUsage } from '@/lib/usage-tracker';
         const response = NextResponse.json({
 ```
 
-### 4.2 수정: `src/app/page.tsx`
+### 4.2 Fix: `src/app/page.tsx`
 
-비용 분석 UI 추가.
+Added cost analysis UI.
 
-**위치:** import 영역에 추가
+**Location:** Add to import area
 
 ```typescript
-// 기존 import들...
+// Existing imports...
 import {
   Activity, Server, Zap, ShieldAlert, Cpu, ArrowUpRight,
   TrendingDown, FileText, CheckCircle2, XCircle, Shield
 } from 'lucide-react';
 
-// === 추가 ===
+// === Add ===
 import { BarChart3, Calendar, Lightbulb, AlertTriangle, ChevronRight } from 'lucide-react';
 ```
 
-**위치:** MetricData 인터페이스 아래에 타입 추가
+**Location:** Add type under MetricData interface
 
 ```typescript
 interface MetricData {
-  // ... 기존 코드 ...
+// ... existing code ...
 }
 
-// === 추가: Cost Report 타입 ===
+// === Add: Cost Report Type ===
 interface CostReportData {
   id: string;
   generatedAt: string;
@@ -1050,11 +1050,11 @@ interface CostReportData {
 }
 ```
 
-**위치:** Dashboard 컴포넌트 내 state 선언 영역에 추가
+**Location:** Added to the state declaration area in the Dashboard component
 
 ```typescript
 export default function Dashboard() {
-  // 기존 state들...
+// Existing states...
   const [dataHistory, setDataHistory] = useState<{ name: string; cpu: number; gethVcpu: number; gethMemGiB: number; saving: number; cost: number }[]>([]);
   const [current, setCurrent] = useState<MetricData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -1062,20 +1062,20 @@ export default function Dashboard() {
   const [logInsight, setLogInsight] = useState<{ summary: string; severity: string; timestamp: string; action_item?: string } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  // === 추가: Cost Report state ===
+// === Add: Cost Report state ===
   const [costReport, setCostReport] = useState<CostReportData | null>(null);
   const [isLoadingCostReport, setIsLoadingCostReport] = useState(false);
   const [showCostAnalysis, setShowCostAnalysis] = useState(false);
 ```
 
-**위치:** checkLogs 함수 아래에 새 함수 추가
+**Location:** Add new function under checkLogs function
 
 ```typescript
   const checkLogs = async (mode: string) => {
-    // ... 기존 코드 ...
+// ... existing code ...
   };
 
-  // === 추가: 비용 분석 함수 ===
+// === Add: cost analysis function ===
   const fetchCostReport = async () => {
     setIsLoadingCostReport(true);
     setCostReport(null);
@@ -1093,9 +1093,9 @@ export default function Dashboard() {
   };
 ```
 
-**위치:** Resource Center 섹션의 "Total Saved Card (Dark)" 부분을 교체
+**Location:** Replace “Total Saved Card (Dark)” in the Resource Center section.
 
-**Before (전체 교체할 영역 - 약 304-326 라인):**
+**Before (whole area to replace - approximately lines 304-326):**
 ```typescript
           {/* Total Saved Card (Dark) */}
           <div className="mt-auto bg-[#1A1D21] rounded-2xl p-5 text-white">
@@ -1122,7 +1122,7 @@ export default function Dashboard() {
           </div>
 ```
 
-**After (새로운 확장 비용 대시보드):**
+**After (New Expansion Cost Dashboard):**
 ```typescript
           {/* Cost Dashboard (Dark) - Expanded */}
           <div className="mt-auto bg-[#1A1D21] rounded-2xl p-5 text-white">
@@ -1155,7 +1155,7 @@ export default function Dashboard() {
                 ) : (
                   <BarChart3 size={12} />
                 )}
-                {isLoadingCostReport ? '분석 중...' : 'COST ANALYSIS'}
+{isLoadingCostReport ? 'Analyzing...' : 'COST ANALYSIS'}
               </button>
             </div>
 
@@ -1178,7 +1178,7 @@ export default function Dashboard() {
                 <div className="mb-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Calendar size={12} className="text-gray-400" />
-                    <span className="text-[10px] text-gray-400 font-semibold uppercase">사용 패턴 (최근 {costReport.periodDays}일)</span>
+<span className="text-[10px] text-gray-400 font-semibold uppercase">Usage pattern (last {costReport.periodDays} days)</span>
                   </div>
                   <UsageHeatmap patterns={costReport.usagePatterns} />
                 </div>
@@ -1187,8 +1187,8 @@ export default function Dashboard() {
                 {costReport.recommendations.length > 0 && (
                   <div>
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-[10px] text-gray-400 font-semibold uppercase">최적화 추천</span>
-                      <span className="text-[10px] text-green-400 font-bold">최대 {costReport.totalSavingsPercent}% 절감 가능</span>
+<span className="text-[10px] text-gray-400 font-semibold uppercase">Optimization recommendation</span>
+<span className="text-[10px] text-green-400 font-bold">Savings up to {costReport.totalSavingsPercent}%</span>
                     </div>
                     <div className="space-y-2">
                       {costReport.recommendations.slice(0, 3).map((rec, idx) => (
@@ -1203,26 +1203,26 @@ export default function Dashboard() {
                   onClick={() => setShowCostAnalysis(false)}
                   className="w-full mt-3 py-2 text-xs text-gray-400 hover:text-gray-300 transition-colors"
                 >
-                  닫기
+close
                 </button>
               </div>
             )}
           </div>
 ```
 
-**위치:** 파일 끝, LogBlock 컴포넌트 아래에 새 컴포넌트 추가
+**Location:** End of file, add new component below LogBlock component
 
 ```typescript
 function LogBlock({ time, source, level, msg, highlight, color }: { time: string; source: string; level: string; msg: string; highlight?: boolean; color?: string }) {
-  // ... 기존 코드 ...
+// ... existing code ...
 }
 
-// === 추가: Usage Heatmap 컴포넌트 ===
+// === Add: Usage Heatmap component ===
 function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] }) {
-  const days = ['일', '월', '화', '수', '목', '금', '토'];
+const days = ['Sun', 'Mon', 'Tues', 'Wed', 'Thu', 'Fri', 'Sat'];
   const hours = Array.from({ length: 24 }, (_, i) => i);
 
-  // 패턴 데이터를 2D 맵으로 변환
+// Convert pattern data to 2D map
   const patternMap = new Map<string, { avgVcpu: number; avgUtilization: number }>();
   patterns.forEach(p => {
     patternMap.set(`${p.dayOfWeek}-${p.hourOfDay}`, {
@@ -1231,7 +1231,7 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
     });
   });
 
-  // 사용률에 따른 색상 결정
+// Determine color based on usage
   const getColor = (utilization: number): string => {
     if (utilization === 0) return 'bg-gray-800';
     if (utilization < 20) return 'bg-green-900/60';
@@ -1248,7 +1248,7 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
         <div className="flex ml-6 mb-1">
           {[0, 4, 8, 12, 16, 20].map(h => (
             <div key={h} className="text-[8px] text-gray-500 font-mono" style={{ marginLeft: h === 0 ? 0 : 'calc((100% - 48px) / 6 - 8px)', width: '16px' }}>
-              {h}시
+{h}hour
             </div>
           ))}
         </div>
@@ -1268,7 +1268,7 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
                     <div
                       key={hour}
                       className={`flex-1 h-3 rounded-sm ${getColor(utilization)} transition-colors hover:ring-1 hover:ring-white/30`}
-                      title={`${days[dayIdx]} ${hour}:00 - 평균 ${vcpu.toFixed(1)} vCPU, ${utilization.toFixed(0)}% 사용률`}
+title={`${days[dayIdx]} ${hour}:00 - 평균 ${vcpu.toFixed(1)} vCPU, ${utilization.toFixed(0)}% 사용률`}
                     />
                   );
                 })}
@@ -1279,7 +1279,7 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
 
         {/* Legend */}
         <div className="flex items-center justify-end gap-2 mt-2">
-          <span className="text-[8px] text-gray-500">낮음</span>
+<span className="text-[8px] text-gray-500">낮음</span>
           <div className="flex gap-px">
             <div className="w-3 h-2 rounded-sm bg-green-900/60" />
             <div className="w-3 h-2 rounded-sm bg-green-700/60" />
@@ -1287,21 +1287,21 @@ function UsageHeatmap({ patterns }: { patterns: CostReportData['usagePatterns'] 
             <div className="w-3 h-2 rounded-sm bg-orange-700/60" />
             <div className="w-3 h-2 rounded-sm bg-red-700/60" />
           </div>
-          <span className="text-[8px] text-gray-500">높음</span>
+<span className="text-[8px] text-gray-500">높음</span>
         </div>
       </div>
     </div>
   );
 }
 
-// === 추가: Recommendation Card 컴포넌트 ===
+// === Add: Recommendation Card component ===
 function RecommendationCard({ recommendation }: { recommendation: CostReportData['recommendations'][0] }) {
   const [expanded, setExpanded] = useState(false);
 
   const riskStyles = {
-    low: { bg: 'bg-green-900/30', text: 'text-green-400', label: '낮음' },
-    medium: { bg: 'bg-yellow-900/30', text: 'text-yellow-400', label: '중간' },
-    high: { bg: 'bg-red-900/30', text: 'text-red-400', label: '높음' },
+low: { bg: 'bg-green-900/30', text: 'text-green-400', label: '낮음' },
+medium: { bg: 'bg-yellow-900/30', text: 'text-yellow-400', label: '중간' },
+high: { bg: 'bg-red-900/30', text: 'text-red-400', label: '높음' },
   };
 
   const typeIcons = {
@@ -1328,7 +1328,7 @@ function RecommendationCard({ recommendation }: { recommendation: CostReportData
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <span className="text-xs font-bold text-green-400">-${(recommendation.currentCost - recommendation.projectedCost).toFixed(0)}/월</span>
+<span className="text-xs font-bold text-green-400">-${(recommendation.currentCost - recommendation.projectedCost).toFixed(0)}/월</span>
           <ChevronRight size={14} className={`text-gray-500 transition-transform ${expanded ? 'rotate-90' : ''}`} />
         </div>
       </div>
@@ -1338,15 +1338,15 @@ function RecommendationCard({ recommendation }: { recommendation: CostReportData
           {/* Stats */}
           <div className="grid grid-cols-3 gap-2 mb-3">
             <div className="text-center">
-              <p className="text-[9px] text-gray-500 uppercase">현재 비용</p>
+<p className="text-[9px] text-gray-500 uppercase">Current cost</p>
               <p className="text-xs font-bold text-white">${recommendation.currentCost.toFixed(0)}</p>
             </div>
             <div className="text-center">
-              <p className="text-[9px] text-gray-500 uppercase">예상 비용</p>
+<p className="text-[9px] text-gray-500 uppercase">Estimated cost</p>
               <p className="text-xs font-bold text-green-400">${recommendation.projectedCost.toFixed(0)}</p>
             </div>
             <div className="text-center">
-              <p className="text-[9px] text-gray-500 uppercase">절감률</p>
+<p className="text-[9px] text-gray-500 uppercase">절감률</p>
               <p className="text-xs font-bold text-green-400">{recommendation.savingsPercent}%</p>
             </div>
           </div>
@@ -1354,16 +1354,16 @@ function RecommendationCard({ recommendation }: { recommendation: CostReportData
           {/* Risk & Confidence */}
           <div className="flex items-center gap-3 mb-3">
             <div className={`px-2 py-0.5 rounded text-[9px] font-bold ${risk.bg} ${risk.text}`}>
-              위험도: {risk.label}
+Risk: {risk.label}
             </div>
             <div className="text-[9px] text-gray-400">
-              신뢰도: {(recommendation.confidence * 100).toFixed(0)}%
+Confidence: {(recommendation.confidence * 100).toFixed(0)}%
             </div>
           </div>
 
           {/* Implementation */}
           <div className="p-2 bg-gray-900/50 rounded-lg">
-            <p className="text-[9px] text-gray-400 uppercase mb-1">구현 방법</p>
+<p className="text-[9px] text-gray-400 uppercase mb-1">Implementation method</p>
             <p className="text-[10px] text-gray-300 leading-relaxed">{recommendation.implementation}</p>
           </div>
         </div>
@@ -1375,17 +1375,17 @@ function RecommendationCard({ recommendation }: { recommendation: CostReportData
 
 ---
 
-## 5. API 명세
+## 5. API Specification
 
 ### 5.1 GET /api/cost-report
 
-비용 분석 리포트를 생성합니다.
+Generate cost analysis reports.
 
 **Query Parameters:**
 
-| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
+| parameters | Type | Required | default | Description |
 |----------|------|------|--------|------|
-| days | number | No | 7 | 분석 기간 (1-30일) |
+| days | number | No | 7 | Analysis period (1-30 days) |
 
 **Request Example:**
 ```bash
@@ -1403,24 +1403,24 @@ curl "http://localhost:3002/api/cost-report?days=7"
   "recommendations": [
     {
       "type": "schedule",
-      "title": "야간 시간대 리소스 축소",
-      "description": "22시-08시 사이에 트래픽이 평균 대비 60% 감소합니다. 이 시간대에 1 vCPU로 운영하면 비용을 절감할 수 있습니다.",
+"title": "Reduce Nighttime Resources",
+"description": "Traffic drops by 60% compared to average between 22:00 and 08:00. You can save money by operating with 1 vCPU during these times.",
       "currentCost": 62.45,
       "projectedCost": 48.32,
       "savingsPercent": 23,
       "confidence": 0.85,
-      "implementation": "K8s CronJob을 설정하여 22시에 scaler API를 호출하여 1 vCPU로 축소하고, 08시에 2 vCPU로 복원합니다. 또는 AWS EventBridge 스케줄러와 Lambda를 조합하여 자동화할 수 있습니다.",
+"implementation": "Set up a K8s CronJob to call the scaler API at 22:00 to scale down to 1 vCPU and restore to 2 vCPU at 08:00. Alternatively, you can automate it using a combination of the AWS EventBridge scheduler and Lambda.",
       "risk": "low"
     },
     {
       "type": "right-size",
-      "title": "평균 사용률 기반 최적화",
-      "description": "현재 평균 CPU 사용률이 25%로 낮습니다. 스케일링 임계치를 조정하여 불필요한 스케일업을 방지할 수 있습니다.",
+"title": "Average Utilization Based Optimization",
+"description": "Current average CPU utilization is low at 25%. You can adjust the scaling threshold to avoid unnecessary scale-ups.",
       "currentCost": 62.45,
       "projectedCost": 51.20,
       "savingsPercent": 18,
       "confidence": 0.72,
-      "implementation": "scaling-decision.ts의 DEFAULT_SCALING_CONFIG에서 thresholds.idle을 30에서 40으로, thresholds.normal을 70에서 80으로 조정하세요.",
+"implementation": "In DEFAULT_SCALING_CONFIG in scaling-decision.ts, adjust thresholds.idle from 30 to 40 and thresholds.normal from 70 to 80.",
       "risk": "medium"
     }
   ],
@@ -1442,7 +1442,7 @@ curl "http://localhost:3002/api/cost-report?days=7"
       "sampleCount": 38
     }
   ],
-  "aiInsight": "지난 7일간 사용 패턴을 분석한 결과, 야간 시간대(22시-08시)와 주말에 트래픽이 현저히 감소하는 패턴이 확인됩니다. 평균 vCPU 1.3, 최대 4 vCPU를 사용했으며, 평균 CPU 사용률은 28%입니다. 시간 기반 스케줄링을 적용하면 월간 약 $14의 비용을 절감할 수 있습니다.",
+"aiInsight": "Analyzing usage patterns over the past 7 days, we see a pattern of significantly reduced traffic during nighttime hours (22:00 - 08:00) and on weekends. Average usage of 1.3 vCPU, maximum of 4 vCPU, and average CPU utilization of 28%. Applying time-based scheduling can result in cost savings of approximately $14 per month.",
   "periodDays": 7
 }
 ```
@@ -1457,9 +1457,9 @@ curl "http://localhost:3002/api/cost-report?days=7"
 
 ---
 
-## 6. AI 프롬프트 전문
+## 6. AI Prompt Professional
 
-### 6.1 System Prompt (전문)
+### 6.1 System Prompt (Full text)
 
 ```
 You are a cloud cost optimization advisor for an Optimism L2 Rollup infrastructure running on AWS Fargate.
@@ -1497,7 +1497,7 @@ Analyze vCPU usage patterns and scaling history to identify cost optimization op
 Respond ONLY in valid JSON format without markdown code blocks.
 ```
 
-### 6.2 User Prompt Template (전문)
+### 6.2 User Prompt Template (Full text)
 
 ```
 ## Analysis Period
@@ -1533,13 +1533,13 @@ Analyze the above data and provide cost optimization recommendations.
 
 For each recommendation, include:
 1. type: 'downscale' | 'schedule' | 'reserved' | 'right-size'
-2. title: 추천 제목 (Korean, 20자 이내)
-3. description: 상세 설명 (Korean, 100자 이내)
-4. currentCost: 현재 월간 비용 (USD)
-5. projectedCost: 적용 후 예상 월간 비용 (USD)
-6. savingsPercent: 절감률 (0-100)
-7. confidence: 신뢰도 (0-1)
-8. implementation: 구현 방법 (Korean, 상세히)
+2. title: Recommended title (Korean, within 20 characters)
+3. description: Detailed description (Korean, within 100 characters)
+4. currentCost: Current monthly cost (USD)
+5. projectedCost: Estimated monthly cost after application (USD)
+6. savingsPercent: savings percentage (0-100)
+7. confidence: confidence (0-1)
+8. implementation: implementation method (Korean, in detail)
 9. risk: 'low' | 'medium' | 'high'
 
 Also provide an overall insight summary in Korean.
@@ -1559,7 +1559,7 @@ Respond in this exact JSON format:
       "risk": "low"
     }
   ],
-  "insight": "전체 인사이트 요약 (Korean)"
+"insight": "Full Insight Summary (Korean)"
 }
 ```
 
@@ -1570,49 +1570,49 @@ Respond in this exact JSON format:
   "recommendations": [
     {
       "type": "schedule",
-      "title": "야간 자동 스케일다운",
-      "description": "22시-08시 트래픽이 평균 대비 65% 감소합니다. 이 시간대에 1 vCPU로 운영 시 비용 절감이 가능합니다.",
+"title": "Night Automatic Scale Down",
+"description": "Traffic decreases by 65% ​​compared to average between 22:00 and 08:00. Cost savings can be achieved by operating with 1 vCPU during these hours.",
       "currentCost": 62.45,
       "projectedCost": 48.32,
       "savingsPercent": 23,
       "confidence": 0.88,
-      "implementation": "K8s CronJob 2개를 생성합니다:\n1. 22:00 KST - POST /api/scaler {targetVcpu: 1}\n2. 08:00 KST - POST /api/scaler {targetVcpu: 2}\n\nCronJob YAML 예시:\n```yaml\napiVersion: batch/v1\nkind: CronJob\nmetadata:\n  name: scale-down-night\nspec:\n  schedule: \"0 22 * * *\"\n  jobTemplate:\n    spec:\n      template:\n        spec:\n          containers:\n          - name: scaler\n            image: curlimages/curl\n            command: [\"curl\", \"-X\", \"POST\", \"http://sentinai:3000/api/scaler\", \"-d\", '{\"targetVcpu\":1}']\n```",
+"implementation": "K8s CronJob 2개를 생성합니다:\n1. 22:00 KST - POST /api/scaler {targetVcpu: 1}\n2. 08:00 KST - POST /api/scaler {targetVcpu: 2}\n\nCronJob YAML 예시:\n```yaml\napiVersion: batch/v1\nkind: CronJob\nmetadata:\n  name: scale-down-night\nspec:\n  schedule: \"0 22 * * *\"\n  jobTemplate:\n    spec:\n      template:\n        spec:\n          containers:\n          - name: scaler\n            image: curlimages/curl\n            command: [\"curl\", \"-X\", \"POST\", \"http://sentinai:3000/api/scaler\", \"-d\", '{\"targetVcpu\":1}']\n```",
       "risk": "low"
     },
     {
       "type": "right-size",
-      "title": "스케일링 임계치 최적화",
-      "description": "평균 사용률 28%로 idle 임계치(30) 근처입니다. 임계치 상향 조정으로 불필요한 스케일업을 방지할 수 있습니다.",
+"title": "Scaling Threshold Optimization",
+"description": "The average utilization rate is 28%, which is near the idle threshold (30). Raising the threshold can prevent unnecessary scale-up.",
       "currentCost": 62.45,
       "projectedCost": 55.10,
       "savingsPercent": 12,
       "confidence": 0.72,
-      "implementation": "src/types/scaling.ts의 DEFAULT_SCALING_CONFIG를 수정합니다:\n\nBefore:\nthresholds: { idle: 30, normal: 70 }\n\nAfter:\nthresholds: { idle: 40, normal: 80 }\n\n이렇게 하면 score가 40 미만일 때만 1 vCPU로 유지되고, 80 이상일 때만 4 vCPU로 스케일업됩니다.",
+"implementation": "Modify DEFAULT_SCALING_CONFIG in src/types/scaling.ts:\n\nBefore:\nthresholds: { idle: 30, normal: 70 }\n\nAfter:\nthresholds: { idle: 40, normal: 80 }\n\nThis will keep it at 1 vCPU only when score is below 40, and 80 Scales up to 4 vCPU only when there is more.",
       "risk": "medium"
     }
   ],
-  "insight": "7일간 1,440개 데이터를 분석한 결과, 야간(22시-08시)과 주말에 트래픽이 현저히 감소하는 패턴이 확인됩니다. 현재 평균 1.3 vCPU, 평균 사용률 28%로 리소스 여유가 있습니다. 시간 기반 스케줄링만 적용해도 월 $14(23%) 절감이 가능하며, 임계치 조정을 함께 적용하면 최대 $18(29%)까지 절감할 수 있습니다. 위험도는 낮으며, 피크 시간대 성능에 영향을 주지 않습니다."
+"insight": "After analyzing 1,440 pieces of data over 7 days, we see a pattern of significantly reduced traffic at night (22:00 - 08:00) and on weekends. Currently, with an average of 1.3 vCPU and an average utilization of 28%, resources are available. Applying time-based scheduling alone can save $14 (23%) per month, and applying threshold adjustment together can save up to $18 (29%). The risk is low; There will be no impact on peak hour performance."
 }
 ```
 
 ---
 
-## 7. 환경 변수
+## 7. Environment variables
 
-### 7.1 새로운 환경 변수
+### 7.1 New environment variables
 
-`.env.local.sample`에 추가:
+Add to `.env.local.sample`:
 
 ```bash
 # Cost Optimizer (Proposal 4)
-# 사용량 추적 활성화 여부 (기본값: true)
-# false로 설정하면 사용량 데이터를 수집하지 않음
+# Whether to enable usage tracking (default: true)
+# If set to false, no usage data will be collected
 COST_TRACKING_ENABLED=true
 ```
 
-### 7.2 기존 환경 변수 (필수)
+### 7.2 Existing environment variables (required)
 
-이 기능은 기존 AI Gateway 설정을 사용합니다:
+This feature uses your existing AI Gateway settings:
 
 ```bash
 # AI Configuration (Required for Cost Analysis)
@@ -1622,79 +1622,79 @@ ANTHROPIC_API_KEY=your-api-key-here
 
 ---
 
-## 8. 테스트 검증
+## 8. Test verification
 
-### 8.1 API 테스트 (curl)
+### 8.1 API testing (curl)
 
-**기본 리포트 생성:**
+**Create basic report:**
 ```bash
 curl -X GET "http://localhost:3002/api/cost-report" | jq
 ```
 
-**14일 분석:**
+**14-day analysis:**
 ```bash
 curl -X GET "http://localhost:3002/api/cost-report?days=14" | jq
 ```
 
-**응답 확인 항목:**
-- `id`: 고유 ID가 생성되었는지
-- `recommendations`: 최소 1개 이상의 추천이 있는지
-- `usagePatterns`: 데이터가 있으면 패턴이 포함되어 있는지
-- `aiInsight`: 한글로 인사이트가 작성되었는지
+**Response confirmation items:**
+- `id`: Is a unique ID created?
+- `recommendations`: Is there at least 1 recommendation?
+- `usagePatterns`: If data exists, check whether it contains patterns.
+- `aiInsight`: Is the insight written in Korean?
 
-### 8.2 UI 테스트
+### 8.2 UI testing
 
-**시나리오 1: 정상 흐름**
-1. 대시보드 접속 (`http://localhost:3002`)
-2. Resource Center 하단의 "COST ANALYSIS" 버튼 클릭
-3. 로딩 스피너 표시 확인
-4. 분석 완료 후:
-   - AI 인사이트 카드 표시
-   - 사용 패턴 히트맵 표시
-   - 추천 카드 목록 표시
-5. 추천 카드 클릭 시 상세 정보 확장
-6. "닫기" 버튼으로 패널 축소
+**Scenario 1: Steady Flow**
+1. Access dashboard (`http://localhost:3002`)
+2. Click the “COST ANALYSIS” button at the bottom of the Resource Center
+3. Check the loading spinner display
+4. After analysis is complete:
+- Display AI insight card
+- Show usage pattern heatmap
+- Display list of recommended cards
+5. Expand detailed information when clicking on the recommended card
+6. Collapse the panel with the “Close” button
 
-**시나리오 2: 데이터 없음**
-1. 서버 재시작 직후 (데이터 없는 상태)
-2. "COST ANALYSIS" 버튼 클릭
-3. Fallback 추천이 표시되는지 확인
-4. "AI 분석이 실패하여 기본 추천을 제공합니다" 메시지 확인
+**Scenario 2: No data**
+1. Immediately after server restart (no data)
+2. Click the “COST ANALYSIS” button
+3. Verify that Fallback recommendations are displayed
+4. Check the message “AI analysis failed, providing default recommendations”
 
-**시나리오 3: 스트레스 모드 제외**
-1. "Simulate Load" 버튼 클릭하여 스트레스 모드 활성화
-2. 1-2분 대기 (데이터 수집)
-3. 스트레스 모드 비활성화
-4. "COST ANALYSIS" 실행
-5. 8 vCPU 데이터가 패턴에 포함되지 않았는지 확인
+**Scenario 3: Excluding stress mode**
+1. Click the “Simulate Load” button to activate stress mode
+2. Wait 1-2 minutes (data collection)
+3. Disable stress mode
+4. Run “COST ANALYSIS”
+5. Verify that 8 vCPU data is not included in the pattern
 
 ### 8.3 Edge Cases
 
-| 케이스 | 예상 동작 |
+| case | Expected Behavior |
 |--------|-----------|
-| 사용량 데이터 0개 | 빈 패턴, Fallback 인사이트 |
-| 1일치 데이터만 존재 | 제한된 패턴, 낮은 신뢰도 추천 |
-| AI Gateway 타임아웃 | Fallback 추천 생성, 에러 로깅 |
-| 잘못된 days 파라미터 | 기본값 7일 사용 |
-| days > 30 | 30일로 제한 |
+| 0 usage data | Empty Pattern, Fallback Insights |
+| Only 1-match data exists | Limited pattern, low confidence recommendation |
+| AI Gateway timeout | Fallback recommendation generation, error logging |
+| Invalid days parameter | Use default 7 days |
+| days > 30 | Limited to 30 days |
 
 ---
 
-## 9. 의존관계
+## 9. Dependencies
 
-### 9.1 필수 의존성
+### 9.1 Required dependencies
 
-| 모듈 | 설명 | 상태 |
+| module | Description | status |
 |------|------|------|
-| `src/lib/k8s-scaler.ts` | `getScalingHistory()` 함수 | 이미 존재 |
-| AI Gateway | Claude API 호출 | 기존 패턴 존재 |
+| `src/lib/k8s-scaler.ts` | `getScalingHistory()` function | already exists |
+| AI Gateway | Claude API call | Existing pattern exists |
 
-### 9.2 선택적 의존성 (Proposal 1)
+### 9.2 Optional dependencies (Proposal 1)
 
-`MetricsStore`가 구현되면 `usage-tracker.ts`를 확장하여 연동 가능:
+Once `MetricsStore` is implemented, it can be integrated by extending `usage-tracker.ts`:
 
 ```typescript
-// 미래 확장 예시
+// example of future expansion
 import { getStats } from '@/lib/metrics-store';
 
 export function enhancedPatternAnalysis(days: number) {
@@ -1708,76 +1708,76 @@ export function enhancedPatternAnalysis(days: number) {
 }
 ```
 
-### 9.3 독립성
+### 9.3 Independence
 
-- **Proposal 2 (Anomaly Detection):** 독립적, 별도 기능
-- **Proposal 3 (RCA Engine):** 독립적, 별도 기능
-- **Proposal 5 (NLOps):** 독립적, 향후 통합 가능
+- **Proposal 2 (Anomaly Detection):** Independent, separate function
+- **Proposal 3 (RCA Engine):** Independent, separate function
+- **Proposal 5 (NLOps):** Independent, possible integration in the future
 
 ---
 
-## 10. UI 상세 - Usage Heatmap
+## 10. UI Details - Usage Heatmap
 
-### 10.1 레이아웃 명세
+### 10.1 Layout Specification
 
-**구조:**
-- 7행 (일-토) x 24열 (0시-23시) 그리드
-- 각 셀: 3px 높이, flex-1 너비
-- 요일 레이블: 왼쪽 20px 폭
-- 시간 레이블: 상단에 6시간 간격 (0, 4, 8, 12, 16, 20)
+**structure:**
+- 7 rows (Sunday - Saturday) x 24 columns (00:00 - 23:00) grid
+- Each cell: 3px height, flex-1 width
+- Day label: left 20px wide
+- Time labels: 6 hour intervals at the top (0, 4, 8, 12, 16, 20)
 
-**색상 스케일 (CPU 사용률 기준):**
+**Color scale (based on CPU utilization):**
 
-| 사용률 | 색상 클래스 | 설명 |
+| utilization | color class | Description |
 |--------|-------------|------|
-| 0% | `bg-gray-800` | 데이터 없음 |
-| 1-19% | `bg-green-900/60` | 매우 낮음 |
-| 20-39% | `bg-green-700/60` | 낮음 |
-| 40-59% | `bg-yellow-700/60` | 보통 |
-| 60-79% | `bg-orange-700/60` | 높음 |
-| 80%+ | `bg-red-700/60` | 매우 높음 |
+| 0% | `bg-gray-800` | No data |
+| 1-19% | `bg-green-900/60` | very low |
+| 20-39% | `bg-green-700/60` | low |
+| 40-59% | `bg-yellow-700/60` | Normal |
+| 60-79% | `bg-orange-700/60` | High |
+| 80%+ | `bg-red-700/60` | very high |
 
-### 10.2 인터랙션
+### 10.2 Interaction
 
 **Hover Tooltip:**
 ```
-월 14:00 - 평균 2.1 vCPU, 67% 사용률
+14:00 per month - 2.1 vCPU average, 67% utilization
 ```
 
-**구현 (title 속성 사용):**
+**Implementation (using title attribute):**
 ```tsx
 title={`${days[dayOfWeek]} ${hour}:00 - 평균 ${vcpu.toFixed(1)} vCPU, ${utilization.toFixed(0)}% 사용률`}
 ```
 
-### 10.3 반응형 고려
+### 10.3 Consider responsiveness
 
-- `min-w-[400px]`: 최소 너비 보장
-- `overflow-x-auto`: 작은 화면에서 가로 스크롤
-- 모바일에서는 가로 스크롤 힌트 표시 가능
-
----
-
-## 구현 체크리스트
-
-구현 완료 후 확인할 항목:
-
-- [ ] `src/types/cost.ts` 생성 및 모든 타입 정의
-- [ ] `src/lib/usage-tracker.ts` 생성 및 함수 구현
-- [ ] `src/lib/cost-optimizer.ts` 생성 및 AI 연동
-- [ ] `src/app/api/cost-report/route.ts` 생성
-- [ ] `src/app/api/metrics/route.ts`에 `recordUsage` 호출 추가
-- [ ] `src/app/page.tsx`에 state, 함수, UI 컴포넌트 추가
-- [ ] `.env.local.sample`에 `COST_TRACKING_ENABLED` 추가
-- [ ] TypeScript 컴파일 오류 없음 (`npm run build`)
-- [ ] ESLint 경고 없음 (`npm run lint`)
-- [ ] 로컬 테스트 완료 (curl, UI)
+- `min-w-[400px]`: Guaranteed minimum width
+- `overflow-x-auto`: horizontal scrolling on small screens
+- Horizontal scroll hint can be displayed on mobile devices
 
 ---
 
-## 문서 끝
+## Implementation Checklist
 
-이 문서는 Proposal 4: AI Cost Optimizer의 완전한 구현 명세입니다.
-다른 파일이나 외부 문서 참조 없이 이 문서만으로 구현이 가능합니다.
+Items to check after implementation is complete:
 
-작성일: 2026-02-06
-버전: 1.0.0
+- [ ] Create `src/types/cost.ts` and define all types
+- [ ] `src/lib/usage-tracker.ts` creation and function implementation
+- [ ] Creation of `src/lib/cost-optimizer.ts` and integration with AI
+- [ ] Create `src/app/api/cost-report/route.ts`
+- [ ] Add `recordUsage` call to `src/app/api/metrics/route.ts`
+- [ ] Add state, function, and UI components to `src/app/page.tsx`
+- [ ] Add `COST_TRACKING_ENABLED` to `.env.local.sample`
+- [ ] No TypeScript compilation errors (`npm run build`)
+- [ ] No ESLint warnings (`npm run lint`)
+- [ ] Local testing completed (curl, UI)
+
+---
+
+## end of document
+
+This document is the complete implementation specification for Proposal 4: AI Cost Optimizer.
+It can be implemented using only this document without reference to other files or external documents.
+
+Created on: 2026-02-06
+Version: 1.0.0

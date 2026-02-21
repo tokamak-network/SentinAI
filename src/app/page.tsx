@@ -84,7 +84,6 @@ interface MetricData {
 }
 
 interface L1FailoverStatus {
-  activeUrl: string;
   failoverCount: number;
   spareUrlCount: number;
   healthy: boolean;
@@ -195,6 +194,13 @@ interface AgentCycleData {
     fromUrl: string;
     toUrl: string;
     k8sUpdated: boolean;
+  };
+  proxydReplacement?: {
+    triggered: boolean;
+    backendName: string;
+    oldUrl: string;
+    newUrl: string;
+    reason: string;
   };
   error?: string;
 }
@@ -643,8 +649,10 @@ export default function Dashboard() {
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${l1Failover.healthy ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
                 <div>
-                  <p className="text-[10px] text-gray-400 font-semibold uppercase">L1 RPC (L2 Nodes)</p>
-                  <p className="text-sm font-bold text-gray-900 font-mono">{l1Failover.activeUrl}</p>
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase">L1 RPC</p>
+                  <p className={`text-sm font-bold ${l1Failover.healthy ? 'text-green-600' : 'text-red-600'}`}>
+                    {l1Failover.healthy ? 'Available' : 'Unavailable'}
+                  </p>
                 </div>
               </div>
               <div className="h-6 w-px bg-gray-200"></div>
@@ -1097,7 +1105,12 @@ export default function Dashboard() {
                     let color = 'text-gray-400';
                     let borderColor = '';
 
-                    if (cycle.failover?.triggered) {
+                    if (cycle.proxydReplacement?.triggered) {
+                      event = 'PROXYD';
+                      detail = `${cycle.proxydReplacement.backendName}: ${cycle.proxydReplacement.oldUrl} → ${cycle.proxydReplacement.newUrl}`;
+                      color = 'text-fuchsia-400';
+                      borderColor = 'border-l-2 border-fuchsia-500 pl-2';
+                    } else if (cycle.failover?.triggered) {
                       event = 'FAILOVER';
                       detail = `L1 RPC: ${cycle.failover.fromUrl} → ${cycle.failover.toUrl}`;
                       if (cycle.failover.k8sUpdated) detail += ' (K8s updated)';

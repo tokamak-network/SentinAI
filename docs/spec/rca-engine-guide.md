@@ -1,34 +1,34 @@
-# RCA Engine (Root Cause Analysis) 가이드
+# RCA Engine (Root Cause Analysis) Guide
 
-## 📋 개요
+## 📋 Overview
 
-RCA Engine은 **이상 탐지 후 근본 원인을 추적**하고 **해결 방안을 제시**하는 AI 기반 분석 시스템입니다.
+RCA Engine is an AI-based analysis system that **tracks the root cause after detecting anomalies** and **suggests solutions**.
 
-**파일**: `src/lib/rca-engine.ts`
+**File**: `src/lib/rca-engine.ts`
 
-### 3단계 분석 프로세스
+### 3-step analysis process
 
 ```
-1️⃣ Timeline 구성
-   ├─ 로그 파싱
-   ├─ 이상 메트릭 변환
-   └─ 시간순 정렬
+1️⃣ Timeline composition
+├─ Log parsing
+├─ Ideal Metric Conversion
+└─ Sort by time
 
-2️⃣ AI 인과관계 분석
-   ├─ Component 의존성 그래프 활용
-   ├─ 연쇄 실패 추적
-   └─ 심각도 평가
+2️⃣ AI causality analysis
+├─ Utilize component dependency graph
+├─ Chain failure tracking
+└─ Severity assessment
 
-3️⃣ 권장 조치 제시
-   ├─ 즉시 조치 (Immediate)
-   └─ 예방 조치 (Preventive)
+3️⃣ Provide recommended actions
+├─ Immediate action (Immediate)
+└─ Preventive measures
 ```
 
 ---
 
-## 🏗️ Optimism Rollup 아키텍처
+## 🏗️ Optimism Rollup Architecture
 
-### 컴포넌트 관계도
+### Component relationship diagram
 
 ```
                     ┌─────────────────┐
@@ -52,17 +52,17 @@ RCA Engine은 **이상 탐지 후 근본 원인을 추적**하고 **해결 방�
                     └─────→ L1 (Submit batches & roots)
 ```
 
-### 각 컴포넌트 역할
+### Role of each component
 
-| 컴포넌트 | 역할 | 의존성 | 영향 범위 |
+| component | Role | Dependency | Scope of influence |
 |---------|------|--------|---------|
-| **L1** | 외부 체인 (Ethereum/Sepolia) | 없음 | 모든 컴포넌트 |
-| **op-node** | L1 데이터 수신 → L2 상태 유도 | L1 | 모든 하위 컴포넌트 |
-| **op-geth** | L2 블록 실행 (트랜잭션 처리) | op-node | 트랜잭션 처리 |
-| **op-batcher** | L2 트랜잭션 배치 제출 (L1) | op-node, L1 | 트랜잭션 압축 |
-| **op-proposer** | L2 상태근 제출 (L1) | op-node, L1 | 인출(Withdrawal) |
+| **L1** | External Chain (Ethereum/Sepolia) | None | All components |
+| **op-node** | Receive L1 data → derive L2 state | L1 | All subcomponents |
+| **op-geth** | L2 block execution (transaction processing) | op-node | transaction processing |
+| **op-batcher** | Submit L2 Transaction Batch (L1) | op-node, L1 | transaction compression |
+| **op-proposer** | Submitted by Sang Geun Sang for L2 (L1) | op-node, L1 | Withdrawal |
 
-### 의존성 그래프
+### Dependency graph
 
 ```typescript
 const DEPENDENCY_GRAPH = {
@@ -89,73 +89,73 @@ const DEPENDENCY_GRAPH = {
 };
 ```
 
-**중요**: op-node가 실패하면 모든 하위 컴포넌트가 영향을 받습니다!
+**Important**: If an op-node fails, all child components are affected!
 
 ---
 
-## 📊 Timeline 구성
+## 📊 Timeline configuration
 
-### 데이터 소스
+### Data Source
 
-Timeline은 다음 3가지 소스에서 이벤트를 수집합니다:
+Timeline collects events from three sources:
 
-#### 1. 로그 파싱 (Log Events)
+#### 1. Log parsing (Log Events)
 
 ```typescript
 function parseLogsToEvents(logs: Record<string, string>): RCAEvent[]
 ```
 
-**지원 형식**:
+**Supported Formats**:
 - ISO 8601: `2024-12-09T14:30:45.123Z`
-- Geth 형식: `[12-09|14:30:45.123]`
-- 일반 형식: `2024-12-09 14:30:45`
+- Geth format: `[12-09|14:30:45.123]`
+- General format: `2024-12-09 14:30:45`
 
-**추출 조건**:
-- ERROR, ERR, FATAL 레벨 → type: `error`
-- WARN, WARNING 레벨 → type: `warning`
+**Extraction Conditions**:
+- ERROR, ERR, FATAL level → type: `error`
+- WARN, WARNING level → type: `warning`
 
-**예시**:
+**example**:
 ```
 [12-09|14:30:45.123] ERROR [execution] block derivation failed: context deadline exceeded
 
 → {
   timestamp: 1733761845123,
-  component: 'op-geth',  # 자동 맵핑
+component: 'op-geth', # automatic mapping
   type: 'error',
   description: 'block derivation failed: context deadline exceeded',
   severity: 'high'
 }
 ```
 
-#### 2. 이상 메트릭 변환 (Anomaly Events)
+#### 2. Anomalous metric conversion (Anomaly Events)
 
 ```typescript
 function anomaliesToEvents(anomalies: AnomalyResult[]): RCAEvent[]
 ```
 
-**메트릭 → 컴포넌트 맵핑**:
+**Metric → Component Mapping**:
 
-| 메트릭 | 컴포넌트 | 원인 |
+| metrics | component | Cause |
 |--------|---------|------|
-| `cpuUsage` | op-geth | CPU 스파이크/부하 |
-| `txPoolPending` | op-geth | 트랜잭션 축적 |
-| `gasUsedRatio` | op-geth | 블록 포화 |
-| `l2BlockHeight`, `l2BlockInterval` | op-node | 블록 생성 정체 |
+| `cpuUsage` | op-geth | CPU spikes/load |
+| `txPoolPending` | op-geth | Transaction Accumulation |
+| `gasUsedRatio` | op-geth | block saturation |
+| `l2BlockHeight`, `l2BlockInterval` | op-node | Block creation stagnation |
 
-**예시**:
+**example**:
 ```
-Anomaly: CPU 스파이크 (Z-Score: 3.2)
+Anomaly: CPU spike (Z-Score: 3.2)
 
 → {
   timestamp: 1733761900000,
   component: 'op-geth',
   type: 'metric_anomaly',
   description: 'CPU usage spike: 30% → 65%',
-  severity: 'high'  # |Z| > 2.5 이므로
+severity: 'high' # |Z| Since > 2.5
 }
 ```
 
-#### 3. 시간순 정렬
+#### 3. Sort chronologically
 
 ```typescript
 function buildTimeline(
@@ -165,12 +165,12 @@ function buildTimeline(
 ): RCAEvent[]
 ```
 
-**동작**:
-1. 로그 + 이상 메트릭 합치기
-2. 지난 5분 데이터만 필터링
-3. 타임스탬프 기준 정렬
+**movement**:
+1. Combine log + anomaly metrics
+2. Filter only the last 5 minutes of data
+3. Sort by timestamp
 
-**결과**:
+**result**:
 ```json
 [
   {
@@ -196,24 +196,24 @@ function buildTimeline(
 
 ---
 
-## 🧠 AI 기반 인과관계 분석
+## 🧠 AI-based causal analysis
 
-### System Prompt 구조
+### System Prompt Structure
 
-RCA Engine은 **SRE 관점의 명확한 지시**를 Claude에 제공합니다:
+RCA Engine provides **clear instructions from an SRE perspective** to Claude:
 
 ```
-1. Component Architecture (5개 컴포넌트 상세 설명)
-2. Dependency Graph (의존성 관계)
-3. Common Failure Patterns (5가지 전형적 실패 패턴)
-4. Analysis Guidelines (분석 방법론)
+1. Component Architecture (detailed description of 5 components)
+2. Dependency Graph
+3. Common Failure Patterns (5 typical failure patterns)
+4. Analysis Guidelines (Analysis Methodology)
 ```
 
-### 5가지 전형적 실패 패턴
+### 5 typical failure patterns
 
-#### 1️⃣ L1 Reorg (L1 체인 재조직)
+#### 1️⃣ L1 Reorg (L1 chain reorganization)
 
-**원인**: L1에서 체인 재조직 발생
+**Cause**: Chain reorganization occurs in L1
 ```
 ┌─────────────────────────────────┐
 │ L1 Reorg                        │
@@ -222,29 +222,29 @@ RCA Engine은 **SRE 관점의 명확한 지시**를 Claude에 제공합니다:
              ▼
 ┌────────────────────────────────┐
 │ op-node Derivation Reset       │
-│ (유도 상태 초기화)              │
+│ (Initialization of inductive state) │
 └────────────┬────────────────────┘
              │
              ▼
 ┌────────────────────────────────┐
 │ L2 Block Generation Stall      │
-│ (블록 생성 일시 정지)           │
+│ (Pause block creation) │
 └────────────────────────────────┘
 ```
 
-**증상**:
-- Block height plateau 2분 이상
-- 임시 동기화 정지
+**Symptoms**:
+- Block height plateau 2 minutes or more
+- Temporarily stop synchronization
 
 ---
 
-#### 2️⃣ L1 Gas Spike (L1 가스비 급등)
+#### 2️⃣ L1 Gas Spike
 
-**원인**: L1 네트워크 혼잡
+**Cause**: L1 network congestion
 ```
 ┌──────────────────────────┐
 │ L1 Gas Price Surge       │
-│ (가스비 급상승)           │
+│ (Gas costs rise rapidly) │
 └─────────┬────────────────┘
           │
     ┌─────┴─────┐
@@ -258,20 +258,20 @@ TxPool
 Accumulation
 ```
 
-**증상**:
-- op-batcher: 배치 제출 실패
-- TxPool: 단조 증가 (5분 이상)
+**Symptoms**:
+- op-batcher: batch submission failed
+- TxPool: monotonic increase (over 5 minutes)
 - 로그: "transaction underpriced" 또는 "replacement transaction underpriced"
 
 ---
 
-#### 3️⃣ op-geth Crash (프로세스 중단)
+#### 3️⃣ op-geth Crash
 
-**원인**: op-geth 프로세스 중단 (OOM, 시그널 등)
+**Cause**: Op-geth process crash (OOM, signal, etc.)
 ```
 ┌──────────────────┐
 │ op-geth Crash    │
-│ (프로세스 종료)   │
+│ (End process) │
 └────────┬─────────┘
          │
          ▼
@@ -280,72 +280,72 @@ Memory: Peak → 0
 Port: Open → Closed
 ```
 
-**증상**:
-- CPU 갑자기 0% (Zero-drop detection)
-- 모든 트랜잭션 처리 중단
+**Symptoms**:
+- CPU suddenly drops to 0% (Zero-drop detection)
+- Stop processing all transactions
 - 로그: "connection refused", "unexpected EOF"
 
 ---
 
-#### 4️⃣ Network Partition (P2P 네트워크 단절)
+#### 4️⃣ Network Partition (P2P network disconnection)
 
-**원인**: 노드 간 P2P 통신 단절
+**Cause**: P2P communication disconnection between nodes
 ```
 ┌──────────────────────────┐
 │ Network Partition        │
-│ (P2P Gossip 단절)        │
+│ (P2P Gossip disconnection) │
 └────────┬─────────────────┘
          │
          ▼
 ┌──────────────────────────┐
 │ op-node Peer Loss        │
-│ (동료 노드 연결 손실)    │
+│ (Loss of peer node connectivity) │
 └────────┬─────────────────┘
          │
          ▼
 Unsafe Head Divergence
-(안전 헤드 발산)
+(Safe Head Radiation)
 ```
 
-**증상**:
-- op-node: "peer disconnected" 로그
-- Block interval: 증가
-- Unsafe head: 예상값과 다름
+**Symptoms**:
+- on-node: "peer disconnected" 로그
+- Block interval: increase
+- Unsafe head: different from expected value
 
 ---
 
 #### 5️⃣ Sequencer Stall (Sequencer 정지)
 
-**원인**: Sequencer 노드 자체 문제
+**Cause**: Problem with the Sequencer node itself
 ```
 ┌──────────────────────┐
 │ Sequencer Stall      │
-│ (블록 생성 정지)      │
+│ (Stop block generation) │
 └──────────┬───────────┘
            │
     ┌──────┴──────┐
     ▼             ▼
 Block Height   TxPool
 Plateau        Growth
-(2분+)         (5분+)
+(2 minutes+) (5 minutes+)
 ```
 
-**증상**:
-- Block height: 변화 없음
-- TxPool: 계속 증가
-- 로그: "context deadline exceeded" 등 타임아웃
+**Symptoms**:
+- Block height: no change
+- TxPool: continues to increase
+- Log: timeout such as "context deadline exceeded"
 
 ---
 
-### AI 분석 결과 형식
+### AI analysis result format
 
-Claude가 반환하는 JSON:
+The JSON returned by Claude:
 
 ```json
 {
   "rootCause": {
     "component": "op-node" | "op-geth" | "op-batcher" | "op-proposer" | "l1" | "system",
-    "description": "명확한 근본 원인 설명",
+"description": "Clear root cause description",
     "confidence": 0.0 - 1.0
   },
   "causalChain": [
@@ -353,7 +353,7 @@ Claude가 반환하는 JSON:
       "timestamp": 1733761800000,
       "component": "op-node",
       "type": "error" | "warning" | "metric_anomaly" | "state_change",
-      "description": "이 단계에서 발생한 일"
+"description": "What happened in this step"
     }
   ],
   "affectedComponents": ["op-geth", "op-batcher"],
@@ -364,61 +364,61 @@ Claude가 반환하는 JSON:
 }
 ```
 
-### 신뢰도 점수 (Confidence)
+### Confidence score
 
-| 신뢰도 | 의미 | 상황 |
+| Reliability | Meaning | Situation |
 |--------|------|------|
-| **0.9~1.0** | 매우 높음 | 명확한 로그 + 이상 메트릭 일치 |
-| **0.7~0.9** | 높음 | 로그 또는 메트릭 중 하나만 명확 |
-| **0.5~0.7** | 중간 | 여러 가능성 있음 |
-| **0.3~0.5** | 낮음 | AI 호출 실패 → Fallback |
-| **< 0.3** | 매우 낮음 | 데이터 부족 |
+| **0.9~1.0** | very high | clear log + ideal metric matching |
+| **0.7~0.9** | High | Only one of the logs or metrics is clear |
+| **0.5~0.7** | middle | Several possibilities |
+| **0.3~0.5** | low | AI call failure → Fallback |
+| **< 0.3** | very low | Lack of data |
 
 ---
 
-## 🔀 의존성 추적
+## 🔀 Dependency tracking
 
-### 상류(Upstream) 의존성 조회
+### Upstream dependency lookup
 
 ```typescript
 findUpstreamComponents(component: RCAComponent): RCAComponent[]
 ```
 
-**예**:
+**yes**:
 ```
-op-geth의 상류 의존성:
+Upstream dependencies of op-geth:
   op-geth → op-node → l1
 
-op-batcher의 상류 의존성:
+Upstream dependencies of op-batcher:
   op-batcher → [op-node, l1]
 ```
 
-### 하류(Downstream) 영향 추적
+### Track downstream impacts
 
 ```typescript
 findAffectedComponents(rootComponent: RCAComponent): RCAComponent[]
 ```
 
-**예**:
+**yes**:
 ```
-op-node 실패 시 영향받는 컴포넌트:
+Components affected when op-node fails:
   op-node fails
-    ├─ op-geth 영향 (op-geth가 op-node 필요)
-    ├─ op-batcher 영향
-    └─ op-proposer 영향
+├─ op-geth impact (op-geth requires op-node)
+├─ op-batcher impact
+└─ op-proposer influence
 
-op-geth 실패 시 영향받는 컴포넌트:
+Components affected when op-geth fails:
   op-geth fails
-    └─ (없음 - op-geth는 다른 컴포넌트를 공급하지 않음)
+└─ (None - op-geth does not supply any other components)
 ```
 
 ---
 
-## 🛠️ Fallback 분석 (AI 호출 실패)
+## 🛠️ Fallback analysis (AI call failure)
 
-AI 호출이 실패할 때 자동으로 규칙 기반 분석을 수행합니다.
+Automatically perform rule-based analysis when AI calls fail.
 
-### Fallback 로직
+### Fallback logic
 
 ```typescript
 function generateFallbackAnalysis(
@@ -428,14 +428,14 @@ function generateFallbackAnalysis(
 ): RCAResult
 ```
 
-**동작**:
-1. Timeline에서 첫 번째 ERROR 이벤트 찾기
-2. 해당 컴포넌트에서 영향받는 모든 컴포넌트 목록화
-3. 기본 권장 조치 제시
+**movement**:
+1. Find the first ERROR event in the Timeline
+2. List all components affected by that component
+3. Provide basic recommended actions
 
-**신뢰도**: 0.3 (낮음 - 수동 확인 권장)
+**Confidence**: 0.3 (low - manual verification recommended)
 
-**반환 권장 조치**:
+**Recommended Action for Return**:
 ```json
 {
   "immediate": [
@@ -453,29 +453,29 @@ function generateFallbackAnalysis(
 
 ---
 
-## 📝 로그 파싱 상세
+## 📝 Log parsing details
 
-### 지원 로그 형식
+### Supported log formats
 
-#### ISO 8601 형식
+#### ISO 8601 format
 ```
 2024-12-09T14:30:45.123Z ERROR [op-geth] failed to execute block
 → timestamp: 1733761845123
 ```
 
-#### Geth 형식
+#### Geth Format
 ```
 [12-09|14:30:45.123] op-geth ERROR block execution timeout
-→ timestamp: 해당 연도-12월-09일 14:30:45.123
+→ timestamp: Year-December-09 14:30:45.123
 ```
 
-#### 일반 형식
+#### General format
 ```
 2024-12-09 14:30:45 ERROR op-node derivation failed
-→ timestamp: 해당 날짜 14:30:45
+→ timestamp: 14:30:45 on the date
 ```
 
-### 컴포넌트 이름 정규화
+### Component name normalization
 
 ```typescript
 const COMPONENT_NAME_MAP = {
@@ -490,23 +490,23 @@ const COMPONENT_NAME_MAP = {
 };
 ```
 
-### 로그 레벨 추출
+### Log level extraction
 
 ```typescript
 const LOG_LEVEL_MAP = {
-  'ERROR', 'ERR', 'FATAL' → type: 'error'   (심각도: high)
-  'WARN', 'WARNING'       → type: 'warning' (심각도: medium)
+'ERROR', 'ERR', 'FATAL' → type: 'error'   (심각도: high)
+'WARN', 'WARNING'       → type: 'warning' (심각도: medium)
 };
 ```
 
 ---
 
-## 📊 실행 예시
+## 📊 Execution example
 
-### 1단계: Timeline 구성
+### Step 1: Configure Timeline
 
 ```bash
-Timeline Events (5분 이내):
+Timeline Events (within 5 minutes):
 [14:28:00] op-node     ERROR  L1 reorg detected
 [14:28:30] op-node     WARNING Derivation stalled
 [14:29:00] op-geth     METRIC  TxPool: 1000 → 5000
@@ -514,11 +514,11 @@ Timeline Events (5분 이내):
 [14:30:00] op-batcher  ERROR   Batch submission failed
 ```
 
-### 2단계: AI 분석
+### Step 2: AI Analysis
 
-**프롬프트 전송 내용**:
+**Prompt to be sent**:
 ```
-System: [RCA_SYSTEM_PROMPT 포함 아키텍처, 패턴 등]
+System: [RCA_SYSTEM_PROMPT includes architecture, patterns, etc.]
 
 User:
 == Event Timeline ==
@@ -528,20 +528,20 @@ User:
 - txPoolPending: 5000 (z-score: 3.1, spike)
 
 == Recent Metrics ==
-[메트릭 스냅샷]
+[Metric Snapshot]
 
 == Component Logs ==
-[로그 내용]
+[Log contents]
 
 Analyze the above data and identify the root cause.
 ```
 
-**Claude 응답**:
+**Claude responds**:
 ```json
 {
   "rootCause": {
     "component": "op-node",
-    "description": "L1에서 체인 재조직이 발생하여 op-node의 유도 상태가 초기화됨. 이로 인해 op-geth 실행이 지연되고 트랜잭션이 TxPool에 축적됨.",
+"description": "Chain reorganization occurs in L1, which resets the induced state of the op-node. This causes op-geth execution to be delayed and transactions to accumulate in the TxPool.",
     "confidence": 0.85
   },
   "causalChain": [
@@ -580,7 +580,7 @@ Analyze the above data and identify the root cause.
 }
 ```
 
-### 3단계: 결과 저장
+### Step 3: Save results
 
 ```typescript
 {
@@ -596,9 +596,9 @@ Analyze the above data and identify the root cause.
 
 ---
 
-## 📞 API 사용
+## 📞 API usage
 
-### RCA 분석 요청
+### RCA Analysis Request
 
 ```bash
 curl -X POST "http://localhost:3002/api/rca" \
@@ -608,7 +608,7 @@ curl -X POST "http://localhost:3002/api/rca" \
   }'
 ```
 
-**응답**:
+**response**:
 ```json
 {
   "success": true,
@@ -627,75 +627,75 @@ curl -X POST "http://localhost:3002/api/rca" \
 }
 ```
 
-### RCA 이력 조회
+### RCA history search
 
 ```bash
-# 최근 10개 RCA 분석 결과
+# Recent 10 RCA analysis results
 curl -s "http://localhost:3002/api/rca?limit=10" | jq '.history'
 
-# 특정 RCA 분석 결과
+# Specific RCA analysis results
 curl -s "http://localhost:3002/api/rca/rca-1733761845-abc123" | jq '.result'
 ```
 
 ---
 
-## ⚙️ 성능 최적화
+## ⚙️ Performance optimization
 
-### 설정값
+### Settings
 
 ```typescript
-/** 최대 이력 항목 수 */
+/** Maximum number of history items */
 const MAX_HISTORY_SIZE = 20;
 
-/** AI 호출 타임아웃 */
-const AI_TIMEOUT = 30000;  // 30초
+/** AI call timeout */
+const AI_TIMEOUT = 30000;  // 30 seconds
 
-/** 재시도 횟수 */
+/** Number of retries */
 const MAX_RETRIES = 2;
 
-/** 재시도 대기 시간 */
-retry_delay = 1000 * (attempt + 1);  // 지수 백오프
+/** Retry wait time */
+retry_delay = 1000 * (attempt + 1);  // exponential backoff
 ```
 
-### Timeline 기간
+### Timeline period
 
 ```typescript
-/** 기본적으로 최근 5분 데이터만 분석 */
+/** By default, only the most recent 5 minutes of data is analyzed */
 buildTimeline(anomalies, logs, minutes = 5)
 ```
 
 ---
 
-## 🔍 Fallback 트리거 조건
+## 🔍 Fallback trigger condition
 
-RCA 분석이 실패하는 경우:
+If RCA analysis fails:
 
-1. AI 호출 실패 (네트워크 오류, 타임아웃)
-2. JSON 파싱 실패
-3. AI 응답이 예상 형식 없음
+1. AI call failure (network error, timeout)
+2. JSON parsing failure
+3. AI response is not in expected format
 
-**이때 자동으로 규칙 기반 분석으로 전환되며, 신뢰도는 0.3으로 표시됩니다.**
+**At this time, it automatically switches to rule-based analysis and the confidence level is displayed as 0.3.**
 
 ---
 
-## 📚 관련 파일
+## 📚 Related files
 
-| 파일 | 역할 |
+| file | Role |
 |------|------|
-| `src/lib/rca-engine.ts` | 메인 RCA 엔진 |
-| `src/types/rca.ts` | 타입 정의 |
-| `src/app/api/rca/route.ts` | API 엔드포인트 |
-| `src/lib/anomaly-detector.ts` | Layer 1 이상 탐지 |
+| `src/lib/rca-engine.ts` | Main RCA Engine |
+| `src/types/rca.ts` | type definition |
+| `src/app/api/rca/route.ts` | API endpoint |
+| `src/lib/anomaly-detector.ts` | Layer 1 abnormality detection |
 | `src/lib/ai-client.ts` | AI 호출 (Claude) |
 
 ---
 
-## 🎯 주요 특징 요약
+## 🎯 Summary of Key Features
 
-✅ **Component-centric Analysis**: Optimism 아키텍처 기반
-✅ **Causal Chain Tracing**: 근본 원인부터 최종 증상까지 추적
-✅ **Dependency Graph**: 컴포넌트 의존성 자동 계산
-✅ **AI-Powered**: Claude 기반 의미 분석
-✅ **Fallback Support**: AI 실패 시 규칙 기반 분석
-✅ **Actionable Advice**: 즉시 조치 + 예방 조치 제시
-✅ **History Management**: 최근 20개 분석 결과 저장
+✅ **Component-centric Analysis**: Based on Optimism architecture
+✅ **Causal Chain Tracing**: Tracing from root cause to final symptom
+✅ **Dependency Graph**: Automatic calculation of component dependencies
+✅ **AI-Powered**: Claude-based semantic analysis
+✅ **Fallback Support**: Rule-based analysis when AI fails
+✅ **Actionable Advice**: Provides immediate action + preventive action
+✅ **History Management**: Save the last 20 analysis results

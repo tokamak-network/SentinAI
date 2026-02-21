@@ -1,103 +1,103 @@
-# Zero-Downtime Scaling (Parallel Pod Swap) — 구현 명세서
+# Zero-Downtime Scaling (Parallel Pod Swap) — Implementation Specification
 
-> **목적**: 이 문서를 읽는 AI 에이전트(Claude Opus 4.6)가 추가 질문 없이 구현 → 빌드 → 테스트까지 완료할 수 있는 수준의 명세서.
+> **Purpose**: A specification at a level that an AI agent (Claude Opus 4.6) reading this document can complete from implementation → build → test without any additional questions.
 
 ---
 
-## 1. 문제 정의
+## 1. Problem definition
 
-### 1.1 현재 상태
+### 1.1 Current status
 
-SentinAI의 `scaleOpGeth()` 함수(`src/lib/k8s-scaler.ts:110-256`)는 `kubectl patch statefulset`으로 op-geth의 CPU/Memory를 변경한다. AWS Fargate에서는 리소스 변경 = Pod 교체이므로 **3-5분간 RPC가 중단**된다.
+SentinAI's `scaleOpGeth()` function (`src/lib/k8s-scaler.ts:110-256`) changes the CPU/Memory of the op-geth with `kubectl patch statefulset`. In AWS Fargate, resource change = Pod replacement, so RPC is interrupted for **3-5 minutes**.
 
 ```
 kubectl patch statefulset    ← StatefulSet spec 변경
-  → 기존 Pod 종료 (즉시)     ← RPC 중단 시작
-  → Fargate micro-VM 할당    (1-3분)
-  → 새 Pod 시작 + 동기화     (1-2분)
-  → 서비스 복구              ← 총 3-5분 다운타임
+→ Terminate existing Pods (immediately) ← Initiate RPC interruption
+→ Fargate micro-VM allocation (1-3 minutes)
+→ Start a new Pod + Sync (1-2 minutes)
+→ Service restoration ← Total downtime of 3-5 minutes
 ```
 
-### 1.2 문제점
+### 1.2 Problem
 
-- `runK8sCommand(cmd)` 성공 = StatefulSet spec 변경 완료일 뿐, Pod가 Ready인지 확인하지 않음
-- Pod 교체 동안 JSON-RPC(8545), WebSocket(8546), P2P(30303) 모두 중단
-- op-batcher, op-proposer가 op-geth에 의존하므로 **L2 체인 전체 중단** 위험
+- `runK8sCommand(cmd)` success = StatefulSet spec change completed, does not check whether Pod is Ready
+- JSON-RPC (8545), WebSocket (8546), and P2P (30303) are all suspended during pod replacement.
+- Risk of **full L2 chain disruption** as op-batcher and op-proposer depend on op-geth
 
-### 1.3 목표
+### 1.3 Goal
 
-**다운타임 0초**로 vertical scaling 실행. 새 Pod를 미리 준비하고, Ready 확인 후 트래픽을 전환하는 Parallel Pod Swap 방식.
+Run vertical scaling with **0 seconds of downtime**. Parallel Pod Swap method that prepares new pods in advance and switches traffic after confirming readiness.
 
 ---
 
-## 2. 솔루션: Parallel Pod Swap
+## 2. Solution: Parallel Pod Swap
 
-### 2.1 전체 흐름
+### 2.1 Overall flow
 
 ```
-[Phase 1: 병렬 준비]
+[Phase 1: Parallel preparation]
   Service ──→ Pod-old (2 vCPU, label: slot=active)
-               Pod-new (4 vCPU, label: slot=standby)  ← 생성 중, 트래픽 없음
+Pod-new (4 vCPU, label: slot=standby) ← Creating, no traffic
 
-[Phase 2: Ready 대기]
+[Phase 2: Ready standby]
   Service ──→ Pod-old (2 vCPU)
-               Pod-new (4 vCPU)  ← readinessProbe 통과 대기
+Pod-new (4 vCPU) ← Wait for readinessProbe to pass
 
-[Phase 3: 트래픽 전환]
-  Service ──→ Pod-new (4 vCPU, label: slot=active)  ← selector 전환
-               Pod-old (2 vCPU)  ← graceful 종료 진행
+[Phase 3: Traffic Conversion]
+Service ──→ Pod-new (4 vCPU, label: slot=active)  ← selector 전환
+Pod-old (2 vCPU) ← graceful shutdown in progress
 
-[Phase 4: 정리]
+[Phase 4: Summary]
   Service ──→ Pod-new (4 vCPU)
-               StatefulSet spec 동기화 (선언적 일관성 확보)
+StatefulSet spec synchronization (ensuring declarative consistency)
 ```
 
-### 2.2 핵심 설계 결정
+### 2.2 Key design decisions
 
-| 항목 | 결정 | 이유 |
+| Item | decision | Reason |
 |------|------|------|
-| Standby Pod 생성 | 독립 Pod (`kubectl run`) | StatefulSet replica 조작 대신 단순한 Pod 직접 생성 |
-| 트래픽 전환 | Service selector 변경 | atomic 전환, 기존 연결 graceful drain |
-| PV(chaindata) | snapshot clone | EBS RWO 제약 — 동시 마운트 불가 |
-| Readiness 확인 | RPC L7 체크 (`eth_blockNumber`) | HTTP 200만으로는 불충분, 실제 RPC 동작 확인 |
-| 롤백 | standby Pod 삭제 | 전환 전 실패 시 기존 Pod 영향 없음 |
-| Simulation 모드 | kubectl 없이 상태만 변경 | 기존 패턴 유지 (`simulationConfig.enabled`) |
+| Create Standby Pod | Independent Pod (`kubectl run`) | Create simple Pods directly instead of manipulating StatefulSet replicas |
+| Traffic Conversion | Change Service selector | atomic conversion, graceful drain of existing connection |
+| PV(chaindata) | snapshot clone | EBS RWO Constraints — No concurrent mounts |
+| Check Readiness | RPC L7 check (`eth_blockNumber`) | HTTP 200 alone is not enough, check actual RPC operation |
+| rollback | Delete standby Pod | Existing Pods will not be affected in case of failure before conversion |
+| Simulation mode | Just change state without kubectl | Maintain existing pattern (`simulationConfig.enabled`) |
 
-### 2.3 비용
+### 2.3 Cost
 
-스케일 이벤트 동안만 2x 리소스 사용 (3-5분).
+2x resource usage during scale events only (3-5 minutes).
 
-- Best case (1→2 vCPU, 5분): **$0.0095/이벤트**
-- Worst case (1→4 vCPU, 5분): **$0.019/이벤트**
-- 월간 (일 2회): **$0.57 ~ $1.14/월**
-
----
-
-## 3. 파일 구조
-
-```
-신규:
-  src/lib/zero-downtime-scaler.ts        ← 오케스트레이터 (핵심 모듈)
-  src/types/zero-downtime.ts             ← 타입 정의
-
-수정:
-  src/lib/k8s-scaler.ts                  ← scaleOpGeth()에 zeroDowntime 모드 분기 추가
-  src/types/scaling.ts                   ← ScaleResult에 rollout 필드 추가, ScalingConfig에 zeroDowntime 옵션
-  src/app/api/scaler/route.ts            ← PATCH에 zeroDowntimeEnabled 설정 추가, GET 응답에 상태 포함
-```
+- Best case (1→2 vCPU, 5 minutes): **$0.0095/event**
+- Worst case (1→4 vCPU, 5 minutes): **$0.019/event**
+- Monthly (twice a day): **$0.57 ~ $1.14/month**
 
 ---
 
-## 4. 타입 정의
+## 3. File structure
 
-### 파일: `src/types/zero-downtime.ts`
+```
+new:
+src/lib/zero-downtime-scaler.ts ← Orchestrator (core module)
+src/types/zero-downtime.ts ← Type definition
+
+correction:
+src/lib/k8s-scaler.ts ← Add zeroDowntime mode branch to scaleOpGeth()
+src/types/scaling.ts ← Add rollout field to ScaleResult, zeroDowntime option to ScalingConfig
+src/app/api/scaler/route.ts ← Add zeroDowntimeEnabled setting to PATCH, include status in GET response
+```
+
+---
+
+## 4. Type definition
+
+### File: `src/types/zero-downtime.ts`
 
 ```typescript
 /**
  * Zero-Downtime Scaling Types
  */
 
-/** 오케스트레이션 단계 */
+/** Orchestration step */
 export type SwapPhase =
   | 'idle'
   | 'creating_standby'
@@ -109,27 +109,27 @@ export type SwapPhase =
   | 'failed'
   | 'rolling_back';
 
-/** 오케스트레이션 상태 (메모리 싱글톤) */
+/** Orchestration state (memory singleton) */
 export interface SwapState {
-  /** 현재 단계 */
+/** Current step */
   phase: SwapPhase;
-  /** 시작 시간 */
+/** Start time */
   startedAt: string | null;
-  /** 완료 시간 */
+/** Completion time */
   completedAt: string | null;
-  /** standby Pod 이름 */
+/** standby Pod name */
   standbyPodName: string | null;
-  /** 목표 vCPU */
+/** Target vCPU */
   targetVcpu: number;
-  /** 목표 Memory GiB */
+/** Target Memory GiB */
   targetMemoryGiB: number;
-  /** 에러 메시지 */
+/** Error message */
   error: string | null;
-  /** 각 단계별 소요 시간 (ms) */
+/** Time required for each step (ms) */
   phaseDurations: Partial<Record<SwapPhase, number>>;
 }
 
-/** Pod readiness 체크 결과 */
+/** Pod readiness check result */
 export interface ReadinessCheckResult {
   ready: boolean;
   podIp: string | null;
@@ -138,7 +138,7 @@ export interface ReadinessCheckResult {
   checkDurationMs: number;
 }
 
-/** 트래픽 전환 결과 */
+/** Traffic conversion results */
 export interface TrafficSwitchResult {
   success: boolean;
   previousSelector: Record<string, string>;
@@ -146,27 +146,27 @@ export interface TrafficSwitchResult {
   serviceName: string;
 }
 
-/** 오케스트레이션 전체 결과 */
+/** Orchestration overall result */
 export interface ZeroDowntimeResult {
   success: boolean;
-  /** 총 소요 시간 (ms) */
+/** Total time taken (ms) */
   totalDurationMs: number;
-  /** 각 단계별 소요 시간 */
+/** Time required for each step */
   phaseDurations: Partial<Record<SwapPhase, number>>;
-  /** 최종 상태 */
+/** Final state */
   finalPhase: SwapPhase;
   error?: string;
 }
 ```
 
-### 파일: `src/types/scaling.ts` — 수정
+### File: `src/types/scaling.ts` — Edit
 
-기존 타입에 다음을 추가:
+Add the following to the existing type:
 
 ```typescript
-// ScaleResult 인터페이스에 필드 추가
+// Add field to ScaleResult interface
 export interface ScaleResult {
-  // ... 기존 필드 유지
+// ... keep existing fields
   success: boolean;
   previousVcpu: number;
   currentVcpu: number;
@@ -175,32 +175,32 @@ export interface ScaleResult {
   timestamp: string;
   message: string;
   error?: string;
-  // 신규 필드
-  /** zero-downtime 스케일링 사용 여부 */
+// new field
+/** Whether to use zero-downtime scaling */
   zeroDowntime?: boolean;
-  /** rollout 상태 (zero-downtime 모드에서만 사용) */
+/** rollout status (only used in zero-downtime mode) */
   rolloutPhase?: string;
-  /** rollout 소요 시간 (ms) */
+/** Rollout time (ms) */
   rolloutDurationMs?: number;
 }
 
-// ScalingConfig 인터페이스에 필드 추가
+// Add fields to ScalingConfig interface
 export interface ScalingConfig {
-  // ... 기존 필드 유지
-  /** op-geth Service 이름 (zero-downtime에서 사용) */
+// ... keep existing fields
+/** op-geth Service name (used in zero-downtime) */
   serviceName: string;
 }
 
-// DEFAULT_SCALING_CONFIG에 추가
+// Add to DEFAULT_SCALING_CONFIG
 export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
-  // ... 기존 필드 유지
+// ... keep existing fields
   minVcpu: 1,
   maxVcpu: 4,
   cooldownSeconds: 300,
   namespace: 'thanos-sepolia',
   statefulSetName: 'sepolia-thanos-stack-op-geth',
   containerIndex: 0,
-  // 신규
+// new
   serviceName: 'sepolia-thanos-stack-op-geth',
   weights: { cpu: 0.3, gas: 0.3, txPool: 0.2, ai: 0.2 },
   thresholds: { idle: 30, normal: 70 },
@@ -209,23 +209,23 @@ export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
 
 ---
 
-## 5. 핵심 모듈 구현 명세
+## 5. Core module implementation specification
 
-### 파일: `src/lib/zero-downtime-scaler.ts`
+### File: `src/lib/zero-downtime-scaler.ts`
 
-**역할**: Parallel Pod Swap 오케스트레이션. 새 Pod 생성 → Ready 대기 → 트래픽 전환 → 기존 Pod 정리.
+**Role**: Parallel Pod Swap Orchestration. Create a new Pod → Stand by Ready → Switch traffic → Clean up existing Pods.
 
-**의존성**:
+**Dependencies**:
 - `runK8sCommand` from `@/lib/k8s-config`
 - 타입: `SwapState`, `SwapPhase`, `ReadinessCheckResult`, `TrafficSwitchResult`, `ZeroDowntimeResult` from `@/types/zero-downtime`
 - 타입: `ScalingConfig`, `DEFAULT_SCALING_CONFIG` from `@/types/scaling`
 
-**반드시 읽어야 할 기존 코드**:
-- `src/lib/k8s-config.ts` — `runK8sCommand(command, options?)` 시그니처. 자동으로 토큰/서버 URL을 포함하여 kubectl 실행.
-- `src/lib/k8s-scaler.ts:197-223` — 기존 kubectl patch 패턴 참조
+**Existing code you must read**:
+- `src/lib/k8s-config.ts` — `runK8sCommand(command, options?)` signature. Automatically run kubectl with token/server URL.
+- `src/lib/k8s-scaler.ts:197-223` — See existing kubectl patch pattern.
 - `src/types/scaling.ts` — `ScalingConfig`의 `namespace`, `statefulSetName`, `containerIndex`, `serviceName`
 
-#### 5.1 싱글톤 상태
+#### 5.1 Singleton state
 
 ```typescript
 let swapState: SwapState = {
@@ -240,24 +240,24 @@ let swapState: SwapState = {
 };
 ```
 
-#### 5.2 Export 함수
+#### 5.2 Export function
 
-| 함수 | 시그니처 | 설명 |
+| function | Signature | Description |
 |------|----------|------|
-| `zeroDowntimeScale` | `(targetVcpu: number, targetMemoryGiB: number, config?: ScalingConfig): Promise<ZeroDowntimeResult>` | 메인 오케스트레이션 함수 |
-| `getSwapState` | `(): SwapState` | 현재 오케스트레이션 상태 조회 |
-| `isSwapInProgress` | `(): boolean` | 스왑 진행 중 여부 (idle/completed/failed 이외) |
-| `resetSwapState` | `(): void` | 상태 초기화 (테스트/디버깅용) |
+| `zeroDowntimeScale` | `(targetVcpu: number, targetMemoryGiB: number, config?: ScalingConfig): Promise<ZeroDowntimeResult>` | Main orchestration function |
+| `getSwapState` | `(): SwapState` | Check current orchestration status |
+| `isSwapInProgress` | `(): boolean` | Whether swap is in progress (other than idle/completed/failed) |
+| `resetSwapState` | `(): void` | Initialize state (for testing/debugging) |
 
-#### 5.3 내부 함수
+#### 5.3 Internal functions
 
 ##### `createStandbyPod`
 
 ```typescript
 /**
- * 목표 리소스로 standby Pod 생성
+* Create a standby Pod with target resources
  *
- * 기존 StatefulSet의 Pod spec을 가져와서 리소스만 변경한 독립 Pod를 생성.
+* Import the Pod spec of an existing StatefulSet and create an independent Pod with only the resources changed.
  * label: app=<prefix>-geth, role=standby
  */
 async function createStandbyPod(
@@ -267,27 +267,27 @@ async function createStandbyPod(
 ): Promise<string>
 ```
 
-**구현 흐름**:
-1. 기존 active Pod의 spec 가져오기:
+**Implementation Flow**:
+1. Import the spec of an existing active Pod:
    ```
    kubectl get pod <statefulSetName>-0 -n <namespace> -o json
    ```
-2. Pod spec에서 `metadata`, `status`, `nodeName` 등 제거
-3. 리소스를 `targetVcpu`/`targetMemoryGiB`로 교체
-4. Pod 이름: `<statefulSetName>-standby-<timestamp>`
+2. Remove `metadata`, `status`, `nodeName`, etc. from Pod spec.
+3. Replace resources with `targetVcpu`/`targetMemoryGiB`
+4. Pod name: `<statefulSetName>-standby-<timestamp>`
 5. label 추가: `role: standby`, `slot: standby`
-6. 기존 label 유지: `app: <prefix>-geth` (Service selector 매칭용 — 단, Service는 `slot=active`로 필터링하므로 트래픽은 받지 않음)
-7. `kubectl apply -f -`로 Pod 생성 (JSON을 stdin으로 전달)
+6. Maintain existing label: `app: <prefix>-geth` (for matching Service selector — However, Service is filtered by `slot=active`, so no traffic is received)
+7. Create a Pod with `kubectl apply -f -` (pass JSON to stdin)
 
-**kubectl 명령어 패턴**:
+**kubectl command pattern**:
 ```typescript
-// 1. 기존 Pod spec 가져오기
+// 1. Import existing Pod spec
 const { stdout: podJson } = await runK8sCommand(
   `get pod ${config.statefulSetName}-0 -n ${config.namespace} -o json`
 );
 const podSpec = JSON.parse(podJson);
 
-// 2. Pod manifest 조립
+// 2. Assemble Pod manifest
 const standbyPodName = `${config.statefulSetName}-standby-${Date.now()}`;
 const manifest = {
   apiVersion: 'v1',
@@ -303,7 +303,7 @@ const manifest = {
   },
   spec: {
     ...podSpec.spec,
-    nodeName: undefined,            // Fargate가 새 노드 할당
+nodeName: undefined, // Fargate allocates a new node
     hostname: undefined,
     subdomain: undefined,
     containers: podSpec.spec.containers.map((c: any, i: number) => {
@@ -321,10 +321,10 @@ const manifest = {
   },
 };
 
-// 3. 볼륨 처리 — 기존 PVC 참조 제거, emptyDir 또는 새 PVC 사용
-// (섹션 5.5 PV 전략 참조)
+// 3. Volume handling — remove existing PVC references, use emptyDir or new PVC
+// (see Section 5.5 PV Strategy)
 
-// 4. Pod 생성
+// 4. Create Pod
 const manifestStr = JSON.stringify(manifest);
 await runK8sCommand(
   `apply -f - -n ${config.namespace}`,
@@ -332,13 +332,13 @@ await runK8sCommand(
 );
 ```
 
-**주의**: `runK8sCommand`은 현재 stdin을 지원하지 않음. 두 가지 옵션:
-- **옵션 A (권장)**: manifest를 임시 JSON 문자열로 만들어 `echo '...' | kubectl apply -f -` 패턴 사용
-- **옵션 B**: `k8s-config.ts`에 `runK8sCommandWithStdin()` 함수 추가
+**Note**: `runK8sCommand` does not currently support stdin. Two options:
+- **Option A (recommended)**: Create the manifest as a temporary JSON string with `echo '...' | kubectl apply -f -` using pattern
+- **Option B**: Add `runK8sCommandWithStdin()` function to `k8s-config.ts`
 
-옵션 A 구현:
+Implementing Option A:
 ```typescript
-// exec로 직접 실행 (runK8sCommand 대신)
+// Run directly with exec (instead of runK8sCommand)
 const manifestStr = JSON.stringify(manifest).replace(/'/g, "'\\''");
 await runK8sCommand(
   `apply -f /dev/stdin -n ${config.namespace}`,
@@ -346,19 +346,19 @@ await runK8sCommand(
 );
 ```
 
-실제로는 `k8s-config.ts`의 `runK8sCommand`를 확장하여 stdin 지원을 추가하는 것이 깔끔. 아래 섹션 6.2 참조.
+Actually, it would be neat to add stdin support by extending `runK8sCommand` in `k8s-config.ts`. See Section 6.2 below.
 
 ##### `waitForReady`
 
 ```typescript
 /**
- * Pod가 Ready 상태가 될 때까지 폴링
- * readinessProbe 통과 + 실제 RPC 응답 확인
+* Poll until Pod is in Ready state
+* Pass readinessProbe + check actual RPC response
  *
- * @param podName - 대기할 Pod 이름
- * @param config - 스케일링 설정
- * @param timeoutMs - 최대 대기 시간 (기본: 300000ms = 5분)
- * @param intervalMs - 폴링 간격 (기본: 10000ms = 10초)
+* @param podName - Pod name to wait on.
+* @param config - scaling settings
+* @param timeoutMs - maximum waiting time (default: 300000ms = 5 minutes)
+* @param intervalMs - Polling interval (default: 10000ms = 10 seconds)
  */
 async function waitForReady(
   podName: string,
@@ -368,28 +368,28 @@ async function waitForReady(
 ): Promise<ReadinessCheckResult>
 ```
 
-**구현 흐름**:
-1. 10초 간격으로 Pod 상태 확인:
+**Implementation Flow**:
+1. Check Pod status every 10 seconds:
    ```
    kubectl get pod <podName> -n <namespace> -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'
    ```
-2. Ready=True이면 Pod IP 가져오기:
+2. If Ready=True, get Pod IP:
    ```
    kubectl get pod <podName> -n <namespace> -o jsonpath='{.status.podIP}'
    ```
-3. RPC L7 체크 (클러스터 내부에서 직접 호출은 불가하므로 kubectl exec 사용):
+3. RPC L7 check (use kubectl exec as direct call from inside the cluster is not possible):
    ```
    kubectl exec <podName> -n <namespace> -- wget -qO- --timeout=5 http://localhost:8545 --post-data='{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
    ```
-   또는 Pod IP가 접근 가능하다면 `curl`로 직접 호출.
-4. blockNumber 파싱 가능하면 `ready: true` 반환
-5. 타임아웃 초과 시 `ready: false` 반환
+Or, if the Pod IP is accessible, call it directly with `curl`.
+4. If blockNumber parsing is possible, return `ready: true`
+5. When timeout is exceeded, `ready: false` is returned.
 
 ##### `switchTraffic`
 
 ```typescript
 /**
- * Service selector를 변경하여 트래픽을 새 Pod으로 전환
+* Change the Service selector to divert traffic to a new Pod
  */
 async function switchTraffic(
   newPodName: string,
@@ -397,36 +397,36 @@ async function switchTraffic(
 ): Promise<TrafficSwitchResult>
 ```
 
-**구현 흐름**:
-1. 현재 Service의 selector 확인:
+**Implementation Flow**:
+1. Check the selector of the current Service:
    ```
    kubectl get service <serviceName> -n <namespace> -o json
    ```
-2. Service에 `slot` selector가 없으면 추가 필요 (초기 설정).
-   - 기존 active Pod에 `slot=active` label이 없으면 먼저 추가:
+2. If the service does not have a `slot` selector, it needs to be added (initial setting).
+- If there is no `slot=active` label in the existing active Pod, add it first:
      ```
      kubectl label pod <statefulSetName>-0 -n <namespace> slot=active --overwrite
      ```
-   - Service selector에 `slot: active` 추가:
+- Add `slot: active` to Service selector:
      ```
      kubectl patch service <serviceName> -n <namespace> --type='json' -p='[{"op":"add","path":"/spec/selector/slot","value":"active"}]'
      ```
-3. standby Pod의 label을 `slot=active`로 변경:
+3. Change the standby Pod’s label to `slot=active`:
    ```
    kubectl label pod <newPodName> -n <namespace> slot=active --overwrite
    ```
-4. 기존 Pod의 label을 `slot=draining`으로 변경:
+4. Change the label of the existing Pod to `slot=draining`:
    ```
    kubectl label pod <statefulSetName>-0 -n <namespace> slot=draining --overwrite
    ```
-   → Service selector가 `slot=active`이므로 트래픽이 즉시 새 Pod으로 전환됨 (atomic)
+→ Service selector is `slot=active`, so traffic is immediately switched to the new Pod (atomic)
 
 ##### `cleanupOldPod`
 
 ```typescript
 /**
- * 기존 Pod graceful 종료
- * preStop hook 또는 terminationGracePeriodSeconds 대기
+* Existing Pod gracefully terminated
+* preStop hook or wait for terminationGracePeriodSeconds
  */
 async function cleanupOldPod(
   podName: string,
@@ -434,13 +434,13 @@ async function cleanupOldPod(
 ): Promise<void>
 ```
 
-**구현 흐름**:
-1. 30초 대기 (기존 연결 drain)
-2. Pod 삭제:
+**Implementation Flow**:
+1. Wait 30 seconds (drain existing connection)
+2. Delete Pod:
    ```
    kubectl delete pod <podName> -n <namespace> --grace-period=60
    ```
-3. 삭제 완료 대기:
+3. Wait for deletion to complete:
    ```
    kubectl wait --for=delete pod/<podName> -n <namespace> --timeout=120s
    ```
@@ -449,8 +449,8 @@ async function cleanupOldPod(
 
 ```typescript
 /**
- * StatefulSet spec을 최종 상태로 동기화
- * Pod를 직접 조작했으므로, StatefulSet의 선언적 spec을 실제 상태와 일치시킴
+* Synchronize StatefulSet spec to final state
+* Since we manipulated the Pod directly, the StatefulSet's declarative spec matches the actual state.
  */
 async function syncStatefulSet(
   targetVcpu: number,
@@ -459,8 +459,8 @@ async function syncStatefulSet(
 ): Promise<void>
 ```
 
-**구현 흐름**:
-기존 `k8s-scaler.ts`의 kubectl patch 패턴과 동일:
+**Implementation Flow**:
+Same as the kubectl patch pattern in the existing `k8s-scaler.ts`:
 ```typescript
 const patchJson = JSON.stringify([
   {
@@ -490,30 +490,30 @@ await runK8sCommand(
 );
 ```
 
-**중요**: 이 패치 후 StatefulSet controller가 Pod를 교체하려 할 수 있음. 이를 방지하기 위해 `updateStrategy.type: OnDelete`로 설정되어 있어야 함. 그렇지 않으면 StatefulSet이 이미 교체된 Pod를 다시 교체하려 한다.
+**Important**: After this patch, the StatefulSet controller may attempt to replace Pods. To prevent this, it must be set to `updateStrategy.type: OnDelete`. Otherwise, the StatefulSet will try to replace Pods that have already been replaced.
 
 ##### `rollback`
 
 ```typescript
 /**
- * 오케스트레이션 실패 시 롤백
- * standby Pod 삭제, Service selector 복원
+* Rollback in case of orchestration failure
+* Delete standby Pod, restore Service selector
  */
 async function rollback(config: ScalingConfig): Promise<void>
 ```
 
-**구현 흐름**:
-1. standby Pod 삭제 (존재하면):
+**Implementation Flow**:
+1. Delete the standby Pod (if it exists):
    ```
    kubectl delete pod <standbyPodName> -n <namespace> --grace-period=0 --force
    ```
-2. 기존 Pod의 label 복원:
+2. Restore the label of the existing Pod:
    ```
    kubectl label pod <statefulSetName>-0 -n <namespace> slot=active --overwrite
    ```
-3. swapState를 `failed`로 설정
+3. Set swapState to `failed`
 
-#### 5.4 메인 오케스트레이션 함수
+#### 5.4 Main orchestration function
 
 ```typescript
 export async function zeroDowntimeScale(
@@ -521,7 +521,7 @@ export async function zeroDowntimeScale(
   targetMemoryGiB: number,
   config: ScalingConfig = DEFAULT_SCALING_CONFIG
 ): Promise<ZeroDowntimeResult> {
-  // 이미 진행 중이면 거부
+// Reject if already in progress
   if (isSwapInProgress()) {
     return { success: false, totalDurationMs: 0, phaseDurations: {}, finalPhase: swapState.phase, error: 'Swap already in progress' };
   }
@@ -544,7 +544,7 @@ export async function zeroDowntimeScale(
     phaseStart = Date.now();
 
     if (!readiness.ready) {
-      // 롤백: standby Pod 삭제
+// Rollback: Delete standby Pod
       updatePhase('rolling_back', targetVcpu, targetMemoryGiB);
       await rollback(config);
       recordPhaseDuration('rolling_back', phaseStart);
@@ -604,33 +604,33 @@ export async function zeroDowntimeScale(
 }
 ```
 
-#### 5.5 PV(Persistent Volume) 전략
+#### 5.5 PV (Persistent Volume) Strategy
 
-op-geth의 chaindata는 EBS 볼륨(RWO)에 저장된다. 동시에 2개 Pod가 같은 볼륨에 마운트할 수 없으므로:
+op-geth's chaindata is stored in the EBS volume (RWO). Since two Pods cannot mount the same volume at the same time:
 
-**옵션 1: PVC 없이 시작 (snap sync)** — 단순하지만 동기화 시간 필요
+**Option 1: Start without PVC (snap sync)** — simple but requires synchronization time
 ```typescript
-// standby Pod manifest에서 volumeMounts/volumes 중 PVC 참조 제거
-// op-geth가 snap sync로 네트워크에서 최신 상태를 받아옴
-// readiness 판정: eth_blockNumber 응답 + 블록 높이가 active Pod과 일정 범위 내
+// Remove PVC reference from volumeMounts/volumes in standby Pod manifest
+// op-geth receives the latest status from the network through snap sync
+// Readiness judgment: eth_blockNumber response + block height within a certain range of active Pod
 ```
 
-**옵션 2: EBS snapshot clone** — 빠르지만 AWS API 직접 호출 필요
+**Option 2: EBS snapshot clone** — Faster, but requires direct AWS API calls
 ```typescript
 // 1. aws ec2 create-snapshot --volume-id <vol-id>
 // 2. aws ec2 create-volume --snapshot-id <snap-id>
-// 3. PVC를 새 볼륨으로 생성
-// 4. standby Pod에 마운트
+// 3. Create PVC as a new volume
+// 4. Mount on standby Pod
 ```
 
-**이 명세에서는 옵션 1을 기본으로 구현**한다. 이유:
-- AWS API 직접 호출이 불필요 (kubectl만으로 완결)
-- op-geth는 snap sync가 빠름 (수 분 내 최신 블록 따라잡기)
-- PV 관련 복잡도 제거
+**In this specification, option 1 is implemented by default**. reason:
+- No need to call AWS API directly (complete with kubectl only)
+- op-geth has fast snap sync (catches up to the latest block within minutes)
+- Eliminate PV-related complexity
 
-standby Pod manifest에서 `volumeClaimTemplates` 관련 볼륨을 `emptyDir`로 교체:
+Replace the `volumeClaimTemplates` associated volume with `emptyDir` in the standby Pod manifest:
 ```typescript
-// volumes에서 PVC 참조를 emptyDir로 교체
+// Replace PVC references with emptyDir in volumes
 manifest.spec.volumes = manifest.spec.volumes?.map((v: any) => {
   if (v.persistentVolumeClaim) {
     return { name: v.name, emptyDir: {} };
@@ -641,14 +641,14 @@ manifest.spec.volumes = manifest.spec.volumes?.map((v: any) => {
 
 ---
 
-## 6. 기존 코드 수정
+## 6. Modify existing code
 
 ### 6.1 `src/types/scaling.ts`
 
-**추가 1**: `ScaleResult`에 필드 추가
+**Add 1**: Add field to `ScaleResult`
 
 ```typescript
-// 기존
+// existing
 export interface ScaleResult {
   success: boolean;
   previousVcpu: number;
@@ -660,7 +660,7 @@ export interface ScaleResult {
   error?: string;
 }
 
-// 수정 후
+// After modification
 export interface ScaleResult {
   success: boolean;
   previousVcpu: number;
@@ -670,73 +670,73 @@ export interface ScaleResult {
   timestamp: string;
   message: string;
   error?: string;
-  /** zero-downtime 모드 사용 여부 */
+/** Whether to use zero-downtime mode */
   zeroDowntime?: boolean;
-  /** rollout 단계 */
+/** rollout step */
   rolloutPhase?: string;
-  /** rollout 소요 시간 (ms) */
+/** Rollout time (ms) */
   rolloutDurationMs?: number;
 }
 ```
 
-**추가 2**: `ScalingConfig`에 `serviceName` 추가
+**Add 2**: Add `serviceName` to `ScalingConfig`
 
 ```typescript
-// 기존 인터페이스에 추가
+// Add to existing interface
 export interface ScalingConfig {
-  // ... 기존 필드
-  /** op-geth K8s Service 이름 */
+// ... existing field
+/** op-geth K8s Service name */
   serviceName: string;
 }
 
-// DEFAULT_SCALING_CONFIG에 추가
+// Add to DEFAULT_SCALING_CONFIG
 export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
-  // ... 기존 필드
+// ... existing field
   serviceName: 'sepolia-thanos-stack-op-geth',
 };
 ```
 
-### 6.2 `src/lib/k8s-config.ts` — stdin 지원 추가
+### 6.2 `src/lib/k8s-config.ts` — Add stdin support
 
-기존 `runK8sCommand` 시그니처를 확장:
+Extending the existing `runK8sCommand` signature:
 
 ```typescript
-// options 타입에 stdin 추가
+// Add stdin to options type
 export async function runK8sCommand(
   command: string,
   options?: { timeout?: number; stdin?: string }
 ): Promise<{ stdout: string; stderr: string }>
 ```
 
-**구현 변경** (`execAsync` 호출 부분):
+**Implementation changes** (in the `execAsync` call):
 
-stdin이 제공되면 `child_process.exec` 대신 `child_process.spawn` 또는 pipe를 사용:
+If stdin is provided, use `child_process.spawn` or pipe instead of `child_process.exec`:
 
 ```typescript
 if (options?.stdin) {
-  // stdin이 필요한 경우 echo + pipe 패턴 사용
+// If stdin is needed, use echo + pipe pattern
   const fullCmd = `echo '${options.stdin.replace(/'/g, "'\\''")}' | ${baseCmd} ${command}`;
   const result = await execAsync(fullCmd, {
     timeout: options?.timeout ?? 10000,
   });
   return result;
 }
-// 기존 로직 유지
+// Maintain existing logic
 const result = await execAsync(`${baseCmd} ${command}`, {
   timeout: options?.timeout ?? 10000,
 });
 ```
 
-### 6.3 `src/lib/k8s-scaler.ts` — zero-downtime 모드 분기
+### 6.3 `src/lib/k8s-scaler.ts` — zero-downtime mode branch
 
-**수정 위치**: `scaleOpGeth()` 함수 내 실제 kubectl 실행 부분 (line 197 부근)
+**Edit Location**: Actual kubectl execution in the `scaleOpGeth()` function (around line 197)
 
-**추가 import**:
+**Additional import**:
 ```typescript
 import { zeroDowntimeScale, isSwapInProgress, getSwapState } from '@/lib/zero-downtime-scaler';
 ```
 
-**추가**: 모듈 레벨 상태
+**ADD**: Module level status
 ```typescript
 let zeroDowntimeEnabled = process.env.ZERO_DOWNTIME_SCALING === 'true';
 
@@ -749,22 +749,22 @@ export function setZeroDowntimeEnabled(enabled: boolean): void {
 }
 ```
 
-**수정**: `scaleOpGeth()` 함수의 실제 실행 부분 (기존 line 197-241). 현재 코드:
+**Edit**: Actual execution part of the `scaleOpGeth()` function (previously lines 197-241). Current code:
 
 ```typescript
-  // 현재 코드 (line 197-241)
+// current code (lines 197-241)
   try {
     const patchJson = JSON.stringify([...]);
     const cmd = `patch statefulset ...`;
     await runK8sCommand(cmd);
-    // 상태 업데이트 ...
+// update status...
     return { success: true, ... };
   } catch (error) {
-    // 에러 처리 ...
+// Error handling...
   }
 ```
 
-**수정 후**:
+**After modification**:
 
 ```typescript
   try {
@@ -808,39 +808,39 @@ export function setZeroDowntimeEnabled(enabled: boolean): void {
       };
     }
 
-    // Legacy mode: Direct kubectl patch (기존 코드 그대로 유지)
+// Legacy mode: Direct kubectl patch (maintain existing code)
     const patchJson = JSON.stringify([...]);
-    // ... 기존 코드 ...
+// ... existing code ...
   } catch (error) {
-    // ... 기존 에러 처리 ...
+// ... existing error handling ...
   }
 ```
 
 ### 6.4 `src/app/api/scaler/route.ts`
 
-**PATCH 핸들러에 zeroDowntimeEnabled 설정 추가**:
+**Add zeroDowntimeEnabled setting to PATCH handler**:
 
-추가 import:
+Add import:
 ```typescript
 import {
-  // ... 기존 import
+// ... existing import
   isZeroDowntimeEnabled,
   setZeroDowntimeEnabled,
 } from '@/lib/k8s-scaler';
 ```
 
-현재 PATCH 핸들러(line 283-309)에서:
+In the current PATCH handler (lines 283-309):
 
 ```typescript
-// 기존 body destructuring에 추가
+// Add to existing body destructuring
 const { autoScalingEnabled, simulationMode, zeroDowntimeEnabled } = body;
 
-// 기존 if 블록들 뒤에 추가
+// Add after existing if blocks
 if (typeof zeroDowntimeEnabled === 'boolean') {
   setZeroDowntimeEnabled(zeroDowntimeEnabled);
 }
 
-// 응답에 추가
+// add to response
 return NextResponse.json({
   success: true,
   autoScalingEnabled: isAutoScalingEnabled(),
@@ -849,17 +849,17 @@ return NextResponse.json({
 });
 ```
 
-**GET 핸들러 응답에 swap 상태 추가**:
+**Add swap status to GET handler response**:
 
-추가 import:
+Add import:
 ```typescript
 import { getSwapState } from '@/lib/zero-downtime-scaler';
 ```
 
-GET 응답(line 122-134)에 추가:
+Add to GET response (lines 122-134):
 ```typescript
 return NextResponse.json({
-  // ... 기존 필드
+// ... existing field
   zeroDowntime: {
     enabled: isZeroDowntimeEnabled(),
     swapState: getSwapState(),
@@ -869,9 +869,9 @@ return NextResponse.json({
 
 ---
 
-## 7. K8s 사전 조건 (클러스터 매뉴얼 설정)
+## 7. K8s prerequisites (cluster manual setup)
 
-코드 구현과 별개로 K8s 클러스터에 다음 설정이 필요. 이는 `kubectl`로 직접 실행하거나, Helm values를 변경:
+Apart from the code implementation, the following settings are required on the K8s cluster: You can run this directly with `kubectl`, or change Helm values:
 
 ### 7.1 StatefulSet updateStrategy
 
@@ -879,7 +879,7 @@ return NextResponse.json({
 # StatefulSet: sepolia-thanos-stack-op-geth
 spec:
   updateStrategy:
-    type: OnDelete    # StatefulSet이 자동으로 Pod를 교체하지 않도록
+type: OnDelete # Prevent StatefulSet from automatically replacing Pods
 ```
 
 ```bash
@@ -889,22 +889,22 @@ kubectl patch statefulset sepolia-thanos-stack-op-geth \
   -p='[{"op":"replace","path":"/spec/updateStrategy/type","value":"OnDelete"}]'
 ```
 
-### 7.2 Service에 slot selector 추가
+### 7.2 Add slot selector to Service
 
 ```bash
-# 기존 active Pod에 slot label 추가
+# Add slot label to existing active Pod
 kubectl label pod sepolia-thanos-stack-op-geth-0 \
   -n thanos-sepolia \
   slot=active
 
-# Service selector에 slot 추가
+# Add slot to Service selector
 kubectl patch service sepolia-thanos-stack-op-geth \
   -n thanos-sepolia \
   --type='json' \
   -p='[{"op":"add","path":"/spec/selector/slot","value":"active"}]'
 ```
 
-### 7.3 readinessProbe 추가 (권장)
+### 7.3 Add readinessProbe (recommended)
 
 ```bash
 kubectl patch statefulset sepolia-thanos-stack-op-geth \
@@ -924,73 +924,73 @@ kubectl patch statefulset sepolia-thanos-stack-op-geth \
 
 ---
 
-## 8. 환경 변수
+## 8. Environment variables
 
-| 변수 | 기본값 | 설명 |
+| variable | default | Description |
 |------|--------|------|
-| `ZERO_DOWNTIME_SCALING` | `false` | zero-downtime 모드 활성화 (`true`/`false`) |
+| `ZERO_DOWNTIME_SCALING` | `false` | enable zero-downtime mode (`true`/`false`) |
 
-기존 변수(`K8S_NAMESPACE`, `AWS_CLUSTER_NAME` 등)는 변경 없음.
+Existing variables (`K8S_NAMESPACE`, `AWS_CLUSTER_NAME`, etc.) remain unchanged.
 
 ---
 
-## 9. 에러 처리 매트릭스
+## 9. Error handling matrix
 
-| 단계 | 실패 시나리오 | 동작 |
+| steps | Failure Scenario | Action |
 |------|--------------|------|
-| `creating_standby` | Pod 생성 실패 (리소스 부족) | 에러 반환, 기존 Pod 영향 없음 |
-| `waiting_ready` | 5분 타임아웃 (sync 지연) | standby Pod 삭제 → rollback |
-| `waiting_ready` | RPC 미응답 | standby Pod 삭제 → rollback |
-| `switching_traffic` | Service patch 실패 | standby Pod 삭제, 기존 selector 복원 |
-| `cleanup` | 기존 Pod 삭제 실패 | 경고 로그, 수동 정리 필요 (서비스는 이미 전환됨) |
-| `syncing_statefulset` | StatefulSet patch 실패 | 경고 로그 (서비스는 이미 전환됨, spec만 불일치) |
-| 전체 | 이미 swap 진행 중 | 즉시 거부 (`isSwapInProgress()` 체크) |
+| `creating_standby` | Pod creation failed (insufficient resources) | Returns an error, does not affect existing Pods |
+| `waiting_ready` | 5 minute timeout (sync delay) | Delete standby Pod → rollback |
+| `waiting_ready` | RPC unresponsive | Delete standby Pod → rollback |
+| `switching_traffic` | Service patch failed | Delete standby Pod, restore existing selector |
+| `cleanup` | Failed to delete existing Pod | Warning log, manual cleanup required (service already switched) |
+| `syncing_statefulset` | StatefulSet patch failed | Warning log (service already switched, only spec mismatch) |
+| All | Swap already in progress | Immediate rejection (check `isSwapInProgress()`) |
 
-**핵심 원칙**: 트래픽 전환 전 실패 시 기존 Pod에 영향 없음. 트래픽 전환 후 실패 시 서비스는 이미 새 Pod에서 동작 중이므로 cleanup/sync 실패는 서비스 영향 없음.
+**Core Principle**: Existing Pods are not affected in case of failure before traffic conversion. In case of failure after switching traffic, the service is already running in the new Pod, so cleanup/sync failure does not affect the service.
 
 ---
 
-## 10. 검증 절차
+## 10. Verification procedure
 
-### 10.1 빌드 검증
+### 10.1 Build Verification
 
 ```bash
 npm run build
 npm run lint
 ```
 
-### 10.2 Simulation 모드 테스트
+### 10.2 Simulation mode test
 
-zero-downtime 모드를 활성화하되 simulation 모드에서 테스트:
+Enable zero-downtime mode but test in simulation mode:
 
 ```bash
-# 1. simulation 모드 + zero-downtime 활성화
+# 1. Activate simulation mode + zero-downtime
 curl -X PATCH http://localhost:3002/api/scaler \
   -H "Content-Type: application/json" \
   -d '{"simulationMode": true, "zeroDowntimeEnabled": true}'
 
-# 2. 스케일링 실행
+#2. Execute scaling
 curl -X POST http://localhost:3002/api/scaler \
   -H "Content-Type: application/json" \
   -d '{"targetVcpu": 4, "reason": "zero-downtime test"}'
 
-# 3. 상태 확인 — zeroDowntime.swapState 확인
+# 3. Check state — check zeroDowntime.swapState
 curl http://localhost:3002/api/scaler
 ```
 
-### 10.3 실제 클러스터 테스트 (K8s 환경 필요)
+### 10.3 Real cluster testing (requires K8s environment)
 
 ```bash
-# 0. 사전 조건 확인
+# 0. Check preconditions
 kubectl get statefulset sepolia-thanos-stack-op-geth -n thanos-sepolia \
   -o jsonpath='{.spec.updateStrategy.type}'
-# 기대: OnDelete
+# Expectation: OnDelete
 
 kubectl get service sepolia-thanos-stack-op-geth -n thanos-sepolia \
   -o jsonpath='{.spec.selector}'
-# 기대: slot=active 포함
+# Expectation: includes slot=active
 
-# 1. RPC 연속 모니터링 시작 (별도 터미널)
+# 1. Start RPC continuous monitoring (separate terminal)
 while true; do
   CODE=$(curl -s -o /dev/null -w "%{http_code}" \
     -X POST http://<op-geth-service>:8545 \
@@ -1000,7 +1000,7 @@ while true; do
   sleep 1
 done
 
-# 2. zero-downtime 스케일링 실행
+# 2. Implement zero-downtime scaling
 curl -X PATCH http://localhost:3002/api/scaler \
   -H "Content-Type: application/json" \
   -d '{"simulationMode": false, "zeroDowntimeEnabled": true}'
@@ -1009,53 +1009,53 @@ curl -X POST http://localhost:3002/api/scaler \
   -H "Content-Type: application/json" \
   -d '{"targetVcpu": 4, "reason": "zero-downtime production test"}'
 
-# 3. 진행 상태 확인 (폴링)
+# 3. Check progress (polling)
 watch -n 2 'curl -s http://localhost:3002/api/scaler | jq .zeroDowntime'
 
-# 4. 검증
-# - 모니터링 로그에서 HTTP 200 연속성 확인 (실패 0건)
-# - kubectl get pods -n thanos-sepolia  (1개 Pod만 남음)
-# - 남은 Pod의 리소스가 4 vCPU인지 확인
+#4. Verification
+# - Check HTTP 200 continuity in monitoring log (0 failures)
+# - kubectl get pods -n thanos-sepolia (only 1 pod left)
+# - Check if the remaining Pod's resources are 4 vCPU
 ```
 
-### 10.4 롤백 테스트
+### 10.4 Rollback Test
 
 ```bash
-# standby Pod가 Ready되지 않는 시나리오 시뮬레이션
-# (의도적으로 잘못된 이미지나 불가능한 리소스 요청)
-# → swapState.phase가 'failed'가 되는지 확인
-# → 기존 Pod이 영향받지 않는지 확인
+# Simulate a scenario where the standby Pod is not Ready
+# (intentionally bad image or impossible resource request)
+# → Check if swapState.phase is ‘failed’
+# → Check that existing Pods are not affected
 ```
 
 ---
 
-## 11. 구현 순서
+## 11. Implementation order
 
 ```
-Phase 1: 타입 + 인프라
-  1. src/types/zero-downtime.ts — 타입 정의
-  2. src/types/scaling.ts — ScaleResult, ScalingConfig 수정 (serviceName 추가)
-  3. src/lib/k8s-config.ts — runK8sCommand에 stdin 옵션 추가
+Phase 1: Type + Infrastructure
+1. src/types/zero-downtime.ts — Type definitions
+2. src/types/scaling.ts — Modify ScaleResult, ScalingConfig (add serviceName)
+3. src/lib/k8s-config.ts — Add stdin option to runK8sCommand
 
-Phase 2: 핵심 모듈
-  4. src/lib/zero-downtime-scaler.ts — 전체 오케스트레이터 구현
+Phase 2: Core modules
+4. src/lib/zero-downtime-scaler.ts — Full orchestrator implementation
 
-Phase 3: 통합
-  5. src/lib/k8s-scaler.ts — zeroDowntimeEnabled 상태 + scaleOpGeth 분기
-  6. src/app/api/scaler/route.ts — PATCH/GET 확장
+Phase 3: Integration
+5. src/lib/k8s-scaler.ts — zeroDowntimeEnabled state + scaleOpGeth branch
+6. src/app/api/scaler/route.ts — PATCH/GET extension
 
-Phase 4: 검증
+Phase 4: Verification
   7. npm run build && npm run lint
-  8. simulation 모드 테스트
+8. Simulation mode test
 ```
 
 ---
 
-## 부록 A: k8s-scaler.ts 수정 대상 코드
+## Appendix A: Code to be modified in k8s-scaler.ts
 
 ```typescript
-// src/lib/k8s-scaler.ts — scaleOpGeth() 함수의 실제 실행 부분
-// line 197-255 (현재 코드)
+// src/lib/k8s-scaler.ts — actual execution part of the scaleOpGeth() function
+// lines 197-255 (current code)
 
   try {
     // Execute kubectl patch command
@@ -1118,9 +1118,9 @@ Phase 4: 검증
   }
 ```
 
-이 부분을 `if (zeroDowntimeEnabled) { ... } else { 기존 코드 }` 로 감싸는 것이 수정의 핵심.
+The key to modifying this part is to surround this part with `if (zeroDowntimeEnabled) { ... } else { existing code }`.
 
-## 부록 B: runK8sCommand 현재 시그니처
+## Appendix B: runK8sCommand Current Signature
 
 ```typescript
 // src/lib/k8s-config.ts:202-238
@@ -1130,9 +1130,9 @@ export async function runK8sCommand(
 ): Promise<{ stdout: string; stderr: string }>
 ```
 
-`options`에 `stdin?: string` 필드를 추가하면 된다.
+Just add the `stdin?: string` field to `options`.
 
-## 부록 C: DEFAULT_SCALING_CONFIG 현재 전체
+## Appendix C: DEFAULT_SCALING_CONFIG Current Full
 
 ```typescript
 // src/types/scaling.ts:115-132
@@ -1156,4 +1156,4 @@ export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
 };
 ```
 
-여기에 `serviceName: 'sepolia-thanos-stack-op-geth'`을 추가.
+Add `serviceName: 'sepolia-thanos-stack-op-geth'` here.

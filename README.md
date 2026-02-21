@@ -7,7 +7,10 @@ A Next.js dashboard for monitoring and auto-scaling Optimism-based L2 networks.
 
 ```bash
 npm install
-cp .env.local.sample .env.local  # Edit with your settings
+# Chain-specific templates
+cp .env.thanos.example .env.local     # Thanos
+# cp .env.optimism.example .env.local  # Optimism / OP Stack
+# cp .env.zkstack.example .env.local   # ZK Stack
 npm run dev
 ```
 
@@ -72,7 +75,10 @@ SentinAI uses **tier-based AI models** via a custom AI Gateway to audit network 
 
 Copy the sample and configure:
 ```bash
-cp .env.local.sample .env.local
+# Select one template
+cp .env.thanos.example .env.local
+# cp .env.optimism.example .env.local
+# cp .env.zkstack.example .env.local
 ```
 
 For EC2 deployment, use `bash scripts/install.sh` which handles everything.

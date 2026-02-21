@@ -67,7 +67,7 @@ export async function checkDerivationLag(rpcUrl: string): Promise<DerivationLagR
       safeL2: null,
       finalizedL2: null,
       checkedAt,
-      message: 'optimism_syncStatus 응답이 없어 derivation lag를 계산하지 못했습니다.',
+      message: 'Unable to calculate derivation lag because optimism_syncStatus returned no response.',
     };
   }
 
@@ -107,4 +107,3 @@ export async function isL1Healthy(
     return { healthy: false, responseTimeMs: Date.now() - started };
   }
 }
-

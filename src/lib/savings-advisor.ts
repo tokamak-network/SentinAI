@@ -129,7 +129,7 @@ function buildRecommendation(options: CommitmentOption[]): string {
     return 'Usage data is insufficient to provide a Savings Plans recommendation.';
   }
 
-  return `추천 커밋은 ${recommended.label} (${recommended.committedVcpu} vCPU)입니다. 예상 절감은 월 $${recommended.savingsVsOnDemand.toFixed(2)} (${recommended.savingsPct.toFixed(1)}%) 수준입니다.`;
+  return `Recommended commitment is ${recommended.label} (${recommended.committedVcpu} vCPU). Estimated monthly savings: $${recommended.savingsVsOnDemand.toFixed(2)} (${recommended.savingsPct.toFixed(1)}%).`;
 }
 
 export async function generateSavingsAdvice(
@@ -160,9 +160,9 @@ export async function generateSavingsAdvice(
   const aggressiveVcpu = Math.max(0.25, percentiles.p50);
 
   const options: CommitmentOption[] = [
-    simulateCommitment('conservative', '보수적 (p10)', conservativeVcpu, data),
-    simulateCommitment('recommended', '권장 (평균)', recommendedVcpu, data),
-    simulateCommitment('aggressive', '공격적 (p50)', aggressiveVcpu, data),
+    simulateCommitment('conservative', 'Conservative (p10)', conservativeVcpu, data),
+    simulateCommitment('recommended', 'Recommended (average)', recommendedVcpu, data),
+    simulateCommitment('aggressive', 'Aggressive (p50)', aggressiveVcpu, data),
   ];
 
   return {
@@ -178,9 +178,9 @@ export async function generateSavingsAdvice(
     recommendation: buildRecommendation(options),
     awsPurchaseUrl: 'https://console.aws.amazon.com/cost-management/home#/savingsPlans/recommendations',
     caveats: [
-      '이 분석은 로컬 usage data 기준 추정치입니다.',
-      '실제 청구는 메모리/리전/워크로드 변동에 따라 달라질 수 있습니다.',
-      '과도한 커밋은 사용량 하락 시 낭비 비용을 유발할 수 있습니다.',
+      'This analysis is an estimate based on local usage data.',
+      'Actual billing can vary by memory, region, and workload changes.',
+      'Over-commitment can cause waste when usage declines.',
     ],
   };
 }

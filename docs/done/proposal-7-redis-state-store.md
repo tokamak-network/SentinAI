@@ -1,46 +1,46 @@
-# Proposal 7: Redis State Store (상태 영속성 계층)
+# Proposal 7: Redis State Store (state persistence layer)
 
-## 문서 정보
+## Document information
 
-| 항목 | 내용 |
+| Item | Content |
 |------|------|
-| 버전 | 1.0.0 |
-| 작성일 | 2026-02-06 |
-| 대상 | Claude Opus 4.6 구현 에이전트 |
-| 의존성 | Proposal 1 (MetricsStore, PredictiveScaler) — 기존 구현 수정 |
+| version | 1.0.0 |
+| Created date | 2026-02-06 |
+| target | Claude Opus 4.6 Implementation Agent |
+| Dependency | Proposal 1 (MetricsStore, PredictiveScaler) — Modify existing implementation |
 
 ---
 
-## 1. 개요 (Overview)
+## 1. Overview
 
-### 1.1 기능 요약
+### 1.1 Feature Summary
 
-SentinAI의 모든 인메모리 상태를 Redis로 마이그레이션하여 **서버 재시작 시 상태 유지**, **다중 인스턴스 간 상태 공유**를 달성하는 영속성 계층이다.
+It is a persistence layer that migrates all of SentinAI's in-memory state to Redis to achieve **maintaining the state upon server restart** and **sharing the state between multiple instances**.
 
-### 1.2 해결하는 문제
+### 1.2 Solving Problems
 
-현재 SentinAI의 모든 런타임 상태가 Node.js 프로세스 메모리에 저장되어 있다:
+Currently, all runtime state of SentinAI is stored in Node.js process memory:
 
-1. **상태 소실**: 서버 재시작, 재배포, 컨테이너 재생성 시 메트릭(최대 1시간분), 스케일링 이력(50건), 예측 캐시가 전부 소실된다.
-2. **인스턴스 불일치**: 로드 밸런서 뒤에 복수 인스턴스 배치 시 각 인스턴스가 독립된 상태를 가진다. 인스턴스 A에서 스케일링이 발생해도 인스턴스 B는 인지하지 못한다.
-3. **코드 내 인지**: `src/lib/k8s-scaler.ts` line 24에 `// Recommended to use Redis or DB in actual production` 주석이 존재하며, 현재 인메모리 방식의 한계를 스스로 인지하고 있다.
+1. **State loss**: When restarting the server, redistributing, or regenerating containers, metrics (up to 1 hour), scaling history (50 cases), and prediction cache are all lost.
+2. **Instance mismatch**: When multiple instances are deployed behind a load balancer, each instance has an independent state. Even if scaling occurs in instance A, instance B is not aware of it.
+3. **Awareness in code**: There is a comment `// Recommended to use Redis or DB in actual production` in line 24 of `src/lib/k8s-scaler.ts`, and the user is aware of the limitations of the current in-memory method.
 
-### 1.3 핵심 가치
+### 1.3 Core Values
 
-- **무상태 서버**: 애플리케이션 서버가 상태를 갖지 않아 자유로운 스케일아웃/재시작 가능
-- **상태 영속성**: 프로세스 생명주기와 무관하게 메트릭, 스케일링 상태, 예측 캐시 보존
-- **점진적 도입**: `REDIS_URL` 미설정 시 기존 인메모리 동작을 100% 유지하는 Strategy Pattern
+- **Stateless Server**: The application server has no state, allowing for free scale-out/restart.
+- **State Persistence**: Preserve metrics, scaling state, and prediction cache regardless of process life cycle.
+- **Gradual introduction**: Strategy Pattern that maintains 100% of the existing in-memory operation when `REDIS_URL` is not set.
 
-### 1.4 의존 관계
+### 1.4 Dependencies
 
-- **Proposal 1** (Predictive Scaling): `metrics-store.ts`, `predictive-scaler.ts` 수정 — 이미 구현 완료된 코드를 async로 전환
-- **npm 패키지**: `ioredis` (신규 의존성)
+- **Proposal 1** (Predictive Scaling): Modify `metrics-store.ts`, `predictive-scaler.ts` — Convert code that has already been implemented to async
+- **npm package**: `ioredis` (new dependency)
 
 ---
 
-## 2. 타입 정의 (Type Definitions)
+## 2. Type Definitions
 
-### 2.1 신규 파일: `src/types/redis.ts`
+### 2.1 New file: `src/types/redis.ts`
 
 ```typescript
 /**
@@ -122,11 +122,11 @@ export const DEFAULT_REDIS_CONFIG: Omit<RedisConfig, 'url'> = {
 
 ---
 
-## 3. 신규 파일 명세 (New Files)
+## 3. New file specifications (New Files)
 
-### 3.1 `src/lib/redis-store.ts` (핵심 모듈)
+### 3.1 `src/lib/redis-store.ts` (core module)
 
-#### 전체 구현 코드
+#### Full implementation code
 
 ```typescript
 /**
@@ -542,39 +542,39 @@ export async function resetStore(): Promise<void> {
 }
 ```
 
-#### 함수 시그니처 요약
+#### Function signature summary
 
-| 함수 | 입력 | 출력 | 설명 |
+| function | input | output | Description |
 |------|------|------|------|
-| `getStore()` | - | `IStateStore` | 싱글톤 스토어 인스턴스 반환 |
-| `resetStore()` | - | `Promise<void>` | 스토어 리셋 (테스트용) |
+| `getStore()` | - | `IStateStore` | return singleton store instance |
+| `resetStore()` | - | `Promise<void>` | Store Reset (for testing) |
 | `store.pushMetric(dp)` | `MetricDataPoint` | `Promise<void>` | 메트릭 추가 (RPUSH + LTRIM 60) |
-| `store.getRecentMetrics(n?)` | `number?` | `Promise<MetricDataPoint[]>` | 최근 N개 메트릭 조회 |
-| `store.clearMetrics()` | - | `Promise<void>` | 메트릭 버퍼 초기화 |
-| `store.getMetricsCount()` | - | `Promise<number>` | 현재 메트릭 수 |
-| `store.getScalingState()` | - | `Promise<ScalingState>` | 스케일링 상태 조회 |
-| `store.updateScalingState(u)` | `Partial<ScalingState>` | `Promise<void>` | 스케일링 상태 업데이트 |
-| `store.addScalingHistory(e)` | `ScalingHistoryEntry` | `Promise<void>` | 이력 추가 (LPUSH + LTRIM 50) |
-| `store.getScalingHistory(n?)` | `number?` | `Promise<ScalingHistoryEntry[]>` | 이력 조회 |
-| `store.getSimulationConfig()` | - | `Promise<SimulationConfig>` | 시뮬레이션 설정 조회 |
-| `store.setSimulationConfig(c)` | `Partial<SimulationConfig>` | `Promise<void>` | 시뮬레이션 설정 변경 |
-| `store.getLastPrediction()` | - | `Promise<PredictionResult \| null>` | 캐시된 예측 조회 |
-| `store.setLastPrediction(p)` | `PredictionResult` | `Promise<void>` | 예측 캐시 저장 (TTL 300s) |
-| `store.getLastPredictionTime()` | - | `Promise<number>` | 마지막 예측 시간 |
-| `store.setLastPredictionTime(t)` | `number` | `Promise<void>` | 예측 시간 저장 |
-| `store.resetPredictionState()` | - | `Promise<void>` | 예측 캐시/시간 초기화 |
-| `store.getLastBlock()` | - | `Promise<{height, time}>` | 마지막 블록 정보 |
-| `store.setLastBlock(h, t)` | `string, string` | `Promise<void>` | 블록 정보 저장 |
+| `store.getRecentMetrics(n?)` | `number?` | `Promise<MetricDataPoint[]>` | View the most recent N metrics |
+| `store.clearMetrics()` | - | `Promise<void>` | Metric buffer initialization |
+| `store.getMetricsCount()` | - | `Promise<number>` | Current metric count |
+| `store.getScalingState()` | - | `Promise<ScalingState>` | Check scaling status |
+| `store.updateScalingState(u)` | `Partial<ScalingState>` | `Promise<void>` | Scaling status update |
+| `store.addScalingHistory(e)` | `ScalingHistoryEntry` | `Promise<void>` | Add History (LPUSH + LTRIM 50) |
+| `store.getScalingHistory(n?)` | `number?` | `Promise<ScalingHistoryEntry[]>` | History search |
+| `store.getSimulationConfig()` | - | `Promise<SimulationConfig>` | Simulation settings inquiry |
+| `store.setSimulationConfig(c)` | `Partial<SimulationConfig>` | `Promise<void>` | Change simulation settings |
+| `store.getLastPrediction()` | - | `Promise<PredictionResult\| null>` | Cached prediction lookup |
+| `store.setLastPrediction(p)` | `PredictionResult` | `Promise<void>` | Save prediction cache (TTL 300s) |
+| `store.getLastPredictionTime()` | - | `Promise<number>` | Last forecast time |
+| `store.setLastPredictionTime(t)` | `number` | `Promise<void>` | Save prediction time |
+| `store.resetPredictionState()` | - | `Promise<void>` | speculative cache/time initialization |
+| `store.getLastBlock()` | - | `Promise<{height, time}>` | Last block information |
+| `store.setLastBlock(h, t)` | `string, string` | `Promise<void>` | Save block information |
 
 ---
 
-## 4. 기존 파일 수정 (Existing File Modifications)
+## 4. Existing File Modifications
 
-### 4.1 `src/lib/metrics-store.ts` 수정 — 전체 교체
+### 4.1 Fix `src/lib/metrics-store.ts` — full replacement
 
-기존 인메모리 배열을 `getStore()`로 교체하고 모든 함수를 async로 전환한다.
+Replace the existing in-memory array with `getStore()` and convert all functions to async.
 
-#### 전체 교체 코드
+#### Full replacement code
 
 ```typescript
 /**
@@ -728,11 +728,11 @@ export const METRICS_BUFFER_CAPACITY = 60;
 
 ---
 
-### 4.2 `src/lib/k8s-scaler.ts` 수정 — 전체 교체
+### 4.2 Fix `src/lib/k8s-scaler.ts` — full replacement.
 
-인메모리 상태 변수를 `getStore()`로 교체하고, 상태 접근 함수를 async로 전환한다.
+Replace the in-memory state variable with `getStore()` and switch the state access function to async.
 
-#### 전체 교체 코드
+#### Full replacement code
 
 ```typescript
 /**
@@ -1041,11 +1041,11 @@ export async function isAutoScalingEnabled(): Promise<boolean> {
 
 ---
 
-### 4.3 `src/lib/predictive-scaler.ts` 수정
+### 4.3 Modify `src/lib/predictive-scaler.ts`
 
-#### 4.3.1 Import 수정 및 상태 변수 제거
+#### 4.3.1 Import modification and status variable removal
 
-**파일 상단 (lines 1-21) 교체**
+**Replace top of file (lines 1-21)**
 
 ```typescript
 /**
@@ -1069,12 +1069,12 @@ import { getStore } from '@/lib/redis-store';
 const AI_GATEWAY_URL = process.env.AI_GATEWAY_URL || 'https://api.ai.tokamak.network';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 
-// 삭제: let lastPredictionTime / lastPrediction (store로 이동)
+// delete: let lastPredictionTime / lastPrediction (go to store)
 ```
 
-#### 4.3.2 `predictScaling()` 수정 (line 209-281)
+#### 4.3.2 Modification of `predictScaling()` (lines 209-281)
 
-**기존 코드의 인메모리 변수 접근을 store 접근으로 변경:**
+**Change in-memory variable access in existing code to store access:**
 
 ```typescript
 export async function predictScaling(
@@ -1152,13 +1152,13 @@ export async function predictScaling(
 }
 ```
 
-#### 4.3.3 `buildUserPrompt()` async 전환 (line 71)
+#### 4.3.3 `buildUserPrompt()` async conversion (line 71)
 
 ```typescript
 async function buildUserPrompt(currentVcpu: number): string {
   const metrics = await getRecentMetrics();
   const stats = await getMetricsStats();
-  // ... 나머지 동일
+// ...the rest is the same
 }
 ```
 
@@ -1167,11 +1167,11 @@ async function buildUserPrompt(currentVcpu: number): string {
 ```typescript
 async function generateFallbackPrediction(currentVcpu: number): Promise<PredictionResult> {
   const stats = await getMetricsStats();
-  // ... 나머지 동일
+// ...the rest is the same
 }
 ```
 
-#### 4.3.5 유틸리티 함수 수정 (lines 287-314)
+#### 4.3.5 Utility function modification (lines 287-314)
 
 ```typescript
 export async function getLastPrediction(): Promise<PredictionResult | null> {
@@ -1198,11 +1198,11 @@ export async function resetPredictionState(): Promise<void> {
 
 ---
 
-### 4.4 `src/app/api/metrics/route.ts` 수정
+### 4.4 Modify `src/app/api/metrics/route.ts`
 
-#### 4.4.1 Import 추가 및 상태 변수 제거
+#### 4.4.1 Add Import and Remove State Variables
 
-**파일 상단 (lines 1-14) 수정:**
+**Edit top of file (lines 1-14):**
 
 ```typescript
 import { createPublicClient, http } from 'viem';
@@ -1215,16 +1215,16 @@ import { pushMetric } from '@/lib/metrics-store';
 import { MetricDataPoint } from '@/types/prediction';
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 
-// ====== 여기에 추가 ======
+// ====== Add here ======
 import { getStore } from '@/lib/redis-store';
 // ========================
 
-// 삭제: let lastL2BlockHeight / lastL2BlockTime (store로 이동)
+// delete: let lastL2BlockHeight / lastL2BlockTime (move to store)
 ```
 
-#### 4.4.2 블록 추적 로직 수정 (lines 358-372)
+#### 4.4.2 Modify block tracking logic (lines 358-372)
 
-**기존 코드:**
+**Old Code:**
 ```typescript
 let blockInterval = 2.0;
 if (lastL2BlockHeight !== null && lastL2BlockTime !== null) {
@@ -1238,7 +1238,7 @@ lastL2BlockHeight = blockNumber;
 lastL2BlockTime = now;
 ```
 
-**변경:**
+**change:**
 ```typescript
 let blockInterval = 2.0;
 const lastBlock = await getStore().getLastBlock();
@@ -1254,46 +1254,46 @@ if (lastBlock.height !== null && lastBlock.time !== null) {
 await getStore().setLastBlock(String(blockNumber), String(now));
 ```
 
-#### 4.4.3 pushMetric 호출 수정 (line 385)
+#### 4.4.3 Modify pushMetric call (line 385)
 
-**기존:** `pushMetric(dataPoint);`
+**Existing:** `pushMetric(dataPoint);`
 **변경:** `await pushMetric(dataPoint);`
 
 ---
 
 ### 4.5 `src/app/api/metrics/seed/route.ts` 수정
 
-#### async 호출 추가
+#### Add async call
 
-**모든 metrics-store/predictive-scaler 함수 호출에 `await` 추가:**
+**Add `await` to all metrics-store/predictive-scaler function calls:**
 
-**line 142 근처:**
+**Near line 142:**
 ```typescript
-// 기존
+// existing
 const count = getMetricsCount();
-// 변경
+// change
 const count = await getMetricsCount();
 ```
 
-**line 155-157 근처:**
+**Near line 155-157:**
 ```typescript
-// 기존
+// existing
 resetPredictionState();
 const liveData = getRecentMetrics();
-// 변경
+// change
 await resetPredictionState();
 const liveData = await getRecentMetrics();
 ```
 
-**line 174-179 근처:**
+**Near line 174-179:**
 ```typescript
-// 기존
+// existing
 clearMetrics();
 resetPredictionState();
 for (const point of dataPoints) {
   pushMetric(point);
 }
-// 변경
+// change
 await clearMetrics();
 await resetPredictionState();
 for (const point of dataPoints) {
@@ -1303,34 +1303,34 @@ for (const point of dataPoints) {
 
 ---
 
-### 4.6 `src/app/api/scaler/route.ts` 수정
+### 4.6 Modify `src/app/api/scaler/route.ts`
 
-#### 4.6.1 Import 추가
+#### 4.6.1 Add Import
 
 ```typescript
-// 기존 import 뒤에 추가 없음 — 기존 import는 유지
-// 함수 시그니처가 async로 바뀌므로 await만 추가
+// No additions after existing imports — existing imports are kept
+// Function signature is changed to async, so only await is added
 ```
 
-#### 4.6.2 GET 핸들러 수정 (line 86-146)
+#### 4.6.2 Modify GET handler (lines 86-146)
 
-기존 동기 호출을 `await`로 변경:
+Change an existing synchronous call to `await`:
 
 ```typescript
 export async function GET(_request: NextRequest) {
   try {
-    const state = await getScalingState();           // await 추가
+const state = await getScalingState();           // await 추가
     const currentVcpu = await getCurrentVcpu();
 
     if (currentVcpu !== state.currentVcpu) {
-      await updateScalingState({                     // await 추가
+await updateScalingState({ // add await
         currentVcpu,
         currentMemoryGiB: (currentVcpu * 2) as 2 | 4 | 8,
       });
     }
 
-    let prediction: PredictionResult | null = await getLastPrediction();  // await 추가
-    const metricsCount = await getMetricsCount();    // await 추가
+let prediction: PredictionResult | null = await getLastPrediction();  // await 추가
+const metricsCount = await getMetricsCount();    // await 추가
 
     if (metricsCount >= DEFAULT_PREDICTION_CONFIG.minDataPoints) {
       const newPrediction = await predictScaling(currentVcpu);
@@ -1339,37 +1339,37 @@ export async function GET(_request: NextRequest) {
       }
     }
 
-    // ... predictionInfo 구성 (동일)
+// ... predictionInfo configuration (same)
 
     return NextResponse.json({
-      ...(await getScalingState()),                  // await 추가
-      simulationMode: await isSimulationMode(),      // await 추가
+...(await getScalingState()), // add await
+simulationMode: await isSimulationMode(), // await addition
       timestamp: new Date().toISOString(),
       prediction: predictionInfo,
       predictionMeta: {
         metricsCount,
         minRequired: DEFAULT_PREDICTION_CONFIG.minDataPoints,
-        nextPredictionIn: await getNextPredictionIn(),  // await 추가
+nextPredictionIn: await getNextPredictionIn(),  // await 추가
         isReady: metricsCount >= DEFAULT_PREDICTION_CONFIG.minDataPoints,
       },
     });
   } catch (error) {
-    // ... 에러 처리 (동일)
+// ... error handling (same)
   }
 }
 ```
 
-#### 4.6.3 POST 핸들러 수정 (line 151-281)
+#### 4.6.3 Modify POST handler (lines 151-281)
 
 ```typescript
-// line 185: 기존 동기 호출 → await
+// line 185: Existing synchronous call → await
 if (!(await isAutoScalingEnabled())) {       // await 추가
 
-// line 267: 기존 동기 호출 → await
+// line 267: Existing synchronous call → await
 cooldownRemaining: (await getScalingState()).cooldownRemaining,  // await 추가
 ```
 
-#### 4.6.4 PATCH 핸들러 수정 (line 286-312)
+#### 4.6.4 Modify PATCH handler (lines 286-312)
 
 ```typescript
 export async function PATCH(request: NextRequest) {
@@ -1378,20 +1378,20 @@ export async function PATCH(request: NextRequest) {
     const { autoScalingEnabled, simulationMode } = body;
 
     if (typeof autoScalingEnabled === 'boolean') {
-      await setAutoScalingEnabled(autoScalingEnabled);    // await 추가
+await setAutoScalingEnabled(autoScalingEnabled);    // await 추가
     }
 
     if (typeof simulationMode === 'boolean') {
-      await setSimulationMode(simulationMode);            // await 추가
+await setSimulationMode(simulationMode);            // add await
     }
 
     return NextResponse.json({
       success: true,
-      autoScalingEnabled: await isAutoScalingEnabled(),   // await 추가
-      simulationMode: await isSimulationMode(),           // await 추가
+autoScalingEnabled: await isAutoScalingEnabled(),   // await 추가
+simulationMode: await isSimulationMode(), // await addition
     });
   } catch (error) {
-    // ... 에러 처리 (동일)
+// ... error handling (same)
   }
 }
 ```
@@ -1400,13 +1400,13 @@ export async function PATCH(request: NextRequest) {
 
 ## 5. API 명세 (API Specification)
 
-### 5.1 외부 API 변경 — 없음
+### 5.1 External API changes — None
 
-모든 API 엔드포인트(`/api/metrics`, `/api/scaler`, `/api/metrics/seed`, `/api/health`)의 요청/응답 형식은 **변경 없음**. Redis 도입은 내부 저장소 교체이므로 외부 인터페이스에 영향을 주지 않는다.
+Request/response formats for all API endpoints (`/api/metrics`, `/api/scaler`, `/api/metrics/seed`, `/api/health`) are **unchanged**. The introduction of Redis is an internal storage replacement, so it does not affect the external interface.
 
-### 5.2 내부 함수 시그니처 변경
+### 5.2 Internal function signature change
 
-| 모듈 | 함수 | 기존 | 변경 |
+| module | function | existing | change |
 |------|------|------|------|
 | metrics-store | `pushMetric` | `(dp) => void` | `(dp) => Promise<void>` |
 | metrics-store | `getRecentMetrics` | `(n?) => MetricDataPoint[]` | `(n?) => Promise<MetricDataPoint[]>` |
@@ -1430,23 +1430,23 @@ export async function PATCH(request: NextRequest) {
 
 ---
 
-## 6. 환경 변수 (Environment Variables)
+## 6. Environment Variables
 
-| 변수 | 용도 | 필수 | 기본값 |
+| variable | Use | Required | default |
 |------|------|:----:|--------|
-| `REDIS_URL` | Redis 연결 URL | 아니오 | 미설정 시 InMemory 모드 |
+| `REDIS_URL` | Redis connection URL | No | InMemory mode when not set |
 
-### `.env.local.sample` 추가
+### Add `.env.local.sample`
 
 ```bash
 # State Store (Optional - defaults to in-memory if not set)
 # REDIS_URL=redis://localhost:6379
 ```
 
-### Docker 실행 시
+### When running Docker
 
 ```bash
-# Redis 포함 실행
+# Run with Redis
 docker run -d \
   --name sentinai \
   -p 3000:3000 \
@@ -1455,7 +1455,7 @@ docker run -d \
   sentinai:latest
 ```
 
-### Docker Compose 예시
+### Docker Compose Example
 
 ```yaml
 services:
@@ -1482,164 +1482,164 @@ volumes:
 
 ---
 
-## 7. 테스트 검증 (Verification)
+## 7. Test Verification
 
-### 7.1 InMemory 모드 검증 (Redis 미설정)
+### 7.1 InMemory mode verification (Redis not set)
 
-`REDIS_URL`을 설정하지 않은 상태에서 기존 동작이 100% 유지되는지 확인:
+Verify that the existing behavior is 100% maintained without `REDIS_URL` set:
 
 ```bash
-# 1. Redis 없이 빌드 & 실행
+# 1. Build & run without Redis
 npm run build && npm run start
 
-# 2. 메트릭 수집 확인
+# 2. Verify metrics collection
 curl http://localhost:3002/api/metrics | jq '.metrics.cpuUsage'
 
-# 3. Seed 데이터 주입
+# 3. Seed data injection
 curl -X POST "http://localhost:3002/api/metrics/seed?scenario=rising"
 
-# 4. 스케일링 상태 확인
+# 4. Check scaling status
 curl http://localhost:3002/api/scaler | jq '.currentVcpu'
 
-# 5. 수동 스케일링 (시뮬레이션 모드)
+# 5. Manual scaling (simulation mode)
 curl -X POST http://localhost:3002/api/scaler \
   -H "Content-Type: application/json" \
   -d '{"targetVcpu": 2}'
 ```
 
-### 7.2 Redis 모드 검증
+### 7.2 Redis mode verification
 
 ```bash
-# 1. Redis 시작
+# 1. Getting started with Redis
 docker run -d --name redis -p 6379:6379 redis:7-alpine
 
-# 2. REDIS_URL 설정 후 실행
+# 2. Run after setting REDIS_URL
 REDIS_URL=redis://localhost:6379 npm run dev
 
-# 3. 메트릭 수집 후 Redis 확인
+# 3. Check Redis after collecting metrics
 redis-cli LLEN sentinai:metrics:buffer
-# 예상: 1 이상
+# Expected: 1 or more
 
-# 4. 서버 재시작 후 상태 유지 확인
-# Ctrl+C로 서버 종료 후 재시작
+# 4. Make sure state is maintained after server restart
+# Shut down and restart the server with Ctrl+C
 REDIS_URL=redis://localhost:6379 npm run dev
 
-# 5. 데이터 보존 확인
+# 5. Check data retention
 curl http://localhost:3002/api/scaler | jq '.currentVcpu'
-# 예상: 재시작 전과 동일한 값
+# Expected: Same value as before restart
 ```
 
-### 7.3 Redis 연결 실패 시나리오
+### 7.3 Redis connection failure scenario
 
 ```bash
-# 1. 존재하지 않는 Redis로 설정
+# 1. Setting up a non-existent Redis
 REDIS_URL=redis://nonexistent:6379 npm run dev
 
-# 2. 서버 시작 실패 여부 확인 → 에러 로그는 출력되나 서버는 시작되어야 함
-# ioredis의 retryStrategy가 null 반환 후 에러 이벤트로 전환
+# 2. Check whether the server startup failed → An error log is output, but the server must be started.
+# Switch to error event after ioredis's retryStrategy returns null
 
-# 3. 기본 동작은 에러를 반환 (Redis 연결 실패 시)
+# 3. The default action is to return an error (when Redis connection fails)
 ```
 
 ### 7.4 Edge Cases
 
-| 케이스 | 예상 동작 |
+| case | Expected Behavior |
 |--------|-----------|
-| `REDIS_URL` 미설정 | InMemoryStateStore 사용, 기존 동작 100% 유지 |
-| Redis 연결 후 끊김 | ioredis 자동 재연결 시도, 재연결 전 요청은 에러 |
-| Redis에 기존 키 존재 | 서버 시작 시 기존 데이터 자동 복원 |
-| 메트릭 61개 추가 | LTRIM으로 최대 60개 유지 (가장 오래된 것 삭제) |
-| 스케일링 이력 51개 | LTRIM으로 최대 50개 유지 |
-| 예측 캐시 TTL 만료 | `getLastPrediction()` → `null` 반환 |
-| `npm run build` | TypeScript strict 모드 통과 (모든 async/await 타입 일관성) |
+| `REDIS_URL` not set | Use InMemoryStateStore, maintain 100% existing behavior |
+| Dropped after connecting to Redis | ioredis Automatic reconnection attempt, request before reconnection results in error |
+| Existing key exists in Redis | Automatically restore existing data when server starts |
+| Added 61 metrics | Keep up to 60 with LTRIM (delete the oldest) |
+| 51 scaling histories | Maintain up to 50 with LTRIM |
+| Predictive Cache TTL Expiration | `getLastPrediction()` → returns `null` |
+| `npm run build` | Pass TypeScript strict mode (all async/await types are consistent) |
 
 ---
 
-## 8. 의존 관계 (Dependencies)
+## 8. Dependencies
 
-### 8.1 npm 패키지
+### 8.1 npm package
 
 ```bash
 npm install ioredis
-npm install -D @types/ioredis  # ioredis 5.x는 내장 타입 제공, 불필요할 수 있음
+npm install -D @types/ioredis # ioredis 5.x provides built-in types, may be unnecessary
 ```
 
-> **참고**: ioredis 5.x는 TypeScript 타입을 내장하고 있으므로 `@types/ioredis`는 불필요할 수 있다. 설치 시 확인할 것.
+> **Note**: ioredis 5.x has built-in TypeScript types, so `@types/ioredis` may be unnecessary. Check when installing.
 
-### 8.2 Proposal 의존성
+### 8.2 Proposal dependency
 
-| Proposal | 관계 | 설명 |
+| Proposal | relationship | Description |
 |----------|------|------|
-| Proposal 1 (Predictive Scaling) | **수정 대상** | `metrics-store.ts`, `predictive-scaler.ts` async 전환 |
-| Proposal 2-5 | 영향 없음 | 아직 미구현 |
-| Proposal 6 (Zero-Downtime) | 영향 없음 | 아키텍처 문서, 코드 변경 없음 |
+| Proposal 1 (Predictive Scaling) | **To be modified** | `metrics-store.ts`, `predictive-scaler.ts` async conversion |
+| Proposal 2-5 | No impact | Not implemented yet |
+| Proposal 6 (Zero-Downtime) | No impact | Architecture documentation, no code changes |
 
-### 8.3 구현 순서
+### 8.3 Implementation order
 
-1. `ioredis` 패키지 설치
-2. `src/types/redis.ts` 생성
-3. `src/lib/redis-store.ts` 생성
-4. `src/lib/metrics-store.ts` 교체
-5. `src/lib/k8s-scaler.ts` 교체
-6. `src/lib/predictive-scaler.ts` 수정
-7. `src/app/api/metrics/route.ts` 수정
+1. Install `ioredis` package
+2. Create `src/types/redis.ts`
+3. Create `src/lib/redis-store.ts`
+4. Replace `src/lib/metrics-store.ts`
+5. Replace `src/lib/k8s-scaler.ts`
+6. Modify `src/lib/predictive-scaler.ts`
+7. Modify `src/app/api/metrics/route.ts`
 8. `src/app/api/metrics/seed/route.ts` 수정
-9. `src/app/api/scaler/route.ts` 수정
-10. `npm run build` 확인
-11. `.env.local.sample` 업데이트
+9. Modify `src/app/api/scaler/route.ts`
+10. Check `npm run build`
+11. Update `.env.local.sample`
 
 ---
 
-## 9. 체크리스트 (Implementation Checklist)
+## 9. Checklist (Implementation Checklist)
 
-- [ ] `npm install ioredis` 실행
-- [ ] `src/types/redis.ts` 생성 — `IStateStore` 인터페이스
-- [ ] `src/lib/redis-store.ts` 생성 — `RedisStateStore`, `InMemoryStateStore`, `getStore()`
-- [ ] `src/lib/metrics-store.ts` 교체 — 전 함수 async, `getStore()` 사용
-- [ ] `src/lib/k8s-scaler.ts` 교체 — 전 함수 async, 인메모리 상태 제거
-- [ ] `src/lib/predictive-scaler.ts` 수정 — 인메모리 캐시 제거, `getStore()` 사용
-- [ ] `src/app/api/metrics/route.ts` 수정 — `lastL2Block*` 제거, `await` 추가
-- [ ] `src/app/api/metrics/seed/route.ts` 수정 — `await` 추가
-- [ ] `src/app/api/scaler/route.ts` 수정 — `await` 추가
-- [ ] `.env.local.sample`에 `REDIS_URL` 추가
-- [ ] TypeScript strict mode 오류 없음
-- [ ] `npm run lint` 통과
-- [ ] `npm run build` 성공
-- [ ] `REDIS_URL` 미설정 시 기존 동작 100% 유지 확인
-- [ ] Redis 연결 시 상태 영속성 확인 (서버 재시작 후 데이터 유지)
+- [ ] Run `npm install ioredis`
+- [ ] Create `src/types/redis.ts` — `IStateStore` interface
+- [ ] `src/lib/redis-store.ts` created - `RedisStateStore`, `InMemoryStateStore`, `getStore()`
+- [ ] Replace `src/lib/metrics-store.ts` — former function async, uses `getStore()`
+- [ ] Replace `src/lib/k8s-scaler.ts` — remove all functions async, in-memory state
+- [ ] Modify `src/lib/predictive-scaler.ts` — remove in-memory cache, use `getStore()`
+- [ ] Modify `src/app/api/metrics/route.ts` — Remove `lastL2Block*`, add `await`
+- [ ] Modify `src/app/api/metrics/seed/route.ts` — Add `await`
+- [ ] Modify `src/app/api/scaler/route.ts` — Add `await`
+- [ ] Add `REDIS_URL` to `.env.local.sample`
+- [ ] TypeScript strict mode no errors
+- [ ] `npm run lint` passed
+- [ ] `npm run build` success
+- [ ] When `REDIS_URL` is not set, check to maintain 100% existing operation.
+- [ ] Check state persistence when connecting to Redis (data maintained after server restart)
 
 ---
 
-## 부록: 파일 구조
+## Appendix: File Structure
 
 ```
 src/
 ├── types/
-│   ├── redis.ts           # 신규 — IStateStore, RedisConfig
-│   ├── scaling.ts         # 변경 없음
-│   └── prediction.ts      # 변경 없음
+│ ├── redis.ts # nyc — IStateStore, RedisConfig
+│ ├── scaling.ts # No change
+│ └── prediction.ts # No change
 ├── lib/
-│   ├── redis-store.ts     # 신규 — RedisStateStore, InMemoryStateStore, getStore()
-│   ├── metrics-store.ts   # 수정 — async 전환, getStore() 사용
-│   ├── k8s-scaler.ts      # 수정 — async 전환, 인메모리 상태 제거
-│   ├── predictive-scaler.ts # 수정 — async 전환, 캐시 store 이동
-│   ├── k8s-config.ts      # 변경 없음
-│   ├── scaling-decision.ts # 변경 없음
-│   └── ai-analyzer.ts     # 변경 없음
+│ ├── redis-store.ts # nyc — RedisStateStore, InMemoryStateStore, getStore()
+│ ├── metrics-store.ts # Modify — switch to async, use getStore()
+│ ├── k8s-scaler.ts # Modify — switch to async, remove in-memory state
+│ ├── predictive-scaler.ts # Edit — switch to async, move cache store
+│ ├── k8s-config.ts # No change
+│ ├── scaling-decision.ts # No change
+│ └── ai-analyzer.ts # No change
 ├── app/
 │   ├── api/
 │   │   ├── metrics/
-│   │   │   ├── route.ts   # 수정 — lastBlock store 이동, await 추가
+│ │ │ ├── route.ts # Edit — Move lastBlock store, add await
 │   │   │   └── seed/
-│   │   │       └── route.ts # 수정 — await 추가
+│ │ │ └── route.ts # Edit — Add await
 │   │   ├── scaler/
-│   │   │   └── route.ts   # 수정 — await 추가
+│ │ │ └── route.ts # Edit — Add await
 │   │   └── health/
-│   │       └── route.ts   # 변경 없음
-│   └── page.tsx           # 변경 없음
+│ │ └── route.ts # No change
+│ └── page.tsx # No change
 ```
 
-### Redis 키 구조 요약
+### Summary of Redis key structure
 
 ```
 sentinai:
@@ -1657,4 +1657,4 @@ sentinai:
 
 ---
 
-*문서 끝*
+*End of document*

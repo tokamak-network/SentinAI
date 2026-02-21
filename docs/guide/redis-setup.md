@@ -1,20 +1,20 @@
 # Redis State Persistence Guide
 
-> ⚠️ **Redis는 선택사항입니다.** 일일 레포트와 비용 분석을 사용할 때만 필요합니다.
+> ⚠️ **Redis is optional.** Only required when using daily reports and cost analysis.
 
 ---
 
-## 빠른 시작
+## Quick start
 
-### 🟢 Redis 설정 (일일 레포트 + 비용 분석)
+### 🟢 Redis setup (daily report + cost analysis)
 
-#### 1단계: Docker Compose로 Redis 시작
+#### Step 1: Start Redis with Docker Compose
 
 ```bash
 docker-compose up redis -d
 ```
 
-**확인:**
+**check:**
 ```bash
 docker-compose ps redis
 # Status: Up X seconds (healthy)
@@ -23,142 +23,142 @@ docker-compose exec redis redis-cli ping
 # PONG
 ```
 
-#### 2단계: .env.local에 추가
+#### Step 2: Add to .env.local
 
 ```bash
-# 로컬 개발용
+# For local development
 REDIS_URL=redis://localhost:6379
 
-# Docker Compose 내부에서는 자동 설정됨:
+# Automatically set inside Docker Compose:
 # REDIS_URL=redis://redis:6379
 ```
 
-#### 3단계: 개발 서버 재시작
+#### Step 3: Restart the development server
 
 ```bash
 npm run dev
 ```
 
-**로그에서 확인:**
+**Check in log:**
 ```
 [State Store] Using Redis: redis://localhost:6379
 ```
 
 ---
 
-## Redis 의존성 분석
+## Redis dependency analysis
 
-**언제 Redis가 필요한가?**
+**When do you need Redis?**
 
-| 기능 | Redis 필수? | 설명 |
+| Features | Is Redis required? | Description |
 |------|----------|------|
-| **일일 레포트** (Daily Report) | 🔴 필수 | 24시간 메트릭 스냅샷 누적 (48시간 TTL) |
-| **비용 최적화** (Cost Optimizer) | 🔴 필수 | 7일 vCPU 사용량 누적 (비용 분석) |
-| **실시간 스케일링** | 🟢 선택 | InMemory 버퍼로 충분 (재시작 시 손실 가능) |
-| **이상 탐지** (Anomaly Detection) | 🟢 선택 | 이벤트 히스토리만 (UI 표시용) |
-| **예측 스케일링** (Predictive Scaler) | 🟢 선택 | 예측 추적 (기능에 영향 없음) |
-| **NLOps 채팅** | 🟢 선택 | Redis 미사용 |
+| **Daily Report** | 🔴 Required | 24-hour metric snapshot accumulation (48-hour TTL) |
+| **Cost Optimizer** | 🔴 Required | 7-day cumulative vCPU usage (cost analysis) |
+| **Real-time scaling** | 🟢 Select | InMemory buffer is sufficient (may be lost on restart) |
+| **Anomaly Detection** | 🟢 Select | Event history only (for UI display) |
+| **Predictive Scaling** (Predictive Scaler) | 🟢 Select | Predictive tracking (no functionality impact) |
+| **NLOps Chat** | 🟢 Select | Redis not used |
 
-**결론:**
-- **Redis 필수**: 일일 레포트 OR 비용 분석을 하려면
-- **Redis 불필요**: 실시간 모니터링 + 스케일링만 필요하면
+**conclusion:**
+- **Redis required**: For daily report OR cost analysis
+- **No need for Redis**: If you only need real-time monitoring + scaling
 
 ---
 
-## Redis 제거
+## Remove Redis
 
-### 🔴 Redis 중지 및 제거
+### 🔴 Stop and uninstall Redis
 
-#### 1단계: 설정 제거
+#### Step 1: Remove settings
 
-**.env.local에서 Redis 관련 설정 제거:**
+**Remove Redis-related settings from .env.local:**
 
 ```bash
-# 이 라인을 주석 처리하거나 삭제
+# Comment out or delete this line
 # REDIS_URL=redis://localhost:6379
 ```
 
-**레포트 & 비용 분석 비활성화 (선택):**
+**Disable Reports & Cost Analysis (Optional):**
 
 ```bash
 COST_TRACKING_ENABLED=false
 ```
 
-#### 2단계: Docker Compose에서 Redis 중지
+#### Step 2: Stop Redis in Docker Compose
 
 ```bash
-# Redis 컨테이너만 중지
+# Stop only the Redis container
 docker-compose stop redis
 
-# 또는 완전히 제거 (데이터도 삭제)
+# or remove completely (delete data too)
 docker-compose down redis
-# 또는 모든 컨테이너 & 볼륨 제거
+# or remove all containers & volumes
 docker-compose down -v
 ```
 
-#### 3단계: 개발 서버 재시작
+#### Step 3: Restart the development server
 
 ```bash
 npm run dev
 ```
 
-**로그에서 확인:**
+**Check in log:**
 ```
 [State Store] Using InMemory (set REDIS_URL for persistence)
 ```
 
 ---
 
-## InMemory vs Redis 비교
+## InMemory vs Redis comparison
 
-### InMemory (Redis 없음)
+### InMemory (no Redis)
 
-**장점:**
-- ✅ 설정 간단 (즉시 사용 가능)
-- ✅ 외부 의존성 없음
-- ✅ 메모리 효율적 (개발 환경)
+**merit:**
+- ✅ Simple to set up (ready to use right away)
+- ✅ No external dependencies
+- ✅ Memory efficient (development environment)
 
-**단점:**
-- ❌ 서버 재시작 시 모든 데이터 손실
-- ❌ 일일 레포트 불완전 (24시간 누적 불가)
-- ❌ 비용 분석 부정확 (7일 히스토리 손실)
-- ❌ 메트릭 히스토리 없음
+**disadvantage:**
+- ❌ All data is lost when server restarts
+- ❌ Daily report incomplete (24-hour accumulation not possible)
+- ❌ Inaccurate cost analysis (loss of 7-day history)
+- ❌ No metric history
 
-### Redis (권장)
+### Redis (recommended)
 
-**장점:**
-- ✅ 모든 데이터 영속성
-- ✅ 일일 레포트 정상 작동
-- ✅ 비용 분석 정확
-- ✅ 서버 재시작 후에도 데이터 유지
+**merit:**
+- ✅ All data persistence
+- ✅ Daily report works properly
+- ✅ Accurate cost analysis
+- ✅ Data retained even after server restart
 
-**단점:**
-- ❌ Docker 추가 설정 필요
-- ❌ 추가 메모리 사용
-- ❌ 프로덕션에서는 Redis 서버 필요
+**disadvantage:**
+- ❌ Additional Docker settings required
+- ❌ Use additional memory
+- ❌ Redis server is required in production
 
 ---
 
-## 프로덕션 배포
+Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
 
-### Docker Compose 배포 (권장)
+### Deploy Docker Compose (recommended)
 
 ```bash
-# 전체 SentinAI + Redis 배포
+# Full SentinAI + Redis deployment
 docker-compose up -d
 
-# 또는 Redis 없이 배포
+# Deploy with or without Redis
 docker-compose up -d sentinai
-# 단, .env.local에서 REDIS_URL 제거 필수
+# However, REDIS_URL must be removed from .env.local
 ```
 
-**docker-compose.yml 설정:**
+**docker-compose.yml settings:**
 
 ```yaml
 services:
   sentinai:
     environment:
-      - REDIS_URL=redis://redis:6379  # 내부 DNS 사용
+- REDIS_URL=redis://redis:6379 # Use internal DNS
     depends_on:
       redis:
         condition: service_healthy
@@ -170,191 +170,191 @@ services:
     command: redis-server --maxmemory 128mb --maxmemory-policy allkeys-lru
 ```
 
-### EC2 배포 (Redis 별도 설치)
+### EC2 deployment (Redis installed separately)
 
-Redis를 별도 서버에 설치하는 경우:
+If you install Redis on a separate server:
 
 ```bash
-# EC2에 Redis 설치
+# Install Redis on EC2
 sudo yum install redis -y
 sudo systemctl start redis-server
 
-# .env.local 설정
+# .env.local settings
 REDIS_URL=redis://redis-server-ip:6379
 ```
 
 ---
 
-## Redis 모니터링
+## Monitoring Redis
 
-### Redis CLI 접속
+### Redis CLI connection
 
 ```bash
-# Docker 컨테이너 내 Redis CLI
+# Redis CLI in Docker container
 docker-compose exec redis redis-cli
 
-# 또는 로컬 설치 Redis
+# or install locally Redis
 redis-cli -h localhost -p 6379
 ```
 
-### 주요 명령어
+### Main commands
 
 ```bash
-# Redis 상태 확인
+# Check Redis status
 PING
 # PONG
 
-# 저장된 모든 키 확인
+# Check all stored keys
 KEYS *
 
-# 특정 데이터 확인
+# Check specific data
 GET metrics:buffer
 HGETALL scaling:state
 LRANGE scaling:history 0 5
 
-# 데이터 개수 확인
+# Check the number of data
 DBSIZE
 
-# 메모리 사용량
+# memory usage
 INFO memory
 ```
 
-### 데이터 초기화
+### Data initialization
 
 ```bash
-# 모든 데이터 삭제 (주의!)
+# Delete all data (Caution!)
 FLUSHALL
 
-# 특정 키만 삭제
+# Delete only specific keys
 DEL metrics:buffer scaling:state
 ```
 
 ---
 
-## 문제 해결
+## Troubleshooting
 
-### Redis 연결 실패
+### Redis connection failure
 
-**증상:** `[State Store] Using InMemory` 메시지가 나타남
+**Symptom:** `[State Store] Using InMemory` message appears
 
-**해결:**
+**solve:**
 
 ```bash
-# 1. Redis 실행 여부 확인
+# 1. Check whether Redis is running
 docker-compose ps redis
 
-# 2. Redis가 실행 중이 아니면 시작
+# 2. Start Redis if it is not running
 docker-compose up redis -d
 
-# 3. .env.local에 REDIS_URL 확인
+# 3. Check REDIS_URL in .env.local
 grep REDIS_URL .env.local
 
-# 4. 개발 서버 재시작
+# 4. Restart the development server
 npm run dev
 ```
 
-### Redis 포트 충돌
+### Redis port conflict
 
 **증상:** `Address already in use: :::6379`
 
-**해결:**
+**solve:**
 
 ```bash
-# 1. 기존 Redis 컨테이너 정지
+# 1. Stop an existing Redis container
 docker-compose stop redis
 
-# 2. 다른 프로세스가 6379를 사용 중인지 확인
+#2. Check if another process is using 6379
 lsof -i :6379
 
-# 3. 필요하면 다른 포트 사용
-# docker-compose.yml의 ports를 6380:6379로 변경
-# 그리고 .env.local: REDIS_URL=redis://localhost:6380
+# 3. Use a different port if necessary
+# Change ports in docker-compose.yml to 6380:6379
+# and .env.local: REDIS_URL=redis://localhost:6380
 ```
 
-### Redis 컨테이너 건강 상태 확인
+### Check Redis container health
 
-**증상:** `health: starting` 상태로 계속 진행되지 않음
+**Symptom:** Does not continue in `health: starting` state
 
-**해결:**
+**solve:**
 
 ```bash
-# 컨테이너 로그 확인
+# Check container log
 docker-compose logs redis
 
-# 컨테이너 재시작
+# Restart container
 docker-compose restart redis
 
-# 또는 상태 강제 재설정
+# or force reset the state
 docker-compose down redis && docker-compose up redis -d
 ```
 
 ---
 
-## 데이터 백업
+## Data Backup
 
-### Redis RDB (스냅샷) 백업
+### Redis RDB (snapshot) backup
 
 ```bash
-# Docker 컨테이너 내 RDB 파일 확인
+# Check RDB file in Docker container
 docker-compose exec redis ls -la /data/
 
-# 로컬로 복사
+# Copy locally
 docker cp sentinai-redis:/data/dump.rdb ./redis-backup.rdb
 ```
 
-### Redis 데이터 내보내기
+### Export Redis data
 
 ```bash
-# 모든 데이터를 텍스트 형식으로 내보내기
+# Export all data in text format
 docker-compose exec redis redis-cli --rdb /tmp/dump.rdb
 docker cp sentinai-redis:/tmp/dump.rdb ./redis-dump.rdb
 ```
 
 ---
 
-## 추천 설정
+## Recommended settings
 
-### 개발 환경
+### Development environment
 
-**일일 레포트 + 비용 분석 원하는 경우:**
+**If you want daily report + cost analysis:**
 
 ```bash
 REDIS_URL=redis://localhost:6379
 COST_TRACKING_ENABLED=true
 ```
 
-**실시간 모니터링만 필요한 경우:**
+**If you only need real-time monitoring:**
 
 ```bash
-# REDIS_URL 제거 (InMemory 사용)
+# Remove REDIS_URL (using InMemory)
 COST_TRACKING_ENABLED=false
 ```
 
-### 프로덕션 환경
+### Production environment
 
-**권장:**
+**Recommended:**
 
 ```bash
-# docker-compose.yml에 정의된 Redis 사용
+# Use Redis defined in docker-compose.yml
 REDIS_URL=redis://redis:6379
 COST_TRACKING_ENABLED=true
 
-# Redis 메모리 제한 (필요시 조정)
+# Redis memory limits (adjust as needed)
 # command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
 ```
 
-**고가용성 (선택사항):**
+**High Availability (Optional):**
 
-- Redis Cluster 또는 Sentinel 구성
-- 정기적 백업 (RDB 또는 AOF)
-- Redis 모니터링 (prometheus-exporter)
+- Redis Cluster or Sentinel configuration
+- Regular backup (RDB or AOF)
+- Redis monitoring (prometheus-exporter)
 
 ---
 
-## 참고
+## reference
 
-- **docker-compose.yml**: Redis 서비스 정의 (라인 24-37)
-- **redis-store.ts**: InMemory/Redis 선택 로직 (라인 1050-1067)
-- **daily-accumulator.ts**: 24시간 스냅샷 수집
-- **usage-tracker.ts**: 7일 비용 데이터 수집
-- **CLAUDE.md**: 프로젝트 설정 가이드
+- **docker-compose.yml**: Redis service definition (lines 24-37)
+- **redis-store.ts**: InMemory/Redis selection logic (lines 1050-1067)
+- **daily-accumulator.ts**: Collect 24-hour snapshots
+- **usage-tracker.ts**: 7-day cost data collection
+- **CLAUDE.md**: Project setup guide

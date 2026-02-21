@@ -1,36 +1,36 @@
-# SentinAI 데모 시나리오
+# SentinAI demo scenario
 
-SentinAI 기능을 검증하기 위한 사전 조건, 단계별 데모 스크립트 및 예상 결과.
+Prerequisites, step-by-step demo scripts, and expected results to validate SentinAI functionality.
 
 ---
 
-## 사전 조건
+## Prerequisites
 
 ```bash
 npm install
 npm run dev          # http://localhost:3002
 ```
 
-최소 `.env.local` 설정:
+Minimum `.env.local` settings:
 
 ```bash
 L2_RPC_URL=https://your-l2-rpc-endpoint.com
-ANTHROPIC_API_KEY=sk-ant-...        # AI 기능 (사용할 AI 공급자의 API 키)
+ANTHROPIC_API_KEY=sk-ant-... # AI function (API key of AI provider to use)
 ```
 
-모든 데모는 `SCALING_SIMULATION_MODE=true` (기본값)에서 작동합니다. 실제 K8s 클러스터가 필요하지 않습니다.
+All demos work with `SCALING_SIMULATION_MODE=true` (default). No need for a physical K8s cluster.
 
 ---
 
-## 데모 1: 정상 운영 모니터링
+## Demo 1: Normal operation monitoring
 
-**목표**: 기본 메트릭 수집 및 대시보드 렌더링 검증.
+**Goal**: Collect basic metrics and validate dashboard rendering.
 
 ```bash
-# 안정적인 메트릭 주입 (20개 데이터 포인트, ~1분 간격)
+# Stable metric injection (20 data points, ~1 minute interval)
 curl -sX POST http://localhost:3002/api/metrics/seed?scenario=stable
 
-# 메트릭 응답 검증
+# Validate metric response
 curl -s http://localhost:3002/api/metrics | jq '{
   l2Block: .metrics.blockHeight,
   cpu: .metrics.cpuUsage,
@@ -40,33 +40,33 @@ curl -s http://localhost:3002/api/metrics | jq '{
 }'
 ```
 
-**예상 결과**:
+**Expected results**:
 - CPU: 15~25%
 - TxPool: 10~30
-- 4개 컴포넌트 표시 (L2 Client, Consensus Node, Batcher, Proposer)
-- 현재 vCPU 기준 비용 계산됨
+- Displays 4 components (L2 Client, Consensus Node, Batcher, Proposer)
+- Cost calculated based on current vCPU
 
-**대시보드**: 브라우저 열기 — 블록 증가, CPU 게이지 안정적, 녹색 상태 표시자 표시.
+**Dashboard**: Open browser — blocks increase, CPU gauge stable, green status indicator displayed.
 
 ---
 
-## 데모 2: 이상 탐지 파이프라인
+## Demo 2: Anomaly Detection Pipeline
 
-**목표**: 4계층 이상 탐지 파이프라인 트리거 및 관찰.
+**Goal**: Trigger and observe a layer 4+ detection pipeline.
 
-### 1단계 — 기준선 수립
+### Step 1 — Establish a baseline
 
 ```bash
 curl -sX POST http://localhost:3002/api/metrics/seed?scenario=stable
 ```
 
-### 2단계 — 스파이크 주입
+### Step 2 — Spike Injection
 
 ```bash
 curl -sX POST http://localhost:3002/api/metrics/seed?scenario=spike
 ```
 
-### 3단계 — 탐지 트리거 (메트릭 폴링)
+### Step 3 — Detection Trigger (Metric Polling)
 
 ```bash
 curl -s http://localhost:3002/api/metrics | jq '{
@@ -76,12 +76,12 @@ curl -s http://localhost:3002/api/metrics | jq '{
 }'
 ```
 
-**예상 결과**:
-- `anomalyCount`: 1개 이상 (cpuUsage, txPoolPending 또는 gasUsedRatio)
+**Expected results**:
+- `anomalyCount`: 1 or more (cpuUsage, txPoolPending or gasUsedRatio)
 - `zScore`: > 2.5
-- `activeEventId`: UUID 문자열
+- `activeEventId`: UUID string
 
-### 4단계 — 이상 이벤트 히스토리 확인
+### Step 4 — Check abnormal event history
 
 ```bash
 curl -s http://localhost:3002/api/anomalies | jq '{
@@ -91,31 +91,31 @@ curl -s http://localhost:3002/api/anomalies | jq '{
 }'
 ```
 
-**예상 결과** (AI 키 설정된 경우):
-- `hasDeepAnalysis`: true (계층 2 AI 분석 완료)
+**Expected results** (if AI Key is enabled):
+- `hasDeepAnalysis`: true (Layer 2 AI analysis completed)
 - `status`: "active"
 
-### 5단계 — 알림 설정 검증
+### Step 5 — Verify notification settings
 
 ```bash
 curl -s http://localhost:3002/api/anomalies/config | jq '.'
 ```
 
-**대시보드**: 이상 모니터 패널에 탐지된 이상과 심각도 지표가 표시됨.
+**Dashboard**: Anomaly monitor panel displays detected anomalies and severity indicators.
 
 ---
 
-## 데모 3: 예측 스케일링
+## Demo 3: Predictive Scaling
 
-**목표**: AI 기반 스케일링 예측 및 추천 시연.
+**Goal**: Demonstrate AI-based scaling predictions and recommendations.
 
-### 1단계 — 상승하는 부하 패턴 주입
+### Step 1 — Inject rising load pattern
 
 ```bash
 curl -sX POST http://localhost:3002/api/metrics/seed?scenario=rising
 ```
 
-### 2단계 — 예측 확인
+### Step 2 — Check predictions
 
 ```bash
 curl -s http://localhost:3002/api/scaler | jq '{
@@ -131,13 +131,13 @@ curl -s http://localhost:3002/api/scaler | jq '{
 }'
 ```
 
-**예상 결과**:
-- `metricsCount` >= 10 (seed 주입에서)
+**Expected results**:
+- `metricsCount` >= 10 (from seed injection)
 - `trend`: "increasing"
-- `predictedVcpu`: 2 또는 4
+- `predictedVcpu`: 2 or 4
 - `confidence`: 60~95%
 
-### 3단계 — 스파이크로 반복하여 확장 업 신뢰도 높이기
+### Step 3 — Repeat with spikes to increase scale-up confidence
 
 ```bash
 curl -sX POST http://localhost:3002/api/metrics/seed?scenario=spike
@@ -145,62 +145,62 @@ sleep 2
 curl -s http://localhost:3002/api/scaler | jq '.prediction | {predictedVcpu, confidence, recommendedAction}'
 ```
 
-**대시보드**: 스케일링 예측 패널에 예측된 vCPU, 트렌드 방향, 신뢰도 수준 표시.
+**Dashboard**: Scaling prediction panel displays predicted vCPUs, trend direction, and confidence level.
 
 ---
 
-## 데모 4: NLOps 채팅 인터페이스
+## Demo 4: NLOps Chat Interface
 
-**목표**: 자연어 운영 제어 시연.
+**Goal**: Demonstrate natural language operational control.
 
-### 안전한 쿼리 (확인 불필요)
+### Safe queries (no confirmation required)
 
 ```bash
-# 상태 조회
+# Status query
 curl -sX POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
   -d '{"message": "Show current status"}' | jq '{intent: .intent, response: .response[0:200]}'
 
-# 로그 분석
+# Log analysis
 curl -sX POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
   -d '{"message": "Analyze recent logs"}' | jq '{intent: .intent, response: .response[0:200]}'
 
-# 근본 원인 분석
+# Root cause analysis
 curl -sX POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
   -d '{"message": "Run root cause analysis"}' | jq '{intent: .intent, response: .response[0:200]}'
 ```
 
-### 위험한 액션 (확인 필요)
+### Dangerous action (requires confirmation)
 
 ```bash
-# 스케일링 요청 — 확인 프롬프트 반환
+# Scaling request — return confirmation prompt
 curl -sX POST http://localhost:3002/api/nlops \
   -H "Content-Type: application/json" \
   -d '{"message": "Scale to 4 vCPU"}' | jq '{intent, needsConfirmation, confirmationMessage}'
 ```
 
-**예상 결과**:
+**Expected results**:
 - `intent`: "scale"
 - `needsConfirmation`: true
-- `confirmationMessage`: 확인할 액션 설명
+- `confirmationMessage`: Description of action to confirm
 
-**대시보드**: 채팅 토글(우측 하단) 클릭, 명령 입력, 위험한 액션 확인/취소.
+**Dashboard**: Click the chat toggle (bottom right), enter commands, and confirm/cancel dangerous actions.
 
 ---
 
-## 데모 5: 비용 최적화
+## Demo 5: Cost Optimization
 
-**목표**: 비용 추적 및 AI 기반 최적화 추천 표시.
+**Goal**: Track costs and display AI-based optimization recommendations.
 
 ```bash
-# 사용량 데이터 주입
+# Inject usage data
 curl -sX POST http://localhost:3002/api/metrics/seed?scenario=stable
 sleep 1
 curl -sX POST http://localhost:3002/api/metrics/seed?scenario=rising
 
-# 비용 보고서 조회
+# View cost report
 curl -s http://localhost:3002/api/cost-report | jq '{
   currentCost: .currentMonthlyCost,
   optimizedCost: .optimizedMonthlyCost,
@@ -209,26 +209,26 @@ curl -s http://localhost:3002/api/cost-report | jq '{
 }'
 ```
 
-**예상 결과**:
-- Fargate Seoul 가격 기준 비용 계산됨
-- 고정 4 vCPU 기준선 대비 절감률
-- AI 추천사항 (AI 키 설정된 경우)
+**Expected results**:
+- Cost calculated based on Fargate Seoul price
+- Savings compared to fixed 4 vCPU baseline
+- AI recommendations (if AI key is set)
 
 ---
 
-## 데모 6: 근본 원인 분석 (RCA)
+## Demo 6: Root Cause Analysis (RCA)
 
-**목표**: 의존성 그래프 탐색 및 장애 전파 분석 시연.
+**Goal**: Demonstrate dependency graph exploration and failure propagation analysis.
 
-### 1단계 — 이상 주입
+### Step 1 — Abnormal Injection
 
 ```bash
 curl -sX POST http://localhost:3002/api/metrics/seed?scenario=spike
 sleep 2
-curl -s http://localhost:3002/api/metrics > /dev/null  # 탐지 트리거
+curl -s http://localhost:3002/api/metrics > /dev/null # trigger detection
 ```
 
-### 2단계 — RCA 실행
+### Step 2 — Run RCA
 
 ```bash
 curl -sX POST http://localhost:3002/api/rca \
@@ -241,18 +241,18 @@ curl -sX POST http://localhost:3002/api/rca \
 }'
 ```
 
-**예상 결과**:
-- `rootCause`: 식별된 컴포넌트 (예: "op-geth resource exhaustion")
-- `affectedComponents`: 의존성 체인 (op-geth → op-node → ...)
-- `remediationAdvice`: 실행 가능한 단계
+**Expected results**:
+- `rootCause`: Identified component (e.g. "op-geth resource exhaustion")
+- `affectedComponents`: dependency chain (op-geth → op-node → ...)
+- `remediationAdvice`: actionable steps
 
 ---
 
-## 데모 7: 자동 자체 복구 엔진
+## Demo 7: Automatic self-healing engine
 
-**목표**: 플레이북 매칭, 안전 게이트 및 자체 복구 실행 검증.
+**Goal**: Verify playbook matching, safety gates, and self-healing execution.
 
-### 1단계 — 자체 복구 상태 확인
+### Step 1 — Check self-recovery status
 
 ```bash
 curl -s http://localhost:3002/api/remediation | jq '{
@@ -262,15 +262,15 @@ curl -s http://localhost:3002/api/remediation | jq '{
 }'
 ```
 
-### 2단계 — 활성화 및 트리거 (시뮬레이션 모드)
+### Step 2 — Activation and Trigger (Simulation Mode)
 
 ```bash
-# 자동 자체 복구 활성화
+# Enable automatic self-recovery
 curl -sX PATCH http://localhost:3002/api/remediation \
   -H "Content-Type: application/json" \
   -d '{"enabled": true}'
 
-# 플레이북 수동으로 트리거
+# Trigger the playbook manually
 curl -sX POST http://localhost:3002/api/remediation \
   -H "Content-Type: application/json" \
   -d '{"playbookName": "op-geth-resource-exhaustion"}' | jq '{
@@ -281,39 +281,39 @@ curl -sX POST http://localhost:3002/api/remediation \
 }'
 ```
 
-**예상 결과** (시뮬레이션 모드):
+**Expected results** (simulation mode):
 - `status`: "completed" 또는 "simulated"
-- 액션이 로깅되지만 실제 K8s에는 실행되지 않음
+- Actions are logged but not executed on actual K8s
 
 ---
 
-## 데모 8: 에이전트 루프 (자율 운영)
+## Demo 8: Agent Loop (Autonomous Operation)
 
-**목표**: 서버 측 자율 관찰-탐지-결정-실행 주기 검증.
+**Goal**: Verify server-side autonomous observation-detection-decision-execution cycle.
 
-### 에이전트 루프 실행 확인
+### Verify agent loop execution
 
 ```bash
-# 스케줄러 상태 확인
+# Check scheduler status
 curl -s http://localhost:3002/api/health
 
-# 서버 콘솔의 에이전트 루프 로그 감시 (30초마다):
+# Watch agent loop log on server console (every 30 seconds):
 # [AgentLoop] Cycle complete — score: 15.2, target: 1 vCPU
 # [AgentLoop] Scaling executed: 1 → 2 vCPU
 ```
 
-### 자율 스케일링 트리거
+### Autonomous scaling trigger
 
 ```bash
-# 1. 자동 스케일링 활성화
+# 1. Enable autoscaling
 curl -sX PATCH http://localhost:3002/api/scaler \
   -H "Content-Type: application/json" \
   -d '{"autoScalingEnabled": true}'
 
-# 2. 높은 부하 주입
+#2. High load injection
 curl -sX POST http://localhost:3002/api/metrics/seed?scenario=spike
 
-# 3. 다음 에이전트 주기 대기 (~30초), 스케일링 상태 확인
+# 3. Wait for next agent cycle (~30 seconds), check scaling status
 sleep 35
 curl -s http://localhost:3002/api/scaler | jq '{
   currentVcpu: .currentVcpu,
@@ -322,110 +322,110 @@ curl -s http://localhost:3002/api/scaler | jq '{
 }'
 ```
 
-**예상 결과**: `currentVcpu` 증가 (시뮬레이션 모드에서 상태 업데이트, 실제 K8s 패치 없음).
+**Expected results**: Increase `currentVcpu` (state update in simulation mode, no actual K8s patch).
 
 ---
 
-## 데모 9: 전체 파이프라인 (엔드-투-엔드)
+## Demo 9: Full Pipeline (End-to-End)
 
-**목표**: 정상 → 이상 → 탐지 → 스케일링 → 자체 복구 → 복구의 완전한 파이프라인 실행.
+**Goal**: Execute a complete pipeline of normal → abnormal → detection → scaling → self-healing → recovery.
 
 ```bash
 #!/bin/bash
 BASE=http://localhost:3002
 
-echo "=== Phase 1: 기준선 ==="
+echo "=== Phase 1: Baseline ==="
 curl -sX POST $BASE/api/metrics/seed?scenario=stable
 curl -s $BASE/api/metrics | jq '{cpu: .metrics.cpuUsage, anomalies: (.anomalies | length)}'
 sleep 2
 
-echo "=== Phase 2: 부하 증가 ==="
+echo "=== Phase 2: Increase load ==="
 curl -sX POST $BASE/api/metrics/seed?scenario=rising
 curl -s $BASE/api/scaler | jq '{prediction: .prediction.trend, confidence: .prediction.confidence}'
 sleep 2
 
-echo "=== Phase 3: 스파이크 (이상 트리거) ==="
+echo "=== Phase 3: Spike (Anomaly Trigger) ==="
 curl -sX POST $BASE/api/metrics/seed?scenario=spike
 sleep 1
 curl -s $BASE/api/metrics | jq '{cpu: .metrics.cpuUsage, anomalies: [.anomalies[] | .metric]}'
 
-echo "=== Phase 4: 스케일링 결정 ==="
+echo "=== Phase 4: Scaling Decision ==="
 curl -s $BASE/api/scaler | jq '{current: .currentVcpu, predicted: .prediction.predictedVcpu}'
 
-echo "=== Phase 5: 근본 원인 분석 ==="
+echo "=== Phase 5: Root Cause Analysis ==="
 curl -sX POST $BASE/api/rca | jq '{cause: .result.rootCause, severity: .result.severity}'
 
-echo "=== Phase 6: 자체 복구 ==="
+echo "=== Phase 6: Self-Recovery ==="
 curl -s $BASE/api/remediation | jq '{executions: (.recentExecutions | length)}'
 
-echo "=== Phase 7: 복구 ==="
+echo "=== Phase 7: Recovery ==="
 curl -sX POST $BASE/api/metrics/seed?scenario=falling
 sleep 2
 curl -s $BASE/api/metrics | jq '{cpu: .metrics.cpuUsage, anomalies: (.anomalies | length)}'
 
-echo "=== Phase 8: 안정 ==="
+echo "=== Phase 8: Stability ==="
 curl -sX POST $BASE/api/metrics/seed?scenario=stable
 curl -s $BASE/api/metrics | jq '{cpu: .metrics.cpuUsage, anomalies: (.anomalies | length)}'
-echo "=== 완료 ==="
+echo "=== completed ==="
 ```
 
-**예상 흐름**:
-1. 기준선: CPU ~20%, 이상 0개
-2. 상승: 예측 트렌드 "increasing"
-3. 스파이크: 이상 탐지 (cpuUsage, txPoolPending)
-4. 스케일링: 예측된 vCPU 증가
-5. RCA: 근본 원인 식별됨
-6. 자체 복구: 플레이북 매칭됨 (활성화된 경우)
-7. 하강: 이상 해결 중
-8. 안정: 정상 상태로 복귀, 이상 0개
+**Expected flow**:
+1. Baseline: CPU ~20%, 0 above
+2. Rising: predicted trend “increasing”
+3. Spike: Anomaly detection (cpuUsage, txPoolPending)
+4. Scaling: Predicted vCPU increase
+5. RCA: Root cause identified
+6. Self-healing: Playbook matched (if enabled)
+7. Descent: Troubleshooting
+8. Stability: Return to normal state, 0 abnormalities
 
 ---
 
-## 데모 10: 스트레스 모드 (대시보드 UI)
+## Demo 10: Stress Mode (Dashboard UI)
 
-**목표**: 실제 인프라 없이 고부하 상태의 시각적 시연.
+**Goal**: Visual demonstration of high load conditions without physical infrastructure.
 
-1. `http://localhost:3002` 열기
-2. **STRESS MODE** 토글 클릭 (상단)
-3. 관찰:
-   - CPU 96.5%로 점프
-   - vCPU 8 표시 (최대 스케일)
-   - 컴포넌트가 "Scaling Up" 상태 표시
-   - 비용이 8 vCPU Fargate 가격 반영
-4. 토글을 다시 클릭하여 정상으로 복귀
+1. Open `http://localhost:3002`
+2. Click the **STRESS MODE** toggle (top)
+3. Observation:
+- CPU jumps to 96.5%
+- Shows vCPU 8 (maximum scale)
+- Component displays “Scaling Up” status
+- Cost reflects 8 vCPU Fargate price
+4. Click the toggle again to return to normal
 
 ---
 
-## 자동화된 테스트 명령어
+## Automated test commands
 
-| 명령어 | 범위 | 실행 시간 |
+| command | range | Running time |
 |--------|------|----------|
-| `npm run test:run` | 559개 단위 테스트 | ~1초 |
-| `npm run test:coverage` | 단위 테스트 + 커버리지 보고서 | ~3초 |
-| `npm run verify` | 전체 6단계 E2E | 5~10분 |
-| `npm run lint` | ESLint 확인 | ~5초 |
+| `npm run test:run` | 559 unit tests | ~1 second |
+| `npm run test:coverage` | Unit Tests + Coverage Reports | ~3 seconds |
+| `npm run verify` | All 6 Steps E2E | 5-10 minutes |
+| `npm run lint` | Check ESLint | ~5 seconds |
 
 ---
 
-## Seed 시나리오 참조
+## See Seed scenario
 
-| 시나리오 | CPU 범위 | TxPool | 포인트 | 사용 사례 |
+| Scenario | CPU range | TxPool | point | Use cases |
 |---------|---------|--------|--------|----------|
-| `stable` | 15~25% | 10~30 | 20 | 기준선, 정상 운영 |
-| `rising` | 15→50% | 10→80 | 20 | 예측 스케일링 데모 |
-| `spike` | ~95% | 5000+ | 20 | 이상 탐지 데모 |
-| `falling` | 80→20% | 감소 중 | 20 | 복구 데모 |
-| `live` | 실시간 데이터 | 실시간 데이터 | 변함 | 프로덕션 유사 (누적 데이터 필요) |
+| `stable` | 15-25% | 10~30 | 20 | Baseline, normal operation |
+| `rising` | 15→50% | 10→80 | 20 | Predictive Scaling Demo |
+| `spike` | ~95% | 5000+ | 20 | Anomaly Detection Demo |
+| `falling` | 80→20% | Declining | 20 | Recovery Demo |
+| `live` | Real-time data | Real-time data | change | Production-like (requires cumulative data) |
 
 ```bash
-# 모든 시나리오 주입
+# Inject all scenarios
 curl -sX POST http://localhost:3002/api/metrics/seed?scenario=<name>
 ```
 
 ---
 
-## 프로덕션 클러스터 테스트
+## Production Cluster Testing
 
-seed API는 프로덕션(`NODE_ENV=production`)에서 사용할 수 없습니다. 실시간 부하 주입을 사용한 실제 K8s 스케일링 검증은 다음을 참고하세요:
+The seed API is not available in production (`NODE_ENV=production`). For real-world K8s scaling verification using real-time load injection, see:
 
-**[프로덕션 부하 테스트 가이드](./production-load-testing-guide.md)**
+**[Production Load Testing Guide](./production-load-testing-guide.md)**

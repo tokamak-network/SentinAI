@@ -30,7 +30,8 @@ export interface FailoverEvent {
 export interface ProxydBackendHealth {
   name: string;
   rpcUrl: string;
-  consecutive429: number;
+  /** Consecutive failover-eligible probe failures (429, 5xx, timeout/network) */
+  consecutiveFailures: number;
   healthy: boolean;
   replaced: boolean;
   replacedWith?: string;
