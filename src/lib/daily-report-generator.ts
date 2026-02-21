@@ -79,6 +79,23 @@ One-line summary: (single line)
 
 ---
 
+## AWS Cost Analysis
+
+**Daily spending:**
+- Total: $XX.XX
+- Monthly projection: $XXX.XX
+
+**Top 3 services:**
+1. [Service name]: $XX.XX/day (~$XX.XX/month) — [description]
+2. [Service name]: $XX.XX/day (~$XX.XX/month) — [description]
+3. [Service name]: $XX.XX/day (~$XX.XX/month) — [description]
+
+**Cost observations:** (insights or optimization recommendations)
+
+(If no AWS cost data available, write: "AWS cost data not available for this period")
+
+---
+
 ## Recommendations & Tomorrow's Forecast
 
 **Action items:**
