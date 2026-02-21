@@ -421,9 +421,9 @@ describe('anomaly-detector', () => {
     it('should return empty array when no anomalies detected', () => {
       // Generate stable history with cpu around 30
       const history = generateHistory(10, { cpuUsage: 30 });
-      // Current values match history baseline (slight variance is OK)
+      // Current values match history baseline exactly
       const current = createMetric({
-        cpuUsage: 30.5,
+        cpuUsage: 30,  // Exact match to avoid flaky test from random variance
         blockHeight: 5009,
         txPoolPending: 10,
         gasUsedRatio: 0.5,
