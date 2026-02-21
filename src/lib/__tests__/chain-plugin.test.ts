@@ -318,7 +318,8 @@ describe('ZkstackPlugin', () => {
   it('should expose zkstack chain metadata', () => {
     expect(plugin.chainType).toBe('zkstack');
     expect(plugin.chainMode).toBe('legacy-era');
-    expect(plugin.capabilities.proofMonitoring).toBe(true);
+    // proofMonitoring depends on ZK_PROOF_RPC_URL env var
+    expect(plugin.capabilities.proofMonitoring).toBe(Boolean(process.env.ZK_PROOF_RPC_URL));
     expect(plugin.capabilities.disputeGameMonitoring).toBe(false);
   });
 
