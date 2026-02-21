@@ -181,19 +181,40 @@ export async function getConfigMapToml(
 }
 
 /**
- * Restart Proxyd pod to pick up ConfigMap changes
+ * Restart Proxyd to pick up ConfigMap changes.
+ *
+ * NOTE: Different Helm charts label Proxyd pods differently. In our EKS setup,
+ * proxyd pods are labeled like: app=<prefix>-l1-proxyd (e.g., sepolia-thanos-stack-l1-proxyd)
+ * not app=proxyd.
  */
 async function restartProxydPod(namespace: string): Promise<boolean> {
-  try {
-    // Delete Proxyd pod to trigger restart (K8s will respawn via Deployment/StatefulSet)
-    const cmd = `delete pod -l app=proxyd -n ${namespace}`;
-    await runK8sCommand(cmd, { timeout: 10000 });
+  const prefix = getStatefulSetPrefix();
+  const deploymentName = `${prefix}-l1-proxyd`;
 
-    console.info(`[L1 Failover] Restarted Proxyd pod(s) in namespace ${namespace}`);
+  // 1) Prefer a clean rollout restart (works for Deployments)
+  try {
+    const cmd = `rollout restart deployment/${deploymentName} -n ${namespace}`;
+    await runK8sCommand(cmd, { timeout: 15000 });
+    console.info(`[L1 Failover] Restarted Proxyd via rollout: ${deploymentName} (${namespace})`);
+    return true;
+  } catch {
+    // Fall through to delete-pod strategy
+  }
+
+  // 2) Fallback: delete pods by label (works if controller recreates pods)
+  try {
+    const labelSelector = `app=${deploymentName}`;
+    const cmd = `delete pod -l ${labelSelector} -n ${namespace}`;
+    await runK8sCommand(cmd, { timeout: 15000 });
+
+    console.info(`[L1 Failover] Restarted Proxyd pod(s) via delete: -l ${labelSelector} (${namespace})`);
     return true;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.warn(`[L1 Failover] Failed to restart Proxyd pod: ${errorMessage} (ConfigMap update applied, but pod restart may be needed manually)`);
+    console.warn(
+      `[L1 Failover] Failed to restart Proxyd (${deploymentName}) in ${namespace}: ${errorMessage} ` +
+        `(ConfigMap update applied, but pod restart may be needed manually)`
+    );
     return false;
   }
 }
