@@ -45,7 +45,7 @@ export interface DetectionResult {
  */
 export async function runDetectionPipeline(
   dataPoint: MetricDataPoint,
-  balances?: { batcherBalanceEth?: number; proposerBalanceEth?: number }
+  balances?: { batcherBalanceEth?: number; proposerBalanceEth?: number; challengerBalanceEth?: number }
 ): Promise<DetectionResult> {
   const history = await getRecentMetrics();
   const anomalies = detectAnomalies(dataPoint, history, balances);

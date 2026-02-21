@@ -89,6 +89,7 @@ interface CollectedMetrics {
   failover?: AgentCycleResult['failover'];
   batcherBalanceEth?: number;
   proposerBalanceEth?: number;
+  challengerBalanceEth?: number;
 }
 
 async function collectMetrics(): Promise<CollectedMetrics | null> {
@@ -174,24 +175,28 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
   // EOA balance queries (non-blocking)
   let batcherBalanceEth: number | undefined;
   let proposerBalanceEth: number | undefined;
+  let challengerBalanceEth: number | undefined;
 
   const batcherAddr = process.env.BATCHER_EOA_ADDRESS as `0x${string}` | undefined;
   const proposerAddr = process.env.PROPOSER_EOA_ADDRESS as `0x${string}` | undefined;
+  const challengerAddr = process.env.CHALLENGER_EOA_ADDRESS as `0x${string}` | undefined;
 
-  if (batcherAddr || proposerAddr) {
+  if (batcherAddr || proposerAddr || challengerAddr) {
     // Use whichever L1 client succeeded
     const activeL1Client = failoverInfo?.triggered
       ? createPublicClient({ chain: getChainPlugin().l1Chain, transport: http(failoverInfo.toUrl, { timeout: RPC_TIMEOUT_MS }) })
       : l1Client;
 
     try {
-      const [batcherBal, proposerBal] = await Promise.all([
+      const [batcherBal, proposerBal, challengerBal] = await Promise.all([
         batcherAddr ? activeL1Client.getBalance({ address: batcherAddr }) : Promise.resolve(null),
         proposerAddr ? activeL1Client.getBalance({ address: proposerAddr }) : Promise.resolve(null),
+        challengerAddr ? activeL1Client.getBalance({ address: challengerAddr }) : Promise.resolve(null),
       ]);
 
       if (batcherBal !== null) batcherBalanceEth = parseFloat(formatEther(batcherBal));
       if (proposerBal !== null) proposerBalanceEth = parseFloat(formatEther(proposerBal));
+      if (challengerBal !== null) challengerBalanceEth = parseFloat(formatEther(challengerBal));
     } catch {
       // Non-blocking: balance fetch failure doesn't kill the cycle
       console.warn('[AgentLoop] EOA balance fetch failed, continuing');
@@ -270,7 +275,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
   await pushMetric(dataPoint);
   recordUsage(currentVcpu, cpuUsage);
 
-  return { dataPoint, l1BlockHeight: Number(l1BlockNumber), failover: failoverInfo, batcherBalanceEth, proposerBalanceEth };
+  return { dataPoint, l1BlockHeight: Number(l1BlockNumber), failover: failoverInfo, batcherBalanceEth, proposerBalanceEth, challengerBalanceEth };
 }
 
 // ============================================================
@@ -431,7 +436,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       };
     }
 
-    const { dataPoint, l1BlockHeight, failover, batcherBalanceEth, proposerBalanceEth } = collected;
+    const { dataPoint, l1BlockHeight, failover, batcherBalanceEth, proposerBalanceEth, challengerBalanceEth } = collected;
 
     const metricsResult: AgentCycleResult['metrics'] = {
       l1BlockHeight,
@@ -441,6 +446,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       gasUsedRatio: dataPoint.gasUsedRatio,
       batcherBalanceEth,
       proposerBalanceEth,
+      challengerBalanceEth,
     };
 
     // Phase 1.5: Proxyd backend health check (non-blocking)
@@ -457,6 +463,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
     const detection = await runDetectionPipeline(dataPoint, {
       batcherBalanceEth,
       proposerBalanceEth,
+      challengerBalanceEth,
     });
 
     // Phase 3+4: Decide & Act — evaluate scaling and auto-execute

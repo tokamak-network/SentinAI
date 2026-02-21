@@ -94,6 +94,10 @@ function matchesMetricCondition(
     const anomaly = event.anomalies.find(a => a.metric === 'proposerBalance');
     return anomaly?.rule === 'threshold-breach';
   }
+  if (condition.includes('challengerBalance')) {
+    const anomaly = event.anomalies.find(a => a.metric === 'challengerBalance');
+    return anomaly?.rule === 'threshold-breach';
+  }
 
   return false;
 }

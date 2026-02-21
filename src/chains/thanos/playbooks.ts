@@ -160,54 +160,66 @@ export const THANOS_PLAYBOOKS: Playbook[] = [
     maxAttempts: 0, // Immediate escalation — L1 issues cannot be auto-resolved
   },
 
-  // Playbook 6: EOA Balance Critical — Auto-refill
+  // Playbook 6a: Batcher EOA Balance Critical — Auto-refill
   {
-    name: 'eoa-balance-critical',
-    description: 'Batcher or proposer EOA balance below critical threshold',
+    name: 'batcher-eoa-balance-critical',
+    description: 'Batcher EOA balance below critical threshold — auto-refill',
     trigger: {
       component: 'op-batcher',
       indicators: [
         { type: 'metric', condition: 'batcherBalance < critical' },
-        { type: 'metric', condition: 'proposerBalance < critical' },
       ],
     },
     actions: [
-      {
-        type: 'check_treasury_balance',
-        safetyLevel: 'safe',
-      },
-      {
-        type: 'check_l1_gas_price',
-        safetyLevel: 'safe',
-      },
+      { type: 'check_treasury_balance', safetyLevel: 'safe' },
+      { type: 'check_l1_gas_price', safetyLevel: 'safe' },
       {
         type: 'refill_eoa',
         safetyLevel: 'guarded',
         params: { role: 'batcher' },
         waitAfterMs: 30000,
       },
-      {
-        type: 'verify_balance_restored',
-        safetyLevel: 'safe',
-        params: { role: 'batcher' },
-      },
+      { type: 'verify_balance_restored', safetyLevel: 'safe', params: { role: 'batcher' } },
     ],
     fallback: [
-      {
-        type: 'escalate_operator',
-        safetyLevel: 'safe',
-        params: { message: 'EOA refill failed. Manual intervention required.' },
-      },
+      { type: 'escalate_operator', safetyLevel: 'safe', params: { message: 'Batcher EOA refill failed. Manual intervention required.' } },
     ],
     maxAttempts: 1,
   },
 
-  // Playbook 7: EOA Balance Critical — Immediate Escalation
+  // Playbook 6b: Proposer EOA Balance Critical — Auto-refill
   {
-    name: 'eoa-balance-critical',
-    description: 'EOA balance critically low — immediate operator alert and auto-refill',
+    name: 'proposer-eoa-balance-critical',
+    description: 'Proposer EOA balance below critical threshold — auto-refill',
     trigger: {
-      component: 'op-batcher',
+      component: 'op-proposer',
+      indicators: [
+        { type: 'metric', condition: 'proposerBalance < critical' },
+      ],
+    },
+    actions: [
+      { type: 'check_treasury_balance', safetyLevel: 'safe' },
+      { type: 'check_l1_gas_price', safetyLevel: 'safe' },
+      {
+        type: 'refill_eoa',
+        safetyLevel: 'guarded',
+        params: { role: 'proposer' },
+        waitAfterMs: 30000,
+      },
+      { type: 'verify_balance_restored', safetyLevel: 'safe', params: { role: 'proposer' } },
+    ],
+    fallback: [
+      { type: 'escalate_operator', safetyLevel: 'safe', params: { message: 'Proposer EOA refill failed. Manual intervention required.' } },
+    ],
+    maxAttempts: 1,
+  },
+
+  // Playbook 7: EOA Balance Critical — Immediate Escalation (Batcher/Proposer)
+  {
+    name: 'eoa-balance-critical-escalation',
+    description: 'EOA balance critically low — immediate operator alert',
+    trigger: {
+      component: 'system',
       indicators: [
         { type: 'metric', condition: 'batcherBalance < critical' },
         { type: 'metric', condition: 'proposerBalance < critical' },
@@ -220,7 +232,7 @@ export const THANOS_PLAYBOOKS: Playbook[] = [
         params: { urgency: 'critical', message: 'EOA balance near zero. Rollup submission will halt imminently.' },
       },
     ],
-    maxAttempts: 0, // Immediate escalation
+    maxAttempts: 0,
   },
 
   // Playbook 8: Challenger EOA Balance Low (Phase 1)

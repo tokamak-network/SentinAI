@@ -267,7 +267,7 @@ function detectTxPoolMonotonicIncrease(
 export function detectAnomalies(
   current: MetricDataPoint,
   history: MetricDataPoint[],
-  balances?: { batcherBalanceEth?: number; proposerBalanceEth?: number }
+  balances?: { batcherBalanceEth?: number; proposerBalanceEth?: number; challengerBalanceEth?: number }
 ): AnomalyResult[] {
   const anomalies: AnomalyResult[] = [];
 
@@ -340,6 +340,9 @@ export function detectAnomalies(
 
     const proposerAnomaly = detectLowBalance(balances.proposerBalanceEth, 'proposerBalance');
     if (proposerAnomaly) anomalies.push(proposerAnomaly);
+
+    const challengerAnomaly = detectLowBalance(balances.challengerBalanceEth, 'challengerBalance');
+    if (challengerAnomaly) anomalies.push(challengerAnomaly);
   }
 
   return anomalies;
@@ -356,7 +359,11 @@ function detectLowBalance(
   if (balanceEth === undefined) return null;
 
   const criticalThreshold = parseFloat(process.env.EOA_BALANCE_CRITICAL_ETH || '0.1');
-  const role = metric === 'batcherBalance' ? 'Batcher' : 'Proposer';
+  const role = metric === 'batcherBalance'
+    ? 'Batcher'
+    : metric === 'proposerBalance'
+      ? 'Proposer'
+      : 'Challenger';
 
   if (balanceEth < criticalThreshold) {
     return {
