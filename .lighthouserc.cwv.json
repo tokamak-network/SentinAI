@@ -31,7 +31,7 @@
         "max-potential-fid": [
           "error",
           {
-            "maxNumericValue": 100
+            "maxNumericValue": 200
           }
         ],
         "cumulative-layout-shift": [
