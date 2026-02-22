@@ -4,6 +4,7 @@
  * Collects metrics → detects anomalies → evaluates scaling → auto-executes actions.
  */
 
+import { randomUUID } from 'crypto';
 import { createPublicClient, http, formatEther } from 'viem';
 import { getChainPlugin } from '@/chains';
 import { pushMetric, getRecentMetrics } from '@/lib/metrics-store';
@@ -27,10 +28,12 @@ import { predictScaling } from '@/lib/predictive-scaler';
 import { analyzeLogChunk } from '@/lib/ai-analyzer';
 import { getAllLiveLogs } from '@/lib/log-ingester';
 import { addScalingEvent } from '@/lib/daily-accumulator';
-import { DEFAULT_SCALING_CONFIG, type TargetVcpu, type TargetMemoryGiB } from '@/types/scaling';
+import { addAgentMemoryEntry, addDecisionTraceEntry, queryAgentMemory } from '@/lib/agent-memory';
+import { DEFAULT_SCALING_CONFIG, type TargetVcpu, type TargetMemoryGiB, type ScalingDecision } from '@/types/scaling';
 import { DEFAULT_PREDICTION_CONFIG } from '@/types/prediction';
 import type { MetricDataPoint } from '@/types/prediction';
 import type { ScalingMetrics } from '@/types/scaling';
+import type { AgentMemoryEntry, AgentPhaseTraceEntry, DecisionTrace, DecisionVerification } from '@/types/agent-memory';
 
 // ============================================================
 // Constants
@@ -45,7 +48,14 @@ const RPC_TIMEOUT_MS = 15_000;
 
 export interface AgentCycleResult {
   timestamp: string;
-  phase: 'observe' | 'detect' | 'decide' | 'act' | 'complete' | 'error';
+  phase: 'observe' | 'detect' | 'analyze' | 'plan' | 'act' | 'verify' | 'complete' | 'error';
+  decisionId?: string;
+  phaseTrace?: AgentPhaseTraceEntry[];
+  verification?: DecisionVerification;
+  degraded?: {
+    active: boolean;
+    reasons: string[];
+  };
   metrics: {
     l1BlockHeight: number;
     l2BlockHeight: number;
@@ -63,6 +73,7 @@ export interface AgentCycleResult {
     targetVcpu: number;
     executed: boolean;
     reason: string;
+    confidence?: number;
   } | null;
   failover?: {
     triggered: boolean;
@@ -99,6 +110,20 @@ interface CollectedMetrics {
   batcherBalanceEth?: number;
   proposerBalanceEth?: number;
   challengerBalanceEth?: number;
+}
+
+async function getRecentSafeMetrics(): Promise<CollectedMetrics | null> {
+  const recent = await getRecentMetrics(1);
+  if (!recent || recent.length === 0) return null;
+
+  const point = recent[0];
+  return {
+    dataPoint: {
+      ...point,
+      timestamp: new Date().toISOString(),
+    },
+    l1BlockHeight: 0,
+  };
 }
 
 async function collectMetrics(): Promise<CollectedMetrics | null> {
@@ -298,26 +323,36 @@ function clampToValidVcpu(vcpu: number): TargetVcpu {
   return 1;
 }
 
-async function evaluateAndExecuteScaling(
-  dataPoint: MetricDataPoint
-): Promise<AgentCycleResult['scaling']> {
-  const autoScaling = await isAutoScalingEnabled();
+interface ScalingPlan {
+  decision: ScalingDecision;
+  score: number;
+  currentVcpu: number;
+  targetVcpu: TargetVcpu;
+  reason: string;
+  confidence: number;
+  autoScalingEnabled: boolean;
+  cooldown: { inCooldown: boolean; remainingSeconds: number };
+}
+
+function compactHintText(value: string, maxLength: number = 100): string {
+  const normalized = value.replace(/\s+/g, ' ').trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 3)}...`;
+}
+
+async function buildScalingPlan(
+  dataPoint: MetricDataPoint,
+  aiSeverity?: ScalingMetrics['aiSeverity'],
+  memoryHint?: string
+): Promise<ScalingPlan> {
+  const autoScalingEnabled = await isAutoScalingEnabled();
+  const cooldown = await checkCooldown();
+
   // Seed metrics may include synthetic currentVcpu (e.g., 8 in spike scenario).
   // For execution decisions, always use actual runtime vCPU when seed data is active.
   const currentVcpu = dataPoint.seedTtlExpiry
     ? await getCurrentVcpu()
     : (dataPoint.currentVcpu || await getCurrentVcpu());
-  const cooldown = await checkCooldown();
-
-  // AI analysis for severity (best-effort)
-  let aiSeverity: ScalingMetrics['aiSeverity'];
-  try {
-    const logs = await getAllLiveLogs();
-    const aiResult = await analyzeLogChunk(logs);
-    aiSeverity = mapAIResultToSeverity(aiResult ? { severity: aiResult.severity } : null);
-  } catch {
-    aiSeverity = undefined;
-  }
 
   const metrics: ScalingMetrics = {
     cpuUsage: dataPoint.cpuUsage,
@@ -327,10 +362,13 @@ async function evaluateAndExecuteScaling(
   };
 
   const decision = makeScalingDecision(metrics);
+  let targetVcpu: TargetVcpu = decision.targetVcpu;
+  let reason = decision.reason;
+  let confidence = decision.confidence;
 
-  // Predictive scaling override
-  let finalTarget: TargetVcpu = decision.targetVcpu;
-  let finalReason = decision.reason;
+  if (memoryHint) {
+    reason = `${reason} | Memory: ${compactHintText(memoryHint)}`;
+  }
 
   const metricsHistory = await getRecentMetrics();
   if (metricsHistory.length >= DEFAULT_PREDICTION_CONFIG.minDataPoints) {
@@ -340,57 +378,69 @@ async function evaluateAndExecuteScaling(
         prediction &&
         prediction.confidence >= DEFAULT_PREDICTION_CONFIG.confidenceThreshold &&
         prediction.recommendedAction === 'scale_up' &&
-        prediction.predictedVcpu > finalTarget
+        prediction.predictedVcpu > targetVcpu
       ) {
-        finalTarget = clampToValidVcpu(prediction.predictedVcpu);
-        finalReason = `[Predictive] ${prediction.reasoning} (Confidence: ${(prediction.confidence * 100).toFixed(0)}%)`;
-        console.info(`[AgentLoop] Predictive override: ${currentVcpu} → ${finalTarget} vCPU`);
+        targetVcpu = clampToValidVcpu(prediction.predictedVcpu);
+        reason = `[Predictive] ${prediction.reasoning} (Confidence: ${(prediction.confidence * 100).toFixed(0)}%)`;
+        confidence = prediction.confidence;
+        console.info(`[AgentLoop] Predictive override: ${currentVcpu} → ${targetVcpu} vCPU`);
       }
     } catch {
       // Prediction failure is non-fatal
     }
   }
 
-  const result = {
+  return {
+    decision,
     score: decision.score,
     currentVcpu,
-    targetVcpu: finalTarget as number,
+    targetVcpu,
+    reason,
+    confidence,
+    autoScalingEnabled,
+    cooldown,
+  };
+}
+
+async function executeScalingPlan(plan: ScalingPlan): Promise<AgentCycleResult['scaling']> {
+  const result: NonNullable<AgentCycleResult['scaling']> = {
+    score: plan.score,
+    currentVcpu: plan.currentVcpu,
+    targetVcpu: plan.targetVcpu as number,
     executed: false,
-    reason: finalReason,
+    reason: plan.reason,
+    confidence: plan.confidence,
   };
 
-  // Auto-execute if conditions met
-  if (!autoScaling) {
+  if (!plan.autoScalingEnabled) {
     result.reason = `[Skip] Auto-scaling disabled. ${result.reason}`;
     return result;
   }
 
-  if (cooldown.inCooldown) {
-    result.reason = `[Skip] Cooldown ${cooldown.remainingSeconds}s. ${result.reason}`;
+  if (plan.cooldown.inCooldown) {
+    result.reason = `[Skip] Cooldown ${plan.cooldown.remainingSeconds}s. ${result.reason}`;
     return result;
   }
 
-  if (finalTarget === currentVcpu) {
-    result.reason = `[Skip] Already at ${currentVcpu} vCPU. ${result.reason}`;
+  if (plan.targetVcpu === plan.currentVcpu) {
+    result.reason = `[Skip] Already at ${plan.currentVcpu} vCPU. ${result.reason}`;
     return result;
   }
 
-  // Execute scaling
-  const targetMemoryGiB = (finalTarget * 2) as TargetMemoryGiB;
-  const scaleResult = await scaleOpGeth(finalTarget, targetMemoryGiB, DEFAULT_SCALING_CONFIG);
+  const targetMemoryGiB = (plan.targetVcpu * 2) as TargetMemoryGiB;
+  const scaleResult = await scaleOpGeth(plan.targetVcpu, targetMemoryGiB, DEFAULT_SCALING_CONFIG);
 
   if (scaleResult.success && scaleResult.previousVcpu !== scaleResult.currentVcpu) {
     result.executed = true;
     result.reason = `[Executed] ${scaleResult.previousVcpu} → ${scaleResult.currentVcpu} vCPU. ${result.reason}`;
 
-    // Record history
     await addScalingHistory({
       timestamp: scaleResult.timestamp,
       fromVcpu: scaleResult.previousVcpu,
       toVcpu: scaleResult.currentVcpu,
-      reason: finalReason,
+      reason: plan.reason,
       triggeredBy: 'auto',
-      decision,
+      decision: plan.decision,
     });
 
     await addScalingEvent({
@@ -398,7 +448,7 @@ async function evaluateAndExecuteScaling(
       fromVcpu: scaleResult.previousVcpu,
       toVcpu: scaleResult.currentVcpu,
       trigger: 'auto',
-      reason: finalReason,
+      reason: plan.reason,
     });
 
     console.info(`[AgentLoop] Scaling executed: ${scaleResult.previousVcpu} → ${scaleResult.currentVcpu} vCPU`);
@@ -407,12 +457,43 @@ async function evaluateAndExecuteScaling(
   return result;
 }
 
+async function verifyScalingOutcome(
+  scaling: AgentCycleResult['scaling']
+): Promise<DecisionVerification> {
+  if (!scaling) {
+    return {
+      expected: 'no-scaling-decision',
+      observed: 'no-scaling-decision',
+      passed: true,
+      details: 'Scaling decision was not generated',
+    };
+  }
+
+  if (!scaling.executed) {
+    return {
+      expected: `no-op at ${scaling.currentVcpu} vCPU`,
+      observed: `no-op at ${scaling.currentVcpu} vCPU`,
+      passed: true,
+      details: 'No scaling execution was required',
+    };
+  }
+
+  const actualVcpu = await getCurrentVcpu();
+  const passed = actualVcpu === scaling.targetVcpu;
+  return {
+    expected: `${scaling.targetVcpu} vCPU`,
+    observed: `${actualVcpu} vCPU`,
+    passed,
+    details: passed ? 'Target vCPU applied successfully' : 'Observed vCPU does not match target',
+  };
+}
+
 // ============================================================
 // Main Agent Cycle
 // ============================================================
 
 /**
- * Run one agent cycle: observe → detect → decide → act
+ * Run one agent cycle: observe → detect → analyze → plan → act → verify
  */
 export async function runAgentCycle(): Promise<AgentCycleResult> {
   if (running) {
@@ -428,21 +509,69 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
 
   running = true;
   const timestamp = new Date().toISOString();
+  const decisionId = randomUUID();
+  const phaseTrace: AgentPhaseTraceEntry[] = [];
+  const degradedReasons: string[] = [];
 
   console.info('[Agent Loop] Starting cycle...');
 
+  const beginPhase = (
+    phase: AgentPhaseTraceEntry['phase']
+  ): { phase: AgentPhaseTraceEntry['phase']; startedAt: string } => ({
+    phase,
+    startedAt: new Date().toISOString(),
+  });
+
+  const endPhase = (
+    started: { phase: AgentPhaseTraceEntry['phase']; startedAt: string },
+    ok: boolean,
+    error?: string
+  ): void => {
+    phaseTrace.push({
+      phase: started.phase,
+      startedAt: started.startedAt,
+      endedAt: new Date().toISOString(),
+      ok,
+      error,
+    });
+  };
+
   try {
     // Phase 1: Observe — collect metrics from RPC
-    const collected = await collectMetrics();
+    const observePhase = beginPhase('observe');
+    let collected: CollectedMetrics | null = null;
+    let observeError: string | null = null;
+    try {
+      collected = await collectMetrics();
+    } catch (error) {
+      observeError = error instanceof Error ? error.message : 'Unknown error';
+    }
+
     if (!collected) {
-      return {
-        timestamp,
-        phase: 'error',
-        metrics: null,
-        detection: null,
-        scaling: null,
-        error: 'Metrics collection failed (L2_RPC_URL not configured)',
-      };
+      const fallbackMetrics = await getRecentSafeMetrics();
+      if (!fallbackMetrics) {
+        const message = observeError || 'Metrics collection failed (L2_RPC_URL not configured)';
+        endPhase(observePhase, false, message);
+        return {
+          timestamp,
+          phase: 'error',
+          decisionId,
+          phaseTrace,
+          metrics: null,
+          detection: null,
+          scaling: null,
+          error: message,
+        };
+      }
+
+      collected = fallbackMetrics;
+      degradedReasons.push('observe-fallback:last-safe-metrics');
+      const fallbackMessage = observeError
+        ? `Observe degraded: ${observeError} (using last safe metrics)`
+        : 'Observe degraded: using last safe metrics';
+      endPhase(observePhase, false, fallbackMessage);
+    } else {
+      endPhase(observePhase, true);
     }
 
     const { dataPoint, l1BlockHeight, failover, batcherBalanceEth, proposerBalanceEth, challengerBalanceEth } = collected;
@@ -489,18 +618,81 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
     }
 
     // Phase 2: Detect — run anomaly detection pipeline
+    const detectPhase = beginPhase('detect');
     const detection = await runDetectionPipeline(dataPoint, {
       batcherBalanceEth,
       proposerBalanceEth,
       challengerBalanceEth,
     });
+    endPhase(detectPhase, true);
 
-    // Phase 3+4: Decide & Act — evaluate scaling and auto-execute
-    const scaling = await evaluateAndExecuteScaling(dataPoint);
+    // Phase 3: Analyze — AI severity extraction (best effort)
+    const analyzePhase = beginPhase('analyze');
+    let aiSeverity: ScalingMetrics['aiSeverity'];
+    try {
+      const logs = await getAllLiveLogs();
+      const aiResult = await analyzeLogChunk(logs);
+      aiSeverity = mapAIResultToSeverity(aiResult ? { severity: aiResult.severity } : null);
+      endPhase(analyzePhase, true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      aiSeverity = undefined;
+      endPhase(analyzePhase, false, message);
+    }
+
+    // Phase 4: Plan — build scaling plan
+    const planPhase = beginPhase('plan');
+    let memoryHint: string | undefined;
+    try {
+      const memoryEntries = await queryAgentMemory({
+        limit: 1,
+        component: getChainPlugin().primaryExecutionClient,
+      });
+      const latest = memoryEntries[0];
+      if (latest?.summary) {
+        memoryHint = latest.summary;
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.warn('[AgentLoop] Memory retrieval failed during planning:', message);
+      degradedReasons.push('plan-memory-retrieval-failed');
+    }
+
+    const scalingPlan = await buildScalingPlan(dataPoint, aiSeverity, memoryHint);
+    endPhase(planPhase, true);
+
+    // Phase 5: Act — execute scaling plan
+    const actPhase = beginPhase('act');
+    let scaling: AgentCycleResult['scaling'];
+    try {
+      scaling = await executeScalingPlan(scalingPlan);
+      endPhase(actPhase, true);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      degradedReasons.push(`act-failed:${message}`);
+      scaling = {
+        score: scalingPlan.score,
+        currentVcpu: scalingPlan.currentVcpu,
+        targetVcpu: scalingPlan.currentVcpu,
+        executed: false,
+        reason: `[Degraded] Action failed (${message}). Fallback to no-op. ${scalingPlan.reason}`,
+        confidence: scalingPlan.confidence,
+      };
+      endPhase(actPhase, false, message);
+    }
+
+    // Phase 6: Verify — verify action outcome
+    const verifyPhase = beginPhase('verify');
+    const verification = await verifyScalingOutcome(scaling);
+    endPhase(verifyPhase, verification.passed, verification.passed ? undefined : verification.details);
 
     const result: AgentCycleResult = {
       timestamp,
       phase: 'complete',
+      decisionId,
+      phaseTrace,
+      verification,
+      degraded: degradedReasons.length > 0 ? { active: true, reasons: degradedReasons } : undefined,
       metrics: metricsResult,
       detection,
       scaling,
@@ -508,6 +700,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       proxydReplacement,
     };
     await pushCycleResult(result);
+    await persistDecisionArtifacts(result);
     console.info(`[Agent Loop] Cycle complete: score=${scaling?.score}, L2=${dataPoint.blockHeight}`);
     return result;
   } catch (error) {
@@ -516,6 +709,9 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
     const result: AgentCycleResult = {
       timestamp,
       phase: 'error',
+      decisionId,
+      phaseTrace,
+      degraded: degradedReasons.length > 0 ? { active: true, reasons: degradedReasons } : undefined,
       metrics: null,
       detection: null,
       scaling: null,
@@ -570,6 +766,110 @@ function getLatestUnseenFailoverEvent(
 
   lastObservedFailoverTimestamp = latest.timestamp;
   return latest;
+}
+
+async function persistDecisionArtifacts(result: AgentCycleResult): Promise<void> {
+  if (!result.decisionId || !result.scaling || !result.verification) return;
+
+  const chainType = process.env.CHAIN_TYPE || 'thanos';
+  const anomalyCount = result.detection?.anomalies?.filter((item) => item.isAnomaly).length ?? 0;
+  const primaryComponent = getChainPlugin().primaryExecutionClient;
+  const inferredSeverity =
+    result.scaling.score >= 90
+      ? 'critical'
+      : result.scaling.score >= 70
+        ? 'high'
+        : result.scaling.score >= 40
+          ? 'medium'
+          : 'low';
+
+  const trace: DecisionTrace = {
+    decisionId: result.decisionId,
+    timestamp: result.timestamp,
+    chainType,
+    severity: inferredSeverity,
+    inputs: {
+      anomalyCount,
+      metrics: result.metrics
+        ? {
+            l1BlockHeight: result.metrics.l1BlockHeight,
+            l2BlockHeight: result.metrics.l2BlockHeight,
+            cpuUsage: result.metrics.cpuUsage,
+            txPoolPending: result.metrics.txPoolPending,
+            gasUsedRatio: result.metrics.gasUsedRatio,
+          }
+        : null,
+      scalingScore: result.scaling.score,
+    },
+    reasoningSummary: result.scaling.reason,
+    evidence: [
+      {
+        type: 'metric',
+        key: 'cpuUsage',
+        value: result.metrics ? `${result.metrics.cpuUsage.toFixed(3)}%` : 'N/A',
+        source: 'agent-loop',
+      },
+      {
+        type: 'metric',
+        key: 'txPoolPending',
+        value: result.metrics ? `${result.metrics.txPoolPending}` : 'N/A',
+        source: 'agent-loop',
+      },
+      {
+        type: 'anomaly',
+        key: 'anomalyCount',
+        value: `${anomalyCount}`,
+        source: 'detection-pipeline',
+      },
+    ],
+    chosenAction: result.scaling.executed
+      ? `scale_to_${result.scaling.targetVcpu}`
+      : `noop_at_${result.scaling.currentVcpu}`,
+    alternatives: [`keep_${result.scaling.currentVcpu}`],
+    phaseTrace: result.phaseTrace || [],
+    verification: result.verification,
+  };
+
+  const memoryEntry: AgentMemoryEntry = {
+    id: randomUUID(),
+    timestamp: result.timestamp,
+    category: result.scaling.executed ? 'scaling' : 'analysis',
+    chainType,
+    summary: result.scaling.reason,
+    decisionId: result.decisionId,
+    component: primaryComponent,
+    severity: inferredSeverity,
+    metadata: {
+      score: result.scaling.score,
+      currentVcpu: result.scaling.currentVcpu,
+      targetVcpu: result.scaling.targetVcpu,
+      executed: result.scaling.executed,
+      verificationPassed: result.verification.passed,
+      degraded: result.degraded?.active ?? false,
+      degradedReasons: result.degraded?.reasons ?? [],
+    },
+  };
+
+  try {
+    await addDecisionTraceEntry(trace);
+    await addAgentMemoryEntry(memoryEntry);
+
+    if (result.failover?.triggered) {
+      await addAgentMemoryEntry({
+        id: randomUUID(),
+        timestamp: result.timestamp,
+        category: 'failover',
+        chainType,
+        summary: `L1 RPC failover: ${result.failover.fromUrl} -> ${result.failover.toUrl}`,
+        decisionId: result.decisionId,
+        component: 'l1-rpc',
+        severity: 'high',
+      });
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    console.warn('[AgentLoop] Failed to persist decision artifacts:', message);
+  }
 }
 
 // ============================================================

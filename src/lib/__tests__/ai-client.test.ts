@@ -97,6 +97,36 @@ describe('ai-client', () => {
       expect(result.provider).toBe('qwen');
     });
 
+    it('should fallback to next provider when primary provider fails', async () => {
+      process.env.QWEN_API_KEY = 'sk-qwen-test';
+      process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          text: async () => 'rate limited',
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            content: [{ type: 'text', text: 'anthropic fallback response' }],
+            usage: { input_tokens: 10, output_tokens: 20 },
+          }),
+        });
+
+      const { chatCompletion } = await importAiClient();
+      const result = await chatCompletion({
+        systemPrompt: 'sys',
+        userPrompt: 'user',
+        modelTier: 'fast',
+      });
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(result.provider).toBe('anthropic');
+      expect(result.content).toBe('anthropic fallback response');
+    });
+
     it('should route through gateway when AI_GATEWAY_URL is set', async () => {
       process.env.AI_GATEWAY_URL = 'https://gateway.example.com';
       process.env.ANTHROPIC_API_KEY = 'test-key';

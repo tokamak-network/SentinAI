@@ -11,6 +11,8 @@ import type {
   PredictionResult,
 } from '@/types/prediction';
 import type { AnomalyEvent, AlertConfig, UsageDataPoint, AccumulatorState, PredictionRecord } from '@/types/daily-report';
+import type { McpApprovalTicket } from '@/types/mcp';
+import type { AgentMemoryEntry, DecisionTrace } from '@/types/agent-memory';
 
 /**
  * Helper: Create mock metric data point
@@ -671,6 +673,96 @@ describe('redis-store (InMemoryStateStore)', () => {
       const records = await store.getPredictionRecords(10);
 
       expect(records).toHaveLength(0);
+    });
+  });
+
+  describe('MCP Approval Tickets', () => {
+    it('should create and retrieve MCP approval ticket', async () => {
+      const now = Date.now();
+      const ticket: McpApprovalTicket = {
+        id: 'ticket-1',
+        toolName: 'scale_component',
+        paramsHash: 'hash-1',
+        createdAt: new Date(now).toISOString(),
+        expiresAt: new Date(now + 60_000).toISOString(),
+        approvedBy: 'tester',
+      };
+
+      await store.createMcpApprovalTicket(ticket);
+
+      const retrieved = await store.getMcpApprovalTicket('ticket-1');
+      expect(retrieved).not.toBeNull();
+      expect(retrieved?.toolName).toBe('scale_component');
+      expect(retrieved?.approvedBy).toBe('tester');
+    });
+
+    it('should consume MCP approval ticket once', async () => {
+      const now = Date.now();
+      const ticket: McpApprovalTicket = {
+        id: 'ticket-2',
+        toolName: 'restart_component',
+        paramsHash: 'hash-2',
+        createdAt: new Date(now).toISOString(),
+        expiresAt: new Date(now + 60_000).toISOString(),
+      };
+
+      await store.createMcpApprovalTicket(ticket);
+
+      const first = await store.consumeMcpApprovalTicket('ticket-2');
+      const second = await store.consumeMcpApprovalTicket('ticket-2');
+
+      expect(first).not.toBeNull();
+      expect(first?.toolName).toBe('restart_component');
+      expect(second).toBeNull();
+    });
+  });
+
+  describe('Agent Memory and Decision Trace', () => {
+    it('should add and query agent memory', async () => {
+      const entry: AgentMemoryEntry = {
+        id: 'memory-1',
+        timestamp: new Date().toISOString(),
+        category: 'analysis',
+        chainType: 'thanos',
+        summary: 'CPU spike observed',
+        component: 'op-geth',
+        severity: 'high',
+      };
+
+      await store.addAgentMemory(entry);
+
+      const list = await store.queryAgentMemory({ limit: 10, component: 'op-geth' });
+      expect(list).toHaveLength(1);
+      expect(list[0].id).toBe('memory-1');
+    });
+
+    it('should add and retrieve decision trace', async () => {
+      const trace: DecisionTrace = {
+        decisionId: 'decision-1',
+        timestamp: new Date().toISOString(),
+        chainType: 'thanos',
+        inputs: { anomalyCount: 1, metrics: null, scalingScore: 82 },
+        reasoningSummary: 'Scale up due to txpool growth',
+        evidence: [{ type: 'metric', key: 'txPoolPending', value: '1200' }],
+        chosenAction: 'scale_to_4',
+        alternatives: ['keep_2'],
+        phaseTrace: [],
+        verification: {
+          expected: '4 vCPU',
+          observed: '4 vCPU',
+          passed: true,
+        },
+      };
+
+      await store.addDecisionTrace(trace);
+
+      const single = await store.getDecisionTrace('decision-1');
+      const list = await store.listDecisionTraces({ limit: 5 });
+
+      expect(single).not.toBeNull();
+      expect(single?.decisionId).toBe('decision-1');
+      expect(list).toHaveLength(1);
+      expect(list[0].chosenAction).toBe('scale_to_4');
     });
   });
 

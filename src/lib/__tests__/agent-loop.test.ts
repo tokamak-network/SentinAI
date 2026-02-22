@@ -48,6 +48,9 @@ vi.mock('@/lib/redis-store', () => ({
     getZeroDowntimeEnabled: vi.fn().mockResolvedValue(false),
     pushAgentCycleResult: vi.fn().mockResolvedValue(undefined),
     getSeedScenario: vi.fn().mockResolvedValue(null),
+    addDecisionTrace: vi.fn().mockResolvedValue(undefined),
+    addAgentMemory: vi.fn().mockResolvedValue(undefined),
+    queryAgentMemory: vi.fn().mockResolvedValue([]),
   })),
 }));
 
@@ -118,6 +121,8 @@ import { runAgentCycle, isAgentRunning, resetAgentState } from '@/lib/agent-loop
 import { runDetectionPipeline } from '@/lib/detection-pipeline';
 import { makeScalingDecision } from '@/lib/scaling-decision';
 import { scaleOpGeth, isAutoScalingEnabled, checkCooldown } from '@/lib/k8s-scaler';
+import { getRecentMetrics } from '@/lib/metrics-store';
+import { analyzeLogChunk } from '@/lib/ai-analyzer';
 import * as failoverModule from '@/lib/l1-rpc-failover';
 
 describe('agent-loop', () => {
@@ -132,13 +137,23 @@ describe('agent-loop', () => {
   });
 
   describe('runAgentCycle', () => {
-    it('should complete a full observe-detect-decide cycle', async () => {
+    it('should complete a full observe-detect-analyze-plan-act-verify cycle', async () => {
       const result = await runAgentCycle();
 
       expect(result.phase).toBe('complete');
+      expect(result.decisionId).toBeDefined();
+      expect(result.verification).toBeDefined();
       expect(result.metrics).not.toBeNull();
       expect(result.detection).not.toBeNull();
       expect(result.scaling).not.toBeNull();
+      expect(result.phaseTrace?.map((entry) => entry.phase)).toEqual([
+        'observe',
+        'detect',
+        'analyze',
+        'plan',
+        'act',
+        'verify',
+      ]);
       expect(result.error).toBeUndefined();
     });
 
@@ -304,6 +319,64 @@ describe('agent-loop', () => {
       expect(result.failover?.fromUrl).toBe('https://rpc2.io');
       expect(result.failover?.toUrl).toBe('https://rpc3.io');
       getFailoverEventsSpy.mockRestore();
+    });
+
+    it('should continue with rule-based path when analyze step fails', async () => {
+      vi.mocked(analyzeLogChunk).mockRejectedValueOnce(new Error('llm timeout'));
+      const result = await runAgentCycle();
+
+      expect(result.phase).toBe('complete');
+      expect(result.phaseTrace?.some((entry) => entry.phase === 'analyze' && entry.ok === false)).toBe(true);
+      expect(result.scaling).not.toBeNull();
+    });
+
+    it('should continue cycle in degraded mode when scaling action fails', async () => {
+      vi.mocked(isAutoScalingEnabled).mockResolvedValue(true);
+      vi.mocked(checkCooldown).mockResolvedValue({ inCooldown: false, remainingSeconds: 0 });
+      vi.mocked(makeScalingDecision).mockReturnValue({
+        targetVcpu: 4,
+        targetMemoryGiB: 8,
+        reason: 'High Load (Score: 85.0)',
+        confidence: 0.95,
+        score: 85,
+        breakdown: { cpuScore: 80, gasScore: 70, txPoolScore: 50, aiScore: 66 },
+      });
+      vi.mocked(scaleOpGeth).mockRejectedValueOnce(new Error('k8s apply failed'));
+
+      const result = await runAgentCycle();
+
+      expect(result.phase).toBe('complete');
+      expect(result.degraded?.active).toBe(true);
+      expect(result.degraded?.reasons.some((item) => item.includes('act-failed'))).toBe(true);
+      expect(result.verification?.passed).toBe(true);
+      expect(result.phaseTrace?.some((entry) => entry.phase === 'act' && entry.ok === false)).toBe(true);
+      expect(result.phaseTrace?.some((entry) => entry.phase === 'verify')).toBe(true);
+    });
+
+    it('should use last safe metrics when observe step fails', async () => {
+      const { createPublicClient } = await import('viem');
+      vi.mocked(createPublicClient).mockReturnValue({
+        getBlock: vi.fn().mockRejectedValue(new Error('L2 RPC down')),
+        getBlockNumber: vi.fn().mockResolvedValue(BigInt(500)),
+      } as never);
+      vi.mocked(getRecentMetrics).mockResolvedValueOnce([
+        {
+          timestamp: new Date().toISOString(),
+          cpuUsage: 42,
+          txPoolPending: 11,
+          gasUsedRatio: 0.22,
+          blockHeight: 123456,
+          blockInterval: 2.1,
+          currentVcpu: 2,
+        },
+      ]);
+
+      const result = await runAgentCycle();
+
+      expect(result.phase).toBe('complete');
+      expect(result.degraded?.active).toBe(true);
+      expect(result.degraded?.reasons).toContain('observe-fallback:last-safe-metrics');
+      expect(result.metrics?.l2BlockHeight).toBe(123456);
     });
   });
 

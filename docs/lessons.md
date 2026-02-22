@@ -1,5 +1,27 @@
 # Lessons Learned
 
+## 2026-02-22
+
+- When adding persistent decision artifacts to the agent loop, unit-test mocks of `getStore()` can silently miss new methods and only fail at runtime logs.
+- Rule: If `IStateStore` interface is extended, update all major `getStore` test mocks (`agent-loop`, integration-style unit tests) in the same commit.
+- Route-level write guards are still required even when middleware already enforces read-only mode.
+- Rule: For APIs that are read-only exceptions in middleware (e.g., MCP), enforce tool-level write restrictions again in handler logic.
+- `vi.clearAllMocks()` only resets call history and does not restore overridden return values, which can leak state between tests and hide regressions.
+- Rule: When a test mutates mock behavior (e.g., enabling/disabling autoscaling), explicitly re-assign required mock return values per test or use reset semantics.
+- Adaptive routing should fail-open when all providers are circuit-blocked, otherwise transient outages can create total inference blackout.
+- Rule: Circuit-breaker filtering keeps provider order, but if all candidates are blocked it must return the original order and rely on per-attempt failure recording.
+- For routing fallback analytics, a single request can generate multiple provider attempts and must be correlated to avoid misleading counters.
+- Rule: Attach `requestId` and `attempt` to each routing decision, then compute fallback-recovered/failed counts on grouped attempts.
+
+## 2026-02-21
+
+- A quarterly roadmap request becomes implementable only when each epic is split into file-level interface, env, and test contracts.
+- Rule: For strategy-to-execution docs, always create one proposal file per epic and include `scope`, `public interface changes`, `test plan`, and `assumptions/defaults`.
+- A roadmap document without timeline ownership causes ambiguous execution order.
+- Rule: Q1 roadmap docs must include week-by-week milestones (12-week mapping) and explicit rollout/rollback checkpoints.
+- Adding a write-capable API to read-only exceptions can accidentally bypass global safety policies.
+- Rule: If a route is exempted in middleware for read-only compatibility, enforce write restrictions again in the route handler based on tool-level policy.
+
 ## 2026-02-20
 
 - Tier 3 bundle gate fails excessively when looking only at the raw sum, so it is best to look at the transmission standard (gzip) figures together to determine the correct operation.

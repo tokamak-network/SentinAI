@@ -9,6 +9,8 @@ import { PredictionResult } from './prediction';
 import { AnomalyEvent, AlertRecord, DeepAnalysisResult, AlertConfig } from './anomaly';
 import { UsageDataPoint } from './cost';
 import { AccumulatorState, DailyAccumulatedData } from './daily-report';
+import { McpApprovalTicket } from './mcp';
+import { AgentMemoryEntry, AgentMemoryQuery, DecisionTrace, DecisionTraceQuery } from './agent-memory';
 
 // ============================================================
 // Store Interface
@@ -62,6 +64,19 @@ export interface IStateStore {
   getAgentCycleCount(): Promise<number>;
   getLastAgentCycleResult(): Promise<any | null>;
   clearAgentCycleHistory(): Promise<void>;
+
+  // --- MCP Approval Tickets ---
+  createMcpApprovalTicket(ticket: McpApprovalTicket): Promise<void>;
+  getMcpApprovalTicket(ticketId: string): Promise<McpApprovalTicket | null>;
+  consumeMcpApprovalTicket(ticketId: string): Promise<McpApprovalTicket | null>;
+
+  // --- Agent Memory / Decision Trace ---
+  addAgentMemory(entry: AgentMemoryEntry): Promise<void>;
+  queryAgentMemory(query?: AgentMemoryQuery): Promise<AgentMemoryEntry[]>;
+  addDecisionTrace(trace: DecisionTrace): Promise<void>;
+  getDecisionTrace(decisionId: string): Promise<DecisionTrace | null>;
+  listDecisionTraces(query?: DecisionTraceQuery): Promise<DecisionTrace[]>;
+  cleanupAgentMemory(beforeTimestamp: number): Promise<number>;
 
   // --- Connection Management ---
   isConnected(): boolean;

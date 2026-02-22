@@ -21,6 +21,13 @@ import { AnomalyEvent, AlertRecord, DeepAnalysisResult, AlertConfig } from '@/ty
 import { UsageDataPoint } from '@/types/cost';
 import { AccumulatorState, DailyAccumulatedData } from '@/types/daily-report';
 import { PredictionRecord } from '@/types/prediction';
+import { McpApprovalTicket } from '@/types/mcp';
+import {
+  AgentMemoryEntry,
+  AgentMemoryQuery,
+  DecisionTrace,
+  DecisionTraceQuery,
+} from '@/types/agent-memory';
 
 // ============================================================
 // Constants
@@ -47,6 +54,8 @@ const PREDICTION_MAX = 100;
 // Agent Cycle History Constants
 const AGENT_CYCLE_HISTORY_MAX = 500;
 const AGENT_CYCLE_HISTORY_DEFAULT_LIMIT = 50;
+const AGENT_MEMORY_MAX = 1000;
+const DECISION_TRACE_MAX = 5000;
 
 // Redis key names (appended to keyPrefix)
 const KEYS = {
@@ -62,6 +71,12 @@ const KEYS = {
   seedScenario: 'seed:scenario',
   // Agent Cycle History (cross-worker persistence)
   agentCycleHistory: 'agent:cycle:history',
+  // MCP Approval Ticket
+  mcpApprovalTicket: (id: string) => `mcp:approval:${id}`,
+  // Agent Memory and Decision Trace
+  agentMemory: 'agent:memory',
+  decisionTrace: (decisionId: string) => `agent:decision:${decisionId}`,
+  decisionTraceIndex: 'agent:decision:index',
   // P1: Anomaly Event Store
   anomalyEvents: 'anomaly:events',
   anomalyActive: 'anomaly:active',
@@ -89,6 +104,32 @@ const DEFAULT_SCALING_STATE: ScalingState = {
   cooldownRemaining: 0,
   autoScalingEnabled: true,
 };
+
+function matchesAgentMemoryQuery(entry: AgentMemoryEntry, query?: AgentMemoryQuery): boolean {
+  if (!query) return true;
+
+  if (query.category && entry.category !== query.category) return false;
+  if (query.component && entry.component !== query.component) return false;
+  if (query.severity && entry.severity !== query.severity) return false;
+  if (query.decisionId && entry.decisionId !== query.decisionId) return false;
+
+  const ts = new Date(entry.timestamp).getTime();
+  if (query.fromTs && ts < new Date(query.fromTs).getTime()) return false;
+  if (query.toTs && ts > new Date(query.toTs).getTime()) return false;
+
+  return true;
+}
+
+function matchesDecisionTraceQuery(trace: DecisionTrace, query?: DecisionTraceQuery): boolean {
+  if (!query) return true;
+  if (query.severity && trace.severity !== query.severity) return false;
+
+  const ts = new Date(trace.timestamp).getTime();
+  if (query.fromTs && ts < new Date(query.fromTs).getTime()) return false;
+  if (query.toTs && ts > new Date(query.toTs).getTime()) return false;
+
+  return true;
+}
 
 // ============================================================
 // RedisStateStore Implementation
@@ -696,6 +737,192 @@ export class RedisStateStore implements IStateStore {
     await this.client.del(key);
   }
 
+  // --- MCP Approval Tickets ---
+
+  async createMcpApprovalTicket(ticket: McpApprovalTicket): Promise<void> {
+    const key = this.key(KEYS.mcpApprovalTicket(ticket.id));
+    const expiresAt = new Date(ticket.expiresAt).getTime();
+    const ttlSeconds = Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000));
+    await this.client.set(key, JSON.stringify(ticket), 'EX', ttlSeconds);
+  }
+
+  async getMcpApprovalTicket(ticketId: string): Promise<McpApprovalTicket | null> {
+    const key = this.key(KEYS.mcpApprovalTicket(ticketId));
+    const raw = await this.client.get(key);
+    if (!raw) return null;
+
+    const ticket = JSON.parse(raw) as McpApprovalTicket;
+    if (new Date(ticket.expiresAt).getTime() <= Date.now()) {
+      await this.client.del(key);
+      return null;
+    }
+
+    return ticket;
+  }
+
+  async consumeMcpApprovalTicket(ticketId: string): Promise<McpApprovalTicket | null> {
+    const key = this.key(KEYS.mcpApprovalTicket(ticketId));
+    let raw: string | null = null;
+
+    try {
+      const result = await this.client.call('GETDEL', key);
+      raw = typeof result === 'string' ? result : null;
+    } catch {
+      raw = await this.client.get(key);
+      if (raw) {
+        await this.client.del(key);
+      }
+    }
+
+    if (!raw) return null;
+
+    const ticket = JSON.parse(raw) as McpApprovalTicket;
+    if (new Date(ticket.expiresAt).getTime() <= Date.now()) {
+      return null;
+    }
+
+    return ticket;
+  }
+
+  // --- Agent Memory / Decision Trace ---
+
+  async addAgentMemory(entry: AgentMemoryEntry): Promise<void> {
+    const key = this.key(KEYS.agentMemory);
+    await this.client.lpush(key, JSON.stringify(entry));
+    await this.client.ltrim(key, 0, AGENT_MEMORY_MAX - 1);
+  }
+
+  async queryAgentMemory(query?: AgentMemoryQuery): Promise<AgentMemoryEntry[]> {
+    const limit = Math.min(Math.max(query?.limit ?? 50, 1), 500);
+    const key = this.key(KEYS.agentMemory);
+    const rawEntries = await this.client.lrange(key, 0, -1);
+
+    const entries: AgentMemoryEntry[] = [];
+    for (const raw of rawEntries) {
+      try {
+        const parsed = JSON.parse(raw) as AgentMemoryEntry;
+        if (matchesAgentMemoryQuery(parsed, query)) {
+          entries.push(parsed);
+        }
+        if (entries.length >= limit) break;
+      } catch {
+        // Ignore malformed entries
+      }
+    }
+
+    return entries;
+  }
+
+  async addDecisionTrace(trace: DecisionTrace): Promise<void> {
+    const traceKey = this.key(KEYS.decisionTrace(trace.decisionId));
+    const indexKey = this.key(KEYS.decisionTraceIndex);
+
+    await this.client.set(traceKey, JSON.stringify(trace));
+    await this.client.lrem(indexKey, 0, trace.decisionId);
+    await this.client.lpush(indexKey, trace.decisionId);
+    await this.client.ltrim(indexKey, 0, DECISION_TRACE_MAX - 1);
+  }
+
+  async getDecisionTrace(decisionId: string): Promise<DecisionTrace | null> {
+    const traceKey = this.key(KEYS.decisionTrace(decisionId));
+    const raw = await this.client.get(traceKey);
+    if (!raw) return null;
+
+    try {
+      return JSON.parse(raw) as DecisionTrace;
+    } catch {
+      return null;
+    }
+  }
+
+  async listDecisionTraces(query?: DecisionTraceQuery): Promise<DecisionTrace[]> {
+    const limit = Math.min(Math.max(query?.limit ?? 50, 1), 500);
+    const indexKey = this.key(KEYS.decisionTraceIndex);
+    const candidateIds = await this.client.lrange(indexKey, 0, Math.max(limit * 5, limit) - 1);
+    if (candidateIds.length === 0) return [];
+
+    const traceKeys = candidateIds.map((id) => this.key(KEYS.decisionTrace(id)));
+    const rawTraces = await this.client.mget(...traceKeys);
+
+    const traces: DecisionTrace[] = [];
+    for (const raw of rawTraces) {
+      if (!raw) continue;
+      try {
+        const parsed = JSON.parse(raw) as DecisionTrace;
+        if (matchesDecisionTraceQuery(parsed, query)) {
+          traces.push(parsed);
+        }
+        if (traces.length >= limit) break;
+      } catch {
+        // Ignore malformed entries
+      }
+    }
+
+    return traces;
+  }
+
+  async cleanupAgentMemory(beforeTimestamp: number): Promise<number> {
+    let removed = 0;
+
+    // Cleanup memory entries
+    const memoryKey = this.key(KEYS.agentMemory);
+    const rawEntries = await this.client.lrange(memoryKey, 0, -1);
+    const keptEntries: string[] = [];
+
+    for (const raw of rawEntries) {
+      try {
+        const parsed = JSON.parse(raw) as AgentMemoryEntry;
+        const ts = new Date(parsed.timestamp).getTime();
+        if (Number.isFinite(ts) && ts < beforeTimestamp) {
+          removed++;
+        } else {
+          keptEntries.push(raw);
+        }
+      } catch {
+        removed++;
+      }
+    }
+
+    await this.client.del(memoryKey);
+    if (keptEntries.length > 0) {
+      await this.client.rpush(memoryKey, ...keptEntries);
+      await this.client.ltrim(memoryKey, 0, AGENT_MEMORY_MAX - 1);
+    }
+
+    // Cleanup traces by index scan
+    const indexKey = this.key(KEYS.decisionTraceIndex);
+    const traceIds = await this.client.lrange(indexKey, 0, -1);
+    const keptTraceIds: string[] = [];
+
+    for (const traceId of traceIds) {
+      const traceKey = this.key(KEYS.decisionTrace(traceId));
+      const raw = await this.client.get(traceKey);
+      if (!raw) continue;
+
+      try {
+        const trace = JSON.parse(raw) as DecisionTrace;
+        const ts = new Date(trace.timestamp).getTime();
+        if (Number.isFinite(ts) && ts < beforeTimestamp) {
+          await this.client.del(traceKey);
+          removed++;
+        } else {
+          keptTraceIds.push(traceId);
+        }
+      } catch {
+        await this.client.del(traceKey);
+        removed++;
+      }
+    }
+
+    await this.client.del(indexKey);
+    if (keptTraceIds.length > 0) {
+      await this.client.rpush(indexKey, ...keptTraceIds);
+      await this.client.ltrim(indexKey, 0, DECISION_TRACE_MAX - 1);
+    }
+
+    return removed;
+  }
+
   // --- Connection Management ---
 
   isConnected(): boolean {
@@ -756,6 +983,14 @@ export class InMemoryStateStore implements IStateStore {
 
   // Agent Cycle History (Cross-Worker Persistence)
   private agentCycleHistory: any[] = [];
+
+  // MCP Approval Tickets
+  private mcpApprovalTickets: Map<string, McpApprovalTicket> = new Map();
+
+  // Agent Memory / Decision Trace
+  private agentMemoryEntries: AgentMemoryEntry[] = [];
+  private decisionTraceMap: Map<string, DecisionTrace> = new Map();
+  private decisionTraceOrder: string[] = [];
 
   // --- Metrics Buffer ---
 
@@ -907,6 +1142,110 @@ export class InMemoryStateStore implements IStateStore {
 
   async clearAgentCycleHistory(): Promise<void> {
     this.agentCycleHistory = [];
+  }
+
+  // --- MCP Approval Tickets ---
+
+  private cleanupExpiredMcpApprovalTickets(): void {
+    const now = Date.now();
+    for (const [ticketId, ticket] of this.mcpApprovalTickets.entries()) {
+      if (new Date(ticket.expiresAt).getTime() <= now) {
+        this.mcpApprovalTickets.delete(ticketId);
+      }
+    }
+  }
+
+  async createMcpApprovalTicket(ticket: McpApprovalTicket): Promise<void> {
+    this.cleanupExpiredMcpApprovalTickets();
+    this.mcpApprovalTickets.set(ticket.id, ticket);
+  }
+
+  async getMcpApprovalTicket(ticketId: string): Promise<McpApprovalTicket | null> {
+    this.cleanupExpiredMcpApprovalTickets();
+    return this.mcpApprovalTickets.get(ticketId) || null;
+  }
+
+  async consumeMcpApprovalTicket(ticketId: string): Promise<McpApprovalTicket | null> {
+    this.cleanupExpiredMcpApprovalTickets();
+    const ticket = this.mcpApprovalTickets.get(ticketId) || null;
+    if (ticket) {
+      this.mcpApprovalTickets.delete(ticketId);
+    }
+    return ticket;
+  }
+
+  // --- Agent Memory / Decision Trace ---
+
+  async addAgentMemory(entry: AgentMemoryEntry): Promise<void> {
+    this.agentMemoryEntries.unshift(entry);
+    if (this.agentMemoryEntries.length > AGENT_MEMORY_MAX) {
+      this.agentMemoryEntries = this.agentMemoryEntries.slice(0, AGENT_MEMORY_MAX);
+    }
+  }
+
+  async queryAgentMemory(query?: AgentMemoryQuery): Promise<AgentMemoryEntry[]> {
+    const limit = Math.min(Math.max(query?.limit ?? 50, 1), 500);
+    return this.agentMemoryEntries
+      .filter((entry) => matchesAgentMemoryQuery(entry, query))
+      .slice(0, limit);
+  }
+
+  async addDecisionTrace(trace: DecisionTrace): Promise<void> {
+    this.decisionTraceMap.set(trace.decisionId, trace);
+    this.decisionTraceOrder = this.decisionTraceOrder.filter((id) => id !== trace.decisionId);
+    this.decisionTraceOrder.unshift(trace.decisionId);
+    if (this.decisionTraceOrder.length > DECISION_TRACE_MAX) {
+      const removed = this.decisionTraceOrder.slice(DECISION_TRACE_MAX);
+      this.decisionTraceOrder = this.decisionTraceOrder.slice(0, DECISION_TRACE_MAX);
+      for (const id of removed) {
+        this.decisionTraceMap.delete(id);
+      }
+    }
+  }
+
+  async getDecisionTrace(decisionId: string): Promise<DecisionTrace | null> {
+    return this.decisionTraceMap.get(decisionId) || null;
+  }
+
+  async listDecisionTraces(query?: DecisionTraceQuery): Promise<DecisionTrace[]> {
+    const limit = Math.min(Math.max(query?.limit ?? 50, 1), 500);
+    const traces: DecisionTrace[] = [];
+
+    for (const id of this.decisionTraceOrder) {
+      const trace = this.decisionTraceMap.get(id);
+      if (!trace) continue;
+      if (matchesDecisionTraceQuery(trace, query)) {
+        traces.push(trace);
+      }
+      if (traces.length >= limit) break;
+    }
+
+    return traces;
+  }
+
+  async cleanupAgentMemory(beforeTimestamp: number): Promise<number> {
+    const originalMemorySize = this.agentMemoryEntries.length;
+    this.agentMemoryEntries = this.agentMemoryEntries.filter((entry) => {
+      const ts = new Date(entry.timestamp).getTime();
+      return !Number.isFinite(ts) || ts >= beforeTimestamp;
+    });
+    let removed = originalMemorySize - this.agentMemoryEntries.length;
+
+    const nextOrder: string[] = [];
+    for (const id of this.decisionTraceOrder) {
+      const trace = this.decisionTraceMap.get(id);
+      if (!trace) continue;
+      const ts = new Date(trace.timestamp).getTime();
+      if (Number.isFinite(ts) && ts < beforeTimestamp) {
+        this.decisionTraceMap.delete(id);
+        removed++;
+      } else {
+        nextOrder.push(id);
+      }
+    }
+    this.decisionTraceOrder = nextOrder;
+
+    return removed;
   }
 
   // === P1: Anomaly Event Store ===

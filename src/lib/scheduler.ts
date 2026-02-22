@@ -13,6 +13,7 @@ import { generateDailyReport } from '@/lib/daily-report-generator';
 import { deliverDailyReport } from '@/lib/daily-report-mailer';
 import { runAgentCycle } from '@/lib/agent-loop';
 import { applyScheduledScaling, buildScheduleProfile } from '@/lib/scheduled-scaler';
+import { cleanupExpiredAgentMemory } from '@/lib/agent-memory';
 
 let initialized = false;
 let agentTask: ScheduledTask | null = null;
@@ -98,6 +99,10 @@ export async function initializeScheduler(): Promise<void> {
     reportTaskRunning = true;
     try {
       console.info('[Scheduler] Starting daily report generation...');
+      const removedMemoryEntries = await cleanupExpiredAgentMemory();
+      if (removedMemoryEntries > 0) {
+        console.info(`[Scheduler] Agent memory cleanup removed ${removedMemoryEntries} entries`);
+      }
       const data = await getAccumulatedData();
       if (data) {
         const result = await generateDailyReport(data);

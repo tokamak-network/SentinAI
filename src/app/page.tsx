@@ -173,7 +173,25 @@ interface DetectionInfo {
 
 interface AgentCycleData {
   timestamp: string;
-  phase: 'observe' | 'detect' | 'decide' | 'act' | 'complete' | 'error';
+  phase: 'observe' | 'detect' | 'analyze' | 'plan' | 'act' | 'verify' | 'complete' | 'error';
+  decisionId?: string;
+  phaseTrace?: {
+    phase: 'observe' | 'detect' | 'analyze' | 'plan' | 'act' | 'verify';
+    startedAt: string;
+    endedAt: string;
+    ok: boolean;
+    error?: string;
+  }[];
+  verification?: {
+    expected: string;
+    observed: string;
+    passed: boolean;
+    details?: string;
+  };
+  degraded?: {
+    active: boolean;
+    reasons: string[];
+  };
   metrics: {
     l1BlockHeight: number;
     l2BlockHeight: number;
@@ -188,6 +206,7 @@ interface AgentCycleData {
     targetVcpu: number;
     executed: boolean;
     reason: string;
+    confidence?: number;
   } | null;
   failover?: {
     triggered: boolean;
@@ -219,6 +238,34 @@ interface AgentLoopStatus {
     autoScalingEnabled: boolean;
     simulationMode: boolean;
     cooldownRemaining: number;
+  };
+}
+
+interface DecisionTraceData {
+  decisionId: string;
+  timestamp: string;
+  chainType: string;
+  reasoningSummary: string;
+  chosenAction: string;
+  alternatives: string[];
+  evidence: Array<{
+    type: string;
+    key: string;
+    value: string;
+    source?: string;
+  }>;
+  phaseTrace: Array<{
+    phase: string;
+    startedAt: string;
+    endedAt: string;
+    ok: boolean;
+    error?: string;
+  }>;
+  verification: {
+    expected: string;
+    observed: string;
+    passed: boolean;
+    details?: string;
   };
 }
 
@@ -294,6 +341,9 @@ export default function Dashboard() {
   // --- Agent Loop State ---
   const [agentLoop, setAgentLoop] = useState<AgentLoopStatus | null>(null);
   const [showFullHistory, setShowFullHistory] = useState(false);
+  const [selectedDecisionTrace, setSelectedDecisionTrace] = useState<DecisionTraceData | null>(null);
+  const [decisionTraceLoading, setDecisionTraceLoading] = useState(false);
+  const [decisionTraceError, setDecisionTraceError] = useState<string | null>(null);
 
   // --- Cost Analysis State ---
   const [costAnalysisExpanded, setCostAnalysisExpanded] = useState(false);
@@ -396,6 +446,34 @@ export default function Dashboard() {
       e.preventDefault();
       sendChatMessage(chatInput);
     }
+  };
+
+  const openDecisionTrace = async (decisionId: string) => {
+    setDecisionTraceLoading(true);
+    setDecisionTraceError(null);
+    try {
+      const response = await fetch(
+        `${BASE_PATH}/api/agent-decisions?decisionId=${encodeURIComponent(decisionId)}`,
+        { cache: 'no-store' }
+      );
+      const data = await response.json();
+      if (!response.ok || !data.trace) {
+        throw new Error(data?.error || '의사결정 추적 정보를 불러오지 못했습니다.');
+      }
+      setSelectedDecisionTrace(data.trace as DecisionTraceData);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '의사결정 추적 정보를 불러오지 못했습니다.';
+      setDecisionTraceError(message);
+      setSelectedDecisionTrace(null);
+    } finally {
+      setDecisionTraceLoading(false);
+    }
+  };
+
+  const closeDecisionTrace = () => {
+    setSelectedDecisionTrace(null);
+    setDecisionTraceError(null);
+    setDecisionTraceLoading(false);
   };
 
   // Track active abort controller to cancel pending requests
@@ -1191,6 +1269,7 @@ export default function Dashboard() {
                       const dir = a.direction === 'spike' ? '↑' : a.direction === 'drop' ? '↓' : '~';
                       return `${name}${dir}`;
                     }).join(' ');
+                    const phaseSummary = cycle.phaseTrace?.map((entry) => `${entry.phase}:${entry.ok ? 'ok' : 'err'}`).join(' > ');
 
                     return (
                       <div key={idx} className={`flex flex-col gap-2 leading-relaxed ${event === 'IDLE' ? 'opacity-70' : ''} ${borderColor}`}>
@@ -1199,6 +1278,29 @@ export default function Dashboard() {
                             <span className="text-gray-700">{date}</span> {time}
                           </span>
                           <span className={`inline-flex items-center px-2 py-0.5 rounded border border-current/20 bg-black/10 font-bold text-[10px] tracking-wide shrink-0 ${color}`}>{event}</span>
+                          {cycle.decisionId && (
+                            <button
+                              onClick={() => openDecisionTrace(cycle.decisionId!)}
+                              className="inline-flex items-center px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold shrink-0 hover:bg-cyan-500/20 transition-colors"
+                              title="의사결정 추적 보기"
+                            >
+                              id {cycle.decisionId.slice(0, 8)}
+                            </button>
+                          )}
+                          {cycle.verification && (
+                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-bold shrink-0 ${
+                              cycle.verification.passed
+                                ? 'bg-green-500/10 text-green-400 border-green-500/20'
+                                : 'bg-red-500/10 text-red-400 border-red-500/20'
+                            }`}>
+                              verify:{cycle.verification.passed ? 'pass' : 'fail'}
+                            </span>
+                          )}
+                          {cycle.degraded?.active && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[10px] font-bold shrink-0">
+                              degraded
+                            </span>
+                          )}
                           {metrics && event !== 'ERROR' && (
                             <>
                               <span className={`inline-flex items-center px-1.5 py-0.5 rounded bg-gray-800/40 text-[10px] shrink-0 ${event === 'IDLE' ? 'text-gray-600' : 'text-gray-400'}`}>cpu {metrics.cpuUsage.toFixed(1)}%</span>
@@ -1247,6 +1349,12 @@ export default function Dashboard() {
                           {scaling?.executed && <Zap size={12} className="text-amber-500 shrink-0" />}
                         </div>
                         {detail && <div className="text-gray-500 break-words text-[11px] pl-0.5">{detail}</div>}
+                        {phaseSummary && <div className="text-gray-600 break-words text-[10px] pl-0.5">trace {phaseSummary}</div>}
+                        {cycle.degraded?.active && cycle.degraded.reasons.length > 0 && (
+                          <div className="text-amber-400/80 break-words text-[10px] pl-0.5">
+                            degraded reason: {cycle.degraded.reasons.join(' | ')}
+                          </div>
+                        )}
                       </div>
                     );
                   }) : (
@@ -1406,6 +1514,101 @@ export default function Dashboard() {
         </div>
       </div>
 
+
+      {/* Decision Trace Modal */}
+      {(decisionTraceLoading || decisionTraceError || selectedDecisionTrace) && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-gray-200 max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white">
+              <div>
+                <h3 className="text-sm font-bold text-gray-900">의사결정 추적</h3>
+                {selectedDecisionTrace?.decisionId && (
+                  <p className="text-[11px] text-gray-500 font-mono mt-0.5">
+                    {selectedDecisionTrace.decisionId}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={closeDecisionTrace}
+                className="text-xs font-semibold text-gray-500 hover:text-gray-800"
+              >
+                닫기
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              {decisionTraceLoading && (
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <RefreshCw size={14} className="animate-spin text-blue-500" />
+                  추적 데이터를 불러오는 중입니다...
+                </div>
+              )}
+
+              {!decisionTraceLoading && decisionTraceError && (
+                <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg px-3 py-2">
+                  {decisionTraceError}
+                </div>
+              )}
+
+              {!decisionTraceLoading && selectedDecisionTrace && (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                      <p className="text-[10px] text-gray-400 font-semibold uppercase">Reasoning</p>
+                      <p className="text-xs text-gray-700 mt-1 leading-relaxed break-words">
+                        {selectedDecisionTrace.reasoningSummary}
+                      </p>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
+                      <p className="text-[10px] text-gray-400 font-semibold uppercase">Action</p>
+                      <p className="text-xs text-gray-700 mt-1 font-mono">{selectedDecisionTrace.chosenAction}</p>
+                      <p className={`text-[11px] mt-2 font-semibold ${selectedDecisionTrace.verification.passed ? 'text-green-600' : 'text-red-600'}`}>
+                        검증: {selectedDecisionTrace.verification.passed ? '성공' : '실패'}
+                      </p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        expected={selectedDecisionTrace.verification.expected}, observed={selectedDecisionTrace.verification.observed}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-gray-100 rounded-xl p-3">
+                    <p className="text-[10px] text-gray-400 font-semibold uppercase mb-2">Evidence</p>
+                    <div className="space-y-1.5">
+                      {selectedDecisionTrace.evidence.map((item, index) => (
+                        <div key={`${item.key}-${index}`} className="text-xs text-gray-700 flex items-center gap-2">
+                          <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-600 text-[10px] font-bold">
+                            {item.type}
+                          </span>
+                          <span className="font-mono text-gray-500">{item.key}</span>
+                          <span className="break-words">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-gray-100 rounded-xl p-3">
+                    <p className="text-[10px] text-gray-400 font-semibold uppercase mb-2">Phase Trace</p>
+                    <div className="space-y-1.5">
+                      {selectedDecisionTrace.phaseTrace.map((entry, index) => (
+                        <div key={`${entry.phase}-${index}`} className="flex items-center gap-2 text-xs">
+                          <span className="font-mono text-gray-500 w-16">{entry.phase}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${entry.ok ? 'bg-green-50 text-green-600' : 'bg-red-50 text-red-600'}`}>
+                            {entry.ok ? 'ok' : 'error'}
+                          </span>
+                          <span className="text-gray-500 font-mono">
+                            {new Date(entry.startedAt).toLocaleTimeString()} - {new Date(entry.endedAt).toLocaleTimeString()}
+                          </span>
+                          {entry.error && <span className="text-red-500 break-words">{entry.error}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ============================================================ */}
       {/* NLOps Chat Interface                                         */}

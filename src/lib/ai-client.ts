@@ -12,6 +12,17 @@
  *   GEMINI_API_KEY       - Google (Gemini) API key
  */
 
+import { randomUUID } from 'crypto';
+import {
+  estimateRequestCost,
+  getRoutingPolicy,
+  recordRoutingDecision,
+  resolveTaskClass,
+  selectProvidersForTask,
+  shouldApplyRoutingSample,
+} from '@/lib/ai-routing';
+import type { RoutingModelTier, RoutingPolicyName, RoutingTaskClass } from '@/types/ai-routing';
+
 // =====================================================
 // Types
 // =====================================================
@@ -80,120 +91,85 @@ interface ProviderConfig {
   baseUrl: string;
 }
 
-function detectProvider(modelTier: ModelTier, modelName?: string): ProviderConfig {
+function getApiKeyForProvider(provider: AIProvider): string | undefined {
+  if (provider === 'qwen') return process.env.QWEN_API_KEY;
+  if (provider === 'anthropic') return process.env.ANTHROPIC_API_KEY;
+  if (provider === 'openai') return process.env.GPT_API_KEY || process.env.OPENAI_API_KEY;
+  return process.env.GEMINI_API_KEY;
+}
+
+function inferProviderFromModelName(modelName: string): AIProvider {
+  if (modelName.startsWith('qwen') || modelName.startsWith('qwen3')) return 'qwen';
+  if (modelName.startsWith('claude')) return 'anthropic';
+  if (modelName.startsWith('gemini')) return 'gemini';
+  return 'openai';
+}
+
+function buildProviderConfig(provider: AIProvider, modelTier: ModelTier, modelName?: string): ProviderConfig {
+  const apiKey = getApiKeyForProvider(provider);
+  if (!apiKey) {
+    throw new Error(`No API key configured for provider: ${provider}`);
+  }
+
   const gatewayUrl = process.env.AI_GATEWAY_URL;
+  return {
+    provider,
+    apiKey,
+    model: modelName || MODEL_MAP[provider][modelTier],
+    baseUrl: gatewayUrl || DEFAULT_BASE_URLS[provider],
+  };
+}
 
-  // If explicit modelName is provided, infer provider from model name
+function resolveProviderSequence(options: ChatCompletionOptions): {
+  providers: AIProvider[];
+  taskClass: RoutingTaskClass;
+  policyName: RoutingPolicyName;
+  budgetConstrained: boolean;
+} {
+  const { modelTier, modelName, systemPrompt, userPrompt } = options;
+  const policy = getRoutingPolicy();
+  const taskClass = resolveTaskClass(modelTier as RoutingModelTier);
+
   if (modelName) {
-    let provider: AIProvider = 'openai';
-    if (modelName.startsWith('qwen') || modelName.startsWith('qwen3')) {
-      provider = 'qwen';
-    } else if (modelName.startsWith('claude')) {
-      provider = 'anthropic';
-    } else if (modelName.startsWith('gemini')) {
-      provider = 'gemini';
-    }
-    // 'gpt', 'gpt-5', 'gpt-4', etc. stay as 'openai'
-
-    // When using gateway, select API key based on detected provider
-    if (gatewayUrl) {
-      // Select API key matching the provider (not just any key)
-      let apiKey: string | undefined;
-
-      if (provider === 'qwen') {
-        apiKey = process.env.QWEN_API_KEY;
-      } else if (provider === 'anthropic') {
-        apiKey = process.env.ANTHROPIC_API_KEY;
-      } else if (provider === 'openai') {
-        // For GPT models, prioritize GPT_API_KEY, then fallback to OPENAI_API_KEY
-        apiKey = process.env.GPT_API_KEY || process.env.OPENAI_API_KEY;
-      } else if (provider === 'gemini') {
-        apiKey = process.env.GEMINI_API_KEY;
-      }
-
-      if (!apiKey) {
-        throw new Error(`No API key configured for provider: ${provider}. Set ${provider.toUpperCase()}_API_KEY.`);
-      }
-
-      return {
-        provider,
-        apiKey,
-        model: modelName,
-        baseUrl: gatewayUrl,
-      };
-    }
-
-    // Without gateway, use provider-specific logic
-    let apiKey: string | undefined;
-    if (provider === 'qwen') {
-      apiKey = process.env.QWEN_API_KEY;
-    } else if (provider === 'anthropic') {
-      apiKey = process.env.ANTHROPIC_API_KEY;
-    } else if (provider === 'openai') {
-      apiKey = process.env.GPT_API_KEY || process.env.OPENAI_API_KEY;
-    } else if (provider === 'gemini') {
-      apiKey = process.env.GEMINI_API_KEY;
-    }
-
-    if (!apiKey) {
+    const provider = inferProviderFromModelName(modelName);
+    if (!getApiKeyForProvider(provider)) {
       throw new Error(`No API key configured for provider: ${provider}`);
     }
-
     return {
-      provider,
-      apiKey,
-      model: modelName,
-      baseUrl: gatewayUrl || DEFAULT_BASE_URLS[provider],
+      providers: [provider],
+      taskClass,
+      policyName: policy.name,
+      budgetConstrained: false,
     };
   }
 
-  // Priority 1: Qwen (DashScope or any OpenAI-compatible endpoint)
-  const qwenKey = process.env.QWEN_API_KEY;
-  if (qwenKey) {
-    return {
-      provider: 'qwen',
-      apiKey: qwenKey,
-      model: MODEL_MAP.qwen[modelTier],
-      baseUrl: gatewayUrl || DEFAULT_BASE_URLS.qwen,
-    };
+  const fallbackOrder: AIProvider[] = ['qwen', 'anthropic', 'openai', 'gemini'];
+  const routingSampleSeed = `${modelTier}:${systemPrompt.slice(0, 24)}:${userPrompt.slice(0, 24)}`;
+  const useRoutingOrder = policy.enabled && shouldApplyRoutingSample(routingSampleSeed, policy.abPercent);
+
+  let providerOrder: AIProvider[] = fallbackOrder;
+  let policyName: RoutingPolicyName = policy.name;
+  let budgetConstrained = false;
+  if (useRoutingOrder) {
+    const selected = selectProvidersForTask(taskClass, policy);
+    providerOrder = selected.providers as AIProvider[];
+    policyName = selected.appliedPolicy;
+    budgetConstrained = selected.budgetConstrained;
   }
 
-  // Priority 2: Anthropic (Claude)
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  if (anthropicKey) {
-    return {
-      provider: 'anthropic',
-      apiKey: anthropicKey,
-      model: MODEL_MAP.anthropic[modelTier],
-      baseUrl: gatewayUrl || DEFAULT_BASE_URLS.anthropic,
-    };
+  const configuredProviders = providerOrder.filter((provider) => Boolean(getApiKeyForProvider(provider)));
+  if (configuredProviders.length === 0) {
+    throw new Error(
+      'No AI API key configured. Set QWEN_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY.'
+    );
   }
 
-  // Priority 3: OpenAI (GPT)
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (openaiKey) {
-    return {
-      provider: 'openai',
-      apiKey: openaiKey,
-      model: MODEL_MAP.openai[modelTier],
-      baseUrl: gatewayUrl || DEFAULT_BASE_URLS.openai,
-    };
-  }
-
-  // Priority 4: Gemini
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (geminiKey) {
-    return {
-      provider: 'gemini',
-      apiKey: geminiKey,
-      model: MODEL_MAP.gemini[modelTier],
-      baseUrl: gatewayUrl || DEFAULT_BASE_URLS.gemini,
-    };
-  }
-
-  throw new Error(
-    'No AI API key configured. Set QWEN_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY.'
-  );
+  return {
+    providers: configuredProviders,
+    taskClass,
+    policyName,
+    budgetConstrained,
+  };
 }
 
 // =====================================================
@@ -399,13 +375,10 @@ async function callGemini(
   };
 }
 
-// =====================================================
-// Main Export
-// =====================================================
-
-export async function chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult> {
-  const config = detectProvider(options.modelTier, options.modelName);
-
+async function callProvider(
+  config: ProviderConfig,
+  options: ChatCompletionOptions
+): Promise<ChatCompletionResult> {
   switch (config.provider) {
     case 'qwen':
       return callQwen(config, options);
@@ -418,14 +391,81 @@ export async function chatCompletion(options: ChatCompletionOptions): Promise<Ch
   }
 }
 
+// =====================================================
+// Main Export
+// =====================================================
+
+export async function chatCompletion(options: ChatCompletionOptions): Promise<ChatCompletionResult> {
+  const sequence = resolveProviderSequence(options);
+  const attemptErrors: string[] = [];
+  const requestId = randomUUID();
+
+  for (let attemptIndex = 0; attemptIndex < sequence.providers.length; attemptIndex++) {
+    const provider = sequence.providers[attemptIndex];
+    const startedAt = Date.now();
+    let config: ProviderConfig;
+    try {
+      config = buildProviderConfig(provider, options.modelTier, options.modelName);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      attemptErrors.push(`${provider}: ${message}`);
+      continue;
+    }
+
+    try {
+      const result = await callProvider(config, options);
+      recordRoutingDecision({
+        requestId,
+        attempt: attemptIndex + 1,
+        timestamp: new Date().toISOString(),
+        taskClass: sequence.taskClass,
+        provider: config.provider,
+        model: result.model,
+        modelTier: options.modelTier as RoutingModelTier,
+        policyName: sequence.policyName,
+        latencyMs: Date.now() - startedAt,
+        success: true,
+        budgetConstrained: sequence.budgetConstrained,
+        estimatedCostUsd: estimateRequestCost(config.provider, options.modelTier as RoutingModelTier),
+      });
+      return result;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      attemptErrors.push(`${provider}: ${message}`);
+      recordRoutingDecision({
+        requestId,
+        attempt: attemptIndex + 1,
+        timestamp: new Date().toISOString(),
+        taskClass: sequence.taskClass,
+        provider: config.provider,
+        model: config.model,
+        modelTier: options.modelTier as RoutingModelTier,
+        policyName: sequence.policyName,
+        latencyMs: Date.now() - startedAt,
+        success: false,
+        error: message,
+        budgetConstrained: sequence.budgetConstrained,
+      });
+    }
+  }
+
+  throw new Error(`All AI providers failed: ${attemptErrors.join(' | ')}`);
+}
+
 /**
  * Return information about the current configured AI provider
  */
 export function getProviderInfo(): { provider: AIProvider; hasGateway: boolean } | null {
   try {
-    const config = detectProvider('fast');
+    const sequence = resolveProviderSequence({
+      systemPrompt: 'provider info',
+      userPrompt: 'provider info',
+      modelTier: 'fast',
+    });
+    const provider = sequence.providers[0];
+    if (!provider) return null;
     return {
-      provider: config.provider,
+      provider,
       hasGateway: !!process.env.AI_GATEWAY_URL,
     };
   } catch {

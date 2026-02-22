@@ -2,6 +2,27 @@
 
 ## Current Status
 
+### In Progress (2026-02-21 Q1 Strategic Roadmap Documentation)
+- [x] Q1 scope fixed to Phase 1 core only (MCP, Guardian v2, Memory/Trace, Model Routing)
+- [x] Proposal 21 draft created: `docs/todo/proposal-21-mcp-control-plane.md`
+- [x] Proposal 22 draft created: `docs/todo/proposal-22-guardian-agent-v2.md`
+- [x] Proposal 23 draft created: `docs/todo/proposal-23-agent-memory-and-reasoning-trace.md`
+- [x] Proposal 24 draft created: `docs/todo/proposal-24-model-routing-and-cost-policy.md`
+- [x] Proposal 21 MCP baseline implementation start (`src/app/api/mcp/route.ts`, `src/lib/mcp-server.ts`, `src/types/mcp.ts`)
+- [x] MCP approval token state store added (`src/types/redis.ts`, `src/lib/redis-store.ts`)
+- [x] MCP baseline unit tests added (`src/lib/__tests__/mcp-server.test.ts`)
+- [x] Proposal 22 Guardian v2 baseline start (`src/lib/agent-loop.ts` phase split + `decisionId` + verification + phase trace)
+- [x] Proposal 23 Memory/Trace baseline start (`src/types/agent-memory.ts`, `src/lib/agent-memory.ts`, `/api/agent-memory`, `/api/agent-decisions`)
+- [x] Proposal 24 Routing baseline start (`src/types/ai-routing.ts`, `src/lib/ai-routing.ts`, `/api/ai-routing/status`, `/api/ai-routing/policy`)
+- [x] 22-24 baseline tests added/updated (`src/lib/__tests__/ai-routing.test.ts`, `src/lib/__tests__/redis-store.test.ts`, `src/lib/__tests__/agent-loop.test.ts`)
+- [x] Proposal 22 runtime hardening (`observe` fallback to last-safe metrics, `act` failure degraded completion, activity log decision/verify/phase trace exposure)
+- [x] Proposal 23 planning integration (memory retrieval hook connected to scaling plan reasoning)
+- [x] Proposal 24 runtime hardening (multi-provider fallback retries, circuit-breaker, budget-constrained routing policy switch, routing status circuit/budget telemetry)
+- [x] 22-24 hardening tests added (`agent-loop` degraded/fallback path, `ai-routing` circuit/budget path, `ai-client` provider fallback path)
+- [x] Proposal 23 dashboard drill-down (`decisionId` click -> `/api/agent-decisions` trace modal)
+- [x] Proposal 24 policy write auth guard (`POST /api/ai-routing/policy` admin key required + route test)
+- [x] Proposal 22/24 runbook added (`docs/guide/agentic-q1-operations-runbook.md`)
+
 ### In Progress (2026-02-20 Proposal 10/15/19 MVP Start)
 - [x] Proposal 19 Savings Plans Advisor type/analysis logic implementation (`src/types/savings-advisor.ts`, `src/lib/savings-advisor.ts`)
 - [x] Savings Advisor API 추가 (`GET /api/savings-advisor`)
@@ -147,4 +168,4 @@
 
 ---
 
-**Updated:** 2026-02-19
+**Updated:** 2026-02-22
