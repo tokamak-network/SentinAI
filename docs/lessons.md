@@ -20,6 +20,10 @@
 - Rule: MCP bridge diagnostics always go to stderr, and stdout writes must be limited to encoded protocol frames.
 - Content-Length frame parsing can silently desync on malformed headers if rest-buffer handling is lax.
 - Rule: Keep framed parser isolated as a pure utility with unit tests for multi-frame, partial-frame, and malformed-header paths.
+- Authorization rules duplicated across route and tool handlers drift quickly and create inconsistent denial reasons.
+- Rule: Centralize guard evaluation in a policy engine and return machine-readable reason codes from a single decision path.
+- Approval token logic (hashing, expiry, consume-once) is easy to fork incorrectly when implemented inline in handlers.
+- Rule: Keep approval ticket issue/validate/consume in a dedicated engine and call it from handlers instead of re-implementing.
 
 ## 2026-02-21
 

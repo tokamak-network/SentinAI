@@ -3,9 +3,7 @@
  * Handles JSON-RPC tool invocation and policy enforcement.
  */
 
-import { createHash, randomUUID } from 'crypto';
 import { getChainPlugin } from '@/chains';
-import { getStore } from '@/lib/redis-store';
 import { getRecentMetrics, getMetricsCount } from '@/lib/metrics-store';
 import { getEvents } from '@/lib/anomaly-event-store';
 import { detectAnomalies } from '@/lib/anomaly-detector';
@@ -19,11 +17,19 @@ import {
 import { addScalingEvent } from '@/lib/daily-accumulator';
 import { executeAction } from '@/lib/action-executor';
 import { buildGoalPlan, executeGoalPlan, saveGoalPlan } from '@/lib/goal-planner';
+import {
+  getApprovalTokenFromParams,
+  issueApprovalTicket as issueApprovalTicketCore,
+  validateAndConsumeApprovalTicket,
+} from '@/lib/approval-engine';
+import {
+  evaluateMcpApprovalIssuePolicy,
+  evaluateMcpToolPolicy,
+} from '@/lib/policy-engine';
 import type { RemediationAction } from '@/types/remediation';
 import type { TargetMemoryGiB, TargetVcpu } from '@/types/scaling';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 import type {
-  McpApprovalTicket,
   McpAuthMode,
   McpJsonRpcId,
   McpJsonRpcRequest,
@@ -33,6 +39,7 @@ import type {
   McpToolDefinition,
   McpToolName,
 } from '@/types/mcp';
+import type { PolicyReasonCode } from '@/types/policy';
 
 const MCP_ERROR = {
   PARSE_ERROR: -32700,
@@ -208,96 +215,17 @@ function normalizeToolName(method: string): McpToolName | null {
     : null;
 }
 
-function stableSerialize(value: unknown): string {
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableSerialize(item)).join(',')}]`;
+function mapPolicyReasonToMcpErrorCode(reasonCode: PolicyReasonCode): number {
+  if (reasonCode === 'api_key_invalid' || reasonCode === 'api_key_not_configured') {
+    return MCP_ERROR.UNAUTHORIZED;
   }
-  if (isObject(value)) {
-    const keys = Object.keys(value).sort();
-    const body = keys
-      .map((key) => `${JSON.stringify(key)}:${stableSerialize(value[key])}`)
-      .join(',');
-    return `{${body}}`;
+  if (reasonCode === 'read_only_write_blocked') {
+    return MCP_ERROR.FORBIDDEN_READ_ONLY;
   }
-  return JSON.stringify(value);
-}
-
-function stripApprovalToken(params: unknown): unknown {
-  if (!isObject(params)) return params;
-  const copied: Record<string, unknown> = { ...params };
-  delete copied.approvalToken;
-  return copied;
-}
-
-function hashParams(params: unknown): string {
-  return createHash('sha256').update(stableSerialize(params)).digest('hex');
-}
-
-function requiresApiKey(authMode: McpAuthMode): boolean {
-  return authMode === 'api-key' || authMode === 'dual';
-}
-
-function needsApprovalToken(config: McpServerConfig, toolName: McpToolName): boolean {
-  if (!WRITE_TOOLS.has(toolName)) return false;
-  if (config.authMode === 'approval-token' || config.authMode === 'dual') return true;
-  return config.approvalRequired;
-}
-
-function getApprovalTokenFromParams(params: unknown): string | undefined {
-  if (!isObject(params)) return undefined;
-  return typeof params.approvalToken === 'string' ? params.approvalToken : undefined;
-}
-
-async function validateAndConsumeTicket(
-  token: string,
-  toolName: McpToolName,
-  params: unknown
-): Promise<{ ok: true; ticket: McpApprovalTicket } | { ok: false; reason: string }> {
-  const ticket = await getStore().consumeMcpApprovalTicket(token);
-  if (!ticket) {
-    return { ok: false, reason: '승인 토큰이 없거나 이미 사용되었습니다.' };
+  if (reasonCode === 'approval_required') {
+    return MCP_ERROR.APPROVAL_REQUIRED;
   }
-
-  if (ticket.toolName !== toolName) {
-    return { ok: false, reason: '승인 토큰의 대상 도구가 일치하지 않습니다.' };
-  }
-
-  if (new Date(ticket.expiresAt).getTime() <= Date.now()) {
-    return { ok: false, reason: '승인 토큰이 만료되었습니다.' };
-  }
-
-  const currentHash = hashParams(stripApprovalToken(params));
-  if (ticket.paramsHash !== currentHash) {
-    return { ok: false, reason: '승인 토큰의 요청 파라미터가 일치하지 않습니다.' };
-  }
-
-  return { ok: true, ticket };
-}
-
-function assertApiKeyForRequest(
-  config: McpServerConfig,
-  context: McpRequestContext
-): string | null {
-  if (!requiresApiKey(config.authMode)) return null;
-
-  const configuredApiKey = process.env.SENTINAI_API_KEY;
-  if (!configuredApiKey) {
-    return 'MCP 인증 모드가 API 키를 요구하지만 SENTINAI_API_KEY가 설정되지 않았습니다.';
-  }
-  if (context.apiKey !== configuredApiKey) {
-    return '유효하지 않은 x-api-key 입니다.';
-  }
-  return null;
-}
-
-function isReadOnlyWriteBlocked(context: McpRequestContext, toolName: McpToolName): boolean {
-  if (!context.readOnlyMode) return false;
-  if (!WRITE_TOOLS.has(toolName)) return false;
-
-  if (toolName === 'scale_component' && context.allowScalerWriteInReadOnly) {
-    return false;
-  }
-  return true;
+  return MCP_ERROR.INTERNAL_ERROR;
 }
 
 async function issueApprovalTicket(
@@ -319,30 +247,18 @@ async function issueApprovalTicket(
     3600,
     config.approvalTtlSeconds
   );
-  const createdAt = new Date();
-  const expiresAt = new Date(createdAt.getTime() + ttlSeconds * 1000);
-
-  const ticket: McpApprovalTicket = {
-    id: randomUUID(),
+  const issueResult = await issueApprovalTicketCore({
     toolName,
-    paramsHash: hashParams(stripApprovalToken(params.toolParams)),
-    createdAt: createdAt.toISOString(),
-    expiresAt: expiresAt.toISOString(),
+    toolParams: params.toolParams,
+    ttlSeconds,
     approvedBy: typeof params.approvedBy === 'string' ? params.approvedBy : undefined,
     reason: typeof params.reason === 'string' ? params.reason : undefined,
-  };
-
-  await getStore().createMcpApprovalTicket(ticket);
+  });
 
   return {
     jsonrpc: '2.0',
     id: null,
-    result: {
-      approvalToken: ticket.id,
-      toolName: ticket.toolName,
-      expiresAt: ticket.expiresAt,
-      ttlSeconds,
-    },
+    result: issueResult,
   };
 }
 
@@ -566,30 +482,42 @@ async function invokeToolWithGuards(
   config: McpServerConfig,
   standardCall: boolean
 ): Promise<McpJsonRpcResponse> {
-  const authError = assertApiKeyForRequest(config, context);
-  if (authError) {
-    return buildError(id, MCP_ERROR.UNAUTHORIZED, authError);
-  }
+  const writeOperation = WRITE_TOOLS.has(toolName);
+  const policyDecision = evaluateMcpToolPolicy({
+    toolName,
+    writeOperation,
+    authMode: config.authMode,
+    approvalRequired: config.approvalRequired,
+    apiKeyProvided: context.apiKey,
+    configuredApiKey: process.env.SENTINAI_API_KEY,
+    readOnlyMode: context.readOnlyMode,
+    allowScalerWriteInReadOnly: context.allowScalerWriteInReadOnly,
+  });
 
-  if (isReadOnlyWriteBlocked(context, toolName)) {
+  if (policyDecision.decision === 'deny') {
     return buildError(
       id,
-      MCP_ERROR.FORBIDDEN_READ_ONLY,
-      '읽기 전용 모드에서는 해당 MCP 쓰기 도구를 실행할 수 없습니다.'
+      mapPolicyReasonToMcpErrorCode(policyDecision.reasonCode),
+      policyDecision.message,
+      { reasonCode: policyDecision.reasonCode }
     );
   }
 
   const startedAt = Date.now();
   try {
-    if (needsApprovalToken(config, toolName)) {
+    if (policyDecision.decision === 'require_approval' || policyDecision.decision === 'require_multi_approval') {
       const token = context.approvalToken || getApprovalTokenFromParams(params);
       if (!token) {
-        return buildError(id, MCP_ERROR.APPROVAL_REQUIRED, '승인 토큰이 필요합니다.');
+        return buildError(id, MCP_ERROR.APPROVAL_REQUIRED, policyDecision.message, {
+          reasonCode: policyDecision.reasonCode,
+        });
       }
 
-      const ticketResult = await validateAndConsumeTicket(token, toolName, params);
+      const ticketResult = await validateAndConsumeApprovalTicket(token, toolName, params);
       if (!ticketResult.ok) {
-        return buildError(id, MCP_ERROR.APPROVAL_REQUIRED, ticketResult.reason);
+        return buildError(id, MCP_ERROR.APPROVAL_REQUIRED, ticketResult.message, {
+          reasonCode: ticketResult.reasonCode,
+        });
       }
     }
 
@@ -710,9 +638,17 @@ export async function handleMcpRequest(
   }
 
   if (request.method === 'mcp.request_approval') {
-    const configuredApiKey = process.env.SENTINAI_API_KEY;
-    if (configuredApiKey && context.apiKey !== configuredApiKey) {
-      return buildError(id, MCP_ERROR.UNAUTHORIZED, '승인 토큰 발급 권한이 없습니다.');
+    const policyDecision = evaluateMcpApprovalIssuePolicy({
+      apiKeyProvided: context.apiKey,
+      configuredApiKey: process.env.SENTINAI_API_KEY,
+    });
+    if (policyDecision.decision === 'deny') {
+      return buildError(
+        id,
+        mapPolicyReasonToMcpErrorCode(policyDecision.reasonCode),
+        policyDecision.message,
+        { reasonCode: policyDecision.reasonCode }
+      );
     }
 
     const ticketResponse = await issueApprovalTicket(request.params, config);

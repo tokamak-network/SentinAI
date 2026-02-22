@@ -13,6 +13,7 @@ import {
   getGoalPlanHistory,
   saveGoalPlan,
 } from '@/lib/goal-planner';
+import { evaluateGoalExecutionPolicy } from '@/lib/policy-engine';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,9 +61,15 @@ export async function POST(request: NextRequest) {
     const dryRun = body.dryRun !== false;
     const allowWrites = body.allowWrites === true;
 
-    if (autoExecute && allowWrites && isReadOnlyMode()) {
+    const policyDecision = evaluateGoalExecutionPolicy({
+      autoExecute,
+      allowWrites,
+      readOnlyMode: isReadOnlyMode(),
+    });
+
+    if (policyDecision.decision === 'deny') {
       return NextResponse.json(
-        { error: 'Write execution is blocked in read-only mode' },
+        { error: policyDecision.message, reasonCode: policyDecision.reasonCode },
         { status: 403 }
       );
     }
@@ -88,4 +95,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-

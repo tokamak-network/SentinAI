@@ -30,6 +30,9 @@
 - [x] Verification complete (`npm run test:run`, `npx tsc --noEmit`, `npm run lint`)
 - [x] Proposal 25 Priority 1 implemented: MCP stdio bridge + HTTP bridge client (`src/lib/mcp-bridge-client.ts`, `src/lib/mcp-stdio-transport.ts`, `scripts/mcp-stdio-bridge.ts`)
 - [x] Proposal 25 Priority 1 tests/docs added (`src/lib/__tests__/mcp-bridge-client.test.ts`, `src/lib/__tests__/mcp-stdio-transport.test.ts`, `docs/guide/claude-code-mcp-setup.md`)
+- [x] Proposal 25 Priority 3 implemented: Central policy/approval engines (`src/types/policy.ts`, `src/lib/policy-engine.ts`, `src/lib/approval-engine.ts`)
+- [x] Proposal 25 Priority 3 integration: MCP/Goals route guard refactor (`src/lib/mcp-server.ts`, `src/app/api/goals/route.ts`)
+- [x] Proposal 25 Priority 3 tests added (`src/lib/__tests__/policy-engine.test.ts`, `src/lib/__tests__/approval-engine.test.ts`, `src/app/api/goals/route.test.ts`)
 
 ### In Progress (2026-02-20 Proposal 10/15/19 MVP Start)
 - [x] Proposal 19 Savings Plans Advisor type/analysis logic implementation (`src/types/savings-advisor.ts`, `src/lib/savings-advisor.ts`)
@@ -185,6 +188,12 @@
 - Added a transport bridge layer so Claude Code can use stdio MCP while SentinAI keeps HTTP `/api/mcp` as backend.
 - Separated bridge concerns into testable modules (HTTP client vs stdio framing/parser) and kept script entrypoint thin.
 - Verified with dedicated unit tests, `tsc --noEmit`, and lint (existing unrelated warning only).
+
+## Review (2026-02-22 Proposal 25 Priority 3 Policy/Approval Engine)
+
+- Moved MCP/API write guard logic into reusable policy module with reason codes, reducing branch duplication and keeping authorization semantics consistent.
+- Extracted approval ticket lifecycle (issue/validate/consume/hash) into a dedicated engine and refactored MCP server to consume it.
+- Added coverage for policy decisions and approval mismatch/expiry paths, then re-verified with full regression (`41 files / 815 tests`).
 
 ---
 

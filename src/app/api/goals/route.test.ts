@@ -88,5 +88,26 @@ describe('/api/goals', () => {
     expect(response.status).toBe(200);
     expect(hoisted.plannerMock.executeGoalPlan).toHaveBeenCalled();
   });
-});
 
+  it('blocks write execution in read-only mode by policy', async () => {
+    process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE = 'true';
+
+    const request = new NextRequest('http://localhost/api/goals', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        goal: 'stabilize',
+        autoExecute: true,
+        dryRun: false,
+        allowWrites: true,
+      }),
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.reasonCode).toBe('read_only_write_blocked');
+    expect(hoisted.plannerMock.executeGoalPlan).not.toHaveBeenCalled();
+  });
+});
