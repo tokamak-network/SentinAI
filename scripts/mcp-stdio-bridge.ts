@@ -4,6 +4,7 @@
  */
 
 import { randomUUID } from 'crypto';
+import { loadEnvConfig } from '@next/env';
 import {
   McpBridgeClient,
   McpBridgeHttpError,
@@ -21,6 +22,9 @@ import {
 const DEFAULT_BASE_URL = 'http://127.0.0.1:3002';
 const DEFAULT_API_PATH = '/api/mcp';
 const DEFAULT_TIMEOUT_MS = 15000;
+
+// Load .env* files like Next.js before reading process.env defaults.
+loadEnvConfig(process.cwd());
 
 function resolveEndpointUrl(baseUrl: string, apiPath: string): string {
   const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;

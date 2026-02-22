@@ -4,6 +4,8 @@
 
 - 자율 에이전트 데모는 실행 알고리즘 설명보다 사용자가 바로 보는 상태 요약(엔진/큐/가드레일)이 먼저 있어야 인지율이 높다.
 - Rule: For autonomy dashboard demos, always expose `engine state + queue state + guardrail state + one-click demo actions` in one panel before deep logs.
+- 대시보드 사용 가이드는 UI 설명만으로 끝내면 실제 운영에서 인증/모드 제약 때문에 즉시 막히기 쉽다.
+- Rule: For dashboard operation docs, always include `UI control -> API endpoint -> auth requirement -> environment mode constraints` mapping in one table.
 - 정책 레벨 제어 UI는 상태 반영 지연이나 동시 실행이 있으면 사용자가 변경 실패로 오해하기 쉽다.
 - Rule: Runtime policy controls in dashboards must lock concurrent actions, show per-action in-progress state, and expose current thresholds next to level selection.
 - 자율 레벨은 버튼 라벨만으로 의미 전달이 어렵고, 운영자마다 해석이 달라진다.

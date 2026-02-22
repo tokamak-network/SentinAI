@@ -22,6 +22,8 @@
 - Use TypeScript and React function components; keep logic in `src/lib` and UI in `src/components`.
 - Follow existing formatting: 2-space indentation and single quotes in TS/TSX.
 - Use PascalCase for components and types (e.g., `RCAResult`), camelCase for functions/variables.
+- Write all code and code comments in English.
+- Korean is allowed for guide/operations documentation under `docs/**`.
 - Run `npm run lint` before pushing changes.
 
 ## Testing Guidelines

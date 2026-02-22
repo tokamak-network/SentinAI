@@ -23,6 +23,12 @@
 - [x] 정책 레벨 변경 성공 피드백 + 툴팁 노출 e2e 시나리오 추가 (`e2e/autonomy-cockpit.spec.ts`)
 - [x] 검증 실행 (`npm run lint -- src/app/page.tsx e2e/autonomy-cockpit.spec.ts playwright.config.ts`, `npx tsc --noEmit`, `npx playwright test e2e/autonomy-cockpit.spec.ts`)
 
+### In Progress (2026-02-22 Autonomy Cockpit User Guide Documentation)
+- [x] 대시보드 `Autonomy Cockpit` UI 요소/액션/API 매핑 확인 (`src/app/page.tsx`, `src/app/api/*`)
+- [x] 신규 사용자 가이드 작성 (`docs/guide/autonomy-cockpit-user-guide.md`)
+- [x] 문서 인덱스 갱신 및 삭제된 ENV 가이드 링크 정리 (`docs/README.md`)
+- [x] 작업 회고 반영 (`docs/todo.md`, `docs/lessons.md`)
+
 ### In Progress (2026-02-22 L2 Ops vs MCP Comparison Section)
 - [x] 통합 MCP 가이드에 기존 L2 운영과 MCP 기반 운영 비교 섹션 추가
 - [x] 운영 관점 비교 항목(진입 방식/흐름/안전 제어/속도/추적/적용 범위) 표로 정리
@@ -482,6 +488,12 @@
 - 정책 레벨 버튼별 권한/가드레일 툴팁을 추가해 사용자가 자율 레벨 의미를 UI에서 즉시 이해할 수 있게 했다.
 - 정책 레벨 배지/버튼/피드백 영역에 테스트 셀렉터를 고정해 UI 구조 변경에도 e2e 안정성을 높였다.
 - Playwright에서 테스트 전용 API key로 정책 변경 성공 경로를 재현하고, 레벨 변경 성공 피드백까지 자동 검증하도록 시나리오를 확장했다.
+
+## Review (2026-02-22 Autonomy Cockpit User Guide Documentation)
+
+- `Autonomy Cockpit` 패널의 실동작을 기준으로 운영자 관점 사용자 가이드를 신규 작성했다.
+- 버튼 단위로 `UI 액션 -> API -> 인증 조건 -> 모드 제약` 매핑을 명시해 데모/운영 시 혼선을 줄였다.
+- `docs/README.md`에서 삭제된 `ENV_GUIDE.md` 참조를 제거하고 새 가이드 진입 링크를 추가해 문서 내비게이션을 복구했다.
 
 ## Review (2026-02-22 Docs Reference Hygiene)
 
