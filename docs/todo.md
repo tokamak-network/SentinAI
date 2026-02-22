@@ -46,8 +46,8 @@
 - [x] Implement signal collector and candidate generator (`src/lib/goal-signal-collector.ts`, `src/lib/goal-candidate-generator.ts`)
 - [ ] Candidate generator LLM prompt/policy hardening and production tuning
 - [x] Implement priority/suppression engine (`src/lib/goal-priority-engine.ts`)
-- [ ] Implement goal manager runtime and queue API (`src/lib/goal-manager.ts`, `src/app/api/goal-manager/route.ts`)
-- [ ] Integrate agent-loop tick -> autonomous goal queue -> goal planner dispatch
+- [x] Implement goal manager runtime and queue API (`src/lib/goal-manager.ts`, `src/app/api/goal-manager/route.ts`)
+- [x] Integrate agent-loop tick -> autonomous goal queue -> goal planner dispatch
 - [ ] Extend autonomy evaluation scenarios for goal generation quality gate
 
 ### In Progress (2026-02-22 Proposal 27 L1/L2 Core Ops Hardening Documentation)
@@ -55,6 +55,12 @@
 - [x] Create Proposal 27 document (`docs/todo/proposal-27-l1-l2-core-ops-hardening.md`)
 - [x] Finalize gap matrix, phased roadmap, and API/type change proposals with acceptance criteria
 - [x] Update TODO review and `docs/lessons.md` with documentation patterns from this task
+
+### In Progress (2026-02-22 Proposal 28 Ethereum Network Diversity Strategy)
+- [x] Revalidate network distribution/client concentration metrics with up-to-date public sources
+- [x] Create Proposal 28 strategy document (`docs/todo/proposal-28-ethereum-network-diversity-sentinai-strategy.md`)
+- [x] Map manifesto pillars to SentinAI product contribution points and KPI tree
+- [x] Update TODO review and `docs/lessons.md` with strategy-documentation rules
 
 ### In Progress (2026-02-20 Proposal 10/15/19 MVP Start)
 - [x] Proposal 19 Savings Plans Advisor type/analysis logic implementation (`src/types/savings-advisor.ts`, `src/lib/savings-advisor.ts`)
@@ -247,11 +253,27 @@
 - Added suppression audit persistence helper (`persistSuppressionRecords`) to write suppression traces into state store.
 - Added coverage in `src/lib/__tests__/goal-priority-engine.test.ts` and re-verified with targeted tests + `tsc --noEmit` + lint (existing unrelated warning only).
 
+## Review (2026-02-22 Proposal 26 Phase D Runtime + API)
+
+- Added runtime orchestrator `src/lib/goal-manager.ts` for tick lifecycle (collect -> generate -> prioritize -> queue) and dispatch lifecycle (`scheduled/running/completed/failed/expired`).
+- Added Goal Manager APIs:
+  - `GET /api/goal-manager` status/queue/candidate/suppression view
+  - `POST /api/goal-manager/tick` manual tick trigger
+  - `POST /api/goal-manager/dispatch` admin-key guarded dispatch trigger
+- Integrated `agent-loop` with best-effort goal manager tick/dispatch path (`src/lib/agent-loop.ts`) so failures do not break scaling loop and are tracked as degraded reasons.
+- Added coverage for runtime + API routes (`src/lib/__tests__/goal-manager.test.ts`, `src/app/api/goal-manager/*.test.ts`) and re-verified with targeted tests + `tsc --noEmit` + lint.
+
 ## Review (2026-02-22 Proposal 27 L1/L2 Core Ops Hardening Documentation)
 
 - L1/L2 공통 운영 인프라 확장을 위해 현재 코드베이스를 체인 런타임, 상태 저장, 제어면 정책, 헬스/복구 축으로 분해해 갭을 정리했다.
 - 각 갭은 코드 근거 파일을 연결하고 `P0/P1/P2` 우선순위와 단계별 DoD를 함께 정의해 실행 가능한 로드맵으로 고정했다.
 - API/타입 변경 제안(`NetworkScope`, `OperationRecord`, `CoreHealthReport`)과 검증 시나리오를 함께 명시해 후속 구현 시 결정 공백을 최소화했다.
+
+## Review (2026-02-22 Proposal 28 Ethereum Network Diversity Strategy)
+
+- Etherscan/Ethernodes/ethereum.org 최신 수치를 `2026-02-22` 기준으로 재검증해 선언문의 문제정의를 정량 근거로 고정했다.
+- Tokamak 슬로건의 4개 명제를 SentinAI 기능(관측/정책/마이그레이션 자동화/incident feedback/GTM KPI)으로 직접 매핑해 실행전략으로 전환했다.
+- `10% 목표`를 북극성 지표와 선행지표로 분리하고 12주 단계별 DoD를 명시해 실행팀이 바로 backlog 분해 가능한 상태로 정리했다.
 
 ---
 

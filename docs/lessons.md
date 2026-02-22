@@ -2,6 +2,10 @@
 
 ## 2026-02-22
 
+- 전략 문서에서 외부 지표를 재사용할 때 수집 시점이 없으면 실행팀이 최신성 논쟁으로 시간을 소모한다.
+- Rule: 외부 네트워크/점유율 지표는 반드시 `출처 + 측정일(YYYY-MM-DD) + 산식(예: top3 합계)`를 함께 남긴다.
+- 선언문(메시지) 기반 요구는 제품팀이 바로 실행하기 어렵다.
+- Rule: 메시지형 전략 요청은 `명제 -> 기능 백로그 -> KPI 트리 -> 단계별 DoD` 순서로 강제 변환해 문서화한다.
 - 인프라 확장 문서는 추상 목표만 나열하면 구현 단계에서 의사결정 공백이 생긴다.
 - Rule: L1/L2 운영 보완 제안서는 모든 갭 항목에 `현재 코드 근거 파일`, `우선순위`, `DoD`를 함께 고정해 구현자가 추가 결정을 하지 않도록 작성한다.
 - Full-autonomy requests become actionable only when decomposed into capability backlog + single focused proposal.
@@ -12,6 +16,8 @@
 - Rule: Candidate generation always returns rule-based results first, then applies LLM text enhancement as best-effort only (fail-open to rule output).
 - Priority queues drift in operator trust when ordering is not deterministic on equal/close scores.
 - Rule: Goal queue ordering must use stable tie-breakers (score -> risk -> enqueue time -> id) and suppression reason codes must be persisted for audit.
+- New autonomy subsystems must never break the core scaling loop on partial failure.
+- Rule: Agent-loop integrations for optional autonomy modules (goal manager, dispatch) run as best-effort and degrade gracefully without failing the main cycle.
 - Changing core planner APIs from sync to async can leave route/MCP tests green in some paths but fail on hidden mock contracts.
 - Rule: When changing function sync/async signatures, run a repo-wide reference search and update both direct callsites and vi-mock return shapes in the same patch.
 - Post-condition verification based on a single keyword (`ready`) is brittle across action executors and test doubles.

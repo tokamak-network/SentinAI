@@ -31,6 +31,7 @@ import { addScalingEvent } from '@/lib/daily-accumulator';
 import { addAgentMemoryEntry, addDecisionTraceEntry, queryAgentMemory } from '@/lib/agent-memory';
 import { verifyOperationOutcome } from '@/lib/operation-verifier';
 import { buildRollbackPlan, runRollbackPlan } from '@/lib/rollback-runner';
+import { tickGoalManager, dispatchTopGoal } from '@/lib/goal-manager';
 import { DEFAULT_SCALING_CONFIG, type TargetVcpu, type TargetMemoryGiB, type ScalingDecision } from '@/types/scaling';
 import { DEFAULT_PREDICTION_CONFIG } from '@/types/prediction';
 import type { MetricDataPoint } from '@/types/prediction';
@@ -89,6 +90,18 @@ export interface AgentCycleResult {
     oldUrl: string;
     newUrl: string;
     reason: string;
+  };
+  goalManager?: {
+    enabled: boolean;
+    ticked: boolean;
+    generatedCount?: number;
+    queuedCount?: number;
+    suppressedCount?: number;
+    queueDepth?: number;
+    llmEnhanced?: boolean;
+    dispatched?: boolean;
+    dispatchStatus?: string;
+    error?: string;
   };
   error?: string;
 }
@@ -674,6 +687,39 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       endPhase(analyzePhase, false, message);
     }
 
+    // Phase 3.5: Goal Manager tick/dispatch (best effort, non-blocking)
+    let goalManagerResult: AgentCycleResult['goalManager'] | undefined;
+    try {
+      const tick = await tickGoalManager();
+      goalManagerResult = {
+        enabled: tick.enabled,
+        ticked: tick.enabled,
+        generatedCount: tick.generatedCount,
+        queuedCount: tick.queuedCount,
+        suppressedCount: tick.suppressedCount,
+        queueDepth: tick.queueDepth,
+        llmEnhanced: tick.llmEnhanced,
+      };
+
+      if (tick.enabled) {
+        const dispatch = await dispatchTopGoal({ initiatedBy: 'scheduler' });
+        goalManagerResult.dispatched = dispatch.dispatched;
+        goalManagerResult.dispatchStatus = dispatch.status || dispatch.reason;
+        if (dispatch.error) {
+          goalManagerResult.error = dispatch.error;
+          degradedReasons.push(`goal-dispatch-failed:${dispatch.error}`);
+        }
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      goalManagerResult = {
+        enabled: false,
+        ticked: false,
+        error: message,
+      };
+      degradedReasons.push(`goal-manager-failed:${message}`);
+    }
+
     // Phase 4: Plan — build scaling plan
     const planPhase = beginPhase('plan');
     let memoryHint: string | undefined;
@@ -732,6 +778,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       scaling,
       failover: failoverInfo,
       proxydReplacement,
+      goalManager: goalManagerResult,
     };
     await pushCycleResult(result);
     await persistDecisionArtifacts(result);
