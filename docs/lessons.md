@@ -16,6 +16,10 @@
 - Rule: When changing consumed fields of a domain result, update test mocks to a minimal full contract and run the affected execution-path test cases.
 - Protocol dual support (legacy + standard MCP) can diverge on authorization behavior if handlers branch early.
 - Rule: Normalize all tool invocations into one guard/execution function so approval token and read-only checks are identical across protocol variants.
+- For stdio MCP transport, any stdout log corrupts frame parsing because stdout must carry only `Content-Length` framed payloads.
+- Rule: MCP bridge diagnostics always go to stderr, and stdout writes must be limited to encoded protocol frames.
+- Content-Length frame parsing can silently desync on malformed headers if rest-buffer handling is lax.
+- Rule: Keep framed parser isolated as a pure utility with unit tests for multi-frame, partial-frame, and malformed-header paths.
 
 ## 2026-02-21
 

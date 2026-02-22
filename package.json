@@ -17,7 +17,8 @@
     "verify": "bash scripts/verify-e2e.sh",
     "probe:zk:settlement": "node scripts/zk-settlement-probe.mjs",
     "benchmark": "npx tsx scripts/benchmark-models.ts",
-    "smoke:metrics:optimism": "bash scripts/smoke-optimism-metrics.sh"
+    "smoke:metrics:optimism": "bash scripts/smoke-optimism-metrics.sh",
+    "mcp:bridge:stdio": "npx tsx scripts/mcp-stdio-bridge.ts"
   },
   "dependencies": {
     "@iarna/toml": "^3.0.0",

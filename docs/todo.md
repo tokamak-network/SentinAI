@@ -8,6 +8,7 @@
 - [x] Proposal 22 draft created: `docs/todo/proposal-22-guardian-agent-v2.md`
 - [x] Proposal 23 draft created: `docs/todo/proposal-23-agent-memory-and-reasoning-trace.md`
 - [x] Proposal 24 draft created: `docs/todo/proposal-24-model-routing-and-cost-policy.md`
+- [x] Proposal 25 draft created: `docs/todo/proposal-25-claude-code-autonomous-ops.md`
 - [x] Proposal 21 MCP baseline implementation start (`src/app/api/mcp/route.ts`, `src/lib/mcp-server.ts`, `src/types/mcp.ts`)
 - [x] MCP approval token state store added (`src/types/redis.ts`, `src/lib/redis-store.ts`)
 - [x] MCP baseline unit tests added (`src/lib/__tests__/mcp-server.test.ts`)
@@ -27,6 +28,8 @@
 - [x] Read-only safe endpoint update with route-level write guard (`src/middleware.ts`, `src/app/api/goals/route.ts`)
 - [x] Proposal 21-24 regression tests expanded (`src/lib/__tests__/mcp-server.test.ts`, `src/lib/__tests__/goal-planner.test.ts`, `src/app/api/goals/route.test.ts`)
 - [x] Verification complete (`npm run test:run`, `npx tsc --noEmit`, `npm run lint`)
+- [x] Proposal 25 Priority 1 implemented: MCP stdio bridge + HTTP bridge client (`src/lib/mcp-bridge-client.ts`, `src/lib/mcp-stdio-transport.ts`, `scripts/mcp-stdio-bridge.ts`)
+- [x] Proposal 25 Priority 1 tests/docs added (`src/lib/__tests__/mcp-bridge-client.test.ts`, `src/lib/__tests__/mcp-stdio-transport.test.ts`, `docs/guide/claude-code-mcp-setup.md`)
 
 ### In Progress (2026-02-20 Proposal 10/15/19 MVP Start)
 - [x] Proposal 19 Savings Plans Advisor type/analysis logic implementation (`src/types/savings-advisor.ts`, `src/lib/savings-advisor.ts`)
@@ -176,6 +179,12 @@
 - Expanded MCP handler to support both legacy tool methods and standard MCP methods through a single guard path so approval/read-only policy stays consistent.
 - Added goal-plan create/execute/history API and guarded execution steps (`collect/anomaly/rca/scale/restart/routing`) to establish a practical autonomous-ops MVP path.
 - Verified with full regression (`37 test files / 791 tests`), type check pass, and lint pass with one pre-existing unrelated warning.
+
+## Review (2026-02-22 Proposal 25 Priority 1 MCP stdio bridge)
+
+- Added a transport bridge layer so Claude Code can use stdio MCP while SentinAI keeps HTTP `/api/mcp` as backend.
+- Separated bridge concerns into testable modules (HTTP client vs stdio framing/parser) and kept script entrypoint thin.
+- Verified with dedicated unit tests, `tsc --noEmit`, and lint (existing unrelated warning only).
 
 ---
 
