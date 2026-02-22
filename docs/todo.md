@@ -44,11 +44,14 @@
 - [x] Create Proposal 26 document (`docs/todo/proposal-26-autonomous-goal-generation-engine.md`)
 - [x] Implement Goal Manager types and store contract (`src/types/goal-manager.ts`, `src/lib/redis-store.ts`)
 - [x] Implement signal collector and candidate generator (`src/lib/goal-signal-collector.ts`, `src/lib/goal-candidate-generator.ts`)
-- [ ] Candidate generator LLM prompt/policy hardening and production tuning
+- [x] Candidate generator LLM prompt/policy hardening and production tuning
 - [x] Implement priority/suppression engine (`src/lib/goal-priority-engine.ts`)
 - [x] Implement goal manager runtime and queue API (`src/lib/goal-manager.ts`, `src/app/api/goal-manager/route.ts`)
 - [x] Integrate agent-loop tick -> autonomous goal queue -> goal planner dispatch
 - [x] Extend autonomy evaluation scenarios for goal generation quality gate
+- [x] Implement durable orchestration (lease/checkpoint/idempotency/retry/DLQ + replay API)
+- [x] Implement adaptive policy baseline (A0-A5 autonomy level + confidence thresholds + policy API)
+- [x] Implement learning loop baseline (episode recording + offline threshold suggestion script)
 
 ### In Progress (2026-02-22 Proposal 27 L1/L2 Core Ops Hardening Documentation)
 - [x] Define analysis scope and baseline evidence for EVM L1 + L2 core operations
@@ -57,10 +60,16 @@
 - [x] Update TODO review and `docs/lessons.md` with documentation patterns from this task
 
 ### In Progress (2026-02-22 Proposal 28 Ethereum Network Diversity Strategy)
-- [x] Revalidate network distribution/client concentration metrics with up-to-date public sources
-- [x] Create Proposal 28 strategy document (`docs/todo/proposal-28-ethereum-network-diversity-sentinai-strategy.md`)
-- [x] Map manifesto pillars to SentinAI product contribution points and KPI tree
-- [x] Update TODO review and `docs/lessons.md` with strategy-documentation rules
+- [x] Reconstruct Proposal 28 around share uplift and Tokamak L1 ops burden reduction
+- [x] Rewrite Proposal 28 strategy document (`docs/todo/proposal-28-ethereum-network-diversity-sentinai-strategy.md`)
+- [x] Replace observability-first framing with migration/automation-first execution pillars
+- [x] Update TODO review and `docs/lessons.md` with outcome-first strategy-documentation rules
+
+### In Progress (2026-02-22 Proposal 28 Phase 0 Issue Breakdown)
+- [x] Decompose Phase 0 into implementation-ready issue units with IDs/dependencies
+- [x] Create issue breakdown doc (`docs/todo/proposal-28-phase0-issue-breakdown.md`)
+- [x] Freeze acceptance criteria and test scenarios per issue
+- [x] Update TODO review and `docs/lessons.md` with issue-decomposition patterns
 
 ### In Progress (2026-02-20 Proposal 10/15/19 MVP Start)
 - [x] Proposal 19 Savings Plans Advisor type/analysis logic implementation (`src/types/savings-advisor.ts`, `src/lib/savings-advisor.ts`)
@@ -269,6 +278,22 @@
 - Added deterministic synthetic goal-signal snapshots to evaluate candidate/prioritization behavior without external runtime dependency.
 - Updated evaluation report template (`docs/verification/proposal-25-autonomy-eval-report-template.md`) to include goal-generation scenarios.
 
+## Review (2026-02-22 Full Autonomy Follow-up: Durability/Policy/Learning)
+
+- Added durable dispatch orchestrator (`src/lib/goal-orchestrator.ts`) with lease acquisition, idempotency key registration, checkpoint updates, retry backoff, DLQ transition, and replay support.
+- Extended state store contracts/implementations for orchestration state (`lease/checkpoint/dlq/idempotency`) and learning episodes (`src/types/redis.ts`, `src/lib/redis-store.ts`).
+- Added DLQ replay endpoint and status surfacing:
+  - `POST /api/goal-manager/replay`
+  - `GET /api/goal-manager` includes `dlq`
+- Added adaptive autonomy policy baseline:
+  - runtime policy state module (`src/lib/autonomy-policy.ts`)
+  - policy API (`src/app/api/policy/autonomy-level/route.ts`)
+  - `evaluateGoalExecutionPolicy` risk/confidence/autonomy-level decision path (`src/lib/policy-engine.ts`)
+- Added learning loop baseline:
+  - episode type + recorder/suggester (`src/types/goal-learning.ts`, `src/lib/goal-learning.ts`)
+  - offline suggestion script (`scripts/train-goal-policy.ts`, `npm run goal:train-policy`)
+- Verified with targeted tests, `npx tsc --noEmit`, `npm run lint`, `npm run goal:train-policy`.
+
 ## Review (2026-02-22 Proposal 27 L1/L2 Core Ops Hardening Documentation)
 
 - L1/L2 공통 운영 인프라 확장을 위해 현재 코드베이스를 체인 런타임, 상태 저장, 제어면 정책, 헬스/복구 축으로 분해해 갭을 정리했다.
@@ -277,9 +302,15 @@
 
 ## Review (2026-02-22 Proposal 28 Ethereum Network Diversity Strategy)
 
-- Etherscan/Ethernodes/ethereum.org 최신 수치를 `2026-02-22` 기준으로 재검증해 선언문의 문제정의를 정량 근거로 고정했다.
-- Tokamak 슬로건의 4개 명제를 SentinAI 기능(관측/정책/마이그레이션 자동화/incident feedback/GTM KPI)으로 직접 매핑해 실행전략으로 전환했다.
-- `10% 목표`를 북극성 지표와 선행지표로 분리하고 12주 단계별 DoD를 명시해 실행팀이 바로 backlog 분해 가능한 상태로 정리했다.
+- 사용자 피드백을 반영해 Proposal 28을 “지표 관측 중심”에서 “점유율 확대 + 운영부담 절감 실행전략”으로 전면 재구성했다.
+- SentinAI 기여 포인트를 `Migration Factory`, `Ops Abstraction Layer`, `Tokamak Client Operator Shield` 3개 축으로 고정했다.
+- 핵심 KPI를 대시보드 수치가 아닌 전환 성공률/수작업시간/롤백율/온콜부담 중심으로 재정의했다.
+
+## Review (2026-02-22 Proposal 28 Phase 0 Issue Breakdown)
+
+- Proposal 28의 Phase 0를 `OPS-001 ~ OPS-008`로 분해해 전환 오케스트레이션/운영 어댑터/릴리즈 게이트 중심 backlog로 재정렬했다.
+- 기존 metric-contract 중심 분해를 제거하고, migration 단계 계약과 verifier/rollback 경로를 먼저 고정하도록 순서를 바꿨다.
+- Tokamak client 운영부담 절감을 위해 `release gate`, `ops burden tracker`, `partner runbook`를 Phase 0부터 의무 산출물로 포함했다.
 
 ---
 

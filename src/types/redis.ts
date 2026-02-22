@@ -16,6 +16,13 @@ import {
   AutonomousGoalQueueItem,
   GoalSuppressionRecord,
 } from './goal-manager';
+import {
+  GoalDlqItem,
+  GoalExecutionCheckpoint,
+  GoalIdempotencyRecord,
+  GoalLeaseRecord,
+} from './goal-orchestrator';
+import { GoalLearningEpisode } from './goal-learning';
 
 // ============================================================
 // Store Interface
@@ -97,6 +104,22 @@ export interface IStateStore {
   addGoalSuppressionRecord(record: GoalSuppressionRecord): Promise<void>;
   listGoalSuppressionRecords(limit?: number): Promise<GoalSuppressionRecord[]>;
   clearGoalSuppressionRecords(): Promise<void>;
+  getGoalLease(goalId: string): Promise<GoalLeaseRecord | null>;
+  setGoalLease(goalId: string, lease: GoalLeaseRecord): Promise<void>;
+  clearGoalLease(goalId: string): Promise<void>;
+  getGoalCheckpoint(goalId: string): Promise<GoalExecutionCheckpoint | null>;
+  setGoalCheckpoint(goalId: string, checkpoint: GoalExecutionCheckpoint): Promise<void>;
+  clearGoalCheckpoint(goalId: string): Promise<void>;
+  addGoalDlqItem(item: GoalDlqItem): Promise<void>;
+  listGoalDlqItems(limit?: number): Promise<GoalDlqItem[]>;
+  removeGoalDlqItem(goalId: string): Promise<void>;
+  clearGoalDlqItems(): Promise<void>;
+  registerGoalIdempotency(record: GoalIdempotencyRecord): Promise<boolean>;
+  getGoalIdempotency(key: string): Promise<GoalIdempotencyRecord | null>;
+  clearGoalIdempotency(key: string): Promise<void>;
+  addGoalLearningEpisode(episode: GoalLearningEpisode): Promise<void>;
+  listGoalLearningEpisodes(limit?: number): Promise<GoalLearningEpisode[]>;
+  clearGoalLearningEpisodes(): Promise<void>;
 
   // --- Connection Management ---
   isConnected(): boolean;

@@ -1,0 +1,20 @@
+{
+  "generatedAt": "2026-02-22T07:33:26.653Z",
+  "sampleSize": 0,
+  "current": {
+    "minConfidenceWrite": 0.65,
+    "minConfidenceDryRun": 0.35
+  },
+  "suggested": {
+    "minConfidenceWrite": 0.65,
+    "minConfidenceDryRun": 0.45
+  },
+  "confidence": 0,
+  "notes": [
+    "episodes=0",
+    "completedWrites=0",
+    "failedWrites=0",
+    "no failed write samples; suggestion is conservative",
+    "sample size is small; review manually before applying"
+  ]
+}

@@ -33,6 +33,13 @@ import {
   AutonomousGoalQueueItem,
   GoalSuppressionRecord,
 } from '@/types/goal-manager';
+import {
+  GoalDlqItem,
+  GoalExecutionCheckpoint,
+  GoalIdempotencyRecord,
+  GoalLeaseRecord,
+} from '@/types/goal-orchestrator';
+import { GoalLearningEpisode } from '@/types/goal-learning';
 
 // ============================================================
 // Constants
@@ -64,6 +71,8 @@ const DECISION_TRACE_MAX = 5000;
 const AUTONOMOUS_GOAL_CANDIDATE_MAX = 200;
 const AUTONOMOUS_GOAL_QUEUE_MAX = 200;
 const GOAL_SUPPRESSION_RECORD_MAX = 500;
+const GOAL_DLQ_MAX = 500;
+const GOAL_LEARNING_EPISODE_MAX = 5000;
 
 // Redis key names (appended to keyPrefix)
 const KEYS = {
@@ -90,6 +99,11 @@ const KEYS = {
   autonomousGoalQueue: 'goal:queue',
   autonomousGoalActive: 'goal:active',
   autonomousGoalSuppression: 'goal:suppression',
+  autonomousGoalLease: (goalId: string) => `goal:lease:${goalId}`,
+  autonomousGoalCheckpoint: (goalId: string) => `goal:checkpoint:${goalId}`,
+  autonomousGoalDlq: 'goal:dlq',
+  autonomousGoalIdempotency: (key: string) => `goal:idempotency:${key}`,
+  autonomousGoalLearningEpisodes: 'goal:learning:episodes',
   // P1: Anomaly Event Store
   anomalyEvents: 'anomaly:events',
   anomalyActive: 'anomaly:active',
@@ -1087,6 +1101,137 @@ export class RedisStateStore implements IStateStore {
     await this.client.del(this.key(KEYS.autonomousGoalSuppression));
   }
 
+  async getGoalLease(goalId: string): Promise<GoalLeaseRecord | null> {
+    const key = this.key(KEYS.autonomousGoalLease(goalId));
+    const raw = await this.client.get(key);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as GoalLeaseRecord;
+    } catch {
+      return null;
+    }
+  }
+
+  async setGoalLease(goalId: string, lease: GoalLeaseRecord): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalLease(goalId));
+    const expiresAt = new Date(lease.leaseExpiresAt).getTime();
+    const ttlSeconds = Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000));
+    await this.client.set(key, JSON.stringify(lease), 'EX', ttlSeconds);
+  }
+
+  async clearGoalLease(goalId: string): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalLease(goalId));
+    await this.client.del(key);
+  }
+
+  async getGoalCheckpoint(goalId: string): Promise<GoalExecutionCheckpoint | null> {
+    const key = this.key(KEYS.autonomousGoalCheckpoint(goalId));
+    const raw = await this.client.get(key);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as GoalExecutionCheckpoint;
+    } catch {
+      return null;
+    }
+  }
+
+  async setGoalCheckpoint(goalId: string, checkpoint: GoalExecutionCheckpoint): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalCheckpoint(goalId));
+    await this.client.set(key, JSON.stringify(checkpoint), 'EX', 7 * 24 * 60 * 60);
+  }
+
+  async clearGoalCheckpoint(goalId: string): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalCheckpoint(goalId));
+    await this.client.del(key);
+  }
+
+  async addGoalDlqItem(item: GoalDlqItem): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalDlq);
+    await this.client.lpush(key, JSON.stringify(item));
+    await this.client.ltrim(key, 0, GOAL_DLQ_MAX - 1);
+  }
+
+  async listGoalDlqItems(limit: number = 50): Promise<GoalDlqItem[]> {
+    const safeLimit = Math.min(Math.max(limit, 1), GOAL_DLQ_MAX);
+    const key = this.key(KEYS.autonomousGoalDlq);
+    const raw = await this.client.lrange(key, 0, safeLimit - 1);
+    const items: GoalDlqItem[] = [];
+    for (const item of raw) {
+      try {
+        items.push(JSON.parse(item) as GoalDlqItem);
+      } catch {
+        // Ignore malformed entries
+      }
+    }
+    return items;
+  }
+
+  async removeGoalDlqItem(goalId: string): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalDlq);
+    const items = await this.listGoalDlqItems(GOAL_DLQ_MAX);
+    const filtered = items.filter((item) => item.goalId !== goalId);
+    await this.client.del(key);
+    if (filtered.length > 0) {
+      await this.client.rpush(key, ...filtered.map((item) => JSON.stringify(item)));
+      await this.client.ltrim(key, 0, GOAL_DLQ_MAX - 1);
+    }
+  }
+
+  async clearGoalDlqItems(): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalDlq);
+    await this.client.del(key);
+  }
+
+  async registerGoalIdempotency(record: GoalIdempotencyRecord): Promise<boolean> {
+    const key = this.key(KEYS.autonomousGoalIdempotency(record.key));
+    const expiresAt = new Date(record.expiresAt).getTime();
+    const ttlSeconds = Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000));
+    const setResult = await this.client.set(key, JSON.stringify(record), 'EX', ttlSeconds, 'NX');
+    return setResult === 'OK';
+  }
+
+  async getGoalIdempotency(keyValue: string): Promise<GoalIdempotencyRecord | null> {
+    const key = this.key(KEYS.autonomousGoalIdempotency(keyValue));
+    const raw = await this.client.get(key);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as GoalIdempotencyRecord;
+    } catch {
+      return null;
+    }
+  }
+
+  async clearGoalIdempotency(keyValue: string): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalIdempotency(keyValue));
+    await this.client.del(key);
+  }
+
+  async addGoalLearningEpisode(episode: GoalLearningEpisode): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalLearningEpisodes);
+    await this.client.lpush(key, JSON.stringify(episode));
+    await this.client.ltrim(key, 0, GOAL_LEARNING_EPISODE_MAX - 1);
+  }
+
+  async listGoalLearningEpisodes(limit: number = 200): Promise<GoalLearningEpisode[]> {
+    const safeLimit = Math.min(Math.max(limit, 1), GOAL_LEARNING_EPISODE_MAX);
+    const key = this.key(KEYS.autonomousGoalLearningEpisodes);
+    const raw = await this.client.lrange(key, 0, safeLimit - 1);
+    const episodes: GoalLearningEpisode[] = [];
+    for (const item of raw) {
+      try {
+        episodes.push(JSON.parse(item) as GoalLearningEpisode);
+      } catch {
+        // Ignore malformed entries
+      }
+    }
+    return episodes;
+  }
+
+  async clearGoalLearningEpisodes(): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalLearningEpisodes);
+    await this.client.del(key);
+  }
+
   // --- Connection Management ---
 
   isConnected(): boolean {
@@ -1161,6 +1306,11 @@ export class InMemoryStateStore implements IStateStore {
   private autonomousGoalQueue: AutonomousGoalQueueItem[] = [];
   private activeAutonomousGoalId: string | null = null;
   private goalSuppressionRecords: GoalSuppressionRecord[] = [];
+  private goalLeases: Map<string, GoalLeaseRecord> = new Map();
+  private goalCheckpoints: Map<string, GoalExecutionCheckpoint> = new Map();
+  private goalDlqItems: GoalDlqItem[] = [];
+  private goalIdempotencyRecords: Map<string, GoalIdempotencyRecord> = new Map();
+  private goalLearningEpisodes: GoalLearningEpisode[] = [];
 
   // --- Metrics Buffer ---
 
@@ -1481,6 +1631,95 @@ export class InMemoryStateStore implements IStateStore {
 
   async clearGoalSuppressionRecords(): Promise<void> {
     this.goalSuppressionRecords = [];
+  }
+
+  async getGoalLease(goalId: string): Promise<GoalLeaseRecord | null> {
+    const lease = this.goalLeases.get(goalId);
+    if (!lease) return null;
+    const expiresAt = new Date(lease.leaseExpiresAt).getTime();
+    if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+      this.goalLeases.delete(goalId);
+      return null;
+    }
+    return lease;
+  }
+
+  async setGoalLease(goalId: string, lease: GoalLeaseRecord): Promise<void> {
+    this.goalLeases.set(goalId, lease);
+  }
+
+  async clearGoalLease(goalId: string): Promise<void> {
+    this.goalLeases.delete(goalId);
+  }
+
+  async getGoalCheckpoint(goalId: string): Promise<GoalExecutionCheckpoint | null> {
+    return this.goalCheckpoints.get(goalId) || null;
+  }
+
+  async setGoalCheckpoint(goalId: string, checkpoint: GoalExecutionCheckpoint): Promise<void> {
+    this.goalCheckpoints.set(goalId, checkpoint);
+  }
+
+  async clearGoalCheckpoint(goalId: string): Promise<void> {
+    this.goalCheckpoints.delete(goalId);
+  }
+
+  async addGoalDlqItem(item: GoalDlqItem): Promise<void> {
+    this.goalDlqItems.unshift(item);
+    if (this.goalDlqItems.length > GOAL_DLQ_MAX) {
+      this.goalDlqItems = this.goalDlqItems.slice(0, GOAL_DLQ_MAX);
+    }
+  }
+
+  async listGoalDlqItems(limit: number = 50): Promise<GoalDlqItem[]> {
+    const safeLimit = Math.min(Math.max(limit, 1), GOAL_DLQ_MAX);
+    return this.goalDlqItems.slice(0, safeLimit);
+  }
+
+  async removeGoalDlqItem(goalId: string): Promise<void> {
+    this.goalDlqItems = this.goalDlqItems.filter((item) => item.goalId !== goalId);
+  }
+
+  async clearGoalDlqItems(): Promise<void> {
+    this.goalDlqItems = [];
+  }
+
+  async registerGoalIdempotency(record: GoalIdempotencyRecord): Promise<boolean> {
+    const existing = await this.getGoalIdempotency(record.key);
+    if (existing) return false;
+    this.goalIdempotencyRecords.set(record.key, record);
+    return true;
+  }
+
+  async getGoalIdempotency(keyValue: string): Promise<GoalIdempotencyRecord | null> {
+    const record = this.goalIdempotencyRecords.get(keyValue);
+    if (!record) return null;
+    const expiresAt = new Date(record.expiresAt).getTime();
+    if (Number.isFinite(expiresAt) && expiresAt <= Date.now()) {
+      this.goalIdempotencyRecords.delete(keyValue);
+      return null;
+    }
+    return record;
+  }
+
+  async clearGoalIdempotency(keyValue: string): Promise<void> {
+    this.goalIdempotencyRecords.delete(keyValue);
+  }
+
+  async addGoalLearningEpisode(episode: GoalLearningEpisode): Promise<void> {
+    this.goalLearningEpisodes.unshift(episode);
+    if (this.goalLearningEpisodes.length > GOAL_LEARNING_EPISODE_MAX) {
+      this.goalLearningEpisodes = this.goalLearningEpisodes.slice(0, GOAL_LEARNING_EPISODE_MAX);
+    }
+  }
+
+  async listGoalLearningEpisodes(limit: number = 200): Promise<GoalLearningEpisode[]> {
+    const safeLimit = Math.min(Math.max(limit, 1), GOAL_LEARNING_EPISODE_MAX);
+    return this.goalLearningEpisodes.slice(0, safeLimit);
+  }
+
+  async clearGoalLearningEpisodes(): Promise<void> {
+    this.goalLearningEpisodes = [];
   }
 
   // === P1: Anomaly Event Store ===

@@ -18,6 +18,13 @@ import type {
   AutonomousGoalQueueItem,
   GoalSuppressionRecord,
 } from '@/types/goal-manager';
+import type {
+  GoalDlqItem,
+  GoalExecutionCheckpoint,
+  GoalIdempotencyRecord,
+  GoalLeaseRecord,
+} from '@/types/goal-orchestrator';
+import type { GoalLearningEpisode } from '@/types/goal-learning';
 
 /**
  * Helper: Create mock metric data point
@@ -168,6 +175,72 @@ function createSuppressionRecord(overrides?: Partial<GoalSuppressionRecord>): Go
     risk: 'medium',
     reasonCode: 'policy_blocked',
     details: 'read-only mode enabled',
+    ...overrides,
+  };
+}
+
+function createGoalLease(overrides?: Partial<GoalLeaseRecord>): GoalLeaseRecord {
+  return {
+    goalId: 'goal-1',
+    ownerId: 'worker-1',
+    leasedAt: new Date().toISOString(),
+    leaseExpiresAt: new Date(Date.now() + 60_000).toISOString(),
+    heartbeatAt: new Date().toISOString(),
+    version: 1,
+    ...overrides,
+  };
+}
+
+function createGoalCheckpoint(overrides?: Partial<GoalExecutionCheckpoint>): GoalExecutionCheckpoint {
+  return {
+    goalId: 'goal-1',
+    phase: 'lease_acquired',
+    timestamp: new Date().toISOString(),
+    details: 'lease ok',
+    ...overrides,
+  };
+}
+
+function createGoalDlqItem(overrides?: Partial<GoalDlqItem>): GoalDlqItem {
+  return {
+    id: `dlq-${Date.now()}-${Math.random()}`,
+    goalId: 'goal-1',
+    movedAt: new Date().toISOString(),
+    reason: 'max_retries_exceeded',
+    attempts: 3,
+    lastError: 'failed',
+    queueItem: createGoalQueueItem({
+      goalId: 'goal-1',
+      status: 'dlq',
+      attempts: 3,
+    }),
+    ...overrides,
+  };
+}
+
+function createGoalIdempotencyRecord(overrides?: Partial<GoalIdempotencyRecord>): GoalIdempotencyRecord {
+  return {
+    key: `idem-${Date.now()}-${Math.random()}`,
+    goalId: 'goal-1',
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    ownerId: 'worker-1',
+    ...overrides,
+  };
+}
+
+function createGoalLearningEpisode(overrides?: Partial<GoalLearningEpisode>): GoalLearningEpisode {
+  return {
+    id: `episode-${Date.now()}-${Math.random()}`,
+    timestamp: new Date().toISOString(),
+    stage: 'selection',
+    snapshotId: 'snapshot-1',
+    candidateId: 'candidate-1',
+    intent: 'stabilize',
+    source: 'anomaly',
+    risk: 'high',
+    confidence: 0.82,
+    outcome: 'queued',
     ...overrides,
   };
 }
@@ -930,6 +1003,62 @@ describe('redis-store (InMemoryStateStore)', () => {
       expect(await store.getAutonomousGoalQueue(10)).toHaveLength(0);
       expect(await store.listGoalSuppressionRecords(10)).toHaveLength(0);
       expect(await store.getActiveAutonomousGoalId()).toBeNull();
+    });
+
+    it('should set/get/clear goal lease', async () => {
+      const lease = createGoalLease();
+      await store.setGoalLease('goal-1', lease);
+      const stored = await store.getGoalLease('goal-1');
+      expect(stored?.ownerId).toBe('worker-1');
+
+      await store.clearGoalLease('goal-1');
+      expect(await store.getGoalLease('goal-1')).toBeNull();
+    });
+
+    it('should set/get/clear goal checkpoint', async () => {
+      const checkpoint = createGoalCheckpoint();
+      await store.setGoalCheckpoint('goal-1', checkpoint);
+      const stored = await store.getGoalCheckpoint('goal-1');
+      expect(stored?.phase).toBe('lease_acquired');
+
+      await store.clearGoalCheckpoint('goal-1');
+      expect(await store.getGoalCheckpoint('goal-1')).toBeNull();
+    });
+
+    it('should add/list/remove dlq items', async () => {
+      await store.addGoalDlqItem(createGoalDlqItem({ goalId: 'goal-1' }));
+      await store.addGoalDlqItem(createGoalDlqItem({ goalId: 'goal-2' }));
+      let list = await store.listGoalDlqItems(10);
+      expect(list).toHaveLength(2);
+
+      await store.removeGoalDlqItem('goal-1');
+      list = await store.listGoalDlqItems(10);
+      expect(list).toHaveLength(1);
+      expect(list[0].goalId).toBe('goal-2');
+
+      await store.clearGoalDlqItems();
+      expect(await store.listGoalDlqItems(10)).toHaveLength(0);
+    });
+
+    it('should register idempotency key only once', async () => {
+      const record = createGoalIdempotencyRecord({ key: 'idem-1' });
+      expect(await store.registerGoalIdempotency(record)).toBe(true);
+      expect(await store.registerGoalIdempotency(record)).toBe(false);
+      expect(await store.getGoalIdempotency('idem-1')).not.toBeNull();
+
+      await store.clearGoalIdempotency('idem-1');
+      expect(await store.getGoalIdempotency('idem-1')).toBeNull();
+    });
+
+    it('should add/list/clear goal learning episodes', async () => {
+      await store.addGoalLearningEpisode(createGoalLearningEpisode({ id: 'episode-1' }));
+      await store.addGoalLearningEpisode(createGoalLearningEpisode({ id: 'episode-2' }));
+      const episodes = await store.listGoalLearningEpisodes(10);
+      expect(episodes).toHaveLength(2);
+      expect(episodes[0].id).toBe('episode-2');
+
+      await store.clearGoalLearningEpisodes();
+      expect(await store.listGoalLearningEpisodes(10)).toHaveLength(0);
     });
   });
 

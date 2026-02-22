@@ -43,6 +43,7 @@ describe('/api/goal-manager', () => {
           score: { impact: 10, urgency: 8, confidence: 12, policyFit: 10, total: 40 },
         },
       ],
+      dlq: [],
       candidates: [],
       suppression: [],
     });
@@ -57,6 +58,7 @@ describe('/api/goal-manager', () => {
     expect(body.config.enabled).toBe(true);
     expect(body.queueDepth).toBe(1);
     expect(Array.isArray(body.queue)).toBe(true);
+    expect(Array.isArray(body.dlq)).toBe(true);
     expect(hoisted.managerMock.listGoalManagerState).toHaveBeenCalledWith(10);
   });
 });

@@ -9,6 +9,7 @@ import type {
   McpToolPolicyInput,
   PolicyEvaluationResult,
 } from '@/types/policy';
+import { getRuntimeAutonomyPolicy } from '@/lib/autonomy-policy';
 
 export function requiresApiKey(authMode: McpToolPolicyInput['authMode']): boolean {
   return authMode === 'api-key' || authMode === 'dual';
@@ -98,10 +99,64 @@ export function evaluateGoalExecutionPolicy(
     };
   }
 
+  const policy = input.autonomyPolicy || getRuntimeAutonomyPolicy();
+  const risk = input.risk || 'medium';
+  const confidence = typeof input.confidence === 'number' ? input.confidence : 1;
+  const confidenceThreshold = input.allowWrites ? policy.minConfidenceWrite : policy.minConfidenceDryRun;
+
+  if (input.autoExecute && (policy.level === 'A0' || policy.level === 'A1')) {
+    return {
+      decision: 'deny',
+      reasonCode: 'autonomy_level_blocked',
+      message: `Autonomous execution blocked at level ${policy.level}`,
+    };
+  }
+
+  if (input.autoExecute && input.allowWrites && policy.level === 'A2') {
+    return {
+      decision: 'deny',
+      reasonCode: 'autonomy_level_blocked',
+      message: 'Write execution blocked at autonomy level A2 (dry-run only)',
+    };
+  }
+
+  if (confidence < confidenceThreshold) {
+    return {
+      decision: 'deny',
+      reasonCode: 'goal_confidence_too_low',
+      message: `Goal confidence ${confidence.toFixed(2)} is below threshold ${confidenceThreshold.toFixed(2)}`,
+    };
+  }
+
+  if (input.autoExecute && input.allowWrites) {
+    if (policy.level === 'A3' && (risk === 'medium' || risk === 'high' || risk === 'critical')) {
+      return {
+        decision: 'require_approval',
+        reasonCode: 'risk_requires_approval',
+        message: `Risk ${risk} requires approval at autonomy level A3`,
+      };
+    }
+
+    if (policy.level === 'A4' && (risk === 'high' || risk === 'critical')) {
+      return {
+        decision: 'require_approval',
+        reasonCode: 'risk_requires_approval',
+        message: `Risk ${risk} requires approval at autonomy level A4`,
+      };
+    }
+
+    if (policy.level === 'A5' && risk === 'critical') {
+      return {
+        decision: 'require_approval',
+        reasonCode: 'risk_requires_approval',
+        message: 'Critical risk requires approval even at autonomy level A5',
+      };
+    }
+  }
+
   return {
     decision: 'allow',
     reasonCode: 'allowed',
     message: 'allowed',
   };
 }
-

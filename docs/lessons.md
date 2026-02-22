@@ -2,6 +2,10 @@
 
 ## 2026-02-22
 
+- 지표가 풍부한 문서는 실행 방향이 불명확하면 실제 점유율/운영비 개선으로 이어지지 않는다.
+- Rule: 시장/운영 전략 문서는 `관측 기능`보다 `행동 파이프라인(전환/검증/롤백/운영가드)`을 먼저 고정하고, 지표는 결과 검증 보조로만 둔다.
+- 전략 문서를 구현으로 넘길 때 이슈 단위에 파일/AC/테스트가 없으면 팀마다 해석이 달라진다.
+- Rule: 전략 문서의 첫 실행 단계(Phase 0)는 반드시 `Issue ID + 대상 파일 + 의존성 + Acceptance Criteria + 테스트 케이스`까지 고정한 분해 문서를 함께 만든다.
 - 전략 문서에서 외부 지표를 재사용할 때 수집 시점이 없으면 실행팀이 최신성 논쟁으로 시간을 소모한다.
 - Rule: 외부 네트워크/점유율 지표는 반드시 `출처 + 측정일(YYYY-MM-DD) + 산식(예: top3 합계)`를 함께 남긴다.
 - 선언문(메시지) 기반 요구는 제품팀이 바로 실행하기 어렵다.
@@ -20,6 +24,12 @@
 - Rule: Agent-loop integrations for optional autonomy modules (goal manager, dispatch) run as best-effort and degrade gracefully without failing the main cycle.
 - Deterministic autonomy evaluation should include both planning outcomes and pre-planning goal-generation quality checks.
 - Rule: Extend replay scorecards with synthetic goal-signal scenarios that validate suppression rules (duplicate, low-confidence, stale) to prevent noisy autonomous dispatch.
+- Queue-based autonomy execution becomes unsafe without lease/idempotency/retry boundaries when workers or requests overlap.
+- Rule: Autonomous dispatch must enforce lease + idempotency + bounded retry + DLQ, and expose replay as an explicit operator action.
+- A single static policy gate is insufficient once autonomy expands into risk-tiered write actions.
+- Rule: Goal execution policy should combine autonomy level (A0-A5), risk tier, and confidence thresholds, with runtime-tunable policy state and audited API updates.
+- Learning loops should be episode-first to avoid coupling policy tuning directly into hot paths.
+- Rule: Record selection/execution episodes online, but run policy-threshold suggestion offline and require explicit operator promotion of suggested values.
 - Changing core planner APIs from sync to async can leave route/MCP tests green in some paths but fail on hidden mock contracts.
 - Rule: When changing function sync/async signatures, run a repo-wide reference search and update both direct callsites and vi-mock return shapes in the same patch.
 - Post-condition verification based on a single keyword (`ready`) is brittle across action executors and test doubles.

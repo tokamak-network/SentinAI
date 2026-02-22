@@ -106,5 +106,58 @@ describe('policy-engine', () => {
     expect(result.decision).toBe('deny');
     expect(result.reasonCode).toBe('read_only_write_blocked');
   });
-});
 
+  it('should deny autonomous execution at level A1', () => {
+    const result = evaluateGoalExecutionPolicy({
+      autoExecute: true,
+      allowWrites: false,
+      readOnlyMode: false,
+      autonomyPolicy: {
+        level: 'A1',
+        minConfidenceDryRun: 0.3,
+        minConfidenceWrite: 0.7,
+      },
+      confidence: 0.9,
+      risk: 'low',
+    });
+
+    expect(result.decision).toBe('deny');
+    expect(result.reasonCode).toBe('autonomy_level_blocked');
+  });
+
+  it('should require approval for high risk at level A4', () => {
+    const result = evaluateGoalExecutionPolicy({
+      autoExecute: true,
+      allowWrites: true,
+      readOnlyMode: false,
+      autonomyPolicy: {
+        level: 'A4',
+        minConfidenceDryRun: 0.3,
+        minConfidenceWrite: 0.7,
+      },
+      confidence: 0.91,
+      risk: 'high',
+    });
+
+    expect(result.decision).toBe('require_approval');
+    expect(result.reasonCode).toBe('risk_requires_approval');
+  });
+
+  it('should deny when confidence is below threshold', () => {
+    const result = evaluateGoalExecutionPolicy({
+      autoExecute: true,
+      allowWrites: true,
+      readOnlyMode: false,
+      autonomyPolicy: {
+        level: 'A5',
+        minConfidenceDryRun: 0.3,
+        minConfidenceWrite: 0.8,
+      },
+      confidence: 0.5,
+      risk: 'low',
+    });
+
+    expect(result.decision).toBe('deny');
+    expect(result.reasonCode).toBe('goal_confidence_too_low');
+  });
+});

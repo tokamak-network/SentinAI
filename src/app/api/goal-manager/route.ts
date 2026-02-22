@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
       activeGoalId: state.activeGoalId,
       queueDepth,
       queue: state.queue,
+      dlq: state.dlq,
       candidates: state.candidates,
       suppression: state.suppression,
     });

@@ -16,7 +16,20 @@ export type PolicyReasonCode =
   | 'api_key_not_configured'
   | 'api_key_invalid'
   | 'read_only_write_blocked'
-  | 'approval_required';
+  | 'approval_required'
+  | 'autonomy_level_blocked'
+  | 'goal_confidence_too_low'
+  | 'risk_requires_approval';
+
+export type AutonomyLevel = 'A0' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5';
+
+export type GoalOperationRisk = 'low' | 'medium' | 'high' | 'critical';
+
+export interface RuntimeAutonomyPolicy {
+  level: AutonomyLevel;
+  minConfidenceDryRun: number;
+  minConfidenceWrite: number;
+}
 
 export interface PolicyEvaluationResult {
   decision: PolicyDecision;
@@ -44,6 +57,9 @@ export interface GoalExecutionPolicyInput {
   autoExecute: boolean;
   allowWrites: boolean;
   readOnlyMode: boolean;
+  risk?: GoalOperationRisk;
+  confidence?: number;
+  autonomyPolicy?: RuntimeAutonomyPolicy;
 }
 
 export type ApprovalValidationReasonCode =
@@ -65,4 +81,3 @@ export interface ApprovalValidationResultFail {
 export type ApprovalValidationResult =
   | ApprovalValidationResultOk
   | ApprovalValidationResultFail;
-

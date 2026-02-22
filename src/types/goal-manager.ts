@@ -20,6 +20,7 @@ export type AutonomousGoalStatus =
   | 'running'
   | 'completed'
   | 'failed'
+  | 'dlq'
   | 'suppressed'
   | 'expired';
 
@@ -120,6 +121,7 @@ export interface AutonomousGoalQueueItem {
   candidateId: string;
   enqueuedAt: string;
   scheduledAt?: string;
+  nextAttemptAt?: string;
   startedAt?: string;
   finishedAt?: string;
   expiresAt?: string;
@@ -134,6 +136,9 @@ export interface AutonomousGoalQueueItem {
   score: GoalPriorityScore;
   lastError?: string;
   planId?: string;
+  idempotencyKey?: string;
+  leaseOwner?: string;
+  leaseExpiresAt?: string;
   metadata?: Record<string, unknown>;
 }
 

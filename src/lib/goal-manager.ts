@@ -3,8 +3,12 @@
  * Orchestrates signal collection -> candidate generation -> prioritization -> queue lifecycle.
  */
 
-import { planAndExecuteGoal } from '@/lib/goal-planner';
-import { evaluateGoalExecutionPolicy } from '@/lib/policy-engine';
+import {
+  dispatchNextGoalWithOrchestration,
+  replayGoalFromDlq,
+  type ReplayDlqGoalResult,
+} from '@/lib/goal-orchestrator';
+import { recordGoalLearningEpisode } from '@/lib/goal-learning';
 import { collectGoalSignalSnapshot } from '@/lib/goal-signal-collector';
 import { generateAutonomousGoalCandidates } from '@/lib/goal-candidate-generator';
 import { persistSuppressionRecords, prioritizeGoalCandidates } from '@/lib/goal-priority-engine';
@@ -15,7 +19,7 @@ import type {
   GoalSuppressionRecord,
   GoalSignalSnapshot,
 } from '@/types/goal-manager';
-import type { GoalExecutionResult } from '@/types/goal-planner';
+import type { GoalDlqItem } from '@/types/goal-orchestrator';
 
 const DEFAULT_CANDIDATE_LIMIT = 6;
 const DEFAULT_QUEUE_LIMIT = 100;
@@ -44,7 +48,7 @@ export interface GoalDispatchResult {
   dispatched: boolean;
   goalId?: string;
   planId?: string;
-  status?: GoalExecutionResult['plan']['status'];
+  status?: AutonomousGoalQueueItem['status'];
   executionLogCount?: number;
   reason?: string;
   error?: string;
@@ -146,6 +150,7 @@ export async function tickGoalManager(now: number = Date.now()): Promise<GoalMan
   for (const candidate of generated.candidates) {
     const suppressionReasonCode = suppressedByCandidateId.get(candidate.id);
     const queueItem = prioritized.queued.find((item) => item.candidateId === candidate.id);
+    const outcome = suppressionReasonCode ? 'suppressed' : queueItem ? 'queued' : 'suppressed';
 
     await store.addAutonomousGoalCandidate({
       ...candidate,
@@ -153,6 +158,24 @@ export async function tickGoalManager(now: number = Date.now()): Promise<GoalMan
       score: queueItem?.score,
       suppressionReasonCode,
       updatedAt: new Date(now).toISOString(),
+    });
+
+    await recordGoalLearningEpisode({
+      timestamp: new Date(now).toISOString(),
+      stage: 'selection',
+      snapshotId: snapshot.snapshotId,
+      goalId: queueItem?.goalId,
+      candidateId: candidate.id,
+      intent: candidate.intent,
+      source: candidate.source,
+      risk: candidate.risk,
+      confidence: candidate.confidence,
+      scoreTotal: queueItem?.score.total,
+      suppressionReasonCode,
+      outcome,
+      metadata: {
+        signalSnapshotId: candidate.signalSnapshotId,
+      },
     });
   }
 
@@ -180,14 +203,16 @@ export async function listGoalManagerState(limit: number = 50): Promise<{
   queue: AutonomousGoalQueueItem[];
   candidates: AutonomousGoalCandidate[];
   suppression: GoalSuppressionRecord[];
+  dlq: GoalDlqItem[];
 }> {
   const safeLimit = Math.min(Math.max(limit, 1), 500);
   const store = getStore();
-  const [activeGoalId, queue, candidates, suppression] = await Promise.all([
+  const [activeGoalId, queue, candidates, suppression, dlq] = await Promise.all([
     store.getActiveAutonomousGoalId(),
     store.getAutonomousGoalQueue(safeLimit),
     store.listAutonomousGoalCandidates(safeLimit),
     store.listGoalSuppressionRecords(safeLimit),
+    store.listGoalDlqItems(safeLimit),
   ]);
 
   return {
@@ -195,25 +220,8 @@ export async function listGoalManagerState(limit: number = 50): Promise<{
     queue,
     candidates,
     suppression,
+    dlq,
   };
-}
-
-async function getNextQueuedGoal(): Promise<AutonomousGoalQueueItem | null> {
-  const queue = await getStore().getAutonomousGoalQueue(getQueueLimit());
-  return queue.find((item) => item.status === 'queued') || null;
-}
-
-async function updateGoalQueueItem(goalId: string, updates: Partial<AutonomousGoalQueueItem>): Promise<AutonomousGoalQueueItem | null> {
-  const store = getStore();
-  const current = await store.getAutonomousGoalQueueItem(goalId);
-  if (!current) return null;
-
-  const next: AutonomousGoalQueueItem = {
-    ...current,
-    ...updates,
-  };
-  await store.upsertAutonomousGoalQueueItem(next);
-  return next;
 }
 
 export async function dispatchTopGoal(options?: {
@@ -234,92 +242,19 @@ export async function dispatchTopGoal(options?: {
   const dryRun = options?.dryRun ?? config.dispatchDryRun;
   const allowWrites = options?.allowWrites ?? config.dispatchAllowWrites;
   const initiatedBy = options?.initiatedBy ?? 'scheduler';
-
-  const nextGoal = await getNextQueuedGoal();
-  if (!nextGoal) {
-    return { enabled: true, dispatched: false, reason: 'queue_empty' };
-  }
-
-  await updateGoalQueueItem(nextGoal.goalId, {
-    status: 'scheduled',
-    scheduledAt: new Date(now).toISOString(),
-  });
-  await updateGoalQueueItem(nextGoal.goalId, {
-    status: 'running',
-    startedAt: new Date(now).toISOString(),
-    attempts: nextGoal.attempts + 1,
-  });
-  await getStore().setActiveAutonomousGoalId(nextGoal.goalId);
-
-  const policyDecision = evaluateGoalExecutionPolicy({
-    autoExecute: true,
+  const result = await dispatchNextGoalWithOrchestration({
+    now,
+    dryRun,
     allowWrites,
-    readOnlyMode: process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE === 'true',
+    initiatedBy,
   });
 
-  if (policyDecision.decision === 'deny') {
-    await updateGoalQueueItem(nextGoal.goalId, {
-      status: 'failed',
-      finishedAt: new Date(now).toISOString(),
-      lastError: policyDecision.message,
-    });
-    await getStore().setActiveAutonomousGoalId(null);
-    return {
-      enabled: true,
-      dispatched: true,
-      goalId: nextGoal.goalId,
-      status: 'failed',
-      reason: policyDecision.reasonCode,
-      error: policyDecision.message,
-    };
-  }
+  return {
+    enabled: true,
+    ...result,
+  };
+}
 
-  try {
-    const result = await planAndExecuteGoal(nextGoal.goal, {
-      dryRun,
-      allowWrites,
-      initiatedBy,
-    });
-
-    if (result.plan.status === 'completed') {
-      await updateGoalQueueItem(nextGoal.goalId, {
-        status: 'completed',
-        finishedAt: new Date().toISOString(),
-        planId: result.plan.planId,
-      });
-    } else {
-      const failedStep = result.executionLog.find((entry) => entry.status === 'failed');
-      await updateGoalQueueItem(nextGoal.goalId, {
-        status: 'failed',
-        finishedAt: new Date().toISOString(),
-        lastError: failedStep?.message || 'goal execution failed',
-        planId: result.plan.planId,
-      });
-    }
-
-    await getStore().setActiveAutonomousGoalId(null);
-    return {
-      enabled: true,
-      dispatched: true,
-      goalId: nextGoal.goalId,
-      planId: result.plan.planId,
-      status: result.plan.status,
-      executionLogCount: result.executionLog.length,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    await updateGoalQueueItem(nextGoal.goalId, {
-      status: 'failed',
-      finishedAt: new Date().toISOString(),
-      lastError: message,
-    });
-    await getStore().setActiveAutonomousGoalId(null);
-    return {
-      enabled: true,
-      dispatched: true,
-      goalId: nextGoal.goalId,
-      status: 'failed',
-      error: message,
-    };
-  }
+export async function replayGoalManagerDlq(goalId: string, now?: number): Promise<ReplayDlqGoalResult> {
+  return replayGoalFromDlq(goalId, now);
 }

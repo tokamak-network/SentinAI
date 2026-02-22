@@ -9,11 +9,22 @@ import type {
   AutonomousGoalQueueItem,
   GoalSignalSnapshot,
 } from '@/types/goal-manager';
+import type {
+  GoalDlqItem,
+  GoalExecutionCheckpoint,
+  GoalIdempotencyRecord,
+  GoalLeaseRecord,
+} from '@/types/goal-orchestrator';
 
 type MockStoreState = {
   candidates: AutonomousGoalCandidate[];
   queue: AutonomousGoalQueueItem[];
   activeGoalId: string | null;
+  goalLeases: Map<string, GoalLeaseRecord>;
+  goalCheckpoints: Map<string, GoalExecutionCheckpoint>;
+  goalDlqItems: GoalDlqItem[];
+  goalIdempotency: Map<string, GoalIdempotencyRecord>;
+  goalLearningEpisodes: Array<Record<string, unknown>>;
 };
 
 const hoisted = vi.hoisted(() => {
@@ -21,6 +32,11 @@ const hoisted = vi.hoisted(() => {
     candidates: [],
     queue: [],
     activeGoalId: null,
+    goalLeases: new Map(),
+    goalCheckpoints: new Map(),
+    goalDlqItems: [],
+    goalIdempotency: new Map(),
+    goalLearningEpisodes: [],
   };
 
   const mockStore = {
@@ -42,6 +58,58 @@ const hoisted = vi.hoisted(() => {
     }),
     getActiveAutonomousGoalId: vi.fn(async () => storeState.activeGoalId),
     listGoalSuppressionRecords: vi.fn(async () => []),
+    getGoalLease: vi.fn(async (goalId: string) => {
+      const lease = storeState.goalLeases.get(goalId);
+      if (!lease) return null;
+      if (new Date(lease.leaseExpiresAt).getTime() <= Date.now()) {
+        storeState.goalLeases.delete(goalId);
+        return null;
+      }
+      return lease;
+    }),
+    setGoalLease: vi.fn(async (goalId: string, lease: GoalLeaseRecord) => {
+      storeState.goalLeases.set(goalId, lease);
+    }),
+    clearGoalLease: vi.fn(async (goalId: string) => {
+      storeState.goalLeases.delete(goalId);
+    }),
+    getGoalCheckpoint: vi.fn(async (goalId: string) => (
+      storeState.goalCheckpoints.get(goalId) || null
+    )),
+    setGoalCheckpoint: vi.fn(async (goalId: string, checkpoint: GoalExecutionCheckpoint) => {
+      storeState.goalCheckpoints.set(goalId, checkpoint);
+    }),
+    clearGoalCheckpoint: vi.fn(async (goalId: string) => {
+      storeState.goalCheckpoints.delete(goalId);
+    }),
+    addGoalDlqItem: vi.fn(async (item: GoalDlqItem) => {
+      storeState.goalDlqItems.unshift(item);
+    }),
+    listGoalDlqItems: vi.fn(async (limit: number = 50) => storeState.goalDlqItems.slice(0, limit)),
+    removeGoalDlqItem: vi.fn(async (goalId: string) => {
+      storeState.goalDlqItems = storeState.goalDlqItems.filter((item) => item.goalId !== goalId);
+    }),
+    clearGoalDlqItems: vi.fn(async () => {
+      storeState.goalDlqItems = [];
+    }),
+    registerGoalIdempotency: vi.fn(async (record: GoalIdempotencyRecord) => {
+      if (storeState.goalIdempotency.has(record.key)) return false;
+      storeState.goalIdempotency.set(record.key, record);
+      return true;
+    }),
+    getGoalIdempotency: vi.fn(async (key: string) => (
+      storeState.goalIdempotency.get(key) || null
+    )),
+    clearGoalIdempotency: vi.fn(async (key: string) => {
+      storeState.goalIdempotency.delete(key);
+    }),
+    addGoalLearningEpisode: vi.fn(async (episode: Record<string, unknown>) => {
+      storeState.goalLearningEpisodes.unshift(episode);
+    }),
+    listGoalLearningEpisodes: vi.fn(async (limit: number = 200) => storeState.goalLearningEpisodes.slice(0, limit)),
+    clearGoalLearningEpisodes: vi.fn(async () => {
+      storeState.goalLearningEpisodes = [];
+    }),
   };
 
   return {
@@ -168,6 +236,11 @@ describe('goal-manager', () => {
     hoisted.storeState.candidates = [];
     hoisted.storeState.queue = [];
     hoisted.storeState.activeGoalId = null;
+    hoisted.storeState.goalLeases = new Map();
+    hoisted.storeState.goalCheckpoints = new Map();
+    hoisted.storeState.goalDlqItems = [];
+    hoisted.storeState.goalIdempotency = new Map();
+    hoisted.storeState.goalLearningEpisodes = [];
 
     hoisted.signalCollectorMock.collectGoalSignalSnapshot.mockResolvedValue(createSnapshot());
     hoisted.candidateGeneratorMock.generateAutonomousGoalCandidates.mockResolvedValue({
@@ -313,5 +386,131 @@ describe('goal-manager', () => {
     expect(result.status).toBe('failed');
     expect(result.reason).toBe('read_only_write_blocked');
     expect(updated?.status).toBe('failed');
+  });
+
+  it('should requeue failed goal with backoff when retries remain', async () => {
+    process.env.GOAL_MANAGER_ENABLED = 'true';
+    process.env.GOAL_MANAGER_DISPATCH_ENABLED = 'true';
+    process.env.GOAL_ORCHESTRATOR_MAX_RETRIES = '2';
+    process.env.GOAL_ORCHESTRATOR_BACKOFF_BASE_MS = '1000';
+
+    hoisted.storeState.queue = [
+      {
+        goalId: 'goal-retry-1',
+        candidateId: 'c1',
+        enqueuedAt: '2026-02-22T12:00:00.000Z',
+        attempts: 0,
+        status: 'queued',
+        goal: 'goal-c1',
+        intent: 'stabilize',
+        source: 'anomaly',
+        risk: 'high',
+        confidence: 0.82,
+        signature: 'sig-retry-1',
+        score: { impact: 30, urgency: 15, confidence: 16, policyFit: 10, total: 71 },
+      },
+    ];
+
+    hoisted.goalPlannerMock.planAndExecuteGoal.mockResolvedValueOnce({
+      plan: {
+        planId: 'plan-retry-1',
+        goal: 'goal-c1',
+        intent: 'stabilize',
+        planVersion: 'v1-rule',
+        replanCount: 0,
+        failureReasonCode: 'none',
+        status: 'failed',
+        dryRun: true,
+        createdAt: '2026-02-22T12:00:00.000Z',
+        updatedAt: '2026-02-22T12:00:00.000Z',
+        summary: 'failed',
+        steps: [],
+      },
+      executionLog: [
+        {
+          stepId: 'step-1',
+          action: 'run_rca',
+          status: 'failed',
+          message: 'rca failed',
+          executedAt: '2026-02-22T12:00:01.000Z',
+        },
+      ],
+    });
+
+    const result = await dispatchTopGoal({
+      initiatedBy: 'scheduler',
+      dryRun: true,
+      allowWrites: false,
+      now: new Date('2026-02-22T12:00:00.000Z').getTime(),
+    });
+
+    const updated = hoisted.storeState.queue.find((item) => item.goalId === 'goal-retry-1');
+    expect(result.status).toBe('queued');
+    expect(result.reason).toBe('requeued');
+    expect(updated?.status).toBe('queued');
+    expect(updated?.nextAttemptAt).toBeDefined();
+    expect(updated?.lastError).toContain('rca failed');
+  });
+
+  it('should move failed goal to dlq when max retries exceeded', async () => {
+    process.env.GOAL_MANAGER_ENABLED = 'true';
+    process.env.GOAL_MANAGER_DISPATCH_ENABLED = 'true';
+    process.env.GOAL_ORCHESTRATOR_MAX_RETRIES = '0';
+
+    hoisted.storeState.queue = [
+      {
+        goalId: 'goal-dlq-1',
+        candidateId: 'c1',
+        enqueuedAt: '2026-02-22T12:00:00.000Z',
+        attempts: 0,
+        status: 'queued',
+        goal: 'goal-c1',
+        intent: 'stabilize',
+        source: 'anomaly',
+        risk: 'high',
+        confidence: 0.82,
+        signature: 'sig-dlq-1',
+        score: { impact: 30, urgency: 15, confidence: 16, policyFit: 10, total: 71 },
+      },
+    ];
+
+    hoisted.goalPlannerMock.planAndExecuteGoal.mockResolvedValueOnce({
+      plan: {
+        planId: 'plan-dlq-1',
+        goal: 'goal-c1',
+        intent: 'stabilize',
+        planVersion: 'v1-rule',
+        replanCount: 0,
+        failureReasonCode: 'none',
+        status: 'failed',
+        dryRun: true,
+        createdAt: '2026-02-22T12:00:00.000Z',
+        updatedAt: '2026-02-22T12:00:00.000Z',
+        summary: 'failed',
+        steps: [],
+      },
+      executionLog: [
+        {
+          stepId: 'step-1',
+          action: 'run_rca',
+          status: 'failed',
+          message: 'fatal failure',
+          executedAt: '2026-02-22T12:00:01.000Z',
+        },
+      ],
+    });
+
+    const result = await dispatchTopGoal({
+      initiatedBy: 'scheduler',
+      dryRun: true,
+      allowWrites: false,
+      now: new Date('2026-02-22T12:00:00.000Z').getTime(),
+    });
+
+    const updated = hoisted.storeState.queue.find((item) => item.goalId === 'goal-dlq-1');
+    expect(result.status).toBe('dlq');
+    expect(updated?.status).toBe('dlq');
+    expect(hoisted.storeState.goalDlqItems.length).toBe(1);
+    expect(hoisted.storeState.goalDlqItems[0].goalId).toBe('goal-dlq-1');
   });
 });
