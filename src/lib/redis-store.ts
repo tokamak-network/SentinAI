@@ -28,6 +28,11 @@ import {
   DecisionTrace,
   DecisionTraceQuery,
 } from '@/types/agent-memory';
+import {
+  AutonomousGoalCandidate,
+  AutonomousGoalQueueItem,
+  GoalSuppressionRecord,
+} from '@/types/goal-manager';
 
 // ============================================================
 // Constants
@@ -56,6 +61,9 @@ const AGENT_CYCLE_HISTORY_MAX = 500;
 const AGENT_CYCLE_HISTORY_DEFAULT_LIMIT = 50;
 const AGENT_MEMORY_MAX = 1000;
 const DECISION_TRACE_MAX = 5000;
+const AUTONOMOUS_GOAL_CANDIDATE_MAX = 200;
+const AUTONOMOUS_GOAL_QUEUE_MAX = 200;
+const GOAL_SUPPRESSION_RECORD_MAX = 500;
 
 // Redis key names (appended to keyPrefix)
 const KEYS = {
@@ -77,6 +85,11 @@ const KEYS = {
   agentMemory: 'agent:memory',
   decisionTrace: (decisionId: string) => `agent:decision:${decisionId}`,
   decisionTraceIndex: 'agent:decision:index',
+  // Autonomous Goal Manager
+  autonomousGoalCandidates: 'goal:candidates',
+  autonomousGoalQueue: 'goal:queue',
+  autonomousGoalActive: 'goal:active',
+  autonomousGoalSuppression: 'goal:suppression',
   // P1: Anomaly Event Store
   anomalyEvents: 'anomaly:events',
   anomalyActive: 'anomaly:active',
@@ -129,6 +142,33 @@ function matchesDecisionTraceQuery(trace: DecisionTrace, query?: DecisionTraceQu
   if (query.toTs && ts > new Date(query.toTs).getTime()) return false;
 
   return true;
+}
+
+function safeIsoTimestampMs(value?: string): number {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function sortGoalQueueItems(items: AutonomousGoalQueueItem[]): AutonomousGoalQueueItem[] {
+  return [...items].sort((a, b) => {
+    const scoreDiff = (b.score?.total || 0) - (a.score?.total || 0);
+    if (scoreDiff !== 0) return scoreDiff;
+
+    const riskRank: Record<AutonomousGoalQueueItem['risk'], number> = {
+      critical: 4,
+      high: 3,
+      medium: 2,
+      low: 1,
+    };
+    const riskDiff = riskRank[b.risk] - riskRank[a.risk];
+    if (riskDiff !== 0) return riskDiff;
+
+    const tsDiff = safeIsoTimestampMs(a.enqueuedAt) - safeIsoTimestampMs(b.enqueuedAt);
+    if (tsDiff !== 0) return tsDiff;
+
+    return a.goalId.localeCompare(b.goalId);
+  });
 }
 
 // ============================================================
@@ -923,6 +963,130 @@ export class RedisStateStore implements IStateStore {
     return removed;
   }
 
+  // --- Autonomous Goal Manager ---
+
+  async addAutonomousGoalCandidate(candidate: AutonomousGoalCandidate): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalCandidates);
+    await this.client.lpush(key, JSON.stringify(candidate));
+    await this.client.ltrim(key, 0, AUTONOMOUS_GOAL_CANDIDATE_MAX - 1);
+  }
+
+  async listAutonomousGoalCandidates(limit: number = 50): Promise<AutonomousGoalCandidate[]> {
+    const safeLimit = Math.min(Math.max(limit, 1), AUTONOMOUS_GOAL_CANDIDATE_MAX);
+    const key = this.key(KEYS.autonomousGoalCandidates);
+    const raw = await this.client.lrange(key, 0, safeLimit - 1);
+    const items: AutonomousGoalCandidate[] = [];
+
+    for (const item of raw) {
+      try {
+        items.push(JSON.parse(item) as AutonomousGoalCandidate);
+      } catch {
+        // Ignore malformed entries
+      }
+    }
+
+    return items;
+  }
+
+  async clearAutonomousGoalCandidates(): Promise<void> {
+    await this.client.del(this.key(KEYS.autonomousGoalCandidates));
+  }
+
+  private async readAutonomousGoalQueue(): Promise<AutonomousGoalQueueItem[]> {
+    const key = this.key(KEYS.autonomousGoalQueue);
+    const raw = await this.client.lrange(key, 0, -1);
+    const queue: AutonomousGoalQueueItem[] = [];
+
+    for (const item of raw) {
+      try {
+        queue.push(JSON.parse(item) as AutonomousGoalQueueItem);
+      } catch {
+        // Ignore malformed entries
+      }
+    }
+
+    return queue;
+  }
+
+  private async writeAutonomousGoalQueue(queue: AutonomousGoalQueueItem[]): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalQueue);
+    await this.client.del(key);
+    if (queue.length === 0) return;
+
+    await this.client.rpush(key, ...queue.map((item) => JSON.stringify(item)));
+    await this.client.ltrim(key, 0, AUTONOMOUS_GOAL_QUEUE_MAX - 1);
+  }
+
+  async upsertAutonomousGoalQueueItem(item: AutonomousGoalQueueItem): Promise<void> {
+    const queue = await this.readAutonomousGoalQueue();
+    const nextQueue = queue.filter((entry) => entry.goalId !== item.goalId);
+    nextQueue.push(item);
+    await this.writeAutonomousGoalQueue(sortGoalQueueItems(nextQueue));
+  }
+
+  async getAutonomousGoalQueue(limit: number = 50): Promise<AutonomousGoalQueueItem[]> {
+    const safeLimit = Math.min(Math.max(limit, 1), AUTONOMOUS_GOAL_QUEUE_MAX);
+    const queue = await this.readAutonomousGoalQueue();
+    return queue.slice(0, safeLimit);
+  }
+
+  async getAutonomousGoalQueueItem(goalId: string): Promise<AutonomousGoalQueueItem | null> {
+    const queue = await this.readAutonomousGoalQueue();
+    return queue.find((item) => item.goalId === goalId) || null;
+  }
+
+  async removeAutonomousGoalQueueItem(goalId: string): Promise<void> {
+    const queue = await this.readAutonomousGoalQueue();
+    const nextQueue = queue.filter((item) => item.goalId !== goalId);
+    await this.writeAutonomousGoalQueue(nextQueue);
+  }
+
+  async clearAutonomousGoalQueue(): Promise<void> {
+    await this.client.del(this.key(KEYS.autonomousGoalQueue));
+  }
+
+  async getActiveAutonomousGoalId(): Promise<string | null> {
+    const key = this.key(KEYS.autonomousGoalActive);
+    const value = await this.client.get(key);
+    return value || null;
+  }
+
+  async setActiveAutonomousGoalId(goalId: string | null): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalActive);
+    if (goalId) {
+      await this.client.set(key, goalId);
+      return;
+    }
+    await this.client.del(key);
+  }
+
+  async addGoalSuppressionRecord(record: GoalSuppressionRecord): Promise<void> {
+    const key = this.key(KEYS.autonomousGoalSuppression);
+    await this.client.lpush(key, JSON.stringify(record));
+    await this.client.ltrim(key, 0, GOAL_SUPPRESSION_RECORD_MAX - 1);
+  }
+
+  async listGoalSuppressionRecords(limit: number = 50): Promise<GoalSuppressionRecord[]> {
+    const safeLimit = Math.min(Math.max(limit, 1), GOAL_SUPPRESSION_RECORD_MAX);
+    const key = this.key(KEYS.autonomousGoalSuppression);
+    const raw = await this.client.lrange(key, 0, safeLimit - 1);
+    const items: GoalSuppressionRecord[] = [];
+
+    for (const item of raw) {
+      try {
+        items.push(JSON.parse(item) as GoalSuppressionRecord);
+      } catch {
+        // Ignore malformed entries
+      }
+    }
+
+    return items;
+  }
+
+  async clearGoalSuppressionRecords(): Promise<void> {
+    await this.client.del(this.key(KEYS.autonomousGoalSuppression));
+  }
+
   // --- Connection Management ---
 
   isConnected(): boolean {
@@ -991,6 +1155,12 @@ export class InMemoryStateStore implements IStateStore {
   private agentMemoryEntries: AgentMemoryEntry[] = [];
   private decisionTraceMap: Map<string, DecisionTrace> = new Map();
   private decisionTraceOrder: string[] = [];
+
+  // Autonomous Goal Manager
+  private autonomousGoalCandidates: AutonomousGoalCandidate[] = [];
+  private autonomousGoalQueue: AutonomousGoalQueueItem[] = [];
+  private activeAutonomousGoalId: string | null = null;
+  private goalSuppressionRecords: GoalSuppressionRecord[] = [];
 
   // --- Metrics Buffer ---
 
@@ -1246,6 +1416,71 @@ export class InMemoryStateStore implements IStateStore {
     this.decisionTraceOrder = nextOrder;
 
     return removed;
+  }
+
+  // --- Autonomous Goal Manager ---
+
+  async addAutonomousGoalCandidate(candidate: AutonomousGoalCandidate): Promise<void> {
+    this.autonomousGoalCandidates.unshift(candidate);
+    if (this.autonomousGoalCandidates.length > AUTONOMOUS_GOAL_CANDIDATE_MAX) {
+      this.autonomousGoalCandidates = this.autonomousGoalCandidates.slice(0, AUTONOMOUS_GOAL_CANDIDATE_MAX);
+    }
+  }
+
+  async listAutonomousGoalCandidates(limit: number = 50): Promise<AutonomousGoalCandidate[]> {
+    const safeLimit = Math.min(Math.max(limit, 1), AUTONOMOUS_GOAL_CANDIDATE_MAX);
+    return this.autonomousGoalCandidates.slice(0, safeLimit);
+  }
+
+  async clearAutonomousGoalCandidates(): Promise<void> {
+    this.autonomousGoalCandidates = [];
+  }
+
+  async upsertAutonomousGoalQueueItem(item: AutonomousGoalQueueItem): Promise<void> {
+    const next = this.autonomousGoalQueue.filter((entry) => entry.goalId !== item.goalId);
+    next.push(item);
+    this.autonomousGoalQueue = sortGoalQueueItems(next).slice(0, AUTONOMOUS_GOAL_QUEUE_MAX);
+  }
+
+  async getAutonomousGoalQueue(limit: number = 50): Promise<AutonomousGoalQueueItem[]> {
+    const safeLimit = Math.min(Math.max(limit, 1), AUTONOMOUS_GOAL_QUEUE_MAX);
+    return this.autonomousGoalQueue.slice(0, safeLimit);
+  }
+
+  async getAutonomousGoalQueueItem(goalId: string): Promise<AutonomousGoalQueueItem | null> {
+    return this.autonomousGoalQueue.find((item) => item.goalId === goalId) || null;
+  }
+
+  async removeAutonomousGoalQueueItem(goalId: string): Promise<void> {
+    this.autonomousGoalQueue = this.autonomousGoalQueue.filter((item) => item.goalId !== goalId);
+  }
+
+  async clearAutonomousGoalQueue(): Promise<void> {
+    this.autonomousGoalQueue = [];
+  }
+
+  async getActiveAutonomousGoalId(): Promise<string | null> {
+    return this.activeAutonomousGoalId;
+  }
+
+  async setActiveAutonomousGoalId(goalId: string | null): Promise<void> {
+    this.activeAutonomousGoalId = goalId;
+  }
+
+  async addGoalSuppressionRecord(record: GoalSuppressionRecord): Promise<void> {
+    this.goalSuppressionRecords.unshift(record);
+    if (this.goalSuppressionRecords.length > GOAL_SUPPRESSION_RECORD_MAX) {
+      this.goalSuppressionRecords = this.goalSuppressionRecords.slice(0, GOAL_SUPPRESSION_RECORD_MAX);
+    }
+  }
+
+  async listGoalSuppressionRecords(limit: number = 50): Promise<GoalSuppressionRecord[]> {
+    const safeLimit = Math.min(Math.max(limit, 1), GOAL_SUPPRESSION_RECORD_MAX);
+    return this.goalSuppressionRecords.slice(0, safeLimit);
+  }
+
+  async clearGoalSuppressionRecords(): Promise<void> {
+    this.goalSuppressionRecords = [];
   }
 
   // === P1: Anomaly Event Store ===

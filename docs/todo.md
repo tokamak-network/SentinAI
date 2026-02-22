@@ -39,6 +39,23 @@
 - [x] Proposal 25 Priority 6 implemented: autonomy replay scorecard and CI workflow (`src/lib/autonomy-scorecard.ts`, `scripts/autonomy-eval.ts`, `.github/workflows/autonomy-eval.yml`, `docs/verification/proposal-25-autonomy-eval-report-template.md`)
 - [x] Proposal 25 regression/full verification complete (`npm run test:run`, `npx tsc --noEmit`, `npm run lint`, `npm run autonomy:eval`)
 
+### Planned (2026-02-22 Full Autonomous Agent - Next Phase)
+- [x] Document full-autonomy remaining backlog in TODO docs
+- [x] Create Proposal 26 document (`docs/todo/proposal-26-autonomous-goal-generation-engine.md`)
+- [x] Implement Goal Manager types and store contract (`src/types/goal-manager.ts`, `src/lib/redis-store.ts`)
+- [ ] Implement signal collector and candidate generator (`src/lib/goal-signal-collector.ts`, `src/lib/goal-candidate-generator.ts`)
+: 진행 상태: `goal-signal-collector` 완료, `goal-candidate-generator` 미착수
+- [ ] Implement priority/suppression engine (`src/lib/goal-priority-engine.ts`)
+- [ ] Implement goal manager runtime and queue API (`src/lib/goal-manager.ts`, `src/app/api/goal-manager/route.ts`)
+- [ ] Integrate agent-loop tick -> autonomous goal queue -> goal planner dispatch
+- [ ] Extend autonomy evaluation scenarios for goal generation quality gate
+
+### In Progress (2026-02-22 Proposal 27 L1/L2 Core Ops Hardening Documentation)
+- [x] Define analysis scope and baseline evidence for EVM L1 + L2 core operations
+- [x] Create Proposal 27 document (`docs/todo/proposal-27-l1-l2-core-ops-hardening.md`)
+- [x] Finalize gap matrix, phased roadmap, and API/type change proposals with acceptance criteria
+- [x] Update TODO review and `docs/lessons.md` with documentation patterns from this task
+
 ### In Progress (2026-02-20 Proposal 10/15/19 MVP Start)
 - [x] Proposal 19 Savings Plans Advisor type/analysis logic implementation (`src/types/savings-advisor.ts`, `src/lib/savings-advisor.ts`)
 - [x] Savings Advisor API 추가 (`GET /api/savings-advisor`)
@@ -207,6 +224,20 @@
 - Expanded MCP operational surface with guarded tools (`restart_batcher`, `restart_proposer`, `switch_l1_rpc`, `update_proxyd_backend`, `run_health_diagnostics`) backed by dedicated operator modules.
 - Added autonomy replay scorecard stack (`autonomy-scorecard`, `autonomy-eval` script, scheduled workflow, report template) and verified end-to-end with strict mode report generation.
 - Re-verified with full regression (`48 files / 843 tests`), `tsc --noEmit` pass, lint pass (existing unrelated warning 1).
+
+## Review (2026-02-22 Proposal 26 Phase A Foundation)
+
+- Added autonomous-goal domain contracts (`src/types/goal-manager.ts`) and expanded store interface with candidate/queue/active/suppression lifecycle methods.
+- Implemented Redis/InMemory goal-manager storage paths in `src/lib/redis-store.ts` with bounded ring/list sizes and deterministic queue ordering by score/risk/time.
+- Implemented deterministic multi-source signal snapshot collector (`src/lib/goal-signal-collector.ts`) with per-source fallback guards.
+- Added coverage for signal normalization/fallback/determinism and store lifecycle (`src/lib/__tests__/goal-signal-collector.test.ts`, `src/lib/__tests__/redis-store.test.ts`).
+- Verified with targeted tests + type check + lint (existing unrelated warning only).
+
+## Review (2026-02-22 Proposal 27 L1/L2 Core Ops Hardening Documentation)
+
+- L1/L2 공통 운영 인프라 확장을 위해 현재 코드베이스를 체인 런타임, 상태 저장, 제어면 정책, 헬스/복구 축으로 분해해 갭을 정리했다.
+- 각 갭은 코드 근거 파일을 연결하고 `P0/P1/P2` 우선순위와 단계별 DoD를 함께 정의해 실행 가능한 로드맵으로 고정했다.
+- API/타입 변경 제안(`NetworkScope`, `OperationRecord`, `CoreHealthReport`)과 검증 시나리오를 함께 명시해 후속 구현 시 결정 공백을 최소화했다.
 
 ---
 

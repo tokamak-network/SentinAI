@@ -13,6 +13,11 @@ import type {
 import type { AnomalyEvent, AlertConfig, UsageDataPoint, AccumulatorState, PredictionRecord } from '@/types/daily-report';
 import type { McpApprovalTicket } from '@/types/mcp';
 import type { AgentMemoryEntry, DecisionTrace } from '@/types/agent-memory';
+import type {
+  AutonomousGoalCandidate,
+  AutonomousGoalQueueItem,
+  GoalSuppressionRecord,
+} from '@/types/goal-manager';
 
 /**
  * Helper: Create mock metric data point
@@ -100,6 +105,69 @@ function createAccumulatorState(overrides?: Partial<AccumulatorState>): Accumula
     },
     lastSnapshotTimestamp: Date.now(),
     startedAt: new Date().toISOString(),
+    ...overrides,
+  };
+}
+
+function createGoalCandidate(overrides?: Partial<AutonomousGoalCandidate>): AutonomousGoalCandidate {
+  return {
+    id: `candidate-${Date.now()}-${Math.random()}`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    source: 'anomaly',
+    status: 'candidate',
+    goal: 'Stabilize sequencer throughput',
+    intent: 'stabilize',
+    risk: 'high',
+    confidence: 0.82,
+    signature: 'sig-stabilize-sequencer',
+    rationale: 'Active anomaly and high txpool pending',
+    signalSnapshotId: 'snapshot-1',
+    score: {
+      impact: 30,
+      urgency: 20,
+      confidence: 16,
+      policyFit: 12,
+      total: 78,
+    },
+    ...overrides,
+  };
+}
+
+function createGoalQueueItem(overrides?: Partial<AutonomousGoalQueueItem>): AutonomousGoalQueueItem {
+  return {
+    goalId: `goal-${Date.now()}-${Math.random()}`,
+    candidateId: `candidate-${Date.now()}-${Math.random()}`,
+    enqueuedAt: new Date().toISOString(),
+    attempts: 0,
+    status: 'queued',
+    goal: 'Scale execution client to 4 vCPU',
+    intent: 'stabilize',
+    source: 'anomaly',
+    risk: 'high',
+    confidence: 0.88,
+    signature: 'sig-scale-4',
+    score: {
+      impact: 32,
+      urgency: 21,
+      confidence: 17,
+      policyFit: 14,
+      total: 84,
+    },
+    ...overrides,
+  };
+}
+
+function createSuppressionRecord(overrides?: Partial<GoalSuppressionRecord>): GoalSuppressionRecord {
+  return {
+    id: `suppression-${Date.now()}-${Math.random()}`,
+    timestamp: new Date().toISOString(),
+    candidateId: 'candidate-1',
+    signature: 'sig-scale-4',
+    source: 'policy',
+    risk: 'medium',
+    reasonCode: 'policy_blocked',
+    details: 'read-only mode enabled',
     ...overrides,
   };
 }
@@ -763,6 +831,105 @@ describe('redis-store (InMemoryStateStore)', () => {
       expect(single?.decisionId).toBe('decision-1');
       expect(list).toHaveLength(1);
       expect(list[0].chosenAction).toBe('scale_to_4');
+    });
+  });
+
+  describe('Autonomous Goal Manager', () => {
+    it('should add and list autonomous goal candidates', async () => {
+      await store.addAutonomousGoalCandidate(createGoalCandidate({ id: 'candidate-1' }));
+      await store.addAutonomousGoalCandidate(createGoalCandidate({ id: 'candidate-2' }));
+
+      const candidates = await store.listAutonomousGoalCandidates(10);
+
+      expect(candidates).toHaveLength(2);
+      expect(candidates[0].id).toBe('candidate-2');
+      expect(candidates[1].id).toBe('candidate-1');
+    });
+
+    it('should upsert queue items and sort by score', async () => {
+      await store.upsertAutonomousGoalQueueItem(
+        createGoalQueueItem({
+          goalId: 'goal-low',
+          score: { impact: 10, urgency: 10, confidence: 8, policyFit: 5, total: 33 },
+          risk: 'medium',
+          enqueuedAt: '2026-02-22T10:00:00.000Z',
+        })
+      );
+      await store.upsertAutonomousGoalQueueItem(
+        createGoalQueueItem({
+          goalId: 'goal-high',
+          score: { impact: 35, urgency: 20, confidence: 19, policyFit: 13, total: 87 },
+          risk: 'high',
+          enqueuedAt: '2026-02-22T10:01:00.000Z',
+        })
+      );
+
+      const queue = await store.getAutonomousGoalQueue(10);
+
+      expect(queue).toHaveLength(2);
+      expect(queue[0].goalId).toBe('goal-high');
+      expect(queue[1].goalId).toBe('goal-low');
+    });
+
+    it('should update existing queue item when upsert with same goalId', async () => {
+      await store.upsertAutonomousGoalQueueItem(
+        createGoalQueueItem({
+          goalId: 'goal-1',
+          attempts: 0,
+          status: 'queued',
+          score: { impact: 20, urgency: 10, confidence: 10, policyFit: 5, total: 45 },
+        })
+      );
+      await store.upsertAutonomousGoalQueueItem(
+        createGoalQueueItem({
+          goalId: 'goal-1',
+          attempts: 1,
+          status: 'running',
+          score: { impact: 20, urgency: 10, confidence: 10, policyFit: 5, total: 45 },
+        })
+      );
+
+      const queue = await store.getAutonomousGoalQueue(10);
+
+      expect(queue).toHaveLength(1);
+      expect(queue[0].goalId).toBe('goal-1');
+      expect(queue[0].attempts).toBe(1);
+      expect(queue[0].status).toBe('running');
+    });
+
+    it('should set/get active autonomous goal ID', async () => {
+      await store.setActiveAutonomousGoalId('goal-active-1');
+      expect(await store.getActiveAutonomousGoalId()).toBe('goal-active-1');
+
+      await store.setActiveAutonomousGoalId(null);
+      expect(await store.getActiveAutonomousGoalId()).toBeNull();
+    });
+
+    it('should add and list suppression records', async () => {
+      await store.addGoalSuppressionRecord(createSuppressionRecord({ id: 'suppression-1' }));
+      await store.addGoalSuppressionRecord(createSuppressionRecord({ id: 'suppression-2' }));
+
+      const records = await store.listGoalSuppressionRecords(10);
+      expect(records).toHaveLength(2);
+      expect(records[0].id).toBe('suppression-2');
+      expect(records[1].id).toBe('suppression-1');
+    });
+
+    it('should clear autonomous goal manager data', async () => {
+      await store.addAutonomousGoalCandidate(createGoalCandidate());
+      await store.upsertAutonomousGoalQueueItem(createGoalQueueItem());
+      await store.addGoalSuppressionRecord(createSuppressionRecord());
+      await store.setActiveAutonomousGoalId('goal-active-1');
+
+      await store.clearAutonomousGoalCandidates();
+      await store.clearAutonomousGoalQueue();
+      await store.clearGoalSuppressionRecords();
+      await store.setActiveAutonomousGoalId(null);
+
+      expect(await store.listAutonomousGoalCandidates(10)).toHaveLength(0);
+      expect(await store.getAutonomousGoalQueue(10)).toHaveLength(0);
+      expect(await store.listGoalSuppressionRecords(10)).toHaveLength(0);
+      expect(await store.getActiveAutonomousGoalId()).toBeNull();
     });
   });
 

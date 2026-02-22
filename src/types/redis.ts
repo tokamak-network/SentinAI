@@ -11,6 +11,11 @@ import { UsageDataPoint } from './cost';
 import { AccumulatorState, DailyAccumulatedData } from './daily-report';
 import { McpApprovalTicket } from './mcp';
 import { AgentMemoryEntry, AgentMemoryQuery, DecisionTrace, DecisionTraceQuery } from './agent-memory';
+import {
+  AutonomousGoalCandidate,
+  AutonomousGoalQueueItem,
+  GoalSuppressionRecord,
+} from './goal-manager';
 
 // ============================================================
 // Store Interface
@@ -77,6 +82,21 @@ export interface IStateStore {
   getDecisionTrace(decisionId: string): Promise<DecisionTrace | null>;
   listDecisionTraces(query?: DecisionTraceQuery): Promise<DecisionTrace[]>;
   cleanupAgentMemory(beforeTimestamp: number): Promise<number>;
+
+  // --- Autonomous Goal Manager ---
+  addAutonomousGoalCandidate(candidate: AutonomousGoalCandidate): Promise<void>;
+  listAutonomousGoalCandidates(limit?: number): Promise<AutonomousGoalCandidate[]>;
+  clearAutonomousGoalCandidates(): Promise<void>;
+  upsertAutonomousGoalQueueItem(item: AutonomousGoalQueueItem): Promise<void>;
+  getAutonomousGoalQueue(limit?: number): Promise<AutonomousGoalQueueItem[]>;
+  getAutonomousGoalQueueItem(goalId: string): Promise<AutonomousGoalQueueItem | null>;
+  removeAutonomousGoalQueueItem(goalId: string): Promise<void>;
+  clearAutonomousGoalQueue(): Promise<void>;
+  getActiveAutonomousGoalId(): Promise<string | null>;
+  setActiveAutonomousGoalId(goalId: string | null): Promise<void>;
+  addGoalSuppressionRecord(record: GoalSuppressionRecord): Promise<void>;
+  listGoalSuppressionRecords(limit?: number): Promise<GoalSuppressionRecord[]>;
+  clearGoalSuppressionRecords(): Promise<void>;
 
   // --- Connection Management ---
   isConnected(): boolean;

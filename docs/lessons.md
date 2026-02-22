@@ -2,6 +2,12 @@
 
 ## 2026-02-22
 
+- 인프라 확장 문서는 추상 목표만 나열하면 구현 단계에서 의사결정 공백이 생긴다.
+- Rule: L1/L2 운영 보완 제안서는 모든 갭 항목에 `현재 코드 근거 파일`, `우선순위`, `DoD`를 함께 고정해 구현자가 추가 결정을 하지 않도록 작성한다.
+- Full-autonomy requests become actionable only when decomposed into capability backlog + single focused proposal.
+- Rule: For autonomous-agent roadmap work, keep one proposal per core capability (goal generation, orchestration, policy, learning) and attach file-level deliverables before implementation.
+- Goal signal fusion across metrics/anomaly/failover/cost/memory is fragile if one source failure aborts the entire snapshot.
+- Rule: Autonomous signal collectors must apply per-source fallback defaults and still emit a schema-complete snapshot for deterministic downstream scoring.
 - Changing core planner APIs from sync to async can leave route/MCP tests green in some paths but fail on hidden mock contracts.
 - Rule: When changing function sync/async signatures, run a repo-wide reference search and update both direct callsites and vi-mock return shapes in the same patch.
 - Post-condition verification based on a single keyword (`ready`) is brittle across action executors and test doubles.
