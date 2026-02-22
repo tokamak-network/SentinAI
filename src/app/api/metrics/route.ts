@@ -16,7 +16,7 @@ import { runDetectionPipeline } from '@/lib/detection-pipeline';
 import { getContainerCpuUsage, getAllContainerUsage, getAllContainerUsageViaKubelet } from '@/lib/k8s-scaler';
 import { isDockerMode } from '@/lib/docker-config';
 import { getDockerComponentDetails } from '@/lib/docker-orchestrator';
-import { getActiveL1RpcUrl, getL2NodesL1RpcStatus } from '@/lib/l1-rpc-failover';
+import { getL2NodesL1RpcStatus, getSentinaiL1RpcUrl } from '@/lib/l1-rpc-failover';
 import { getAllBalanceStatus } from '@/lib/eoa-balance-monitor';
 import { getDisputeGameMonitor } from '@/lib/dispute-game-monitor';
 import { checkDerivationLag, isL1Healthy } from '@/lib/derivation-lag-monitor';
@@ -346,7 +346,7 @@ export async function GET(request: Request) {
         let realL2Block = 0;
         try {
             const rpcUrl = process.env.L2_RPC_URL;
-            const l1RpcUrl = getActiveL1RpcUrl();
+            const l1RpcUrl = getSentinaiL1RpcUrl();
             if (rpcUrl) {
                 const l2Client = createPublicClient({ chain: plugin.l2Chain, transport: http(rpcUrl) });
                 const l1Client = createPublicClient({ chain: plugin.l1Chain, transport: http(l1RpcUrl) });
@@ -434,7 +434,7 @@ export async function GET(request: Request) {
                 l1ResponseTimeMs: null,
             },
             ...(plugin.capabilities.disputeGameMonitoring
-                ? { disputeGames: await getDisputeGameStatus(getActiveL1RpcUrl()) }
+                ? { disputeGames: await getDisputeGameStatus(getSentinaiL1RpcUrl()) }
                 : {}),
             ...(plugin.capabilities.proofMonitoring
                 ? {
@@ -534,7 +534,7 @@ export async function GET(request: Request) {
                 { status: 500 }
             );
         }
-        const l1RpcUrl = getActiveL1RpcUrl();
+        const l1RpcUrl = getSentinaiL1RpcUrl();
 
         const l2RpcClient = createPublicClient({ chain: plugin.l2Chain, transport: http(rpcUrl) });
         const l1RpcClient = createPublicClient({ chain: plugin.l1Chain, transport: http(l1RpcUrl) });

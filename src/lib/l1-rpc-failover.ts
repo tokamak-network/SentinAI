@@ -1,6 +1,6 @@
 /**
- * L1 RPC Auto-Failover Module
- * Manages multiple L1 RPC endpoints with automatic failover.
+ * L1 RPC Auto-Failover Module (L2 Nodes)
+ * Manages L2 node L1 RPC endpoints with automatic failover.
  * Detects failures, switches to healthy backup, and updates K8s components.
  * Monitors Proxyd backends for repeated probe failures and auto-replaces with spare URLs.
  */
@@ -59,11 +59,25 @@ function getStatefulSetPrefix(): string {
   return getAppPrefix();
 }
 
+function parseUrlList(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map((u) => u.trim())
+    .filter((u) => u.length > 0);
+}
+
+function getDefaultL1RpcUrl(): string {
+  return DEFAULT_PUBLIC_ENDPOINT;
+}
+
 // ============================================================
 // Proxyd ConfigMap Name Resolution
 // ============================================================
 
 let proxydConfigMapNameCache: string | null = null;
+let warnedDeprecatedSentinaiL1Rpc = false;
+let warnedMissingL2FailoverPool = false;
 
 /**
  * Resolve Proxyd ConfigMap name with fallback chain:
@@ -297,29 +311,15 @@ const globalForFailover = globalThis as unknown as {
 };
 
 function initFromEnv(): L1FailoverState {
-  const urls: string[] = [];
-
-  // L1_RPC_URLS (comma-separated, supports single URL too)
-  const urlsList = process.env.L1_RPC_URLS;
-  if (urlsList) {
-    urls.push(
-      ...urlsList
-        .split(',')
-        .map((u) => u.trim())
-        .filter((u) => u.length > 0)
-    );
-  }
-
-  // Deprecated: L1_RPC_URL (use L1_RPC_URLS instead)
-  const singleUrl = process.env.L1_RPC_URL;
-  if (singleUrl && !urls.includes(singleUrl)) {
-    console.warn('[L1 Failover] L1_RPC_URL is deprecated — use L1_RPC_URLS instead');
-    urls.push(singleUrl);
-  }
-
-  // Priority 3: Default public endpoint (always last)
-  if (!urls.includes(DEFAULT_PUBLIC_ENDPOINT)) {
-    urls.push(DEFAULT_PUBLIC_ENDPOINT);
+  const urls = parseUrlList(process.env.L1_RPC_URLS);
+  if (urls.length === 0) {
+    urls.push(getDefaultL1RpcUrl());
+    if (!warnedMissingL2FailoverPool) {
+      console.warn(
+        '[L1 Failover] L1_RPC_URLS is not configured. L2 failover pool defaults to a single public endpoint.'
+      );
+      warnedMissingL2FailoverPool = true;
+    }
   }
 
   const endpoints: L1RpcEndpoint[] = urls.map((url) => ({
@@ -336,14 +336,7 @@ function initFromEnv(): L1FailoverState {
   if (process.env.L1_PROXYD_SPARE_URLS && !process.env.L1_RPC_URLS) {
     console.warn('[L1 Failover] L1_PROXYD_SPARE_URLS is deprecated — use L1_RPC_URLS instead');
   }
-  if (spareUrlsList) {
-    spareUrls.push(
-      ...spareUrlsList
-        .split(',')
-        .map((u) => u.trim())
-        .filter((u) => u.length > 0)
-    );
-  }
+  spareUrls.push(...parseUrlList(spareUrlsList));
 
   return {
     activeUrl: endpoints[0].url,
@@ -386,10 +379,30 @@ export function maskUrl(url: string): string {
 
 /**
  * Get the currently active L1 RPC URL.
- * Single source of truth — all L1 RPC consumers should use this.
+ * Source of truth for L2 node failover routing.
  */
 export function getActiveL1RpcUrl(): string {
   return getState().activeUrl;
+}
+
+/**
+ * Get SentinAI internal L1 RPC URL used for app-level reads/monitoring.
+ * This is intentionally separated from L2 node failover pool (L1_RPC_URLS).
+ */
+export function getSentinaiL1RpcUrl(): string {
+  const sentinaiUrl = process.env.SENTINAI_L1_RPC_URL?.trim();
+  if (sentinaiUrl) return sentinaiUrl;
+
+  const deprecatedUrl = process.env.L1_RPC_URL?.trim();
+  if (deprecatedUrl) {
+    if (!warnedDeprecatedSentinaiL1Rpc) {
+      console.warn('[L1 Failover] L1_RPC_URL is deprecated — use SENTINAI_L1_RPC_URL instead.');
+      warnedDeprecatedSentinaiL1Rpc = true;
+    }
+    return deprecatedUrl;
+  }
+
+  return getDefaultL1RpcUrl();
 }
 
 /**
@@ -922,6 +935,8 @@ export function getFailoverEvents(): FailoverEvent[] {
  */
 export function resetL1FailoverState(): void {
   globalForFailover.__sentinai_l1_failover = undefined;
+  warnedDeprecatedSentinaiL1Rpc = false;
+  warnedMissingL2FailoverPool = false;
 }
 
 // ============================================================

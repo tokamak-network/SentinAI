@@ -115,14 +115,23 @@ No need to put AWS credentials in `.env.local`. SentinAI uses the standard AWS c
 
 ## 4. L1 RPC (Optional)
 
-L1 chain RPC used by SentinAI for monitoring. Defaults to publicnode.com if not set.
+SentinAI separates L1 RPC usage into two paths:
+
+1. **SentinAI internal read/monitoring path**
+2. **L2 node failover path (op-node/op-batcher/op-proposer)**
 
 ```bash
-# Comma-separated for multiple endpoints with automatic failover
+# SentinAI internal monitoring RPC (optional)
+SENTINAI_L1_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
+
+# L2 node failover pool (comma-separated)
 L1_RPC_URLS=https://ethereum-sepolia-rpc.publicnode.com,https://sepolia.drpc.org
 ```
 
-> ⚠️ `L1_RPC_URL` (singular) is deprecated. Use `L1_RPC_URLS` instead.
+Notes:
+- `SENTINAI_L1_RPC_URL` is optional and defaults to publicnode.com.
+- `L1_RPC_URLS` is used for L2 failover target list and Proxyd spare replacement pool.
+- `L1_RPC_URL` (singular) is deprecated. Use `SENTINAI_L1_RPC_URL`.
 
 ### L1 Proxyd Integration (Optional)
 
@@ -265,7 +274,8 @@ Additional variables:
 ### L1 RPC (optional)
 | Variable | Description |
 |---|---|
-| `L1_RPC_URLS` | L1 RPC endpoints (comma-separated) |
+| `SENTINAI_L1_RPC_URL` | SentinAI internal monitoring L1 RPC |
+| `L1_RPC_URLS` | L2 node failover endpoint list (comma-separated) |
 
 ### EOA (optional)
 | Variable | Description |

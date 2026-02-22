@@ -7,7 +7,7 @@
 import { createPublicClient, createWalletClient, http, parseEther, formatEther, parseGwei } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { getChainPlugin } from '@/chains';
-import { getActiveL1RpcUrl } from '@/lib/l1-rpc-failover';
+import { getSentinaiL1RpcUrl } from '@/lib/l1-rpc-failover';
 import { getEOAAddressWithAutoDetect } from '@/lib/eoa-detector';
 import { getCachedEOABalance, invalidateEOABalanceCache } from '@/lib/l1-rpc-cache';
 import type {
@@ -170,7 +170,7 @@ export async function getAllBalanceStatus(
   l1RpcUrl?: string
 ): Promise<EOABalanceStatus> {
   const plugin = getChainPlugin();
-  const rpcUrl = l1RpcUrl || getActiveL1RpcUrl();
+  const rpcUrl = l1RpcUrl || getSentinaiL1RpcUrl();
   const config = getConfig();
   const state = getState();
   const treasuryKey = getTreasuryKey();

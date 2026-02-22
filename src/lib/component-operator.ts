@@ -8,7 +8,7 @@ import { executeAction } from '@/lib/action-executor';
 import { getEvents } from '@/lib/anomaly-event-store';
 import { getScalingState } from '@/lib/k8s-scaler';
 import {
-  getActiveL1RpcUrl,
+  getSentinaiL1RpcUrl,
   getL1FailoverState,
   healthCheckEndpoint,
   maskUrl,
@@ -115,7 +115,7 @@ export async function runHealthDiagnostics(): Promise<HealthDiagnosticsResult> {
     getMetricsCount(),
     getScalingState(),
     getEvents(100, 0),
-    Promise.resolve(getActiveL1RpcUrl()),
+    Promise.resolve(getSentinaiL1RpcUrl()),
     Promise.resolve(getL1FailoverState()),
   ]);
 

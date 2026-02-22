@@ -19,7 +19,7 @@ const hoisted = vi.hoisted(() => ({
     getScalingState: vi.fn(),
   },
   l1Mock: {
-    getActiveL1RpcUrl: vi.fn(),
+    getSentinaiL1RpcUrl: vi.fn(),
     getL1FailoverState: vi.fn(),
     healthCheckEndpoint: vi.fn(),
     maskUrl: vi.fn((url: string) => url),
@@ -48,7 +48,7 @@ vi.mock('@/lib/k8s-scaler', () => ({
 }));
 
 vi.mock('@/lib/l1-rpc-failover', () => ({
-  getActiveL1RpcUrl: hoisted.l1Mock.getActiveL1RpcUrl,
+  getSentinaiL1RpcUrl: hoisted.l1Mock.getSentinaiL1RpcUrl,
   getL1FailoverState: hoisted.l1Mock.getL1FailoverState,
   healthCheckEndpoint: hoisted.l1Mock.healthCheckEndpoint,
   maskUrl: hoisted.l1Mock.maskUrl,
@@ -95,7 +95,7 @@ describe('component-operator', () => {
       cooldownRemaining: 0,
       autoScalingEnabled: true,
     });
-    hoisted.l1Mock.getActiveL1RpcUrl.mockReturnValue('https://rpc.io');
+    hoisted.l1Mock.getSentinaiL1RpcUrl.mockReturnValue('https://rpc.io');
     hoisted.l1Mock.getL1FailoverState.mockReturnValue({
       endpoints: [{ url: 'https://rpc.io' }],
     });

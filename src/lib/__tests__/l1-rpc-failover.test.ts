@@ -32,6 +32,7 @@ vi.mock('@/lib/k8s-config', () => ({
 
 import {
   getActiveL1RpcUrl,
+  getSentinaiL1RpcUrl,
   reportL1Success,
   reportL1Failure,
   healthCheckEndpoint,
@@ -57,6 +58,7 @@ describe('l1-rpc-failover', () => {
     // Reset env
     delete process.env.L1_RPC_URLS;
     delete process.env.L1_RPC_URL;
+    delete process.env.SENTINAI_L1_RPC_URL;
     delete process.env.K8S_APP_PREFIX;
     delete process.env.SCALING_SIMULATION_MODE;
     delete process.env.AWS_CLUSTER_NAME;
@@ -85,22 +87,21 @@ describe('l1-rpc-failover', () => {
 
       const state = getL1FailoverState();
 
-      expect(state.endpoints).toHaveLength(3); // rpc1 + rpc2 + publicnode
+      expect(state.endpoints).toHaveLength(2);
       expect(state.endpoints[0].url).toBe('https://rpc1.io');
       expect(state.endpoints[1].url).toBe('https://rpc2.io');
-      expect(state.endpoints[2].url).toContain('publicnode.com');
       expect(state.activeUrl).toBe('https://rpc1.io');
       expect(state.activeIndex).toBe(0);
     });
 
-    it('should fall back to L1_RPC_URL when L1_RPC_URLS is not set', () => {
+    it('should ignore L1_RPC_URL for L2 failover pool', () => {
       process.env.L1_RPC_URL = 'https://single-rpc.io';
 
       const state = getL1FailoverState();
 
-      expect(state.endpoints).toHaveLength(2); // single + publicnode
-      expect(state.endpoints[0].url).toBe('https://single-rpc.io');
-      expect(state.activeUrl).toBe('https://single-rpc.io');
+      expect(state.endpoints).toHaveLength(1);
+      expect(state.endpoints[0].url).toContain('publicnode.com');
+      expect(state.activeUrl).toContain('publicnode.com');
     });
 
     it('should use only publicnode.com when no env vars set', () => {
@@ -127,7 +128,7 @@ describe('l1-rpc-failover', () => {
 
       const state = getL1FailoverState();
 
-      expect(state.endpoints).toHaveLength(3); // rpc1 + rpc2 + publicnode
+      expect(state.endpoints).toHaveLength(2);
     });
 
     it('should initialize all endpoints as healthy', () => {
@@ -158,6 +159,21 @@ describe('l1-rpc-failover', () => {
     it('should auto-initialize if not yet initialized', () => {
       const url = getActiveL1RpcUrl();
       expect(url).toContain('publicnode.com');
+    });
+  });
+
+  describe('getSentinaiL1RpcUrl', () => {
+    it('should prefer SENTINAI_L1_RPC_URL', () => {
+      process.env.SENTINAI_L1_RPC_URL = 'https://sentinai-rpc.io';
+      process.env.L1_RPC_URL = 'https://legacy-rpc.io';
+
+      expect(getSentinaiL1RpcUrl()).toBe('https://sentinai-rpc.io');
+    });
+
+    it('should fallback to deprecated L1_RPC_URL when SENTINAI_L1_RPC_URL is missing', () => {
+      process.env.L1_RPC_URL = 'https://legacy-rpc.io';
+
+      expect(getSentinaiL1RpcUrl()).toBe('https://legacy-rpc.io');
     });
   });
 
@@ -329,20 +345,20 @@ describe('l1-rpc-failover', () => {
     });
 
     it('should wrap around to check all endpoints', async () => {
-      // 4 endpoints: rpc1(0), rpc2(1), rpc3(2), publicnode(3)
+      // 3 endpoints: rpc1(0), rpc2(1), rpc3(2)
       process.env.L1_RPC_URLS = 'https://rpc1.io,https://rpc2.io,https://rpc3.io';
       process.env.SCALING_SIMULATION_MODE = 'true';
       const state = getL1FailoverState();
 
-      // Start from rpc2 (index 1), so check order: rpc3(2) → publicnode(3) → rpc1(0)
+      // Start from rpc2 (index 1), so check order: rpc3(2) → rpc1(0)
       state.activeIndex = 1;
       state.activeUrl = 'https://rpc2.io';
 
-      // rpc3 fails, publicnode fails, rpc1 succeeds
+      // rpc3 fails, rpc1 succeeds
       let callCount = 0;
       mockGetBlockNumber.mockImplementation(() => {
         callCount++;
-        if (callCount <= 2) return Promise.reject(new Error('dead'));
+        if (callCount <= 1) return Promise.reject(new Error('dead'));
         return Promise.resolve(BigInt(1000));
       });
 

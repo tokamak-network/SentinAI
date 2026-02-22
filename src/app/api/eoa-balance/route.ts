@@ -7,7 +7,7 @@
 import { NextResponse } from 'next/server';
 import { getChainPlugin } from '@/chains';
 import { getAllBalanceStatus, refillEOA, getRefillEvents } from '@/lib/eoa-balance-monitor';
-import { getActiveL1RpcUrl } from '@/lib/l1-rpc-failover';
+import { getSentinaiL1RpcUrl } from '@/lib/l1-rpc-failover';
 import type { EOARole } from '@/types/eoa-balance';
 
 export const dynamic = 'force-dynamic';
@@ -67,7 +67,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const l1RpcUrl = getActiveL1RpcUrl();
+    const l1RpcUrl = getSentinaiL1RpcUrl();
     const result = await refillEOA(l1RpcUrl, targetAddr as `0x${string}`, target);
 
     return NextResponse.json(result);

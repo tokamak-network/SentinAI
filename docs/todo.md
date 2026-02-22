@@ -2,6 +2,18 @@
 
 ## Current Status
 
+### In Progress (2026-02-22 L1 Client Operations Automation Documentation)
+- [x] 요청 범위를 L1 운영 자동화 기술 요소 문서로 확정
+- [x] 신규 가이드 작성 (`docs/guide/l1-client-operations-automation-guide.md`)
+- [x] 문서 인덱스 링크 추가 (`docs/README.md`)
+- [x] 작업 회고 반영 (`docs/todo.md`, `docs/lessons.md`)
+
+### In Progress (2026-02-22 L1 RPC Path Separation)
+- [x] SentinAI 내부 조회용 L1 RPC와 L2 노드 failover용 L1 RPC 경로 분리 설계 확정
+- [x] `getSentinaiL1RpcUrl` 추가 및 내부 조회 경로 전환 (`metrics`, `EOA`, `goal-signal`, `component diagnostics`)
+- [x] `L1_RPC_URLS`를 L2 노드 failover endpoint list 의미로 고정 (`src/lib/l1-rpc-failover.ts`)
+- [x] `.env` 샘플/ENV 가이드 업데이트 및 관련 단위 테스트 보강
+
 ### In Progress (2026-02-21 Q1 Strategic Roadmap Documentation)
 - [x] Q1 scope fixed to Phase 1 core only (MCP, Guardian v2, Memory/Trace, Model Routing)
 - [x] Proposal 21 draft created: `docs/todo/proposal-21-mcp-control-plane.md`
@@ -311,6 +323,12 @@
 - Proposal 28의 Phase 0를 `OPS-001 ~ OPS-008`로 분해해 전환 오케스트레이션/운영 어댑터/릴리즈 게이트 중심 backlog로 재정렬했다.
 - 기존 metric-contract 중심 분해를 제거하고, migration 단계 계약과 verifier/rollback 경로를 먼저 고정하도록 순서를 바꿨다.
 - Tokamak client 운영부담 절감을 위해 `release gate`, `ops burden tracker`, `partner runbook`를 Phase 0부터 의무 산출물로 포함했다.
+
+## Review (2026-02-22 L1 Client Operations Automation Documentation)
+
+- L1 운영 자동화 요청을 실행 가능한 문서로 전환하기 위해 12개 기술 요소를 `영역/기술요소/DoD/KPI` 표로 고정했다.
+- 아키텍처를 `수집 -> 분류 -> 오케스트레이션 -> 실행 -> 검증/이관` 흐름으로 표준화해 구현 순서를 명확히 했다.
+- 즉시 적용 가능하도록 4주 MVP 우선순위와 운영 시작 체크리스트를 문서에 포함했다.
 
 ---
 

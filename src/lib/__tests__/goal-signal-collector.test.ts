@@ -4,7 +4,7 @@ import { collectGoalSignalSnapshot } from '@/lib/goal-signal-collector';
 const mockGetRecentMetrics = vi.fn();
 const mockGetEvents = vi.fn();
 const mockGetFailoverEvents = vi.fn();
-const mockGetActiveL1RpcUrl = vi.fn();
+const mockGetSentinaiL1RpcUrl = vi.fn();
 const mockGetUsageSummary = vi.fn();
 const mockQueryAgentMemory = vi.fn();
 const mockGetScalingState = vi.fn();
@@ -20,7 +20,7 @@ vi.mock('@/lib/anomaly-event-store', () => ({
 
 vi.mock('@/lib/l1-rpc-failover', () => ({
   getFailoverEvents: (...args: unknown[]) => mockGetFailoverEvents(...args),
-  getActiveL1RpcUrl: (...args: unknown[]) => mockGetActiveL1RpcUrl(...args),
+  getSentinaiL1RpcUrl: (...args: unknown[]) => mockGetSentinaiL1RpcUrl(...args),
 }));
 
 vi.mock('@/lib/usage-tracker', () => ({
@@ -88,7 +88,7 @@ describe('goal-signal-collector', () => {
       { timestamp: '2026-02-22T09:45:00.000Z' },
       { timestamp: '2026-02-22T08:10:00.000Z' },
     ]);
-    mockGetActiveL1RpcUrl.mockResolvedValue('https://ethereum-sepolia-rpc.publicnode.com');
+    mockGetSentinaiL1RpcUrl.mockResolvedValue('https://ethereum-sepolia-rpc.publicnode.com');
     mockGetUsageSummary.mockResolvedValue({
       avgVcpu: 2.25,
       peakVcpu: 4,
@@ -182,7 +182,7 @@ describe('goal-signal-collector', () => {
     mockGetUsageSummary.mockRejectedValue(new Error('usage down'));
     mockQueryAgentMemory.mockRejectedValue(new Error('memory down'));
     mockGetScalingState.mockRejectedValue(new Error('scaling down'));
-    mockGetActiveL1RpcUrl.mockRejectedValue(new Error('l1 down'));
+    mockGetSentinaiL1RpcUrl.mockRejectedValue(new Error('l1 down'));
     process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE = 'true';
 
     const snapshot = await collectGoalSignalSnapshot({

@@ -15,7 +15,13 @@ import {
   inspectDockerContainer,
   restartDockerContainer,
 } from '@/lib/docker-orchestrator';
-import { getActiveL1RpcUrl, healthCheckEndpoint, getL1FailoverState, maskUrl } from '@/lib/l1-rpc-failover';
+import {
+  getActiveL1RpcUrl,
+  getSentinaiL1RpcUrl,
+  healthCheckEndpoint,
+  getL1FailoverState,
+  maskUrl,
+} from '@/lib/l1-rpc-failover';
 import { checkBalance, refillEOA, getAllBalanceStatus } from '@/lib/eoa-balance-monitor';
 import type { EOARole } from '@/types/eoa-balance';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
@@ -397,7 +403,7 @@ async function executeCheckTreasuryBalance(): Promise<string> {
 async function executeCheckL1GasPrice(): Promise<string> {
   const { createPublicClient: createClient, http: httpTransport, formatGwei } = await import('viem');
   const plugin = getChainPlugin();
-  const l1RpcUrl = getActiveL1RpcUrl();
+  const l1RpcUrl = getSentinaiL1RpcUrl();
   const client = createClient({ chain: plugin.l1Chain, transport: httpTransport(l1RpcUrl, { timeout: 15000 }) });
 
   try {
@@ -427,7 +433,7 @@ async function executeRefillEOA(action: RemediationAction): Promise<string> {
     throw new Error(`${role} EOA address not configured`);
   }
 
-  const l1RpcUrl = getActiveL1RpcUrl();
+  const l1RpcUrl = getSentinaiL1RpcUrl();
   const result = await refillEOA(l1RpcUrl, targetAddr as `0x${string}`, role);
 
   if (result.success) {
@@ -455,7 +461,7 @@ async function executeVerifyBalanceRestored(action: RemediationAction): Promise<
     throw new Error(`${role} EOA address not configured`);
   }
 
-  const l1RpcUrl = getActiveL1RpcUrl();
+  const l1RpcUrl = getSentinaiL1RpcUrl();
   const result = await checkBalance(l1RpcUrl, targetAddr as `0x${string}`, role);
 
   if (result.level === 'normal' || result.level === 'warning') {

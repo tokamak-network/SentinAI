@@ -44,7 +44,7 @@ vi.mock('viem/chains', () => ({
 }));
 
 vi.mock('@/lib/l1-rpc-failover', () => ({
-  getActiveL1RpcUrl: vi.fn(() => 'https://rpc.example.com'),
+  getSentinaiL1RpcUrl: vi.fn(() => 'https://rpc.example.com'),
 }));
 
 // ============================================================

@@ -8,7 +8,7 @@ import { getChainPlugin } from '@/chains';
 import { getEvents } from '@/lib/anomaly-event-store';
 import { queryAgentMemory } from '@/lib/agent-memory';
 import { getScalingState } from '@/lib/k8s-scaler';
-import { getActiveL1RpcUrl, getFailoverEvents } from '@/lib/l1-rpc-failover';
+import { getFailoverEvents, getSentinaiL1RpcUrl } from '@/lib/l1-rpc-failover';
 import { getRecentMetrics } from '@/lib/metrics-store';
 import { getUsageSummary } from '@/lib/usage-tracker';
 import type {
@@ -201,7 +201,7 @@ export async function collectGoalSignalSnapshot(
       'scaling'
     ),
     safeCollect(
-      async () => getActiveL1RpcUrl(),
+      async () => getSentinaiL1RpcUrl(),
       '',
       'l1-rpc'
     ),
