@@ -1,0 +1,36 @@
+name: Autonomy Eval
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2 * * 1'
+
+jobs:
+  autonomy-eval:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run autonomy replay evaluation
+        env:
+          AUTONOMY_EVAL_STRICT: 'true'
+          GOAL_PLANNER_LLM_ENABLED: 'false'
+        run: npm run autonomy:eval
+
+      - name: Upload evaluation artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: autonomy-eval-report
+          path: |
+            docs/verification/proposal-25-autonomy-eval-latest.json
+            docs/verification/proposal-25-autonomy-eval-latest.md

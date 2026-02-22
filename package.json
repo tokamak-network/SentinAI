@@ -18,7 +18,8 @@
     "probe:zk:settlement": "node scripts/zk-settlement-probe.mjs",
     "benchmark": "npx tsx scripts/benchmark-models.ts",
     "smoke:metrics:optimism": "bash scripts/smoke-optimism-metrics.sh",
-    "mcp:bridge:stdio": "npx tsx scripts/mcp-stdio-bridge.ts"
+    "mcp:bridge:stdio": "npx tsx scripts/mcp-stdio-bridge.ts",
+    "autonomy:eval": "npx tsx scripts/autonomy-eval.ts --strict"
   },
   "dependencies": {
     "@iarna/toml": "^3.0.0",

@@ -1,8 +1,19 @@
 # Proposal 25: Claude Code Natural-Language L2 Operations (Priority Roadmap)
 
 > Created: 2026-02-22  
-> Status: Planned  
+> Status: Implemented (Priority 1-6 complete)  
 > Quarter: Q2 (2026-03 ~ 2026-05)
+
+---
+
+## 0. Implementation Status
+
+- [x] Priority 1: Claude Code MCP stdio bridge
+- [x] Priority 3: Central policy and approval engine
+- [x] Priority 2: LLM+validator goal planner with re-planning fallback
+- [x] Priority 5: Closed-loop verification and rollback automation
+- [x] Priority 4: Expanded operational MCP toolset
+- [x] Priority 6: Evaluation environment and autonomy scorecard
 
 ---
 
@@ -340,4 +351,3 @@ Establish repeatable evaluation before production rollout so autonomy quality is
 
 4. Risk: low reproducibility of safety claims  
    Mitigation: deterministic replay eval and release score gating
-

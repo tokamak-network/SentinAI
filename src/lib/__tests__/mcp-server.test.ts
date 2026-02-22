@@ -27,6 +27,21 @@ const hoisted = vi.hoisted(() => ({
     executeGoalPlan: vi.fn(),
     saveGoalPlan: vi.fn(),
   },
+  componentOperatorMock: {
+    restartComponent: vi.fn(),
+    runHealthDiagnostics: vi.fn(),
+  },
+  l1RpcOperatorMock: {
+    switchL1RpcUrl: vi.fn(),
+    updateProxydBackendUrl: vi.fn(),
+  },
+  operationVerifierMock: {
+    verifyOperationOutcome: vi.fn(),
+  },
+  rollbackRunnerMock: {
+    buildRollbackPlan: vi.fn(),
+    runRollbackPlan: vi.fn(),
+  },
   approvalTicketMap: new Map<string, McpApprovalTicket>(),
 }));
 
@@ -77,6 +92,25 @@ vi.mock('@/lib/goal-planner', () => ({
   buildGoalPlan: hoisted.goalPlannerMock.buildGoalPlan,
   executeGoalPlan: hoisted.goalPlannerMock.executeGoalPlan,
   saveGoalPlan: hoisted.goalPlannerMock.saveGoalPlan,
+}));
+
+vi.mock('@/lib/component-operator', () => ({
+  restartComponent: hoisted.componentOperatorMock.restartComponent,
+  runHealthDiagnostics: hoisted.componentOperatorMock.runHealthDiagnostics,
+}));
+
+vi.mock('@/lib/l1-rpc-operator', () => ({
+  switchL1RpcUrl: hoisted.l1RpcOperatorMock.switchL1RpcUrl,
+  updateProxydBackendUrl: hoisted.l1RpcOperatorMock.updateProxydBackendUrl,
+}));
+
+vi.mock('@/lib/operation-verifier', () => ({
+  verifyOperationOutcome: hoisted.operationVerifierMock.verifyOperationOutcome,
+}));
+
+vi.mock('@/lib/rollback-runner', () => ({
+  buildRollbackPlan: hoisted.rollbackRunnerMock.buildRollbackPlan,
+  runRollbackPlan: hoisted.rollbackRunnerMock.runRollbackPlan,
 }));
 
 vi.mock('@/lib/redis-store', () => ({
@@ -142,6 +176,9 @@ describe('mcp-server', () => {
       planId: 'plan-1',
       goal,
       intent: 'custom',
+      planVersion: 'v1-rule',
+      replanCount: 0,
+      failureReasonCode: 'none',
       status: 'planned',
       dryRun,
       createdAt: new Date().toISOString(),
@@ -155,6 +192,9 @@ describe('mcp-server', () => {
         planId: 'plan-1',
         goal: 'stabilize',
         intent: 'stabilize',
+        planVersion: 'v1-rule',
+        replanCount: 0,
+        failureReasonCode: 'none',
         status: 'completed',
         dryRun: true,
         createdAt: new Date().toISOString(),
@@ -163,6 +203,54 @@ describe('mcp-server', () => {
         steps: [],
       },
       executionLog: [],
+    });
+    hoisted.componentOperatorMock.restartComponent.mockResolvedValue({
+      success: true,
+      target: 'op-geth',
+      dryRun: false,
+      message: 'restarted',
+    });
+    hoisted.componentOperatorMock.runHealthDiagnostics.mockResolvedValue({
+      generatedAt: new Date().toISOString(),
+      metrics: { count: 1, latestCpuUsage: 50, latestTxPoolPending: 5, currentVcpu: 2, cooldownRemaining: 0 },
+      anomalies: { total: 0, active: 0 },
+      l1Rpc: { activeUrl: 'https://rpc.io', healthy: true, endpointCount: 2 },
+      components: [],
+    });
+    hoisted.l1RpcOperatorMock.switchL1RpcUrl.mockResolvedValue({
+      success: true,
+      fromUrl: 'https://rpc-a.io',
+      fromUrlRaw: 'https://rpc-a.io',
+      toUrl: 'https://rpc-b.io',
+      toUrlRaw: 'https://rpc-b.io',
+      message: 'switched',
+      k8sUpdated: true,
+    });
+    hoisted.l1RpcOperatorMock.updateProxydBackendUrl.mockResolvedValue({
+      success: true,
+      backendName: 'backend1',
+      oldUrl: 'https://old.io',
+      oldUrlRaw: 'https://old.io',
+      newUrl: 'https://new.io',
+      newUrlRaw: 'https://new.io',
+      message: 'updated',
+    });
+    hoisted.operationVerifierMock.verifyOperationOutcome.mockResolvedValue({
+      expected: 'ok',
+      observed: 'ok',
+      passed: true,
+      details: 'verified',
+      verifiedAt: new Date().toISOString(),
+    });
+    hoisted.rollbackRunnerMock.buildRollbackPlan.mockReturnValue({
+      available: false,
+      reason: 'not-needed',
+    });
+    hoisted.rollbackRunnerMock.runRollbackPlan.mockResolvedValue({
+      attempted: false,
+      success: false,
+      message: 'not-needed',
+      executedAt: new Date().toISOString(),
     });
   });
 
@@ -380,6 +468,87 @@ describe('mcp-server', () => {
     );
 
     expect(response.error?.code).toBe(-32003);
-    expect(hoisted.actionExecutorMock.executeAction).not.toHaveBeenCalled();
+    expect(hoisted.componentOperatorMock.restartComponent).not.toHaveBeenCalled();
+  });
+
+  it('should execute run_health_diagnostics tool', async () => {
+    const response = await handleMcpRequest(
+      {
+        jsonrpc: '2.0',
+        id: 9,
+        method: 'run_health_diagnostics',
+        params: {},
+      },
+      {
+        requestId: 'req-health',
+        apiKey: 'test-key',
+        readOnlyMode: false,
+        allowScalerWriteInReadOnly: false,
+      }
+    );
+
+    expect(response.error).toBeUndefined();
+    expect(hoisted.componentOperatorMock.runHealthDiagnostics).toHaveBeenCalled();
+  });
+
+  it('should execute restart_batcher with valid approval token', async () => {
+    const approvalResponse = await handleMcpRequest(
+      {
+        jsonrpc: '2.0',
+        id: 10,
+        method: 'mcp.request_approval',
+        params: {
+          toolName: 'restart_batcher',
+          toolParams: {},
+          approvedBy: 'tester',
+        },
+      },
+      {
+        requestId: 'req-approve-batcher',
+        apiKey: 'test-key',
+        readOnlyMode: false,
+        allowScalerWriteInReadOnly: false,
+      }
+    );
+    const token = (approvalResponse.result as { approvalToken: string }).approvalToken;
+
+    const response = await handleMcpRequest(
+      {
+        jsonrpc: '2.0',
+        id: 11,
+        method: 'restart_batcher',
+        params: { approvalToken: token },
+      },
+      {
+        requestId: 'req-restart-batcher',
+        apiKey: 'test-key',
+        readOnlyMode: false,
+        allowScalerWriteInReadOnly: false,
+      }
+    );
+
+    expect(response.error).toBeUndefined();
+    expect((response.result as { success: boolean }).success).toBe(true);
+    expect(hoisted.componentOperatorMock.restartComponent).toHaveBeenCalled();
+  });
+
+  it('should block switch_l1_rpc without approval token', async () => {
+    const response = await handleMcpRequest(
+      {
+        jsonrpc: '2.0',
+        id: 12,
+        method: 'switch_l1_rpc',
+        params: {},
+      },
+      {
+        requestId: 'req-switch-l1',
+        apiKey: 'test-key',
+        readOnlyMode: false,
+        allowScalerWriteInReadOnly: false,
+      }
+    );
+
+    expect(response.error?.code).toBe(-32002);
+    expect(hoisted.l1RpcOperatorMock.switchL1RpcUrl).not.toHaveBeenCalled();
   });
 });

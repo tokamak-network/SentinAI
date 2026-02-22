@@ -74,6 +74,7 @@ vi.mock('@/lib/k8s-scaler', () => ({
 describe('goal-planner', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    process.env.GOAL_PLANNER_LLM_ENABLED = 'false';
     hoisted.metricsMock.getRecentMetrics.mockResolvedValue([
       {
         timestamp: new Date().toISOString(),
@@ -129,15 +130,16 @@ describe('goal-planner', () => {
     });
   });
 
-  it('builds stabilize plan from natural language goal', () => {
-    const plan = buildGoalPlan('L2 안정화가 필요하다', true);
+  it('builds stabilize plan from natural language goal', async () => {
+    const plan = await buildGoalPlan('L2 안정화가 필요하다', true);
     expect(plan.intent).toBe('stabilize');
+    expect(plan.planVersion).toBe('v1-rule');
     expect(plan.steps.some((step) => step.action === 'scale_execution')).toBe(true);
     expect(plan.status).toBe('planned');
   });
 
   it('skips approval-required write steps when allowWrites is false', async () => {
-    const plan = buildGoalPlan('비용 최적화', true);
+    const plan = await buildGoalPlan('비용 최적화', true);
     const result = await executeGoalPlan(plan, {
       dryRun: true,
       allowWrites: false,
@@ -150,7 +152,7 @@ describe('goal-planner', () => {
   });
 
   it('executes recovery restart when writes are allowed', async () => {
-    const plan = buildGoalPlan('노드 복구를 위해 restart 해줘', false);
+    const plan = await buildGoalPlan('노드 복구를 위해 restart 해줘', false);
     const result = await executeGoalPlan(plan, {
       dryRun: false,
       allowWrites: true,
@@ -161,8 +163,8 @@ describe('goal-planner', () => {
     expect(hoisted.actionMock.executeAction).toHaveBeenCalled();
   });
 
-  it('stores and retrieves plan history', () => {
-    const plan = buildGoalPlan('RCA 분석', true);
+  it('stores and retrieves plan history', async () => {
+    const plan = await buildGoalPlan('RCA 분석', true);
     const saved = saveGoalPlan(plan);
     const history = getGoalPlanHistory(5);
     const loaded = getGoalPlanById(saved.planId);

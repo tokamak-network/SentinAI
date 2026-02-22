@@ -10,7 +10,12 @@ export type McpToolName =
   | 'plan_goal'
   | 'execute_goal_plan'
   | 'scale_component'
-  | 'restart_component';
+  | 'restart_component'
+  | 'restart_batcher'
+  | 'restart_proposer'
+  | 'switch_l1_rpc'
+  | 'update_proxyd_backend'
+  | 'run_health_diagnostics';
 
 export type McpAuthMode = 'api-key' | 'approval-token' | 'dual';
 

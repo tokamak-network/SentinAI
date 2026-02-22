@@ -2,6 +2,12 @@
 
 ## 2026-02-22
 
+- Changing core planner APIs from sync to async can leave route/MCP tests green in some paths but fail on hidden mock contracts.
+- Rule: When changing function sync/async signatures, run a repo-wide reference search and update both direct callsites and vi-mock return shapes in the same patch.
+- Post-condition verification based on a single keyword (`ready`) is brittle across action executors and test doubles.
+- Rule: Health verification predicates should reject explicit failure markers first, then accept a broader success vocabulary (`ready|running|ok|success|restart`).
+- Deterministic autonomy evaluation must not depend on external LLM/runtime state by default.
+- Rule: Evaluation scripts run in CI default to offline deterministic mode, with explicit opt-in flag (e.g., `--with-execution`) for heavier runtime replay.
 - When adding persistent decision artifacts to the agent loop, unit-test mocks of `getStore()` can silently miss new methods and only fail at runtime logs.
 - Rule: If `IStateStore` interface is extended, update all major `getStore` test mocks (`agent-loop`, integration-style unit tests) in the same commit.
 - Route-level write guards are still required even when middleware already enforces read-only mode.

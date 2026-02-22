@@ -10,6 +10,8 @@ export type GoalPlanIntent =
   | 'recover'
   | 'custom';
 
+export type GoalPlanVersion = 'v1-rule' | 'v2-llm';
+
 export type GoalPlanStatus =
   | 'planned'
   | 'running'
@@ -30,6 +32,17 @@ export type GoalPlanStepAction =
   | 'restart_execution'
   | 'set_routing_policy';
 
+export type GoalPlanFailureReasonCode =
+  | 'none'
+  | 'llm_unavailable'
+  | 'llm_parse_error'
+  | 'schema_invalid'
+  | 'invalid_step_action'
+  | 'policy_violation'
+  | 'runtime_precondition_failed'
+  | 'replan_exhausted'
+  | 'fallback_rule_based';
+
 export interface GoalPlanStep {
   id: string;
   title: string;
@@ -48,12 +61,22 @@ export interface GoalPlan {
   planId: string;
   goal: string;
   intent: GoalPlanIntent;
+  planVersion: GoalPlanVersion;
+  replanCount: number;
+  failureReasonCode?: GoalPlanFailureReasonCode;
   status: GoalPlanStatus;
   dryRun: boolean;
   createdAt: string;
   updatedAt: string;
   summary: string;
   steps: GoalPlanStep[];
+}
+
+export interface GoalPlannerRuntimeContext {
+  latestCpuUsage: number | null;
+  activeAnomalyCount: number;
+  currentVcpu: number;
+  cooldownRemaining: number;
 }
 
 export interface GoalExecutionOptions {
@@ -72,4 +95,3 @@ export interface GoalExecutionResult {
     executedAt: string;
   }>;
 }
-

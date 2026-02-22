@@ -15,8 +15,11 @@ import {
   scaleOpGeth,
 } from '@/lib/k8s-scaler';
 import { addScalingEvent } from '@/lib/daily-accumulator';
-import { executeAction } from '@/lib/action-executor';
 import { buildGoalPlan, executeGoalPlan, saveGoalPlan } from '@/lib/goal-planner';
+import { restartComponent, runHealthDiagnostics } from '@/lib/component-operator';
+import { switchL1RpcUrl, updateProxydBackendUrl } from '@/lib/l1-rpc-operator';
+import { verifyOperationOutcome } from '@/lib/operation-verifier';
+import { buildRollbackPlan, runRollbackPlan } from '@/lib/rollback-runner';
 import {
   getApprovalTokenFromParams,
   issueApprovalTicket as issueApprovalTicketCore,
@@ -26,7 +29,6 @@ import {
   evaluateMcpApprovalIssuePolicy,
   evaluateMcpToolPolicy,
 } from '@/lib/policy-engine';
-import type { RemediationAction } from '@/types/remediation';
 import type { TargetMemoryGiB, TargetVcpu } from '@/types/scaling';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 import type {
@@ -40,6 +42,7 @@ import type {
   McpToolName,
 } from '@/types/mcp';
 import type { PolicyReasonCode } from '@/types/policy';
+import type { OperationActionType } from '@/types/operation-control';
 
 const MCP_ERROR = {
   PARSE_ERROR: -32700,
@@ -57,6 +60,10 @@ const WRITE_TOOLS = new Set<McpToolName>([
   'execute_goal_plan',
   'scale_component',
   'restart_component',
+  'restart_batcher',
+  'restart_proposer',
+  'switch_l1_rpc',
+  'update_proxyd_backend',
 ]);
 
 const TOOL_NAMES = new Set<McpToolName>([
@@ -67,6 +74,11 @@ const TOOL_NAMES = new Set<McpToolName>([
   'execute_goal_plan',
   'scale_component',
   'restart_component',
+  'restart_batcher',
+  'restart_proposer',
+  'switch_l1_rpc',
+  'update_proxyd_backend',
+  'run_health_diagnostics',
 ]);
 
 const DEFAULT_APPROVAL_TTL_SECONDS = 300;
@@ -158,6 +170,69 @@ export const MCP_TOOLS: McpToolDefinition[] = [
       },
     },
     writeOperation: true,
+  },
+  {
+    name: 'restart_batcher',
+    description: '배처 컴포넌트를 재시작합니다.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dryRun: { type: 'boolean', default: false },
+        approvalToken: { type: 'string' },
+      },
+    },
+    writeOperation: true,
+  },
+  {
+    name: 'restart_proposer',
+    description: '프로포저 컴포넌트를 재시작합니다.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        dryRun: { type: 'boolean', default: false },
+        approvalToken: { type: 'string' },
+      },
+    },
+    writeOperation: true,
+  },
+  {
+    name: 'switch_l1_rpc',
+    description: 'L1 RPC 활성 엔드포인트를 전환합니다. targetUrl 미지정 시 다음 건강한 엔드포인트로 failover합니다.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        targetUrl: { type: 'string' },
+        reason: { type: 'string' },
+        dryRun: { type: 'boolean', default: false },
+        approvalToken: { type: 'string' },
+      },
+    },
+    writeOperation: true,
+  },
+  {
+    name: 'update_proxyd_backend',
+    description: '지정한 Proxyd backend RPC URL을 교체합니다.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        backendName: { type: 'string' },
+        newRpcUrl: { type: 'string' },
+        reason: { type: 'string' },
+        dryRun: { type: 'boolean', default: false },
+        approvalToken: { type: 'string' },
+      },
+      required: ['backendName', 'newRpcUrl'],
+    },
+    writeOperation: true,
+  },
+  {
+    name: 'run_health_diagnostics',
+    description: '메트릭, 이상 이벤트, L1 RPC, 주요 컴포넌트 상태를 종합 점검합니다.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+    writeOperation: false,
   },
 ];
 
@@ -333,7 +408,7 @@ async function executePlanGoal(params: unknown): Promise<unknown> {
   }
 
   const dryRun = params.dryRun !== false;
-  const plan = buildGoalPlan(goal, dryRun);
+  const plan = await buildGoalPlan(goal, dryRun);
   return {
     plan: saveGoalPlan(plan),
   };
@@ -352,7 +427,7 @@ async function executeGoalPlanTool(params: unknown): Promise<unknown> {
   const dryRun = params.dryRun !== false;
   const allowWrites = params.allowWrites === true;
 
-  const plan = buildGoalPlan(goal, dryRun);
+  const plan = await buildGoalPlan(goal, dryRun);
   const result = await executeGoalPlan(plan, {
     dryRun,
     allowWrites,
@@ -360,6 +435,52 @@ async function executeGoalPlanTool(params: unknown): Promise<unknown> {
   });
 
   return result;
+}
+
+async function runOperationControl(
+  actionType: OperationActionType,
+  dryRun: boolean,
+  expected: Record<string, unknown>,
+  observed: Record<string, unknown>,
+  execution: Record<string, unknown>
+): Promise<{
+  status: 'verified' | 'rollback_succeeded' | 'rollback_failed' | 'verification_failed' | 'skipped';
+  verification: Awaited<ReturnType<typeof verifyOperationOutcome>>;
+  rollback?: Awaited<ReturnType<typeof runRollbackPlan>>;
+}> {
+  const verification = await verifyOperationOutcome({
+    actionType,
+    dryRun,
+    expected,
+    observed,
+  });
+
+  if (verification.passed) {
+    return {
+      status: dryRun ? 'skipped' : 'verified',
+      verification,
+    };
+  }
+
+  const rollbackPlan = buildRollbackPlan({
+    actionType,
+    execution,
+  });
+
+  const rollback = await runRollbackPlan(rollbackPlan, dryRun);
+  if (rollback.success) {
+    return {
+      status: 'rollback_succeeded',
+      verification,
+      rollback,
+    };
+  }
+
+  return {
+    status: rollback.attempted ? 'rollback_failed' : 'verification_failed',
+    verification,
+    rollback,
+  };
 }
 
 async function executeScaleComponent(params: unknown): Promise<unknown> {
@@ -402,14 +523,26 @@ async function executeScaleComponent(params: unknown): Promise<unknown> {
     });
   }
 
+  const operationControl = await runOperationControl(
+    'scale_component',
+    dryRun,
+    { targetVcpu },
+    { currentVcpu: result.currentVcpu },
+    {
+      previousVcpu: result.previousVcpu,
+      currentVcpu: result.currentVcpu,
+    }
+  );
+
   return {
-    success: result.success,
+    success: result.success && (operationControl.status === 'verified' || operationControl.status === 'skipped' || operationControl.status === 'rollback_succeeded'),
     previousVcpu: result.previousVcpu,
     currentVcpu: result.currentVcpu,
     dryRun,
     message: result.message,
     error: result.error,
     timestamp: result.timestamp,
+    operationControl,
   };
 }
 
@@ -420,17 +553,125 @@ async function executeRestartComponent(params: unknown): Promise<unknown> {
       ? p.target.trim()
       : getChainPlugin().primaryExecutionClient;
 
-  const action: RemediationAction = {
-    type: 'restart_pod',
-    safetyLevel: 'guarded',
-    target,
-  };
+  const dryRun = p.dryRun === true;
+  const restartResult = await restartComponent({ target, dryRun });
+  const operationControl = await runOperationControl(
+    'restart_component',
+    dryRun,
+    { target },
+    { target, success: restartResult.success },
+    { target }
+  );
 
-  const result = await executeAction(action, DEFAULT_SCALING_CONFIG);
   return {
     target,
-    result,
+    success: restartResult.success && (operationControl.status === 'verified' || operationControl.status === 'skipped' || operationControl.status === 'rollback_succeeded'),
+    result: restartResult,
+    operationControl,
   };
+}
+
+async function executeRestartRoleComponent(role: 'batcher' | 'proposer', params: unknown): Promise<unknown> {
+  const p = isObject(params) ? params : {};
+  const dryRun = p.dryRun === true;
+  const plugin = getChainPlugin();
+  const target = typeof plugin.normalizeComponentName === 'function'
+    ? plugin.normalizeComponentName(role)
+    : role;
+  if (target === 'system') {
+    throw new Error(`${role} 컴포넌트를 현재 체인에서 찾을 수 없습니다.`);
+  }
+
+  const restartResult = await restartComponent({ target, dryRun });
+  const actionType: OperationActionType = role === 'batcher' ? 'restart_batcher' : 'restart_proposer';
+  const operationControl = await runOperationControl(
+    actionType,
+    dryRun,
+    { target },
+    { target, success: restartResult.success },
+    { target }
+  );
+
+  return {
+    role,
+    target,
+    success: restartResult.success && (operationControl.status === 'verified' || operationControl.status === 'skipped' || operationControl.status === 'rollback_succeeded'),
+    result: restartResult,
+    operationControl,
+  };
+}
+
+async function executeSwitchL1Rpc(params: unknown): Promise<unknown> {
+  const p = isObject(params) ? params : {};
+  const targetUrl = typeof p.targetUrl === 'string' ? p.targetUrl : undefined;
+  const reason = typeof p.reason === 'string' ? p.reason : undefined;
+  const dryRun = p.dryRun === true;
+
+  const switchResult = await switchL1RpcUrl({ targetUrl, reason, dryRun });
+  const operationControl = await runOperationControl(
+    'switch_l1_rpc',
+    dryRun,
+    { targetUrl: switchResult.toUrlRaw },
+    { activeUrl: switchResult.toUrlRaw },
+    {
+      fromUrl: switchResult.fromUrlRaw,
+      previousUrl: switchResult.fromUrlRaw,
+      toUrl: switchResult.toUrlRaw,
+    }
+  );
+
+  return {
+    ...switchResult,
+    success: switchResult.success && (operationControl.status === 'verified' || operationControl.status === 'skipped' || operationControl.status === 'rollback_succeeded'),
+    operationControl,
+  };
+}
+
+async function executeUpdateProxydBackend(params: unknown): Promise<unknown> {
+  if (!isObject(params)) {
+    throw new Error('backendName/newRpcUrl 파라미터가 필요합니다.');
+  }
+
+  const backendName = typeof params.backendName === 'string' ? params.backendName : '';
+  const newRpcUrl = typeof params.newRpcUrl === 'string' ? params.newRpcUrl : '';
+  const reason = typeof params.reason === 'string' ? params.reason : undefined;
+  const dryRun = params.dryRun === true;
+  if (!backendName || !newRpcUrl) {
+    throw new Error('backendName/newRpcUrl 파라미터가 필요합니다.');
+  }
+
+  const updateResult = await updateProxydBackendUrl({
+    backendName,
+    newRpcUrl,
+    reason,
+    dryRun,
+  });
+
+  const operationControl = await runOperationControl(
+    'update_proxyd_backend',
+    dryRun,
+    { backendName, newRpcUrl: updateResult.newUrlRaw },
+    {
+      backendName: updateResult.backendName,
+      newRpcUrl: updateResult.newUrlRaw,
+      success: updateResult.success,
+    },
+    {
+      backendName: updateResult.backendName,
+      oldUrl: updateResult.oldUrlRaw,
+      newUrl: updateResult.newUrlRaw,
+    }
+  );
+
+  return {
+    ...updateResult,
+    success: updateResult.success && (operationControl.status === 'verified' || operationControl.status === 'skipped' || operationControl.status === 'rollback_succeeded'),
+    operationControl,
+  };
+}
+
+async function executeRunHealthDiagnostics(): Promise<unknown> {
+  return runHealthDiagnostics();
 }
 
 async function executeTool(toolName: McpToolName, params: unknown): Promise<unknown> {
@@ -449,6 +690,16 @@ async function executeTool(toolName: McpToolName, params: unknown): Promise<unkn
       return executeScaleComponent(params);
     case 'restart_component':
       return executeRestartComponent(params);
+    case 'restart_batcher':
+      return executeRestartRoleComponent('batcher', params);
+    case 'restart_proposer':
+      return executeRestartRoleComponent('proposer', params);
+    case 'switch_l1_rpc':
+      return executeSwitchL1Rpc(params);
+    case 'update_proxyd_backend':
+      return executeUpdateProxydBackend(params);
+    case 'run_health_diagnostics':
+      return executeRunHealthDiagnostics();
     default: {
       const exhaustiveCheck: never = toolName;
       throw new Error(`Unknown MCP tool: ${exhaustiveCheck}`);

@@ -7,19 +7,30 @@ import { randomUUID } from 'crypto';
 import { getChainPlugin } from '@/chains';
 import { getEvents } from '@/lib/anomaly-event-store';
 import { detectAnomalies } from '@/lib/anomaly-detector';
+import { generateGoalPlanCandidate } from '@/lib/goal-planner-llm';
+import {
+  collectGoalPlannerRuntimeContext,
+  validateGoalPlanCandidate,
+  type GoalPlanCandidate,
+  type GoalPlanValidationIssue,
+} from '@/lib/goal-plan-validator';
 import { getAllLiveLogs, generateMockLogs } from '@/lib/log-ingester';
 import { getRecentMetrics } from '@/lib/metrics-store';
 import { performRCA, addRCAHistory } from '@/lib/rca-engine';
 import { executeAction } from '@/lib/action-executor';
 import { setRoutingPolicy } from '@/lib/ai-routing';
+import { verifyOperationOutcome } from '@/lib/operation-verifier';
+import { buildRollbackPlan, runRollbackPlan } from '@/lib/rollback-runner';
 import { scaleOpGeth, getScalingState } from '@/lib/k8s-scaler';
 import { DEFAULT_SCALING_CONFIG, type TargetMemoryGiB, type TargetVcpu } from '@/types/scaling';
 import type { RemediationAction } from '@/types/remediation';
 import type { RoutingPolicyName } from '@/types/ai-routing';
+import type { OperationActionType } from '@/types/operation-control';
 import type {
   GoalExecutionOptions,
   GoalExecutionResult,
   GoalPlan,
+  GoalPlanFailureReasonCode,
   GoalPlanIntent,
   GoalPlanStep,
   GoalPlanStepAction,
@@ -27,6 +38,7 @@ import type {
 } from '@/types/goal-planner';
 
 const MAX_GOAL_PLAN_HISTORY = 100;
+const MAX_REPLANS = 2;
 
 type ExecutionContext = {
   latestCpuUsage: number | null;
@@ -80,13 +92,16 @@ function makeStep(
   reason: string,
   options: Partial<GoalPlanStep> = {}
 ): GoalPlanStep {
+  const defaultRequiresApproval =
+    action === 'scale_execution' || action === 'restart_execution' || action === 'set_routing_policy';
+
   return {
     id: randomUUID(),
     title,
     action,
     reason,
     risk: options.risk || 'low',
-    requiresApproval: options.requiresApproval ?? false,
+    requiresApproval: options.requiresApproval ?? defaultRequiresApproval,
     parameters: options.parameters,
     preconditions: options.preconditions,
     rollbackHint: options.rollbackHint,
@@ -127,6 +142,7 @@ function buildSteps(intent: GoalPlanIntent, goal: string): GoalPlanStep[] {
         'AI 모델 라우팅을 비용 중심으로 조정합니다.',
         {
           risk: 'medium',
+          requiresApproval: true,
           parameters: { policyName: explicitPolicy || 'cost-first' },
           rollbackHint: '정확도 이슈 발생 시 balanced로 복귀',
         }
@@ -177,7 +193,39 @@ function buildSteps(intent: GoalPlanIntent, goal: string): GoalPlanStep[] {
   ];
 }
 
-export function buildGoalPlan(goal: string, dryRun: boolean = true): GoalPlan {
+function createGoalPlan(
+  goal: string,
+  dryRun: boolean,
+  intent: GoalPlanIntent,
+  summary: string,
+  steps: GoalPlanStep[],
+  planVersion: GoalPlan['planVersion'],
+  replanCount: number,
+  failureReasonCode?: GoalPlanFailureReasonCode
+): GoalPlan {
+  const timestamp = new Date().toISOString();
+  return {
+    planId: randomUUID(),
+    goal,
+    intent,
+    planVersion,
+    replanCount,
+    failureReasonCode,
+    status: 'planned',
+    dryRun,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    summary,
+    steps,
+  };
+}
+
+function createRuleBasedPlan(
+  goal: string,
+  dryRun: boolean,
+  failureReasonCode?: GoalPlanFailureReasonCode,
+  replanCount: number = 0
+): GoalPlan {
   const normalizedGoal = goal.trim();
   if (!normalizedGoal) {
     throw new Error('Goal text is required');
@@ -185,19 +233,90 @@ export function buildGoalPlan(goal: string, dryRun: boolean = true): GoalPlan {
 
   const intent = inferGoalIntent(normalizedGoal);
   const steps = buildSteps(intent, normalizedGoal);
-  const timestamp = new Date().toISOString();
-
-  return {
-    planId: randomUUID(),
-    goal: normalizedGoal,
-    intent,
-    status: 'planned',
+  const summary = `${intent} 목표에 대해 ${steps.length}개 단계 계획 생성`;
+  return createGoalPlan(
+    normalizedGoal,
     dryRun,
-    createdAt: timestamp,
-    updatedAt: timestamp,
-    summary: `${intent} 목표에 대해 ${steps.length}개 단계 계획 생성`,
+    intent,
+    summary,
     steps,
+    'v1-rule',
+    replanCount,
+    failureReasonCode
+  );
+}
+
+function issuesToText(issues: GoalPlanValidationIssue[]): string[] {
+  return issues.map((issue) => {
+    const stepLabel = typeof issue.stepIndex === 'number' ? `step#${issue.stepIndex + 1}: ` : '';
+    return `${stepLabel}${issue.code} - ${issue.message}`;
+  });
+}
+
+function normalizeGoalCandidate(goal: string, candidate: GoalPlanCandidate): GoalPlanCandidate {
+  return {
+    ...candidate,
+    summary: candidate.summary || `${goal} 목표 계획`,
   };
+}
+
+export async function buildGoalPlan(goal: string, dryRun: boolean = true): Promise<GoalPlan> {
+  const normalizedGoal = goal.trim();
+  if (!normalizedGoal) {
+    throw new Error('Goal text is required');
+  }
+
+  let validationIssues: string[] = [];
+  let lastFailureReason: GoalPlanFailureReasonCode | undefined;
+
+  for (let replanCount = 0; replanCount <= MAX_REPLANS; replanCount++) {
+    const llmResult = await generateGoalPlanCandidate({
+      goal: normalizedGoal,
+      dryRun,
+      replanCount,
+      maxReplans: MAX_REPLANS,
+      previousIssues: validationIssues,
+    });
+
+    if (!llmResult.ok) {
+      lastFailureReason = llmResult.reasonCode;
+      break;
+    }
+
+    const runtime = await collectGoalPlannerRuntimeContext();
+    const validation = validateGoalPlanCandidate({
+      candidate: normalizeGoalCandidate(normalizedGoal, llmResult.candidate),
+      dryRun,
+      allowWrites: !dryRun,
+      readOnlyMode: process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE === 'true',
+      runtime,
+    });
+
+    if (validation.valid) {
+      return createGoalPlan(
+        normalizedGoal,
+        dryRun,
+        validation.intent,
+        validation.summary,
+        validation.steps,
+        'v2-llm',
+        replanCount,
+        'none'
+      );
+    }
+
+    validationIssues = issuesToText(validation.issues);
+    lastFailureReason = validation.failureReasonCode;
+  }
+
+  if (lastFailureReason) {
+    const fallbackReason: GoalPlanFailureReasonCode = lastFailureReason === 'llm_unavailable' || lastFailureReason === 'llm_parse_error'
+      ? 'fallback_rule_based'
+      : 'replan_exhausted';
+    return createRuleBasedPlan(normalizedGoal, dryRun, fallbackReason, MAX_REPLANS);
+  }
+
+  return createRuleBasedPlan(normalizedGoal, dryRun, 'fallback_rule_based', 0);
 }
 
 function clonePlan(plan: GoalPlan): GoalPlan {
@@ -300,6 +419,36 @@ async function executeRcaStep(): Promise<{ ok: boolean; message: string }> {
   };
 }
 
+async function runStepOperationControl(
+  actionType: OperationActionType,
+  dryRun: boolean,
+  expected: Record<string, unknown>,
+  observed: Record<string, unknown>,
+  execution: Record<string, unknown>
+): Promise<string> {
+  const verification = await verifyOperationOutcome({
+    actionType,
+    dryRun,
+    expected,
+    observed,
+  });
+
+  if (verification.passed) {
+    return verification.details ? ` | verify: ${verification.details}` : '';
+  }
+
+  const rollbackPlan = buildRollbackPlan({ actionType, execution });
+  const rollback = await runRollbackPlan(rollbackPlan, dryRun);
+  if (rollback.success) {
+    return ` | verify-failed: ${verification.details || 'unknown'} | rollback: ${rollback.message}`;
+  }
+
+  const rollbackDetails = rollback.attempted
+    ? `rollback failed: ${rollback.message}`
+    : `rollback unavailable: ${rollback.message}`;
+  throw new Error(`verification failed (${verification.details || 'unknown'}), ${rollbackDetails}`);
+}
+
 async function executePlanStep(
   step: GoalPlanStep,
   context: ExecutionContext,
@@ -343,7 +492,17 @@ async function executePlanStep(
     if (!result.success) {
       throw new Error(result.message || result.error || 'scaling failed');
     }
-    return result.message;
+    const controlMessage = await runStepOperationControl(
+      'goal_scale_execution',
+      options.dryRun,
+      { targetVcpu },
+      { currentVcpu: result.currentVcpu },
+      {
+        previousVcpu: result.previousVcpu,
+        currentVcpu: result.currentVcpu,
+      }
+    );
+    return `${result.message}${controlMessage}`;
   }
 
   if (step.action === 'restart_execution') {
@@ -361,7 +520,14 @@ async function executePlanStep(
     if (result.status !== 'success') {
       throw new Error(result.error || result.output || 'restart failed');
     }
-    return `component restarted: ${target}`;
+    const controlMessage = await runStepOperationControl(
+      'goal_restart_execution',
+      false,
+      { target },
+      { target, success: true },
+      { target }
+    );
+    return `component restarted: ${target}${controlMessage}`;
   }
 
   throw new Error(`Unsupported step action: ${step.action}`);
@@ -428,6 +594,6 @@ export async function planAndExecuteGoal(
   goal: string,
   options: GoalExecutionOptions
 ): Promise<GoalExecutionResult> {
-  const plan = buildGoalPlan(goal, options.dryRun);
+  const plan = await buildGoalPlan(goal, options.dryRun);
   return executeGoalPlan(plan, options);
 }

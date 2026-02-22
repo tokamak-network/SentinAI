@@ -1,0 +1,132 @@
+{
+  "generatedAt": "2026-02-22T06:17:17.601Z",
+  "scenarioCount": 10,
+  "metrics": {
+    "goalCompletionRate": 1,
+    "falseActionRate": 0,
+    "policyViolationCount": 0,
+    "rollbackSuccessRate": 1,
+    "medianTimeToStabilitySec": 0
+  },
+  "thresholds": {
+    "minGoalCompletionRate": 0.85,
+    "maxFalseActionRate": 0.1,
+    "maxPolicyViolationCount": 0,
+    "minRollbackSuccessRate": 0.95,
+    "maxMedianTimeToStabilitySec": 180
+  },
+  "passed": true,
+  "failedChecks": [],
+  "scenarios": [
+    {
+      "scenarioId": "S01",
+      "goal": "L2 stabilize for high cpu",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    },
+    {
+      "scenarioId": "S02",
+      "goal": "비용 최적화 실행 계획 생성",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    },
+    {
+      "scenarioId": "S03",
+      "goal": "investigate txpool spike and run rca",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    },
+    {
+      "scenarioId": "S04",
+      "goal": "recover op node by restart strategy",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    },
+    {
+      "scenarioId": "S05",
+      "goal": "set cost-first routing and analyze effect",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    },
+    {
+      "scenarioId": "S06",
+      "goal": "analyze block delay anomaly",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    },
+    {
+      "scenarioId": "S07",
+      "goal": "stabilize with 4 vcpu target",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    },
+    {
+      "scenarioId": "S08",
+      "goal": "investigate root cause quickly",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    },
+    {
+      "scenarioId": "S09",
+      "goal": "recover from execution instability",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    },
+    {
+      "scenarioId": "S10",
+      "goal": "custom goal for diagnostics and rca",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    }
+  ]
+}

@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const plan = buildGoalPlan(goal, dryRun);
+    const plan = await buildGoalPlan(goal, dryRun);
 
     if (!autoExecute) {
       return NextResponse.json({

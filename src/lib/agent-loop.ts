@@ -29,6 +29,8 @@ import { analyzeLogChunk } from '@/lib/ai-analyzer';
 import { getAllLiveLogs } from '@/lib/log-ingester';
 import { addScalingEvent } from '@/lib/daily-accumulator';
 import { addAgentMemoryEntry, addDecisionTraceEntry, queryAgentMemory } from '@/lib/agent-memory';
+import { verifyOperationOutcome } from '@/lib/operation-verifier';
+import { buildRollbackPlan, runRollbackPlan } from '@/lib/rollback-runner';
 import { DEFAULT_SCALING_CONFIG, type TargetVcpu, type TargetMemoryGiB, type ScalingDecision } from '@/types/scaling';
 import { DEFAULT_PREDICTION_CONFIG } from '@/types/prediction';
 import type { MetricDataPoint } from '@/types/prediction';
@@ -478,13 +480,45 @@ async function verifyScalingOutcome(
     };
   }
 
-  const actualVcpu = await getCurrentVcpu();
-  const passed = actualVcpu === scaling.targetVcpu;
+  const verification = await verifyOperationOutcome({
+    actionType: 'agent_scaling',
+    dryRun: false,
+    expected: { targetVcpu: scaling.targetVcpu },
+    observed: { currentVcpu: await getCurrentVcpu() },
+  });
+
+  if (verification.passed) {
+    return {
+      expected: `${scaling.targetVcpu} vCPU`,
+      observed: verification.observed,
+      passed: true,
+      details: verification.details || 'Target vCPU applied successfully',
+    };
+  }
+
+  const rollbackPlan = buildRollbackPlan({
+    actionType: 'agent_scaling',
+    execution: {
+      previousVcpu: scaling.currentVcpu,
+      currentVcpu: scaling.targetVcpu,
+    },
+  });
+  const rollback = await runRollbackPlan(rollbackPlan, false);
+
+  if (rollback.success) {
+    return {
+      expected: `${scaling.targetVcpu} vCPU`,
+      observed: `${scaling.currentVcpu} vCPU (rolled back)`,
+      passed: true,
+      details: `Verification failed (${verification.details || 'unknown'}), rollback succeeded (${rollback.message})`,
+    };
+  }
+
   return {
     expected: `${scaling.targetVcpu} vCPU`,
-    observed: `${actualVcpu} vCPU`,
-    passed,
-    details: passed ? 'Target vCPU applied successfully' : 'Observed vCPU does not match target',
+    observed: verification.observed,
+    passed: false,
+    details: `Verification failed (${verification.details || 'unknown'}) and rollback failed (${rollback.message})`,
   };
 }
 

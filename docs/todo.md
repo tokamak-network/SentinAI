@@ -33,6 +33,11 @@
 - [x] Proposal 25 Priority 3 implemented: Central policy/approval engines (`src/types/policy.ts`, `src/lib/policy-engine.ts`, `src/lib/approval-engine.ts`)
 - [x] Proposal 25 Priority 3 integration: MCP/Goals route guard refactor (`src/lib/mcp-server.ts`, `src/app/api/goals/route.ts`)
 - [x] Proposal 25 Priority 3 tests added (`src/lib/__tests__/policy-engine.test.ts`, `src/lib/__tests__/approval-engine.test.ts`, `src/app/api/goals/route.test.ts`)
+- [x] Proposal 25 Priority 2 implemented: LLM+validator goal planner with bounded replan fallback (`src/lib/goal-planner-llm.ts`, `src/lib/goal-plan-validator.ts`, `src/lib/goal-planner.ts`, `src/types/goal-planner.ts`)
+- [x] Proposal 25 Priority 5 implemented: operation verification + rollback runner integrated to MCP/Goal Planner/Agent Loop (`src/types/operation-control.ts`, `src/lib/operation-verifier.ts`, `src/lib/rollback-runner.ts`, `src/lib/mcp-server.ts`, `src/lib/goal-planner.ts`, `src/lib/agent-loop.ts`)
+- [x] Proposal 25 Priority 4 implemented: expanded MCP operational tools (`restart_batcher`, `restart_proposer`, `switch_l1_rpc`, `update_proxyd_backend`, `run_health_diagnostics`) with operator modules (`src/lib/component-operator.ts`, `src/lib/l1-rpc-operator.ts`)
+- [x] Proposal 25 Priority 6 implemented: autonomy replay scorecard and CI workflow (`src/lib/autonomy-scorecard.ts`, `scripts/autonomy-eval.ts`, `.github/workflows/autonomy-eval.yml`, `docs/verification/proposal-25-autonomy-eval-report-template.md`)
+- [x] Proposal 25 regression/full verification complete (`npm run test:run`, `npx tsc --noEmit`, `npm run lint`, `npm run autonomy:eval`)
 
 ### In Progress (2026-02-20 Proposal 10/15/19 MVP Start)
 - [x] Proposal 19 Savings Plans Advisor type/analysis logic implementation (`src/types/savings-advisor.ts`, `src/lib/savings-advisor.ts`)
@@ -194,6 +199,14 @@
 - Moved MCP/API write guard logic into reusable policy module with reason codes, reducing branch duplication and keeping authorization semantics consistent.
 - Extracted approval ticket lifecycle (issue/validate/consume/hash) into a dedicated engine and refactored MCP server to consume it.
 - Added coverage for policy decisions and approval mismatch/expiry paths, then re-verified with full regression (`41 files / 815 tests`).
+
+## Review (2026-02-22 Proposal 25 Priority 2/4/5/6 Completion)
+
+- Added LLM planning adapter + validator with bounded replan and deterministic fallback, and extended `GoalPlan` metadata (`planVersion`, `replanCount`, `failureReasonCode`) for traceable planning outcomes.
+- Introduced reusable operation control contracts (verification + rollback) and wired them into MCP write tools, goal-plan write steps, and agent-loop verification path so failed post-conditions are not silently treated as success.
+- Expanded MCP operational surface with guarded tools (`restart_batcher`, `restart_proposer`, `switch_l1_rpc`, `update_proxyd_backend`, `run_health_diagnostics`) backed by dedicated operator modules.
+- Added autonomy replay scorecard stack (`autonomy-scorecard`, `autonomy-eval` script, scheduled workflow, report template) and verified end-to-end with strict mode report generation.
+- Re-verified with full regression (`48 files / 843 tests`), `tsc --noEmit` pass, lint pass (existing unrelated warning 1).
 
 ---
 

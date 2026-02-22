@@ -36,6 +36,7 @@ import {
   reportL1Failure,
   healthCheckEndpoint,
   executeFailover,
+  setActiveL1RpcUrl,
   updateK8sL1Rpc,
   getL1FailoverState,
   getFailoverEvents,
@@ -43,6 +44,7 @@ import {
   maskUrl,
   getL1Components,
   replaceBackendInToml,
+  replaceProxydBackendUrl,
   checkProxydBackends,
 } from '../l1-rpc-failover';
 
@@ -382,6 +384,27 @@ describe('l1-rpc-failover', () => {
   // updateK8sL1Rpc
   // ----------------------------------------------------------
 
+  describe('setActiveL1RpcUrl', () => {
+    it('should switch to explicitly requested endpoint', async () => {
+      process.env.L1_RPC_URLS = 'https://rpc1.io,https://rpc2.io';
+      getL1FailoverState();
+
+      const event = await setActiveL1RpcUrl('https://rpc2.io', 'manual switch');
+      expect(event).not.toBeNull();
+      expect(getActiveL1RpcUrl()).toBe('https://rpc2.io');
+    });
+
+    it('should return null when target endpoint is unhealthy', async () => {
+      process.env.L1_RPC_URLS = 'https://rpc1.io';
+      getL1FailoverState();
+      mockGetBlockNumber.mockRejectedValue(new Error('target down'));
+
+      const event = await setActiveL1RpcUrl('https://rpc-down.io', 'manual switch');
+      expect(event).toBeNull();
+      expect(getActiveL1RpcUrl()).toBe('https://rpc1.io');
+    });
+  });
+
   describe('updateK8sL1Rpc', () => {
     it('should log only in simulation mode', async () => {
       process.env.SCALING_SIMULATION_MODE = 'true';
@@ -564,6 +587,36 @@ backends = ["infura_theo1", "infura_theo2"]
         expect(() => replaceBackendInToml('[server]\nhost = "0.0.0.0"', 'x', 'https://x.io')).toThrow(
           'TOML missing [backends] section'
         );
+      });
+    });
+
+    describe('replaceProxydBackendUrl', () => {
+      const MOCK_TOML = `[backends]
+[backends.backend1]
+rpc_url = "https://old-rpc.io"
+
+[backend_groups]
+[backend_groups.main]
+backends = ["backend1"]
+`;
+
+      it('should replace backend url and return details', async () => {
+        process.env.L1_PROXYD_CONFIGMAP_NAME = 'proxyd-config';
+        mockRunK8sCommand
+          .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // get configmap
+          .mockResolvedValueOnce({ stdout: '', stderr: '' }) // patch configmap
+          .mockResolvedValueOnce({ stdout: '', stderr: '' }); // rollout restart
+
+        const result = await replaceProxydBackendUrl(
+          'backend1',
+          'https://new-rpc.io',
+          'manual replacement'
+        );
+
+        expect(result.success).toBe(true);
+        expect(result.backendName).toBe('backend1');
+        expect(result.previousUrl).toBe('https://old-rpc.io');
+        expect(result.newUrl).toBe('https://new-rpc.io');
       });
     });
 

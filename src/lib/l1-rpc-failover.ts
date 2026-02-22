@@ -547,6 +547,75 @@ export async function executeFailover(
 }
 
 /**
+ * Switch active L1 RPC URL to a specific endpoint.
+ * Adds the endpoint to state if it does not exist.
+ */
+export async function setActiveL1RpcUrl(
+  newUrl: string,
+  reason: string
+): Promise<FailoverEvent | null> {
+  const trimmed = newUrl.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const state = getState();
+  const fromUrl = state.activeUrl;
+
+  let targetIndex = state.endpoints.findIndex((endpoint) => endpoint.url === trimmed);
+  if (targetIndex < 0) {
+    state.endpoints.push({
+      url: trimmed,
+      healthy: true,
+      lastSuccess: null,
+      lastFailure: null,
+      consecutiveFailures: 0,
+    });
+    targetIndex = state.endpoints.length - 1;
+  }
+
+  const healthy = await healthCheckEndpoint(trimmed);
+  if (!healthy) {
+    const endpoint = state.endpoints[targetIndex];
+    endpoint.healthy = false;
+    endpoint.lastFailure = Date.now();
+    endpoint.consecutiveFailures++;
+    return null;
+  }
+
+  state.activeUrl = trimmed;
+  state.activeIndex = targetIndex;
+  state.lastFailoverTime = Date.now();
+
+  const endpoint = state.endpoints[targetIndex];
+  endpoint.healthy = true;
+  endpoint.lastSuccess = Date.now();
+  endpoint.consecutiveFailures = 0;
+
+  const isProxydMode = process.env.L1_PROXYD_ENABLED === 'true';
+  const k8sResult = isProxydMode
+    ? { updated: [] as string[], errors: [] as string[] }
+    : await updateK8sL1Rpc(trimmed);
+
+  const event: FailoverEvent = {
+    timestamp: new Date().toISOString(),
+    fromUrl: maskUrl(fromUrl),
+    toUrl: maskUrl(trimmed),
+    reason,
+    k8sUpdated: k8sResult.updated.length > 0,
+    k8sComponents: k8sResult.updated,
+    simulated: false,
+  };
+
+  state.events.push(event);
+  if (state.events.length > MAX_FAILOVER_EVENTS) {
+    state.events.shift();
+  }
+
+  return event;
+}
+
+/**
  * Update K8s StatefulSet components with new L1 RPC URL.
  */
 export async function updateK8sL1Rpc(
@@ -758,6 +827,76 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
   }
 
   return null;
+}
+
+/**
+ * Manually replace a proxyd backend URL.
+ */
+export interface ManualBackendReplacementResult {
+  success: boolean;
+  backendName: string;
+  previousUrl?: string;
+  newUrl?: string;
+  event?: BackendReplacementEvent;
+  error?: string;
+}
+
+export async function replaceProxydBackendUrl(
+  backendName: string,
+  newUrl: string,
+  reason: string
+): Promise<ManualBackendReplacementResult> {
+  const trimmedBackend = backendName.trim();
+  const trimmedUrl = newUrl.trim();
+  if (!trimmedBackend || !trimmedUrl) {
+    return {
+      success: false,
+      backendName: trimmedBackend || backendName,
+      error: 'backendName/newUrl is required',
+    };
+  }
+
+  const result = await applyBackendReplacement(trimmedBackend, trimmedUrl);
+  if (!result.success || !result.previousUrl || !result.newUrl) {
+    return {
+      success: false,
+      backendName: trimmedBackend,
+      error: result.error || 'backend replacement failed',
+    };
+  }
+
+  const state = getState();
+  const event: BackendReplacementEvent = {
+    timestamp: new Date().toISOString(),
+    backendName: trimmedBackend,
+    oldUrl: maskUrl(result.previousUrl),
+    newUrl: maskUrl(result.newUrl),
+    reason,
+    simulated: false,
+  };
+
+  state.backendReplacements.push(event);
+  if (state.backendReplacements.length > MAX_REPLACEMENT_EVENTS) {
+    state.backendReplacements.shift();
+  }
+
+  const health = state.proxydHealth.find((item) => item.name === trimmedBackend);
+  if (health) {
+    health.rpcUrl = trimmedUrl;
+    health.replaced = true;
+    health.replacedWith = trimmedUrl;
+    health.consecutiveFailures = 0;
+    health.healthy = true;
+    health.lastChecked = Date.now();
+  }
+
+  return {
+    success: true,
+    backendName: trimmedBackend,
+    previousUrl: result.previousUrl,
+    newUrl: result.newUrl,
+    event,
+  };
 }
 
 // ============================================================
