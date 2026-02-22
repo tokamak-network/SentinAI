@@ -1,7 +1,7 @@
 # SentinAI Test Guide
 
 **Version:** 1.1
-**Date:** 2026-02-10
+**Date:** 2026-02-22
 
 ---
 
@@ -20,13 +20,13 @@ SentinAI is an AI-based monitoring and auto-scaling dashboard for Optimism L2 no
 | P5 | NLOps | ✅ 완료 | `src/lib/nlops-engine.ts`, `src/app/api/nlops/route.ts` |
 | P6 | Zero-Downtime | ✅ 완료 | `src/lib/zero-downtime-scaler.ts` |
 | P7 | Return to the State ✅ completed | `src/lib/redis-store.ts` |
-| P8 | Auto-Remediation | 📋 계획 | `docs/todo/proposal-8-auto-remediation.md` |
+| P8 | Auto-Remediation | ✅ 완료 | `docs/done/proposal-8-auto-remediation.md` |
 
 ---
 
 ## 1.2 Unit Test Coverage
 
-**Latest execution standard (2026-02-20):** 32 files, 750 tests 100% passed, lines coverage 55%
+**Latest execution standard (2026-02-22):** 59 files, 898 tests 100% passed, lines coverage 62.22%
 **Note:** The detailed table below is a 2026-02-10 extended operations snapshot.
 
 ### Test status (2026-02-10 snapshot: 23 files, 541 tests)
@@ -129,7 +129,7 @@ npm run dev
 ### 3.2 Unit testing
 
 ```bash
-# Full tests (750 tests, 32 files)
+# Full tests (898 tests, 59 files)
 npm run test:run
 
 # Full testing + coverage report

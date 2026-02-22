@@ -5,7 +5,7 @@
 | version | 1.0.0 |
 | execution date | 2026-02-06 15:15~15:25 (KST) |
 | executor | Claude Opus 4 (Automated Verification) |
-| based document | `docs/seed-ui-verification.md` |
+| based document | `docs/verification/seed-ui-verification.md` |
 | environment | macOS Darwin 25.2.0, Node.js, Next.js 16.1.6 (Turbopack) |
 | server port | 3002 (`npm run dev`, NODE_ENV=development) |
 

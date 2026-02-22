@@ -355,7 +355,7 @@ curl -H "Authorization: Bearer $ANTHROPIC_API_KEY" \
 
 ## 📖 Related Documentation
 
-- **Main Framework Doc**: `docs/todo/llm-stress-test-implementation.md`
+- **Main Framework Doc**: `docs/done/llm-stress-test-implementation.md`
 - **AI Client Config**: `.env.local.sample` (AI Provider section)
 - **Test Scenarios**: `src/lib/__tests__/llm-stress-test/scenarios/`
 - **Quick Start**: README.md → LLM Stress Testing section

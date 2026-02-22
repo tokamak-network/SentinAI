@@ -461,6 +461,6 @@ curl -X PUT "http://localhost:3002/api/anomalies/config" \
 
 ## 📚 Additional Resources
 
-- [Anomaly Detection Proposal](./done/proposal-2-anomaly-detection.md)
-- [RCA Engine Guide](./done/proposal-3-rca-engine.md)
-- [Alert Configuration API](../app/api/anomalies/config/route.ts)
+- [Anomaly Detection Proposal](../done/proposal-2-anomaly-detection.md)
+- [RCA Engine Guide](../done/proposal-3-rca-engine.md)
+- [Alert Configuration API](../../src/app/api/anomalies/config/route.ts)

@@ -4,7 +4,7 @@
 |------|------|
 | version | 1.0.0 |
 | Created date | 2026-02-06 |
-| based document | `docs/predictive-scaling-verification.md` |
+| based document | `docs/verification/predictive-scaling-verification.md` |
 | target | Front-end QA, developer |
 | Prerequisites | No K8s/RPC required. Just run `npm run dev` |
 

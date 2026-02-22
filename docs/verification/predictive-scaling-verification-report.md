@@ -5,7 +5,7 @@
 | version | 1.2.0 |
 | execution date | 2026-02-06 14:18~14:24 (KST), re-verification 18:01 (KST) |
 | executor | Claude Opus 4.6 (automated verification) |
-| based document | `docs/predictive-scaling-verification.md` |
+| based document | `docs/verification/predictive-scaling-verification.md` |
 | commit | `4c60b21` |
 | environment | macOS Darwin 25.2.0, Node.js, Next.js 16.1.6 (Turbopack) |
 | 클러스터 | Tokamak Thanos Sepolis (AWS Fargate, 1 vCPU) |
@@ -311,7 +311,7 @@ avg: 0.727s | min: 0.576s | max: 2.506s | n=20
 
 ## 6. Known limitations
 
-Constraints identified during the verification process are consistent with those described in `docs/predictive-scaling-verification.md` §5:
+Constraints identified during the verification process are consistent with those described in `docs/verification/predictive-scaling-verification.md` §5:
 
 | # | Restrictions | Verifying Confirmation |
 |---|---------|-------------|
@@ -344,7 +344,7 @@ Constraints identified during the verification process are consistent with those
 
 ---
 
-## 8. Verification checklist (docs/predictive-scaling-verification.md §6 correspondence)
+## 8. Verification checklist (docs/verification/predictive-scaling-verification.md §6 correspondence)
 
 ### Build and type safety
 

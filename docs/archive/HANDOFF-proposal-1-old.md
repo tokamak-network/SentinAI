@@ -48,8 +48,8 @@
 | `src/app/api/metrics/seed/route.ts` | Mock/live data injection (dev-only) |
 | `src/app/api/scaler/route.ts` | Scaling state + prediction API |
 | `src/app/page.tsx` | Dashboard UI |
-| `docs/proposals/` | 5 AI enhancement proposals |
+| `docs/done/`, `docs/todo/` | proposal documents (implemented/planned) |
 | `docs/verification/` | Verification plans and execution reports |
 
 ## 6. Next Prompt Suggestion
-*   "Implement Proposal 2 (Anomaly Detection) based on `docs/proposals/proposal-2-anomaly-detection.md`. Start with the multi-layer detection pipeline and integrate with the existing metrics collection."
+*   "Implement Proposal 2 (Anomaly Detection) based on `docs/done/proposal-2-anomaly-detection.md`. Start with the multi-layer detection pipeline and integrate with the existing metrics collection."

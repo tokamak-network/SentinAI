@@ -4,7 +4,7 @@
 |------|------|
 | version | 1.0.0 |
 | Created date | 2026-02-06 |
-| based document | `docs/proposal-1-predictive-scaling.md` |
+| based document | `docs/done/proposal-1-predictive-scaling.md` |
 | target | QA, DevOps, Project Manager |
 
 ---
