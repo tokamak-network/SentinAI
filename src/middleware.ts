@@ -84,6 +84,7 @@ export function middleware(request: NextRequest) {
         '/api/reports/daily/send', // Slack delivery (read-only)
         '/api/rca',               // RCA analysis (read-only)
         '/api/nlops',             // NLOps chat (dangerous commands filtered in handler)
+        '/api/goals',             // Goal planner (write safety enforced in route)
         '/api/mcp',               // MCP invocation (write safety enforced in MCP handler)
       ];
 

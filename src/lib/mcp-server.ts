@@ -18,6 +18,7 @@ import {
 } from '@/lib/k8s-scaler';
 import { addScalingEvent } from '@/lib/daily-accumulator';
 import { executeAction } from '@/lib/action-executor';
+import { buildGoalPlan, executeGoalPlan, saveGoalPlan } from '@/lib/goal-planner';
 import type { RemediationAction } from '@/types/remediation';
 import type { TargetMemoryGiB, TargetVcpu } from '@/types/scaling';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
@@ -46,6 +47,7 @@ const MCP_ERROR = {
 } as const;
 
 const WRITE_TOOLS = new Set<McpToolName>([
+  'execute_goal_plan',
   'scale_component',
   'restart_component',
 ]);
@@ -54,6 +56,8 @@ const TOOL_NAMES = new Set<McpToolName>([
   'get_metrics',
   'get_anomalies',
   'run_rca',
+  'plan_goal',
+  'execute_goal_plan',
   'scale_component',
   'restart_component',
 ]);
@@ -92,6 +96,34 @@ export const MCP_TOOLS: McpToolDefinition[] = [
       properties: {},
     },
     writeOperation: false,
+  },
+  {
+    name: 'plan_goal',
+    description: '자연어 목표를 실행 계획으로 분해합니다.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        goal: { type: 'string' },
+        dryRun: { type: 'boolean', default: true },
+      },
+      required: ['goal'],
+    },
+    writeOperation: false,
+  },
+  {
+    name: 'execute_goal_plan',
+    description: '목표 계획을 실행합니다. 기본은 dry-run이며, allowWrites=true면 실제 변경을 수행합니다.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        goal: { type: 'string' },
+        dryRun: { type: 'boolean', default: true },
+        allowWrites: { type: 'boolean', default: false },
+        approvalToken: { type: 'string' },
+      },
+      required: ['goal'],
+    },
+    writeOperation: true,
   },
   {
     name: 'scale_component',
@@ -374,6 +406,46 @@ async function executeRunRca(): Promise<unknown> {
   };
 }
 
+async function executePlanGoal(params: unknown): Promise<unknown> {
+  if (!isObject(params)) {
+    throw new Error('goal 파라미터가 필요합니다.');
+  }
+
+  const goal = typeof params.goal === 'string' ? params.goal.trim() : '';
+  if (!goal) {
+    throw new Error('goal 문자열이 비어 있습니다.');
+  }
+
+  const dryRun = params.dryRun !== false;
+  const plan = buildGoalPlan(goal, dryRun);
+  return {
+    plan: saveGoalPlan(plan),
+  };
+}
+
+async function executeGoalPlanTool(params: unknown): Promise<unknown> {
+  if (!isObject(params)) {
+    throw new Error('goal 파라미터가 필요합니다.');
+  }
+
+  const goal = typeof params.goal === 'string' ? params.goal.trim() : '';
+  if (!goal) {
+    throw new Error('goal 문자열이 비어 있습니다.');
+  }
+
+  const dryRun = params.dryRun !== false;
+  const allowWrites = params.allowWrites === true;
+
+  const plan = buildGoalPlan(goal, dryRun);
+  const result = await executeGoalPlan(plan, {
+    dryRun,
+    allowWrites,
+    initiatedBy: 'mcp',
+  });
+
+  return result;
+}
+
 async function executeScaleComponent(params: unknown): Promise<unknown> {
   if (!isObject(params)) {
     throw new Error('스케일링 파라미터가 올바르지 않습니다.');
@@ -453,6 +525,10 @@ async function executeTool(toolName: McpToolName, params: unknown): Promise<unkn
       return executeGetAnomalies(params);
     case 'run_rca':
       return executeRunRca();
+    case 'plan_goal':
+      return executePlanGoal(params);
+    case 'execute_goal_plan':
+      return executeGoalPlanTool(params);
     case 'scale_component':
       return executeScaleComponent(params);
     case 'restart_component':
@@ -462,6 +538,114 @@ async function executeTool(toolName: McpToolName, params: unknown): Promise<unkn
       throw new Error(`Unknown MCP tool: ${exhaustiveCheck}`);
     }
   }
+}
+
+const MCP_PROTOCOL_VERSION = '2025-03-26';
+
+function toStandardToolCallResult(
+  payload: Record<string, unknown>,
+  isError: boolean
+): Record<string, unknown> {
+  return {
+    content: [
+      {
+        type: 'text',
+        text: JSON.stringify(payload, null, 2),
+      },
+    ],
+    structuredContent: payload,
+    isError,
+  };
+}
+
+async function invokeToolWithGuards(
+  id: McpJsonRpcId,
+  toolName: McpToolName,
+  params: unknown,
+  context: McpRequestContext,
+  config: McpServerConfig,
+  standardCall: boolean
+): Promise<McpJsonRpcResponse> {
+  const authError = assertApiKeyForRequest(config, context);
+  if (authError) {
+    return buildError(id, MCP_ERROR.UNAUTHORIZED, authError);
+  }
+
+  if (isReadOnlyWriteBlocked(context, toolName)) {
+    return buildError(
+      id,
+      MCP_ERROR.FORBIDDEN_READ_ONLY,
+      '읽기 전용 모드에서는 해당 MCP 쓰기 도구를 실행할 수 없습니다.'
+    );
+  }
+
+  const startedAt = Date.now();
+  try {
+    if (needsApprovalToken(config, toolName)) {
+      const token = context.approvalToken || getApprovalTokenFromParams(params);
+      if (!token) {
+        return buildError(id, MCP_ERROR.APPROVAL_REQUIRED, '승인 토큰이 필요합니다.');
+      }
+
+      const ticketResult = await validateAndConsumeTicket(token, toolName, params);
+      if (!ticketResult.ok) {
+        return buildError(id, MCP_ERROR.APPROVAL_REQUIRED, ticketResult.reason);
+      }
+    }
+
+    const result = await executeTool(toolName, params);
+    const payload = {
+      ...((isObject(result) ? result : { value: result }) as Record<string, unknown>),
+      audit: {
+        requestId: context.requestId,
+        toolName,
+        durationMs: Date.now() - startedAt,
+        executedAt: new Date().toISOString(),
+      },
+    };
+
+    if (standardCall) {
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: toStandardToolCallResult(payload, false),
+      };
+    }
+
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: payload,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    if (standardCall) {
+      return {
+        jsonrpc: '2.0',
+        id,
+        result: toStandardToolCallResult(
+          {
+            error: message,
+            toolName,
+          },
+          true
+        ),
+      };
+    }
+    return buildError(id, MCP_ERROR.INTERNAL_ERROR, `MCP 도구 실행 실패: ${message}`);
+  }
+}
+
+function parseStandardToolCall(
+  params: unknown
+): { toolName: McpToolName; argumentsPayload: unknown } | null {
+  if (!isObject(params) || typeof params.name !== 'string') return null;
+  const toolName = normalizeToolName(params.name);
+  if (!toolName) return null;
+  return {
+    toolName,
+    argumentsPayload: params.arguments,
+  };
 }
 
 export async function handleMcpRequest(
@@ -482,6 +666,35 @@ export async function handleMcpRequest(
 
   if (request.jsonrpc !== '2.0' || typeof request.method !== 'string') {
     return buildError(id, MCP_ERROR.INVALID_REQUEST, 'jsonrpc 또는 method 필드가 올바르지 않습니다.');
+  }
+
+  if (request.method === 'initialize') {
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        protocolVersion: MCP_PROTOCOL_VERSION,
+        serverInfo: {
+          name: 'sentinai-mcp',
+          version: '1.0.0',
+        },
+        capabilities: {
+          tools: {
+            listChanged: false,
+          },
+        },
+      },
+    };
+  }
+
+  if (request.method === 'notifications/initialized') {
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        acknowledged: true,
+      },
+    };
   }
 
   if (request.method === 'tools/list') {
@@ -509,54 +722,25 @@ export async function handleMcpRequest(
     };
   }
 
+  if (request.method === 'tools/call') {
+    const parsed = parseStandardToolCall(request.params);
+    if (!parsed) {
+      return buildError(id, MCP_ERROR.INVALID_PARAMS, 'tools/call 파라미터가 올바르지 않습니다.');
+    }
+    return invokeToolWithGuards(
+      id,
+      parsed.toolName,
+      parsed.argumentsPayload,
+      context,
+      config,
+      true
+    );
+  }
+
   const toolName = normalizeToolName(request.method);
   if (!toolName) {
     return buildError(id, MCP_ERROR.METHOD_NOT_FOUND, `지원하지 않는 MCP 메서드입니다: ${request.method}`);
   }
 
-  const authError = assertApiKeyForRequest(config, context);
-  if (authError) {
-    return buildError(id, MCP_ERROR.UNAUTHORIZED, authError);
-  }
-
-  if (isReadOnlyWriteBlocked(context, toolName)) {
-    return buildError(
-      id,
-      MCP_ERROR.FORBIDDEN_READ_ONLY,
-      '읽기 전용 모드에서는 해당 MCP 쓰기 도구를 실행할 수 없습니다.'
-    );
-  }
-
-  const startedAt = Date.now();
-  try {
-    if (needsApprovalToken(config, toolName)) {
-      const token = context.approvalToken || getApprovalTokenFromParams(request.params);
-      if (!token) {
-        return buildError(id, MCP_ERROR.APPROVAL_REQUIRED, '승인 토큰이 필요합니다.');
-      }
-
-      const ticketResult = await validateAndConsumeTicket(token, toolName, request.params);
-      if (!ticketResult.ok) {
-        return buildError(id, MCP_ERROR.APPROVAL_REQUIRED, ticketResult.reason);
-      }
-    }
-
-    const result = await executeTool(toolName, request.params);
-    return {
-      jsonrpc: '2.0',
-      id,
-      result: {
-        ...((isObject(result) ? result : { value: result }) as Record<string, unknown>),
-        audit: {
-          requestId: context.requestId,
-          toolName,
-          durationMs: Date.now() - startedAt,
-          executedAt: new Date().toISOString(),
-        },
-      },
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
-    return buildError(id, MCP_ERROR.INTERNAL_ERROR, `MCP 도구 실행 실패: ${message}`);
-  }
+  return invokeToolWithGuards(id, toolName, request.params, context, config, false);
 }

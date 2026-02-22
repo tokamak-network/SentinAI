@@ -7,6 +7,8 @@ export type McpToolName =
   | 'get_metrics'
   | 'get_anomalies'
   | 'run_rca'
+  | 'plan_goal'
+  | 'execute_goal_plan'
   | 'scale_component'
   | 'restart_component';
 

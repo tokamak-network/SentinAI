@@ -12,6 +12,10 @@
 - Rule: Circuit-breaker filtering keeps provider order, but if all candidates are blocked it must return the original order and rely on per-attempt failure recording.
 - For routing fallback analytics, a single request can generate multiple provider attempts and must be correlated to avoid misleading counters.
 - Rule: Attach `requestId` and `attempt` to each routing decision, then compute fallback-recovered/failed counts on grouped attempts.
+- Unit test mocks can silently drift from runtime contracts when return values are loosely typed (e.g., RCA shape), which surfaces only during execution paths.
+- Rule: When changing consumed fields of a domain result, update test mocks to a minimal full contract and run the affected execution-path test cases.
+- Protocol dual support (legacy + standard MCP) can diverge on authorization behavior if handlers branch early.
+- Rule: Normalize all tool invocations into one guard/execution function so approval token and read-only checks are identical across protocol variants.
 
 ## 2026-02-21
 

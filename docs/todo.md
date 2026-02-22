@@ -22,6 +22,11 @@
 - [x] Proposal 23 dashboard drill-down (`decisionId` click -> `/api/agent-decisions` trace modal)
 - [x] Proposal 24 policy write auth guard (`POST /api/ai-routing/policy` admin key required + route test)
 - [x] Proposal 22/24 runbook added (`docs/guide/agentic-q1-operations-runbook.md`)
+- [x] Proposal 21 MCP compatibility expansion (`initialize`, `notifications/initialized`, `tools/call` in `src/lib/mcp-server.ts`)
+- [x] Proposal 22 autonomous goal planning MVP (`src/types/goal-planner.ts`, `src/lib/goal-planner.ts`, `src/app/api/goals/route.ts`)
+- [x] Read-only safe endpoint update with route-level write guard (`src/middleware.ts`, `src/app/api/goals/route.ts`)
+- [x] Proposal 21-24 regression tests expanded (`src/lib/__tests__/mcp-server.test.ts`, `src/lib/__tests__/goal-planner.test.ts`, `src/app/api/goals/route.test.ts`)
+- [x] Verification complete (`npm run test:run`, `npx tsc --noEmit`, `npm run lint`)
 
 ### In Progress (2026-02-20 Proposal 10/15/19 MVP Start)
 - [x] Proposal 19 Savings Plans Advisor type/analysis logic implementation (`src/types/savings-advisor.ts`, `src/lib/savings-advisor.ts`)
@@ -165,6 +170,12 @@
 - Add Savings Plans Advisor as an independent module/dedicated API and configure it for immediate consumption by connecting a summary field to the `cost-report` response.
 - Scheduled Scaling runs as a cron every hour, and completes the minimum operation MVP with safety guards including cooldown/autoscaling status/real-time CPU override.
 - Add Derivation Lag Monitor based on `optimism_syncStatus` and secure observation path by including lag level and L1 health information in `/api/metrics` response.
+
+## Review (2026-02-22 Proposal 21-24 MCP + Goal Planner)
+
+- Expanded MCP handler to support both legacy tool methods and standard MCP methods through a single guard path so approval/read-only policy stays consistent.
+- Added goal-plan create/execute/history API and guarded execution steps (`collect/anomaly/rca/scale/restart/routing`) to establish a practical autonomous-ops MVP path.
+- Verified with full regression (`37 test files / 791 tests`), type check pass, and lint pass with one pre-existing unrelated warning.
 
 ---
 

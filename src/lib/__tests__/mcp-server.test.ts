@@ -22,6 +22,11 @@ const hoisted = vi.hoisted(() => ({
   actionExecutorMock: {
     executeAction: vi.fn(),
   },
+  goalPlannerMock: {
+    buildGoalPlan: vi.fn(),
+    executeGoalPlan: vi.fn(),
+    saveGoalPlan: vi.fn(),
+  },
   approvalTicketMap: new Map<string, McpApprovalTicket>(),
 }));
 
@@ -66,6 +71,12 @@ vi.mock('@/lib/daily-accumulator', () => ({
 
 vi.mock('@/lib/action-executor', () => ({
   executeAction: hoisted.actionExecutorMock.executeAction,
+}));
+
+vi.mock('@/lib/goal-planner', () => ({
+  buildGoalPlan: hoisted.goalPlannerMock.buildGoalPlan,
+  executeGoalPlan: hoisted.goalPlannerMock.executeGoalPlan,
+  saveGoalPlan: hoisted.goalPlannerMock.saveGoalPlan,
 }));
 
 vi.mock('@/lib/redis-store', () => ({
@@ -127,6 +138,32 @@ describe('mcp-server', () => {
       status: 'success',
       output: 'ok',
     });
+    hoisted.goalPlannerMock.buildGoalPlan.mockImplementation((goal: string, dryRun: boolean) => ({
+      planId: 'plan-1',
+      goal,
+      intent: 'custom',
+      status: 'planned',
+      dryRun,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      summary: 'plan created',
+      steps: [],
+    }));
+    hoisted.goalPlannerMock.saveGoalPlan.mockImplementation((plan: any) => plan);
+    hoisted.goalPlannerMock.executeGoalPlan.mockResolvedValue({
+      plan: {
+        planId: 'plan-1',
+        goal: 'stabilize',
+        intent: 'stabilize',
+        status: 'completed',
+        dryRun: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        summary: 'done',
+        steps: [],
+      },
+      executionLog: [],
+    });
   });
 
   it('should return error when MCP is disabled', async () => {
@@ -157,6 +194,49 @@ describe('mcp-server', () => {
 
     expect(response.error).toBeUndefined();
     expect((response.result as { tools: unknown[] }).tools.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it('should support initialize method for standard MCP clients', async () => {
+    const response = await handleMcpRequest(
+      { jsonrpc: '2.0', id: 100, method: 'initialize', params: {} },
+      {
+        requestId: 'req-init',
+        apiKey: 'test-key',
+        readOnlyMode: false,
+        allowScalerWriteInReadOnly: false,
+      }
+    );
+
+    expect(response.error).toBeUndefined();
+    const result = response.result as Record<string, any>;
+    expect(result.protocolVersion).toBeDefined();
+    expect(result.serverInfo?.name).toBe('sentinai-mcp');
+  });
+
+  it('should execute tools/call for standard MCP clients', async () => {
+    const response = await handleMcpRequest(
+      {
+        jsonrpc: '2.0',
+        id: 101,
+        method: 'tools/call',
+        params: {
+          name: 'get_metrics',
+          arguments: { limit: 1 },
+        },
+      },
+      {
+        requestId: 'req-tools-call',
+        apiKey: 'test-key',
+        readOnlyMode: false,
+        allowScalerWriteInReadOnly: false,
+      }
+    );
+
+    expect(response.error).toBeUndefined();
+    const result = response.result as Record<string, any>;
+    expect(result.isError).toBe(false);
+    expect(Array.isArray(result.content)).toBe(true);
+    expect(hoisted.metricsStoreMock.getRecentMetrics).toHaveBeenCalledWith(1);
   });
 
   it('should execute get_metrics tool', async () => {
@@ -198,6 +278,46 @@ describe('mcp-server', () => {
 
     expect(response.error?.code).toBe(-32002);
     expect(hoisted.scalerMock.scaleOpGeth).not.toHaveBeenCalled();
+  });
+
+  it('should plan goal using MCP tool', async () => {
+    const response = await handleMcpRequest(
+      {
+        jsonrpc: '2.0',
+        id: 7,
+        method: 'plan_goal',
+        params: { goal: 'stabilize l2' },
+      },
+      {
+        requestId: 'req-goal-plan',
+        apiKey: 'test-key',
+        readOnlyMode: false,
+        allowScalerWriteInReadOnly: false,
+      }
+    );
+
+    expect(response.error).toBeUndefined();
+    expect(hoisted.goalPlannerMock.buildGoalPlan).toHaveBeenCalled();
+  });
+
+  it('should block execute_goal_plan without approval token', async () => {
+    const response = await handleMcpRequest(
+      {
+        jsonrpc: '2.0',
+        id: 8,
+        method: 'execute_goal_plan',
+        params: { goal: 'stabilize l2', dryRun: true, allowWrites: false },
+      },
+      {
+        requestId: 'req-goal-exec',
+        apiKey: 'test-key',
+        readOnlyMode: false,
+        allowScalerWriteInReadOnly: false,
+      }
+    );
+
+    expect(response.error?.code).toBe(-32002);
+    expect(hoisted.goalPlannerMock.executeGoalPlan).not.toHaveBeenCalled();
   });
 
   it('should allow scale_component with valid approval token', async () => {
