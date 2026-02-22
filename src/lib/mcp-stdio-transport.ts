@@ -55,7 +55,7 @@ export function parseStdioFrames(buffer: Buffer<ArrayBufferLike>): ParsedStdioFr
     const bodyStart = headerEnd + HEADER_SEPARATOR.length;
 
     if (contentLength === null) {
-      protocolErrors.push('유효하지 않은 Content-Length 헤더를 수신했습니다.');
+      protocolErrors.push('Received an invalid Content-Length header.');
       offset = bodyStart;
       continue;
     }

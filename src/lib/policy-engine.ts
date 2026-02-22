@@ -31,7 +31,7 @@ export function evaluateMcpToolPolicy(input: McpToolPolicyInput): PolicyEvaluati
       return {
         decision: 'deny',
         reasonCode: 'api_key_not_configured',
-        message: 'MCP 인증 모드가 API 키를 요구하지만 SENTINAI_API_KEY가 설정되지 않았습니다.',
+        message: 'MCP auth mode requires an API key, but SENTINAI_API_KEY is not configured.',
       };
     }
 
@@ -39,7 +39,7 @@ export function evaluateMcpToolPolicy(input: McpToolPolicyInput): PolicyEvaluati
       return {
         decision: 'deny',
         reasonCode: 'api_key_invalid',
-        message: '유효하지 않은 x-api-key 입니다.',
+        message: 'Invalid x-api-key.',
       };
     }
   }
@@ -50,7 +50,7 @@ export function evaluateMcpToolPolicy(input: McpToolPolicyInput): PolicyEvaluati
       return {
         decision: 'deny',
         reasonCode: 'read_only_write_blocked',
-        message: '읽기 전용 모드에서는 해당 MCP 쓰기 도구를 실행할 수 없습니다.',
+        message: 'This MCP write tool cannot run in read-only mode.',
       };
     }
   }
@@ -59,7 +59,7 @@ export function evaluateMcpToolPolicy(input: McpToolPolicyInput): PolicyEvaluati
     return {
       decision: 'require_approval',
       reasonCode: 'approval_required',
-      message: '승인 토큰이 필요합니다.',
+      message: 'Approval token is required.',
     };
   }
 
@@ -77,7 +77,7 @@ export function evaluateMcpApprovalIssuePolicy(
     return {
       decision: 'deny',
       reasonCode: 'api_key_invalid',
-      message: '승인 토큰 발급 권한이 없습니다.',
+      message: 'Not authorized to issue approval tokens.',
     };
   }
 

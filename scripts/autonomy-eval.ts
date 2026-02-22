@@ -98,7 +98,7 @@ function createSyntheticSnapshot(params: {
 
 const SCENARIOS: ReplayScenario[] = [
   { kind: 'plan', scenarioId: 'S01', goal: 'L2 stabilize for high cpu', dryRun: true, allowWrites: false },
-  { kind: 'plan', scenarioId: 'S02', goal: '비용 최적화 실행 계획 생성', dryRun: true, allowWrites: false },
+  { kind: 'plan', scenarioId: 'S02', goal: 'generate a cost-optimization execution plan', dryRun: true, allowWrites: false },
   { kind: 'plan', scenarioId: 'S03', goal: 'investigate txpool spike and run rca', dryRun: true, allowWrites: false },
   { kind: 'plan', scenarioId: 'S04', goal: 'recover op node by restart strategy', dryRun: true, allowWrites: false },
   { kind: 'plan', scenarioId: 'S05', goal: 'set cost-first routing and analyze effect', dryRun: true, allowWrites: false },

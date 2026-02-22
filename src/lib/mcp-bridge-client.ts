@@ -107,19 +107,19 @@ export class McpBridgeClient {
         try {
           parsedBody = JSON.parse(bodyText);
         } catch {
-          throw new McpBridgeTransportError('MCP 서버가 JSON이 아닌 응답을 반환했습니다.');
+          throw new McpBridgeTransportError('MCP server returned a non-JSON response.');
         }
       }
 
       if (!response.ok) {
         const serverMessage = extractServerErrorMessage(parsedBody);
         const message = serverMessage
-          || `MCP 서버 요청이 실패했습니다. (${response.status} ${response.statusText})`;
+          || `MCP server request failed. (${response.status} ${response.statusText})`;
         throw new McpBridgeHttpError(message, response.status, response.statusText, bodyText);
       }
 
       if (!isJsonRpcResponse(parsedBody)) {
-        throw new McpBridgeTransportError('MCP 서버 응답 형식이 JSON-RPC가 아닙니다.');
+        throw new McpBridgeTransportError('MCP server response is not a valid JSON-RPC payload.');
       }
 
       return parsedBody;
@@ -128,13 +128,12 @@ export class McpBridgeClient {
         throw error;
       }
       if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new McpBridgeTransportError(`MCP 서버 요청이 ${this.timeoutMs}ms 내에 완료되지 않았습니다.`);
+        throw new McpBridgeTransportError(`MCP server request did not complete within ${this.timeoutMs}ms.`);
       }
       const message = error instanceof Error ? error.message : 'Unknown error';
-      throw new McpBridgeTransportError(`MCP 브리지 전송에 실패했습니다: ${message}`);
+      throw new McpBridgeTransportError(`Failed to send MCP bridge request: ${message}`);
     } finally {
       clearTimeout(timeoutId);
     }
   }
 }
-

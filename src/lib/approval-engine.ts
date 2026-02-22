@@ -95,7 +95,7 @@ export async function validateAndConsumeApprovalTicket(
     return {
       ok: false,
       reasonCode: 'approval_token_missing_or_consumed',
-      message: '승인 토큰이 없거나 이미 사용되었습니다.',
+      message: 'Approval token is missing or has already been consumed.',
     };
   }
 
@@ -103,7 +103,7 @@ export async function validateAndConsumeApprovalTicket(
     return {
       ok: false,
       reasonCode: 'approval_tool_mismatch',
-      message: '승인 토큰의 대상 도구가 일치하지 않습니다.',
+      message: 'Approval token target tool does not match.',
     };
   }
 
@@ -111,7 +111,7 @@ export async function validateAndConsumeApprovalTicket(
     return {
       ok: false,
       reasonCode: 'approval_token_expired',
-      message: '승인 토큰이 만료되었습니다.',
+      message: 'Approval token has expired.',
     };
   }
 
@@ -120,10 +120,9 @@ export async function validateAndConsumeApprovalTicket(
     return {
       ok: false,
       reasonCode: 'approval_params_mismatch',
-      message: '승인 토큰의 요청 파라미터가 일치하지 않습니다.',
+      message: 'Approval token request parameters do not match.',
     };
   }
 
   return { ok: true };
 }
-

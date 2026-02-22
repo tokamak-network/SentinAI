@@ -86,7 +86,7 @@ const DEFAULT_APPROVAL_TTL_SECONDS = 300;
 export const MCP_TOOLS: McpToolDefinition[] = [
   {
     name: 'get_metrics',
-    description: '최근 메트릭과 스케일링 상태를 조회합니다.',
+    description: 'Retrieves recent metrics and scaling state.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -97,7 +97,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'get_anomalies',
-    description: '이상 이벤트 목록을 조회합니다.',
+    description: 'Retrieves anomaly event list.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -109,7 +109,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'run_rca',
-    description: '즉시 RCA 분석을 수행합니다.',
+    description: 'Runs RCA analysis immediately.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -118,7 +118,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'plan_goal',
-    description: '자연어 목표를 실행 계획으로 분해합니다.',
+    description: 'Decomposes a natural-language goal into an execution plan.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -131,7 +131,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'execute_goal_plan',
-    description: '목표 계획을 실행합니다. 기본은 dry-run이며, allowWrites=true면 실제 변경을 수행합니다.',
+    description: 'Executes a goal plan. Default is dry-run; set allowWrites=true to apply real changes.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -146,7 +146,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'scale_component',
-    description: '기본 실행 컴포넌트(op-geth) 리소스를 스케일링합니다.',
+    description: 'Scales resources for the primary execution component (op-geth).',
     inputSchema: {
       type: 'object',
       properties: {
@@ -161,7 +161,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'restart_component',
-    description: '선택한 컴포넌트를 재시작합니다.',
+    description: 'Restarts the selected component.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -173,7 +173,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'restart_batcher',
-    description: '배처 컴포넌트를 재시작합니다.',
+    description: 'Restarts the batcher component.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -185,7 +185,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'restart_proposer',
-    description: '프로포저 컴포넌트를 재시작합니다.',
+    description: 'Restarts the proposer component.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -197,7 +197,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'switch_l1_rpc',
-    description: 'L1 RPC 활성 엔드포인트를 전환합니다. targetUrl 미지정 시 다음 건강한 엔드포인트로 failover합니다.',
+    description: 'Switches the active L1 RPC endpoint. If targetUrl is omitted, it fails over to the next healthy endpoint.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -211,7 +211,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'update_proxyd_backend',
-    description: '지정한 Proxyd backend RPC URL을 교체합니다.',
+    description: 'Replaces the RPC URL for the specified Proxyd backend.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -227,7 +227,7 @@ export const MCP_TOOLS: McpToolDefinition[] = [
   },
   {
     name: 'run_health_diagnostics',
-    description: '메트릭, 이상 이벤트, L1 RPC, 주요 컴포넌트 상태를 종합 점검합니다.',
+    description: 'Runs comprehensive diagnostics across metrics, anomalies, L1 RPC, and key component health.',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -308,12 +308,12 @@ async function issueApprovalTicket(
   config: McpServerConfig
 ): Promise<McpJsonRpcResponse> {
   if (!isObject(params)) {
-    return buildError(null, MCP_ERROR.INVALID_PARAMS, '승인 요청 파라미터가 올바르지 않습니다.');
+    return buildError(null, MCP_ERROR.INVALID_PARAMS, 'Approval request parameters are invalid.');
   }
 
   const toolName = normalizeToolName(String(params.toolName || ''));
   if (!toolName || !WRITE_TOOLS.has(toolName)) {
-    return buildError(null, MCP_ERROR.INVALID_PARAMS, '승인 요청은 쓰기 도구에만 발급할 수 있습니다.');
+    return buildError(null, MCP_ERROR.INVALID_PARAMS, 'Approval requests can only be issued for write tools.');
   }
 
   const ttlSeconds = clampNumber(
@@ -399,12 +399,12 @@ async function executeRunRca(): Promise<unknown> {
 
 async function executePlanGoal(params: unknown): Promise<unknown> {
   if (!isObject(params)) {
-    throw new Error('goal 파라미터가 필요합니다.');
+    throw new Error('goal parameter is required.');
   }
 
   const goal = typeof params.goal === 'string' ? params.goal.trim() : '';
   if (!goal) {
-    throw new Error('goal 문자열이 비어 있습니다.');
+    throw new Error('goal must be a non-empty string.');
   }
 
   const dryRun = params.dryRun !== false;
@@ -416,12 +416,12 @@ async function executePlanGoal(params: unknown): Promise<unknown> {
 
 async function executeGoalPlanTool(params: unknown): Promise<unknown> {
   if (!isObject(params)) {
-    throw new Error('goal 파라미터가 필요합니다.');
+    throw new Error('goal parameter is required.');
   }
 
   const goal = typeof params.goal === 'string' ? params.goal.trim() : '';
   if (!goal) {
-    throw new Error('goal 문자열이 비어 있습니다.');
+    throw new Error('goal must be a non-empty string.');
   }
 
   const dryRun = params.dryRun !== false;
@@ -485,12 +485,12 @@ async function runOperationControl(
 
 async function executeScaleComponent(params: unknown): Promise<unknown> {
   if (!isObject(params)) {
-    throw new Error('스케일링 파라미터가 올바르지 않습니다.');
+    throw new Error('Scaling parameters are invalid.');
   }
 
   const targetVcpuRaw = params.targetVcpu;
   if (typeof targetVcpuRaw !== 'number' || ![1, 2, 4, 8].includes(targetVcpuRaw)) {
-    throw new Error('targetVcpu 값은 1, 2, 4, 8 중 하나여야 합니다.');
+    throw new Error('targetVcpu must be one of 1, 2, 4, or 8.');
   }
 
   const targetVcpu = targetVcpuRaw as TargetVcpu;
@@ -579,7 +579,7 @@ async function executeRestartRoleComponent(role: 'batcher' | 'proposer', params:
     ? plugin.normalizeComponentName(role)
     : role;
   if (target === 'system') {
-    throw new Error(`${role} 컴포넌트를 현재 체인에서 찾을 수 없습니다.`);
+    throw new Error(`Cannot find ${role} component on the current chain.`);
   }
 
   const restartResult = await restartComponent({ target, dryRun });
@@ -629,7 +629,7 @@ async function executeSwitchL1Rpc(params: unknown): Promise<unknown> {
 
 async function executeUpdateProxydBackend(params: unknown): Promise<unknown> {
   if (!isObject(params)) {
-    throw new Error('backendName/newRpcUrl 파라미터가 필요합니다.');
+    throw new Error('backendName/newRpcUrl parameters are required.');
   }
 
   const backendName = typeof params.backendName === 'string' ? params.backendName : '';
@@ -637,7 +637,7 @@ async function executeUpdateProxydBackend(params: unknown): Promise<unknown> {
   const reason = typeof params.reason === 'string' ? params.reason : undefined;
   const dryRun = params.dryRun === true;
   if (!backendName || !newRpcUrl) {
-    throw new Error('backendName/newRpcUrl 파라미터가 필요합니다.');
+    throw new Error('backendName/newRpcUrl parameters are required.');
   }
 
   const updateResult = await updateProxydBackendUrl({
@@ -811,7 +811,7 @@ async function invokeToolWithGuards(
         ),
       };
     }
-    return buildError(id, MCP_ERROR.INTERNAL_ERROR, `MCP 도구 실행 실패: ${message}`);
+    return buildError(id, MCP_ERROR.INTERNAL_ERROR, `MCP tool execution failed: ${message}`);
   }
 }
 
@@ -833,18 +833,18 @@ export async function handleMcpRequest(
 ): Promise<McpJsonRpcResponse> {
   const config = getMcpConfig();
   if (!config.enabled) {
-    return buildError(null, MCP_ERROR.DISABLED, 'MCP 서버가 비활성화되어 있습니다.');
+    return buildError(null, MCP_ERROR.DISABLED, 'MCP server is disabled.');
   }
 
   if (!isObject(payload)) {
-    return buildError(null, MCP_ERROR.INVALID_REQUEST, 'JSON-RPC 요청 형식이 올바르지 않습니다.');
+    return buildError(null, MCP_ERROR.INVALID_REQUEST, 'Invalid JSON-RPC request format.');
   }
 
   const request = payload as Partial<McpJsonRpcRequest>;
   const id: McpJsonRpcId = request.id ?? null;
 
   if (request.jsonrpc !== '2.0' || typeof request.method !== 'string') {
-    return buildError(id, MCP_ERROR.INVALID_REQUEST, 'jsonrpc 또는 method 필드가 올바르지 않습니다.');
+    return buildError(id, MCP_ERROR.INVALID_REQUEST, 'Invalid jsonrpc or method field.');
   }
 
   if (request.method === 'initialize') {
@@ -912,7 +912,7 @@ export async function handleMcpRequest(
   if (request.method === 'tools/call') {
     const parsed = parseStandardToolCall(request.params);
     if (!parsed) {
-      return buildError(id, MCP_ERROR.INVALID_PARAMS, 'tools/call 파라미터가 올바르지 않습니다.');
+      return buildError(id, MCP_ERROR.INVALID_PARAMS, 'Invalid tools/call parameters.');
     }
     return invokeToolWithGuards(
       id,
@@ -926,7 +926,7 @@ export async function handleMcpRequest(
 
   const toolName = normalizeToolName(request.method);
   if (!toolName) {
-    return buildError(id, MCP_ERROR.METHOD_NOT_FOUND, `지원하지 않는 MCP 메서드입니다: ${request.method}`);
+    return buildError(id, MCP_ERROR.METHOD_NOT_FOUND, `Unsupported MCP method: ${request.method}`);
   }
 
   return invokeToolWithGuards(id, toolName, request.params, context, config, false);

@@ -370,28 +370,28 @@ const AUTONOMY_LEVEL_GUIDE: Record<RuntimeAutonomyPolicyData['level'], {
   guardrail: string;
 }> = {
   A0: {
-    permission: '관측 전용, 자동 실행 없음',
-    guardrail: '모든 실행은 운영자 수동 승인 필요',
+    permission: 'Observe only, no autonomous execution',
+    guardrail: 'All executions require manual operator approval',
   },
   A1: {
-    permission: '추천 생성 가능, 실행은 수동 트리거',
-    guardrail: '자동 dispatch 비활성화 상태 유지',
+    permission: 'Can generate recommendations; execution is manually triggered',
+    guardrail: 'Automatic dispatch remains disabled',
   },
   A2: {
-    permission: 'dry-run 자동 실행 허용',
-    guardrail: 'write 실행 차단, 승인 토큰 필수',
+    permission: 'Allows autonomous dry-run execution',
+    guardrail: 'Write execution blocked, approval token required',
   },
   A3: {
-    permission: '저위험 목표 write 실행 허용',
-    guardrail: '검증 실패 시 degraded 전환',
+    permission: 'Allows write execution for low-risk goals',
+    guardrail: 'Switches to degraded mode on verification failure',
   },
   A4: {
-    permission: '중위험 목표까지 자동 실행 확장',
-    guardrail: '승인/검증/감사 로그를 모두 강제',
+    permission: 'Extends autonomous execution to medium-risk goals',
+    guardrail: 'Enforces approval, verification, and audit logging',
   },
   A5: {
-    permission: '고위험 포함 최대 자율 운영',
-    guardrail: '사후 검증 실패 시 자동 롤백',
+    permission: 'Maximum autonomy including high-risk goals',
+    guardrail: 'Automatically rolls back on post-verification failure',
   },
 };
 
@@ -551,11 +551,11 @@ export default function Dashboard() {
       );
       const data = await response.json();
       if (!response.ok || !data.trace) {
-        throw new Error(data?.error || '의사결정 추적 정보를 불러오지 못했습니다.');
+        throw new Error(data?.error || 'Failed to load decision trace.');
       }
       setSelectedDecisionTrace(data.trace as DecisionTraceData);
     } catch (error) {
-      const message = error instanceof Error ? error.message : '의사결정 추적 정보를 불러오지 못했습니다.';
+      const message = error instanceof Error ? error.message : 'Failed to load decision trace.';
       setDecisionTraceError(message);
       setSelectedDecisionTrace(null);
     } finally {
@@ -620,15 +620,15 @@ export default function Dashboard() {
         });
         const body = await res.json().catch(() => ({} as Record<string, unknown>));
         if (!res.ok) {
-          const message = typeof body.error === 'string' ? body.error : '시나리오 주입에 실패했습니다.';
+          const message = typeof body.error === 'string' ? body.error : 'Failed to inject scenario.';
           throw new Error(message);
         }
         const injectedCount = typeof body.injectedCount === 'number' ? body.injectedCount : null;
         setAutonomyActionFeedback({
           type: 'success',
           message: injectedCount !== null
-            ? `시나리오 ${scenario} 주입 완료 (${injectedCount}개 데이터)`
-            : `시나리오 ${scenario} 주입 완료`,
+            ? `Scenario ${scenario} injected (${injectedCount} data points)`
+            : `Scenario ${scenario} injected`,
         });
       } else if (action === 'goal-tick') {
         const res = await fetch(`${BASE_PATH}/api/goal-manager/tick`, {
@@ -638,7 +638,7 @@ export default function Dashboard() {
         });
         const body = await res.json().catch(() => ({} as Record<string, unknown>));
         if (!res.ok) {
-          const message = typeof body.error === 'string' ? body.error : 'Goal tick 실행에 실패했습니다.';
+          const message = typeof body.error === 'string' ? body.error : 'Failed to execute goal tick.';
           throw new Error(message);
         }
         const generated = typeof body.generatedCount === 'number' ? body.generatedCount : 0;
@@ -646,7 +646,7 @@ export default function Dashboard() {
         const depth = typeof body.queueDepth === 'number' ? body.queueDepth : 0;
         setAutonomyActionFeedback({
           type: 'success',
-          message: `Goal tick 완료 (생성 ${generated}, 큐잉 ${queued}, 큐 깊이 ${depth})`,
+          message: `Goal tick completed (generated ${generated}, queued ${queued}, queue depth ${depth})`,
         });
       } else {
         const res = await fetch(`${BASE_PATH}/api/goal-manager/dispatch`, {
@@ -661,7 +661,7 @@ export default function Dashboard() {
         if (!res.ok) {
           const message = typeof body.error === 'string'
             ? body.error
-            : 'Dry-run dispatch 실행에 실패했습니다.';
+            : 'Failed to execute dry-run dispatch.';
           throw new Error(message);
         }
         const status = typeof body.status === 'string'
@@ -671,7 +671,7 @@ export default function Dashboard() {
             : 'unknown';
         setAutonomyActionFeedback({
           type: 'success',
-          message: `Dry-run dispatch 완료 (상태: ${status})`,
+          message: `Dry-run dispatch completed (status: ${status})`,
         });
       }
 
@@ -680,7 +680,7 @@ export default function Dashboard() {
         refreshAutonomyPanels(),
       ]);
     } catch (error) {
-      const message = error instanceof Error ? error.message : '자율 에이전트 데모 액션 실행 중 오류가 발생했습니다.';
+      const message = error instanceof Error ? error.message : 'An error occurred while running the autonomy demo action.';
       setAutonomyActionFeedback({
         type: 'error',
         message,
@@ -695,7 +695,7 @@ export default function Dashboard() {
     if (!API_KEY || API_KEY.trim().length === 0) {
       setAutonomyActionFeedback({
         type: 'error',
-        message: '정책 레벨 변경은 `NEXT_PUBLIC_SENTINAI_API_KEY` 설정이 필요합니다.',
+        message: 'Changing policy level requires `NEXT_PUBLIC_SENTINAI_API_KEY`.',
       });
       return;
     }
@@ -714,7 +714,7 @@ export default function Dashboard() {
       if (!response.ok) {
         const message = typeof body.error === 'string'
           ? body.error
-          : '자율 정책 레벨 변경에 실패했습니다.';
+          : 'Failed to update autonomy policy level.';
         throw new Error(message);
       }
 
@@ -725,14 +725,14 @@ export default function Dashboard() {
 
       setAutonomyActionFeedback({
         type: 'success',
-        message: `자율 레벨을 ${level}로 변경했습니다.`,
+        message: `Autonomy level changed to ${level}.`,
       });
 
       await refreshAutonomyPanels();
     } catch (error) {
       const message = error instanceof Error
         ? error.message
-        : '자율 정책 레벨 변경 중 오류가 발생했습니다.';
+        : 'An error occurred while updating autonomy policy level.';
       setAutonomyActionFeedback({
         type: 'error',
         message,
@@ -1290,7 +1290,7 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-              <p className="text-[10px] text-gray-400 font-semibold uppercase">엔진 상태</p>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Engine Status</p>
               <div className="mt-2 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-gray-500">Goal Manager</span>
@@ -1318,7 +1318,7 @@ export default function Dashboard() {
             </div>
 
             <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-              <p className="text-[10px] text-gray-400 font-semibold uppercase">목표 큐</p>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Goal Queue</p>
               <div className="mt-2 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-gray-500">Queue Depth</span>
@@ -1333,7 +1333,7 @@ export default function Dashboard() {
                   </span>
                 </div>
                 <p className="text-[11px] text-gray-500 truncate" title={activeQueueItem?.goal || ''}>
-                  top: {activeQueueItem?.goal || '대기 중인 목표 없음'}
+                  top: {activeQueueItem?.goal || 'No queued goal'}
                 </p>
                 <div className="flex items-center gap-2 text-[10px]">
                   <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">
@@ -1347,7 +1347,7 @@ export default function Dashboard() {
             </div>
 
             <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
-              <p className="text-[10px] text-gray-400 font-semibold uppercase">가드레일</p>
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">Guardrails</p>
               <div className="mt-2 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-gray-500">Read-Only</span>
@@ -1374,18 +1374,18 @@ export default function Dashboard() {
                 <p className={`text-[11px] truncate ${
                   latestDegradedReasons.length > 0 ? 'text-amber-600' : 'text-gray-400'
                 }`} title={latestDegradedReasons.join(' | ')}>
-                  degraded: {latestDegradedReasons[0] || '없음'}
+                  degraded: {latestDegradedReasons[0] || 'none'}
                 </p>
               </div>
             </div>
           </div>
 
           <div className="lg:col-span-4 bg-gray-50 rounded-xl p-3 border border-gray-100">
-            <p className="text-[10px] text-gray-400 font-semibold uppercase">데모 컨트롤</p>
-            <p className="text-[11px] text-gray-500 mt-1">시나리오 주입 후 tick/dispatch를 실행해 자율 흐름을 확인합니다.</p>
+            <p className="text-[10px] text-gray-400 font-semibold uppercase">Demo Controls</p>
+            <p className="text-[11px] text-gray-500 mt-1">Inject a scenario, then run tick/dispatch to observe the autonomous flow.</p>
 
             <div className="mt-3">
-              <p className="text-[10px] text-gray-500 font-semibold uppercase">자율 레벨</p>
+              <p className="text-[10px] text-gray-500 font-semibold uppercase">Autonomy Level</p>
               <div className="grid grid-cols-3 gap-2 mt-2">
                 {AUTONOMY_LEVEL_OPTIONS.map((level) => {
                   const isActive = autonomyPolicy?.level === level;
@@ -1403,9 +1403,9 @@ export default function Dashboard() {
                         }`}
                         data-testid={`autonomy-level-btn-${level}`}
                         aria-describedby={`autonomy-level-tooltip-${level}`}
-                        title={`${level} · 권한: ${levelGuide.permission} · 가드레일: ${levelGuide.guardrail}`}
+                        title={`${level} · Permission: ${levelGuide.permission} · Guardrail: ${levelGuide.guardrail}`}
                       >
-                        {isUpdating ? '변경 중' : level}
+                        {isUpdating ? 'Updating' : level}
                       </button>
                       <div
                         id={`autonomy-level-tooltip-${level}`}
@@ -1413,19 +1413,19 @@ export default function Dashboard() {
                         data-testid={`autonomy-level-tooltip-${level}`}
                         className="pointer-events-none absolute z-20 left-1/2 -translate-x-1/2 top-full mt-1.5 w-52 rounded-lg border border-gray-200 bg-white px-2 py-1.5 shadow-lg text-[10px] text-gray-600 invisible opacity-0 transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
                       >
-                        <p className="font-bold text-gray-800">{level} 권한/가드레일</p>
-                        <p className="mt-0.5">권한: {levelGuide.permission}</p>
-                        <p>가드레일: {levelGuide.guardrail}</p>
+                        <p className="font-bold text-gray-800">{level} Permissions / Guardrails</p>
+                        <p className="mt-0.5">Permission: {levelGuide.permission}</p>
+                        <p>Guardrail: {levelGuide.guardrail}</p>
                       </div>
                     </div>
                   );
                 })}
               </div>
               <p className="text-[10px] text-gray-400 mt-1.5">
-                dry-run 임계치 {autonomyPolicy?.minConfidenceDryRun?.toFixed(2) ?? '0.00'} · write 임계치 {autonomyPolicy?.minConfidenceWrite?.toFixed(2) ?? '0.00'}
+                dry-run threshold {autonomyPolicy?.minConfidenceDryRun?.toFixed(2) ?? '0.00'} · write threshold {autonomyPolicy?.minConfidenceWrite?.toFixed(2) ?? '0.00'}
               </p>
               <p className="text-[10px] text-gray-500 mt-1">
-                현재 {activeAutonomyLevel}: {activeAutonomyGuide.permission} / {activeAutonomyGuide.guardrail}
+                Current {activeAutonomyLevel}: {activeAutonomyGuide.permission} / {activeAutonomyGuide.guardrail}
               </p>
             </div>
 
@@ -1435,21 +1435,21 @@ export default function Dashboard() {
                 disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
                 className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50"
               >
-                {autonomyActionRunning === 'seed-stable' ? '실행 중' : 'Stable'}
+                {autonomyActionRunning === 'seed-stable' ? 'Running' : 'Stable'}
               </button>
               <button
                 onClick={() => runAutonomyDemoAction('seed-rising')}
                 disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
                 className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50"
               >
-                {autonomyActionRunning === 'seed-rising' ? '실행 중' : 'Rising'}
+                {autonomyActionRunning === 'seed-rising' ? 'Running' : 'Rising'}
               </button>
               <button
                 onClick={() => runAutonomyDemoAction('seed-spike')}
                 disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
                 className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50"
               >
-                {autonomyActionRunning === 'seed-spike' ? '실행 중' : 'Spike'}
+                {autonomyActionRunning === 'seed-spike' ? 'Running' : 'Spike'}
               </button>
             </div>
 
@@ -1459,14 +1459,14 @@ export default function Dashboard() {
                 disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
                 className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50"
               >
-                {autonomyActionRunning === 'goal-tick' ? 'Tick 실행 중' : 'Goal Tick'}
+                {autonomyActionRunning === 'goal-tick' ? 'Running Tick' : 'Goal Tick'}
               </button>
               <button
                 onClick={() => runAutonomyDemoAction('goal-dispatch-dry-run')}
                 disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
                 className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 disabled:opacity-50"
               >
-                {autonomyActionRunning === 'goal-dispatch-dry-run' ? 'Dispatch 실행 중' : 'Dispatch Dry-run'}
+                {autonomyActionRunning === 'goal-dispatch-dry-run' ? 'Running Dispatch' : 'Dispatch Dry-run'}
               </button>
             </div>
 
@@ -1485,7 +1485,7 @@ export default function Dashboard() {
 
             {(!API_KEY || API_KEY.trim().length === 0) && (
               <p className="mt-2 text-[10px] text-amber-600">
-                참고: policy level 변경/dispatch 데모는 `NEXT_PUBLIC_SENTINAI_API_KEY` 설정이 필요합니다.
+                Note: changing policy level or running dispatch demo requires `NEXT_PUBLIC_SENTINAI_API_KEY`.
               </p>
             )}
           </div>
@@ -1815,7 +1815,7 @@ export default function Dashboard() {
                             <button
                               onClick={() => openDecisionTrace(cycle.decisionId!)}
                               className="inline-flex items-center px-1.5 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-[10px] font-bold shrink-0 hover:bg-cyan-500/20 transition-colors"
-                              title="의사결정 추적 보기"
+                              title="View decision trace"
                             >
                               id {cycle.decisionId.slice(0, 8)}
                             </button>
@@ -2054,7 +2054,7 @@ export default function Dashboard() {
           <div className="w-full max-w-3xl bg-white rounded-2xl shadow-2xl border border-gray-200 max-h-[80vh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 sticky top-0 bg-white">
               <div>
-                <h3 className="text-sm font-bold text-gray-900">의사결정 추적</h3>
+                <h3 className="text-sm font-bold text-gray-900">Decision Trace</h3>
                 {selectedDecisionTrace?.decisionId && (
                   <p className="text-[11px] text-gray-500 font-mono mt-0.5">
                     {selectedDecisionTrace.decisionId}
@@ -2065,7 +2065,7 @@ export default function Dashboard() {
                 onClick={closeDecisionTrace}
                 className="text-xs font-semibold text-gray-500 hover:text-gray-800"
               >
-                닫기
+                Close
               </button>
             </div>
 
@@ -2073,7 +2073,7 @@ export default function Dashboard() {
               {decisionTraceLoading && (
                 <div className="flex items-center gap-2 text-sm text-gray-600">
                   <RefreshCw size={14} className="animate-spin text-blue-500" />
-                  추적 데이터를 불러오는 중입니다...
+                  Loading trace data...
                 </div>
               )}
 
@@ -2096,7 +2096,7 @@ export default function Dashboard() {
                       <p className="text-[10px] text-gray-400 font-semibold uppercase">Action</p>
                       <p className="text-xs text-gray-700 mt-1 font-mono">{selectedDecisionTrace.chosenAction}</p>
                       <p className={`text-[11px] mt-2 font-semibold ${selectedDecisionTrace.verification.passed ? 'text-green-600' : 'text-red-600'}`}>
-                        검증: {selectedDecisionTrace.verification.passed ? '성공' : '실패'}
+                        Verification: {selectedDecisionTrace.verification.passed ? 'passed' : 'failed'}
                       </p>
                       <p className="text-[11px] text-gray-500 mt-0.5">
                         expected={selectedDecisionTrace.verification.expected}, observed={selectedDecisionTrace.verification.observed}

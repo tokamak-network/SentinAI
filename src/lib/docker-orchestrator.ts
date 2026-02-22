@@ -11,7 +11,6 @@ import {
   getDockerEnvFile,
   parseCpuPercToMillicores,
   parseMemUsageToMiB,
-  parseMemStringToMiB,
   type DockerStatsJson,
 } from './docker-config';
 import type { ContainerResourceUsage } from './k8s-scaler';

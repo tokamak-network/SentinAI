@@ -16,7 +16,7 @@ export async function GET() {
     return NextResponse.json(
       {
         enabled: false,
-        message: 'MCP 서버가 비활성화되어 있습니다.',
+        message: 'MCP server is disabled.',
       },
       { status: 503 }
     );
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
         id: null,
         error: {
           code: -32004,
-          message: 'MCP 서버가 비활성화되어 있습니다.',
+          message: 'MCP server is disabled.',
         },
       },
       { status: 503 }
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
         id: null,
         error: {
           code: -32700,
-          message: 'JSON 파싱에 실패했습니다.',
+          message: 'Failed to parse JSON payload.',
         },
       },
       { status: 400 }

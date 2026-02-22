@@ -133,7 +133,7 @@ function buildRuleCandidates(snapshot: GoalSignalSnapshot, now: number): Autonom
       intent: 'stabilize',
       risk,
       confidence: confidenceBase,
-      goal: 'L2 처리량을 안정화하고 활성 이상 징후를 완화한다',
+      goal: 'Stabilize L2 throughput and mitigate active anomaly signals',
       rationale: `CPU=${cpu.toFixed(1)}%, activeAnomaly=${snapshot.anomalies.activeCount}, txPool=${txPool}`,
       metadata: {
         cpu,
@@ -153,7 +153,7 @@ function buildRuleCandidates(snapshot: GoalSignalSnapshot, now: number): Autonom
       intent: 'investigate',
       risk,
       confidence,
-      goal: '최근 L1 RPC 페일오버 원인을 분석하고 재발 방지 조치를 도출한다',
+      goal: 'Investigate recent L1 RPC failover causes and define recurrence prevention actions',
       rationale: `failoverRecent=${snapshot.failover.recentCount}, activeL1Rpc=${snapshot.failover.activeL1RpcUrl}`,
       metadata: {
         failoverRecentCount: snapshot.failover.recentCount,
@@ -179,7 +179,7 @@ function buildRuleCandidates(snapshot: GoalSignalSnapshot, now: number): Autonom
       intent: 'cost-optimize',
       risk: 'medium',
       confidence,
-      goal: '유휴 구간 기준으로 실행 리소스를 비용 최적화한다',
+      goal: 'Optimize execution resources for cost during idle windows',
       rationale: `avgVcpu=${snapshot.cost.avgVcpu}, avgUtil=${snapshot.cost.avgUtilization}%, data=${snapshot.cost.dataPointCount}`,
       metadata: {
         avgVcpu: snapshot.cost.avgVcpu,
@@ -198,7 +198,7 @@ function buildRuleCandidates(snapshot: GoalSignalSnapshot, now: number): Autonom
       intent: 'investigate',
       risk: snapshot.memory.recentHighSeverityCount >= 2 ? 'high' : 'medium',
       confidence,
-      goal: '반복 인시던트 패턴을 분석하고 예방형 운영 목표를 정의한다',
+      goal: 'Analyze recurring incident patterns and define preventive operational goals',
       rationale: `incidentMemory=${snapshot.memory.recentIncidentCount}, highSeverityMemory=${snapshot.memory.recentHighSeverityCount}`,
       metadata: {
         recentIncidentCount: snapshot.memory.recentIncidentCount,
@@ -215,7 +215,7 @@ function buildRuleCandidates(snapshot: GoalSignalSnapshot, now: number): Autonom
       intent: 'investigate',
       risk: 'high',
       confidence: 0.64,
-      goal: '오토스케일링 비활성 상태의 위험도를 점검하고 안전한 운영 경로를 복구한다',
+      goal: 'Assess risk from disabled autoscaling and restore a safe operating path',
       rationale: `autoScalingEnabled=false, cpu=${cpu.toFixed(1)}%, activeAnomaly=${snapshot.anomalies.activeCount}`,
       metadata: {
         autoScalingEnabled: false,
@@ -232,8 +232,8 @@ function buildRuleCandidates(snapshot: GoalSignalSnapshot, now: number): Autonom
       intent: 'investigate',
       risk: 'low',
       confidence: 0.42,
-      goal: '현재 운영 상태를 점검하고 다음 주기 목표를 준비한다',
-      rationale: '강한 이상 신호가 없어 기본 점검 목표를 생성',
+      goal: 'Review current operations and prepare next-cycle goals',
+      rationale: 'Generated a baseline inspection goal because no strong anomaly signal was detected',
       metadata: {
         fallback: true,
       },
@@ -256,7 +256,7 @@ function buildEnhancerSystemPrompt(): string {
     'You are a goal text enhancer for L2 operations automation.',
     'Return only JSON: {"candidates":[{"index":0,"goal":"...","rationale":"..."}]}',
     'Do not change intent/source/risk/confidence meaning.',
-    'Keep each goal and rationale concise, operational, and in Korean.',
+    'Keep each goal and rationale concise, operational, and in English.',
     'Do not add markdown fences or commentary.',
   ].join('\n');
 }

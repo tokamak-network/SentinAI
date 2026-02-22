@@ -42,7 +42,7 @@ function toBridgeErrorMessage(error: unknown): { message: string; data?: Record<
     return { message: error.message };
   }
   const message = error instanceof Error ? error.message : 'Unknown bridge error';
-  return { message: `MCP 브리지 처리 중 오류가 발생했습니다: ${message}` };
+  return { message: `MCP bridge handling failed: ${message}` };
 }
 
 function writeFrame(payload: unknown): void {
@@ -68,7 +68,7 @@ async function handleRequestBody(rawMessage: string): Promise<void> {
   try {
     requestPayload = JSON.parse(rawMessage);
   } catch {
-    writeFrame(buildJsonRpcErrorResponse(null, -32700, 'JSON 파싱에 실패했습니다.'));
+    writeFrame(buildJsonRpcErrorResponse(null, -32700, 'Failed to parse JSON payload.'));
     return;
   }
 
