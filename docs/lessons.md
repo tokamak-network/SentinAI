@@ -2,6 +2,34 @@
 
 ## 2026-02-22
 
+- 자율 에이전트 데모는 실행 알고리즘 설명보다 사용자가 바로 보는 상태 요약(엔진/큐/가드레일)이 먼저 있어야 인지율이 높다.
+- Rule: For autonomy dashboard demos, always expose `engine state + queue state + guardrail state + one-click demo actions` in one panel before deep logs.
+- 정책 레벨 제어 UI는 상태 반영 지연이나 동시 실행이 있으면 사용자가 변경 실패로 오해하기 쉽다.
+- Rule: Runtime policy controls in dashboards must lock concurrent actions, show per-action in-progress state, and expose current thresholds next to level selection.
+- 자율 레벨은 버튼 라벨만으로 의미 전달이 어렵고, 운영자마다 해석이 달라진다.
+- Rule: For autonomy-level controls, attach level-specific `permission + guardrail` tooltip/help text next to each action button.
+- 대시보드 e2e에서 정책 변경 성공 경로를 검증하려면 클라이언트 공개 키와 서버 관리자 키를 같은 테스트 컨텍스트로 주입해야 한다.
+- Rule: UI e2e for policy-write flows must provision both `NEXT_PUBLIC_*` and server auth env in the Playwright webServer command to avoid false unauthorized paths.
+- 운영 가이드에서 신규 운영 방식만 설명하면 기존 방식 대비 이점/제약이 불명확해 도입 판단이 늦어진다.
+- Rule: For operational migration docs, add a side-by-side comparison table of current vs target workflow with safety and scope differences.
+- 지원 체인 정책이 모호하면 운영자가 지원 범위를 넘는 환경에서도 같은 절차를 시도해 장애 대응 시간을 낭비하게 된다.
+- Rule: In ops guides, pin supported chain policy with explicit status (`recommended`, `disabled`) and a concrete 기준일.
+- 운영 프롬프트 예시에 내부 tool 이름을 직접 노출하면 사용자가 기능명을 외워야 해서 실사용 진입 장벽이 높아진다.
+- Rule: In user-facing prompt examples, prefer intent-based natural language and reserve tool/method names for protocol/debug sections only.
+- 계획 문서에 “향후 작성될 문서 경로”만 남기고 스텁을 만들지 않으면 참조 경로 품질이 빠르게 떨어진다.
+- Rule: If a proposal references future docs paths, create draft stub docs immediately (or avoid path-like syntax) to keep reference integrity.
+- 설정 가이드와 운영 가이드를 분리 유지하면 신규 사용자가 중간 전환에서 경로를 잃기 쉽다.
+- Rule: For operator-facing protocol docs, maintain one canonical guide that covers setup, operations, and troubleshooting; keep old docs as redirect stubs.
+- 고권한 자동복구는 실행 가능 여부보다 권한 경계 설계가 먼저 고정되지 않으면 위험하다.
+- Rule: `sudo`가 필요한 AI 액션은 직접 셸 실행을 금지하고 `Policy Engine -> Action Broker -> Allowlisted Wrapper -> Post-Verification -> Auto-Rollback` 체인으로만 허용한다.
+- 운영 이슈 문서는 “문제 목록”만 있으면 온콜 시 바로 실행하기 어렵다.
+- Rule: 운영 이슈 정리 문서는 반드시 `우선순위 + 탐지 신호 + 즉시 대응 + 근본 해결/자동화`를 같은 표에 고정한다.
+- 클라이언트 분석 없는 운영 자동화 문서는 공통론에 머물러 실제 구현 우선순위가 흐려진다.
+- Rule: 다중 클라이언트 운영 문서는 각 프로젝트의 `최신 릴리즈 스냅샷 + 공식 운영 특성 + 자동화 반영 항목`을 한 표로 연결해 근거 기반으로 작성한다.
+- 운영 문서에서 특정 구현체 제외 요청이 들어오면 기존 범위를 유지한 채 추가만 하면 초점이 흐려진다.
+- Rule: 특정 클라이언트 제외 요청 시 섹션 제목/매트릭스/체크리스트를 동시에 재작성해 범위와 실행 대상을 명시적으로 재고정한다.
+- L1 클라이언트 운영 문서는 공통 자동화 항목만으로는 실제 장애 패턴(포크/동기화 편차/DB 압박)을 충분히 커버하지 못한다.
+- Rule: 이더리움 L1 운영 문서는 반드시 `클라이언트 전용 자동화 항목(업그레이드, 교차검증, EL-CL 연계, 복구)`과 `클라이언트별 운영 포인트`를 함께 명시한다.
 - L1 RPC 변수를 단일 경로로 재사용하면 모니터링 RPC 장애가 L2 노드 failover 정책에 의도치 않게 전파된다.
 - Rule: L1 RPC 설정은 `SentinAI 내부 조회용`과 `L2 노드 failover pool`을 별도 env/함수 경로로 분리하고, 각 호출부에서 목적에 맞는 resolver만 사용한다.
 - 운영 자동화 개념 정리는 요소 나열만으로는 구현팀이 바로 착수하기 어렵다.
@@ -72,7 +100,7 @@
 - Adding a write-capable API to read-only exceptions can accidentally bypass global safety policies.
 - Rule: If a route is exempted in middleware for read-only compatibility, enforce write restrictions again in the route handler based on tool-level policy.
 
-## 2026-02-20
+## 2026-02-20 (추가)
 
 - Tier 3 bundle gate fails excessively when looking only at the raw sum, so it is best to look at the transmission standard (gzip) figures together to determine the correct operation.
 - Rule: First Load JS limit is measured based on the sum of `rootMain + polyfill` gzip, and raw/gzip figures are also output.

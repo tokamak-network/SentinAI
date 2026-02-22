@@ -241,6 +241,54 @@ interface AgentLoopStatus {
   };
 }
 
+interface GoalManagerQueueItemData {
+  goalId: string;
+  status: string;
+  goal: string;
+  risk: 'low' | 'medium' | 'high' | 'critical';
+  confidence: number;
+  score: {
+    total: number;
+  };
+}
+
+interface GoalManagerStatusData {
+  config: {
+    enabled: boolean;
+    dispatchEnabled: boolean;
+    llmEnhancerEnabled: boolean;
+    dispatchDryRun: boolean;
+    dispatchAllowWrites: boolean;
+  };
+  activeGoalId: string | null;
+  queueDepth: number;
+  queue: GoalManagerQueueItemData[];
+  dlq: Array<{
+    id: string;
+    goalId: string;
+    reason: string;
+    attempts: number;
+  }>;
+  suppression: Array<{
+    id: string;
+    reasonCode: string;
+    timestamp: string;
+  }>;
+}
+
+interface RuntimeAutonomyPolicyData {
+  level: 'A0' | 'A1' | 'A2' | 'A3' | 'A4' | 'A5';
+  minConfidenceDryRun: number;
+  minConfidenceWrite: number;
+}
+
+type AutonomyDemoAction =
+  | 'seed-stable'
+  | 'seed-rising'
+  | 'seed-spike'
+  | 'goal-tick'
+  | 'goal-dispatch-dry-run';
+
 interface DecisionTraceData {
   decisionId: string;
   timestamp: string;
@@ -304,11 +352,48 @@ function parseResourceSpec(current: string): { platform: string; vcpu: number; m
   return { platform, vcpu, memory: `${match[3]}${memUnit}`, memoryMiB };
 }
 
+function shortId(value?: string | null, visible: number = 8): string {
+  if (!value) return '—';
+  return value.length > visible ? `${value.slice(0, visible)}...` : value;
+}
+
 /** Metrics API polling interval (ms). Adjusted to reduce L1 RPC load (1s → 60s). */
 const METRICS_REFRESH_INTERVAL_MS = 60_000;
 
 /** Agent Loop status polling interval (ms) */
 const AGENT_LOOP_REFRESH_INTERVAL_MS = 30_000;
+
+const AUTONOMY_LEVEL_OPTIONS: RuntimeAutonomyPolicyData['level'][] = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5'];
+
+const AUTONOMY_LEVEL_GUIDE: Record<RuntimeAutonomyPolicyData['level'], {
+  permission: string;
+  guardrail: string;
+}> = {
+  A0: {
+    permission: '관측 전용, 자동 실행 없음',
+    guardrail: '모든 실행은 운영자 수동 승인 필요',
+  },
+  A1: {
+    permission: '추천 생성 가능, 실행은 수동 트리거',
+    guardrail: '자동 dispatch 비활성화 상태 유지',
+  },
+  A2: {
+    permission: 'dry-run 자동 실행 허용',
+    guardrail: 'write 실행 차단, 승인 토큰 필수',
+  },
+  A3: {
+    permission: '저위험 목표 write 실행 허용',
+    guardrail: '검증 실패 시 degraded 전환',
+  },
+  A4: {
+    permission: '중위험 목표까지 자동 실행 확장',
+    guardrail: '승인/검증/감사 로그를 모두 강제',
+  },
+  A5: {
+    permission: '고위험 포함 최대 자율 운영',
+    guardrail: '사후 검증 실패 시 자동 롤백',
+  },
+};
 
 // --- Main Dashboard Component ---
 export default function Dashboard() {
@@ -341,6 +426,14 @@ export default function Dashboard() {
   // --- Agent Loop State ---
   const [agentLoop, setAgentLoop] = useState<AgentLoopStatus | null>(null);
   const [showFullHistory, setShowFullHistory] = useState(false);
+  const [goalManager, setGoalManager] = useState<GoalManagerStatusData | null>(null);
+  const [autonomyPolicy, setAutonomyPolicy] = useState<RuntimeAutonomyPolicyData | null>(null);
+  const [autonomyActionRunning, setAutonomyActionRunning] = useState<AutonomyDemoAction | null>(null);
+  const [autonomyPolicyUpdating, setAutonomyPolicyUpdating] = useState<RuntimeAutonomyPolicyData['level'] | null>(null);
+  const [autonomyActionFeedback, setAutonomyActionFeedback] = useState<{
+    type: 'success' | 'error';
+    message: string;
+  } | null>(null);
   const [selectedDecisionTrace, setSelectedDecisionTrace] = useState<DecisionTraceData | null>(null);
   const [decisionTraceLoading, setDecisionTraceLoading] = useState(false);
   const [decisionTraceError, setDecisionTraceError] = useState<string | null>(null);
@@ -476,6 +569,179 @@ export default function Dashboard() {
     setDecisionTraceLoading(false);
   };
 
+  const refreshAgentLoopPanel = async () => {
+    try {
+      const limit = showFullHistory ? 500 : 50;
+      const res = await fetch(`${BASE_PATH}/api/agent-loop?limit=${limit}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json() as AgentLoopStatus;
+        setAgentLoop(data);
+      }
+    } catch {
+      // Ignore refresh errors in demo action path
+    }
+  };
+
+  const refreshAutonomyPanels = async () => {
+    try {
+      const [goalManagerRes, policyRes] = await Promise.all([
+        fetch(`${BASE_PATH}/api/goal-manager?limit=20`, { cache: 'no-store' }),
+        fetch(`${BASE_PATH}/api/policy/autonomy-level`, { cache: 'no-store' }),
+      ]);
+
+      if (goalManagerRes.ok) {
+        const goalManagerData = await goalManagerRes.json() as GoalManagerStatusData;
+        setGoalManager(goalManagerData);
+      }
+
+      if (policyRes.ok) {
+        const policyData = await policyRes.json() as { policy?: RuntimeAutonomyPolicyData };
+        if (policyData.policy) {
+          setAutonomyPolicy(policyData.policy);
+        }
+      }
+    } catch {
+      // Ignore panel refresh errors; existing values are kept
+    }
+  };
+
+  const runAutonomyDemoAction = async (action: AutonomyDemoAction) => {
+    if (autonomyActionRunning) return;
+
+    setAutonomyActionRunning(action);
+    setAutonomyActionFeedback(null);
+
+    try {
+      if (action === 'seed-stable' || action === 'seed-rising' || action === 'seed-spike') {
+        const scenario = action.replace('seed-', '');
+        const res = await fetch(`${BASE_PATH}/api/metrics/seed?scenario=${scenario}`, {
+          method: 'POST',
+          headers: writeHeaders(),
+        });
+        const body = await res.json().catch(() => ({} as Record<string, unknown>));
+        if (!res.ok) {
+          const message = typeof body.error === 'string' ? body.error : '시나리오 주입에 실패했습니다.';
+          throw new Error(message);
+        }
+        const injectedCount = typeof body.injectedCount === 'number' ? body.injectedCount : null;
+        setAutonomyActionFeedback({
+          type: 'success',
+          message: injectedCount !== null
+            ? `시나리오 ${scenario} 주입 완료 (${injectedCount}개 데이터)`
+            : `시나리오 ${scenario} 주입 완료`,
+        });
+      } else if (action === 'goal-tick') {
+        const res = await fetch(`${BASE_PATH}/api/goal-manager/tick`, {
+          method: 'POST',
+          headers: writeHeaders(),
+          body: JSON.stringify({}),
+        });
+        const body = await res.json().catch(() => ({} as Record<string, unknown>));
+        if (!res.ok) {
+          const message = typeof body.error === 'string' ? body.error : 'Goal tick 실행에 실패했습니다.';
+          throw new Error(message);
+        }
+        const generated = typeof body.generatedCount === 'number' ? body.generatedCount : 0;
+        const queued = typeof body.queuedCount === 'number' ? body.queuedCount : 0;
+        const depth = typeof body.queueDepth === 'number' ? body.queueDepth : 0;
+        setAutonomyActionFeedback({
+          type: 'success',
+          message: `Goal tick 완료 (생성 ${generated}, 큐잉 ${queued}, 큐 깊이 ${depth})`,
+        });
+      } else {
+        const res = await fetch(`${BASE_PATH}/api/goal-manager/dispatch`, {
+          method: 'POST',
+          headers: writeHeaders(),
+          body: JSON.stringify({
+            dryRun: true,
+            allowWrites: false,
+          }),
+        });
+        const body = await res.json().catch(() => ({} as Record<string, unknown>));
+        if (!res.ok) {
+          const message = typeof body.error === 'string'
+            ? body.error
+            : 'Dry-run dispatch 실행에 실패했습니다.';
+          throw new Error(message);
+        }
+        const status = typeof body.status === 'string'
+          ? body.status
+          : typeof body.reason === 'string'
+            ? body.reason
+            : 'unknown';
+        setAutonomyActionFeedback({
+          type: 'success',
+          message: `Dry-run dispatch 완료 (상태: ${status})`,
+        });
+      }
+
+      await Promise.all([
+        refreshAgentLoopPanel(),
+        refreshAutonomyPanels(),
+      ]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '자율 에이전트 데모 액션 실행 중 오류가 발생했습니다.';
+      setAutonomyActionFeedback({
+        type: 'error',
+        message,
+      });
+    } finally {
+      setAutonomyActionRunning(null);
+    }
+  };
+
+  const updateAutonomyPolicyLevel = async (level: RuntimeAutonomyPolicyData['level']) => {
+    if (autonomyPolicyUpdating || autonomyActionRunning) return;
+    if (!API_KEY || API_KEY.trim().length === 0) {
+      setAutonomyActionFeedback({
+        type: 'error',
+        message: '정책 레벨 변경은 `NEXT_PUBLIC_SENTINAI_API_KEY` 설정이 필요합니다.',
+      });
+      return;
+    }
+
+    setAutonomyPolicyUpdating(level);
+    setAutonomyActionFeedback(null);
+
+    try {
+      const response = await fetch(`${BASE_PATH}/api/policy/autonomy-level`, {
+        method: 'POST',
+        headers: writeHeaders(),
+        body: JSON.stringify({ level }),
+      });
+      const body = await response.json().catch(() => ({} as Record<string, unknown>));
+
+      if (!response.ok) {
+        const message = typeof body.error === 'string'
+          ? body.error
+          : '자율 정책 레벨 변경에 실패했습니다.';
+        throw new Error(message);
+      }
+
+      const policy = (body as { policy?: RuntimeAutonomyPolicyData }).policy;
+      if (policy) {
+        setAutonomyPolicy(policy);
+      }
+
+      setAutonomyActionFeedback({
+        type: 'success',
+        message: `자율 레벨을 ${level}로 변경했습니다.`,
+      });
+
+      await refreshAutonomyPanels();
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : '자율 정책 레벨 변경 중 오류가 발생했습니다.';
+      setAutonomyActionFeedback({
+        type: 'error',
+        message,
+      });
+    } finally {
+      setAutonomyPolicyUpdating(null);
+    }
+  };
+
   // Track active abort controller to cancel pending requests
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -580,6 +846,36 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [showFullHistory]);
 
+  // --- Goal Manager + Autonomy Policy polling (every 30s) ---
+  useEffect(() => {
+    const fetchAutonomyPanelsData = async () => {
+      try {
+        const [goalManagerRes, policyRes] = await Promise.all([
+          fetch(`${BASE_PATH}/api/goal-manager?limit=20`, { cache: 'no-store' }),
+          fetch(`${BASE_PATH}/api/policy/autonomy-level`, { cache: 'no-store' }),
+        ]);
+
+        if (goalManagerRes.ok) {
+          const goalManagerData = await goalManagerRes.json() as GoalManagerStatusData;
+          setGoalManager(goalManagerData);
+        }
+
+        if (policyRes.ok) {
+          const policyData = await policyRes.json() as { policy?: RuntimeAutonomyPolicyData };
+          if (policyData.policy) {
+            setAutonomyPolicy(policyData.policy);
+          }
+        }
+      } catch {
+        // Ignore panel polling errors
+      }
+    };
+
+    fetchAutonomyPanelsData();
+    const interval = setInterval(fetchAutonomyPanelsData, AGENT_LOOP_REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
+
   // --- Anomaly Events polling (with agent loop) ---
   useEffect(() => {
     const fetchAnomalies = async () => {
@@ -605,12 +901,20 @@ export default function Dashboard() {
     </div>
   );
 
+  const isReadOnlyMode = process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE === 'true';
   const networkName = current?.chain?.displayName || process.env.NEXT_PUBLIC_NETWORK_NAME;
   const eoaRoleEntries = Object.entries(current?.eoaBalances?.roles || {}).filter(([, value]) => value !== null);
   const showL1Failover = Boolean(l1Failover && current?.chain?.capabilities?.l1Failover !== false);
   const showFaultProof = Boolean(current?.chain?.capabilities?.disputeGameMonitoring && current?.disputeGames?.enabled);
   const showProof = Boolean(current?.chain?.capabilities?.proofMonitoring && current?.proof?.enabled);
   const showSettlement = Boolean(current?.chain?.capabilities?.settlementMonitoring && current?.settlement?.enabled);
+  const activeQueueItem = goalManager?.queue?.find((item) => (
+    item.status === 'running' || item.status === 'scheduled' || item.status === 'queued'
+  ));
+  const latestVerificationPassed = agentLoop?.lastCycle?.verification?.passed;
+  const latestDegradedReasons = agentLoop?.lastCycle?.degraded?.reasons || [];
+  const activeAutonomyLevel = autonomyPolicy?.level || 'A2';
+  const activeAutonomyGuide = AUTONOMY_LEVEL_GUIDE[activeAutonomyLevel];
 
   // --- Render ---
   return (
@@ -643,7 +947,7 @@ export default function Dashboard() {
       </header>
 
       {/* Read-Only Mode Banner */}
-      {process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE === 'true' && (
+      {isReadOnlyMode && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 mb-6 flex items-start gap-3">
           <span className="text-yellow-600 text-lg shrink-0">⚠️</span>
           <div>
@@ -954,6 +1258,235 @@ export default function Dashboard() {
                   <p className="text-xs text-gray-500 text-center py-3">No data available</p>
                 )}
               </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Autonomy Cockpit Panel */}
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60 mb-6" data-testid="autonomy-cockpit-panel">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <Bot size={18} className="text-indigo-500" />
+            <h3 className="font-bold text-gray-900 text-lg">Autonomy Cockpit</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className="text-[10px] bg-indigo-100 text-indigo-700 px-2 py-1 rounded font-bold"
+              data-testid="autonomy-current-level-badge"
+            >
+              {autonomyPolicy?.level || 'A?'}
+            </span>
+            <span className={`text-[10px] px-2 py-1 rounded font-bold ${
+              agentLoop?.scheduler.agentLoopEnabled
+                ? 'bg-green-100 text-green-700'
+                : 'bg-gray-200 text-gray-500'
+            }`}>
+              {agentLoop?.scheduler.agentLoopEnabled ? 'loop:on' : 'loop:off'}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          <div className="lg:col-span-8 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">엔진 상태</p>
+              <div className="mt-2 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-gray-500">Goal Manager</span>
+                  <span className={`text-xs font-bold ${
+                    goalManager?.config.enabled ? 'text-green-600' : 'text-gray-400'
+                  }`}>
+                    {goalManager?.config.enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-gray-500">Dispatch</span>
+                  <span className={`text-xs font-bold ${
+                    goalManager?.config.dispatchEnabled ? 'text-blue-600' : 'text-gray-400'
+                  }`}>
+                    {goalManager?.config.dispatchEnabled ? 'On' : 'Off'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-gray-500">Dispatch Mode</span>
+                  <span className="text-xs font-bold text-gray-700">
+                    {goalManager?.config.dispatchDryRun ? 'dry-run' : 'write'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">목표 큐</p>
+              <div className="mt-2 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-gray-500">Queue Depth</span>
+                  <span className="text-sm font-bold text-gray-900 font-mono">
+                    {goalManager?.queueDepth ?? 0}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-gray-500">Active Goal</span>
+                  <span className="text-xs font-bold text-gray-700 font-mono">
+                    {shortId(goalManager?.activeGoalId)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-500 truncate" title={activeQueueItem?.goal || ''}>
+                  top: {activeQueueItem?.goal || '대기 중인 목표 없음'}
+                </p>
+                <div className="flex items-center gap-2 text-[10px]">
+                  <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">
+                    suppression {goalManager?.suppression?.length || 0}
+                  </span>
+                  <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">
+                    dlq {goalManager?.dlq?.length || 0}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+              <p className="text-[10px] text-gray-400 font-semibold uppercase">가드레일</p>
+              <div className="mt-2 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-gray-500">Read-Only</span>
+                  <span className={`text-xs font-bold ${isReadOnlyMode ? 'text-amber-600' : 'text-green-600'}`}>
+                    {isReadOnlyMode ? 'On' : 'Off'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-gray-500">Verify</span>
+                  <span className={`text-xs font-bold ${
+                    latestVerificationPassed === undefined
+                      ? 'text-gray-400'
+                      : latestVerificationPassed
+                        ? 'text-green-600'
+                        : 'text-red-600'
+                  }`}>
+                    {latestVerificationPassed === undefined ? 'N/A' : latestVerificationPassed ? 'PASS' : 'FAIL'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] text-gray-500">Approval (Write)</span>
+                  <span className="text-xs font-bold text-indigo-600">Required</span>
+                </div>
+                <p className={`text-[11px] truncate ${
+                  latestDegradedReasons.length > 0 ? 'text-amber-600' : 'text-gray-400'
+                }`} title={latestDegradedReasons.join(' | ')}>
+                  degraded: {latestDegradedReasons[0] || '없음'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:col-span-4 bg-gray-50 rounded-xl p-3 border border-gray-100">
+            <p className="text-[10px] text-gray-400 font-semibold uppercase">데모 컨트롤</p>
+            <p className="text-[11px] text-gray-500 mt-1">시나리오 주입 후 tick/dispatch를 실행해 자율 흐름을 확인합니다.</p>
+
+            <div className="mt-3">
+              <p className="text-[10px] text-gray-500 font-semibold uppercase">자율 레벨</p>
+              <div className="grid grid-cols-3 gap-2 mt-2">
+                {AUTONOMY_LEVEL_OPTIONS.map((level) => {
+                  const isActive = autonomyPolicy?.level === level;
+                  const isUpdating = autonomyPolicyUpdating === level;
+                  const levelGuide = AUTONOMY_LEVEL_GUIDE[level];
+                  return (
+                    <div key={level} className="relative group">
+                      <button
+                        onClick={() => updateAutonomyPolicyLevel(level)}
+                        disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || (!API_KEY || API_KEY.trim().length === 0)}
+                        className={`w-full px-2 py-1.5 text-[11px] font-semibold rounded-lg border transition-colors disabled:opacity-50 ${
+                          isActive
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-white text-indigo-700 border-indigo-200 hover:bg-indigo-50'
+                        }`}
+                        data-testid={`autonomy-level-btn-${level}`}
+                        aria-describedby={`autonomy-level-tooltip-${level}`}
+                        title={`${level} · 권한: ${levelGuide.permission} · 가드레일: ${levelGuide.guardrail}`}
+                      >
+                        {isUpdating ? '변경 중' : level}
+                      </button>
+                      <div
+                        id={`autonomy-level-tooltip-${level}`}
+                        role="tooltip"
+                        data-testid={`autonomy-level-tooltip-${level}`}
+                        className="pointer-events-none absolute z-20 left-1/2 -translate-x-1/2 top-full mt-1.5 w-52 rounded-lg border border-gray-200 bg-white px-2 py-1.5 shadow-lg text-[10px] text-gray-600 invisible opacity-0 transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
+                      >
+                        <p className="font-bold text-gray-800">{level} 권한/가드레일</p>
+                        <p className="mt-0.5">권한: {levelGuide.permission}</p>
+                        <p>가드레일: {levelGuide.guardrail}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] text-gray-400 mt-1.5">
+                dry-run 임계치 {autonomyPolicy?.minConfidenceDryRun?.toFixed(2) ?? '0.00'} · write 임계치 {autonomyPolicy?.minConfidenceWrite?.toFixed(2) ?? '0.00'}
+              </p>
+              <p className="text-[10px] text-gray-500 mt-1">
+                현재 {activeAutonomyLevel}: {activeAutonomyGuide.permission} / {activeAutonomyGuide.guardrail}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 mt-3">
+              <button
+                onClick={() => runAutonomyDemoAction('seed-stable')}
+                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+              >
+                {autonomyActionRunning === 'seed-stable' ? '실행 중' : 'Stable'}
+              </button>
+              <button
+                onClick={() => runAutonomyDemoAction('seed-rising')}
+                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+              >
+                {autonomyActionRunning === 'seed-rising' ? '실행 중' : 'Rising'}
+              </button>
+              <button
+                onClick={() => runAutonomyDemoAction('seed-spike')}
+                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50"
+              >
+                {autonomyActionRunning === 'seed-spike' ? '실행 중' : 'Spike'}
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <button
+                onClick={() => runAutonomyDemoAction('goal-tick')}
+                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50"
+              >
+                {autonomyActionRunning === 'goal-tick' ? 'Tick 실행 중' : 'Goal Tick'}
+              </button>
+              <button
+                onClick={() => runAutonomyDemoAction('goal-dispatch-dry-run')}
+                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 disabled:opacity-50"
+              >
+                {autonomyActionRunning === 'goal-dispatch-dry-run' ? 'Dispatch 실행 중' : 'Dispatch Dry-run'}
+              </button>
+            </div>
+
+            {autonomyActionFeedback && (
+              <div
+                className={`mt-3 text-[11px] px-2.5 py-2 rounded-lg border ${
+                autonomyActionFeedback.type === 'success'
+                  ? 'bg-green-50 border-green-200 text-green-700'
+                  : 'bg-red-50 border-red-200 text-red-700'
+                }`}
+                data-testid="autonomy-action-feedback"
+              >
+                {autonomyActionFeedback.message}
+              </div>
+            )}
+
+            {(!API_KEY || API_KEY.trim().length === 0) && (
+              <p className="mt-2 text-[10px] text-amber-600">
+                참고: policy level 변경/dispatch 데모는 `NEXT_PUBLIC_SENTINAI_API_KEY` 설정이 필요합니다.
+              </p>
             )}
           </div>
         </div>

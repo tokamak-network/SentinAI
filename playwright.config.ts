@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test';
 
 const PORT = 3002;
 const BASE_URL = `http://localhost:${PORT}`;
+const E2E_API_KEY = process.env.E2E_SENTINAI_API_KEY || 'sentinai-e2e-key';
 
 export default defineConfig({
   testDir: './e2e',
@@ -14,10 +15,15 @@ export default defineConfig({
     trace: 'off',
   },
   webServer: {
-    command: `npm run start -- -p ${PORT}`,
+    command: `npm run build && npm run start -- -p ${PORT}`,
+    env: {
+      ...process.env,
+      SENTINAI_API_KEY: E2E_API_KEY,
+      NEXT_PUBLIC_SENTINAI_API_KEY: E2E_API_KEY,
+      NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE: 'false',
+    },
     port: PORT,
-    timeout: 120_000,
+    timeout: 300_000,
     reuseExistingServer: false,
   },
 });
-

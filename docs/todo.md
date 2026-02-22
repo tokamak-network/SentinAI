@@ -2,10 +2,91 @@
 
 ## Current Status
 
+### In Progress (2026-02-22 Dashboard Autonomy Cockpit MVP)
+- [x] 대시보드에 자율 에이전트 인지용 `Autonomy Cockpit` 패널 추가 (`src/app/page.tsx`)
+- [x] `goal-manager`/`autonomy policy` 상태 polling 연결
+- [x] 데모 컨트롤(시나리오 주입, goal tick, dry-run dispatch) UI/액션 연결
+- [x] 검증 실행 (`npm run lint -- src/app/page.tsx`, `npx tsc --noEmit`)
+- [x] 작업 회고 반영 (`docs/todo.md`, `docs/lessons.md`)
+
+### In Progress (2026-02-22 Dashboard Autonomy Policy Level Control Expansion)
+- [x] 자율 레벨(`A0~A5`) 런타임 변경 버튼을 `Autonomy Cockpit`에 추가 (`src/app/page.tsx`)
+- [x] 정책 변경 API(`POST /api/policy/autonomy-level`) 연동 및 성공/실패 피드백 메시지 연결
+- [x] 정책 변경 중/데모 액션 실행 중 상호 배타 disable 처리로 동시 실행 충돌 방지
+- [x] 임계치(`minConfidenceDryRun`, `minConfidenceWrite`)를 패널에 노출해 현재 정책 상태 가시화
+- [x] 검증 실행 (`npm run lint -- src/app/page.tsx`, `npx tsc --noEmit`)
+
+### In Progress (2026-02-22 Autonomy Cockpit E2E + Level Tooltip)
+- [x] 정책 레벨 버튼에 권한/가드레일 툴팁 추가 (`src/app/page.tsx`)
+- [x] 정책 레벨/피드백 영역에 e2e 안정 셀렉터(`data-testid`) 추가
+- [x] Playwright 실행 환경에 테스트용 정책 API key 주입 및 webServer build/start 일원화 (`playwright.config.ts`)
+- [x] 정책 레벨 변경 성공 피드백 + 툴팁 노출 e2e 시나리오 추가 (`e2e/autonomy-cockpit.spec.ts`)
+- [x] 검증 실행 (`npm run lint -- src/app/page.tsx e2e/autonomy-cockpit.spec.ts playwright.config.ts`, `npx tsc --noEmit`, `npx playwright test e2e/autonomy-cockpit.spec.ts`)
+
+### In Progress (2026-02-22 L2 Ops vs MCP Comparison Section)
+- [x] 통합 MCP 가이드에 기존 L2 운영과 MCP 기반 운영 비교 섹션 추가
+- [x] 운영 관점 비교 항목(진입 방식/흐름/안전 제어/속도/추적/적용 범위) 표로 정리
+- [x] OP Stack 권고 및 ZK Stack 비활성화 정책을 비교 표에 동기화
+- [x] 작업 회고 반영 (`docs/todo.md`, `docs/lessons.md`)
+
+### In Progress (2026-02-22 MCP Value + OP-Only Policy Update)
+- [x] MCP 사용 효용성 섹션 추가 (`docs/guide/sentinai-mcp-user-guide.md`)
+- [x] 지원 체인 정책을 OP Stack 권고 / ZK Stack 비활성화로 명시
+- [x] 빠른 시작/문제 해결/체크리스트를 OP 전용 운영 기준으로 정리
+- [x] 작업 회고 반영 (`docs/todo.md`, `docs/lessons.md`)
+
+### In Progress (2026-02-22 MCP Prompt Natural Language Conversion)
+- [x] MCP 사용자 가이드의 프롬프트 예시에서 tool 이름 직접 호출 문구 식별
+- [x] 프롬프트 예시를 자연어 의도 중심 문장으로 일괄 치환
+- [x] 운영 체크리스트/문제해결 문구에서도 tool 이름 의존 표현 최소화
+- [x] 작업 회고 반영 (`docs/todo.md`, `docs/lessons.md`)
+
+### In Progress (2026-02-22 Docs Reference Hygiene)
+- [x] `docs/**/*.md` 로컬 링크 무결성 재검사 및 깨진 링크 0건 확인
+- [x] 누락된 과거 감사 경로 스텁 추가 (`docs/todo/codebase-audit-2026-02-16.md`)
+- [x] Proposal 28 참조 경로용 Draft 스텁 문서 4건 생성 (guide/spec)
+- [x] 통합 안내 문서(`claude-code-mcp-*`)를 클릭 가능한 링크 기반으로 정리
+
+### In Progress (2026-02-22 SentinAI MCP User Guide Consolidation)
+- [x] `claude-code-mcp-setup.md` + `claude-code-mcp-operations-guide.md` 통합 구조 설계
+- [x] 통합 문서 신규 작성 (`docs/guide/sentinai-mcp-user-guide.md`)
+- [x] 기존 setup/operations 문서를 통합 가이드 안내 문서로 정리
+- [x] 문서 인덱스 및 회고 업데이트 (`docs/README.md`, `docs/todo.md`, `docs/lessons.md`)
+
 ### In Progress (2026-02-22 L1 Client Operations Automation Documentation)
 - [x] 요청 범위를 L1 운영 자동화 기술 요소 문서로 확정
 - [x] 신규 가이드 작성 (`docs/guide/l1-client-operations-automation-guide.md`)
 - [x] 문서 인덱스 링크 추가 (`docs/README.md`)
+- [x] 작업 회고 반영 (`docs/todo.md`, `docs/lessons.md`)
+
+### In Progress (2026-02-22 Ethereum L1 Client Automation Expansion)
+- [x] geth/ethrex/reth/besu/erigon 운영 시 필수 자동화 요소 확장 반영
+- [x] L1 클라이언트 전용 자동화 매트릭스(항목/필요성/DoD) 추가
+- [x] 클라이언트별 운영 포인트와 4주 MVP 우선순위 업데이트
+- [x] 작업 회고 반영 (`docs/todo.md`, `docs/lessons.md`)
+
+### In Progress (2026-02-22 Minor Client Focused Documentation Refinement)
+- [x] `geth` 제외 요청 반영 및 문서 범위 축소
+- [x] `reth/besu/erigon/ethrex` 중심 전용 자동화 항목으로 재작성
+- [x] 마이너 클라이언트 기준 MVP/체크리스트 재정의
+- [x] 작업 회고 반영 (`docs/todo.md`, `docs/lessons.md`)
+
+### In Progress (2026-02-22 Multi-Client Project Analysis Driven Documentation Update)
+- [x] `reth/besu/erigon/ethrex/nethermind` 공식 문서/릴리즈 기반 분석 추가
+- [x] 분석 스냅샷(버전/운영특성/자동화 포인트) 섹션 신규 작성
+- [x] 분석 결과를 반영한 자동화 매트릭스/클라이언트별 포인트/MVP/체크리스트 개선
+- [x] 작업 회고 반영 (`docs/todo.md`, `docs/lessons.md`)
+
+### In Progress (2026-02-22 L1 Client Incident Response Matrix)
+- [x] L1 클라이언트 운영 이슈 목록을 우선순위(P1/P2/P3) 기준으로 정리
+- [x] 이슈별 탐지 신호/즉시 대응/근본 해결 자동화 항목 추가
+- [x] 표준 대응 흐름(탐지->격리->복구->검증->회고) 문서화
+- [x] 작업 회고 반영 (`docs/todo.md`, `docs/lessons.md`)
+
+### In Progress (2026-02-22 Full-Auto Recovery Actions + Safe Sudo Model)
+- [x] 완전 자동화 가능 이슈별 AI Agent 액션 시퀀스 추가
+- [x] `sudo`가 필요한 네트워크 조치(30303) 안전 실행 모델 추가
+- [x] OpenClaw 유사 정책 기반 Action Broker 구조 반영
 - [x] 작업 회고 반영 (`docs/todo.md`, `docs/lessons.md`)
 
 ### In Progress (2026-02-22 L1 RPC Path Separation)
@@ -95,7 +176,7 @@
 - [ ] Subsequent update to the document/environment variable guide (reinforced in the next commit)
 
 ### In Progress (2026-02-20 Optimism Plugin Integration)
-- [x] Check requirements based on `docs/todo/optimism-tutorial-integration.md`
+- [x] Check requirements based on `docs/done/optimism-tutorial-integration.md`
 - [x] `src/chains/optimism` chain plugin implementation (for tutorial OP Stack)
 - [x] Extension of automatic loading of `CHAIN_TYPE` based plugins (`optimism`, `my-l2` alias)
 - [x] Enhanced chain registry testing (`CHAIN_TYPE=optimism|my-l2`)
@@ -329,6 +410,84 @@
 - L1 운영 자동화 요청을 실행 가능한 문서로 전환하기 위해 12개 기술 요소를 `영역/기술요소/DoD/KPI` 표로 고정했다.
 - 아키텍처를 `수집 -> 분류 -> 오케스트레이션 -> 실행 -> 검증/이관` 흐름으로 표준화해 구현 순서를 명확히 했다.
 - 즉시 적용 가능하도록 4주 MVP 우선순위와 운영 시작 체크리스트를 문서에 포함했다.
+
+## Review (2026-02-22 Ethereum L1 Client Automation Expansion)
+
+- geth/ethrex/reth/besu/erigon 공통 운영 리스크를 기준으로 L1 전용 자동화 항목 12개를 추가해 문서의 실행 밀도를 높였다.
+- 단순 기술 나열 대신 각 항목을 `필요성 + 최소 DoD`로 고정해 구현팀이 바로 백로그로 분해할 수 있도록 정리했다.
+- 클라이언트별 운영 포인트와 업그레이드/복구 중심 MVP 우선순위를 함께 반영해 실운영 적용성을 강화했다.
+
+## Review (2026-02-22 Minor Client Focused Documentation Refinement)
+
+- 사용자 요청에 맞춰 `geth`를 문서 범위에서 제외하고 `reth/besu/erigon/ethrex` 중심으로 재구성했다.
+- 전용 자동화 항목을 마이너 클라이언트 운영 리스크(호환성 계약, 카나리, JVM/DB 특화 운영) 중심으로 재정렬했다.
+- 운영 체크리스트에 `geth` 전용 플래그/명령 의존성 제거 항목을 추가해 실행팀 혼선을 줄였다.
+
+## Review (2026-02-22 Multi-Client Project Analysis Driven Documentation Update)
+
+- `reth/besu/erigon/ethrex/nethermind`의 공식 문서와 최신 릴리즈를 기준으로 분석 섹션을 추가해 문서 근거성을 강화했다.
+- 분석 결과를 `릴리즈 인텔리전스`, `저장소/리소스 모드 인지 운영`, `health webhook 연계`, `deprecated 설정 탐지` 같은 실행 항목으로 변환했다.
+- 기존 일반론 중심 항목을 클라이언트 특성 기반 DoD로 재정의해 구현 백로그 분해 가능성을 높였다.
+
+## Review (2026-02-22 L1 Client Incident Response Matrix)
+
+- L1 운영 현장에서 자주 발생하는 장애를 `우선순위/탐지신호/즉시대응/근본해결` 구조로 정리해 온콜 대응 속도를 높였다.
+- 동기화 지연, EL-CL 단절, 정합성 불일치, 디스크/DB 장애 등 핵심 이슈를 P1 중심으로 재배치했다.
+- 대응 절차를 `탐지 -> 격리 -> 복구 -> 검증 -> 회고` 흐름으로 표준화해 자동화/수동 대응 간 경계를 명확히 했다.
+
+## Review (2026-02-22 Full-Auto Recovery Actions + Safe Sudo Model)
+
+- 완전 자동화 가능한 이슈에 대해 AI Agent의 액션 시퀀스와 안전 가드레일을 문서에 명시해 무인 복구 범위를 구체화했다.
+- `피어 급감 -> 30303 임시 차단` 시나리오를 예시로 추가하고, TTL 기반 자동 원복 조건을 함께 고정했다.
+- `sudo` 사용은 직접 명령 실행이 아니라 정책 엔진 + 액션 브로커 + 제한된 privileged wrapper를 거치도록 설계 원칙을 명문화했다.
+
+## Review (2026-02-22 SentinAI MCP User Guide Consolidation)
+
+- MCP 설정 문서와 운영 문서를 단일 사용자 가이드로 통합해 설정-운영-장애대응 진입점을 하나로 정리했다.
+- 기존 문서 경로는 삭제하지 않고 통합 문서 안내 링크로 유지해 기존 참조 링크의 호환성을 보존했다.
+- 문서 인덱스를 통합 가이드 기준으로 갱신해 신규 사용자가 중복 문서를 탐색하지 않도록 했다.
+
+## Review (2026-02-22 MCP Prompt Natural Language Conversion)
+
+- MCP 사용자 가이드 프롬프트 예시를 tool 호출명 중심에서 자연어 의도 중심 문장으로 일괄 전환했다.
+- 스모크 테스트/운영 절차/사후 검증 예시에서 내부 도구명을 몰라도 실행 가능한 표현을 고정했다.
+- 문제 해결/운영 체크리스트 문구의 tool 이름 의존도를 낮춰 운영자 관점 가독성을 개선했다.
+
+## Review (2026-02-22 MCP Value + OP-Only Policy Update)
+
+- MCP 사용 시 운영자가 얻는 효용성(자연어 운영, 정책 일관성, 대응 속도, 추적 용이성)을 가이드 상단에 명시했다.
+- 체인 지원 정책을 `2026-02-22 기준 OP Stack 권고 / ZK Stack 비활성화`로 고정해 모호성을 제거했다.
+- 빠른 시작·문제 해결·체크리스트를 OP Stack 운영 기준으로 재정렬해 실행 기준을 명확히 했다.
+
+## Review (2026-02-22 L2 Ops vs MCP Comparison Section)
+
+- 통합 가이드에 기존 L2 운영과 MCP 기반 운영을 한눈에 비교할 수 있는 표를 추가했다.
+- 비교 축을 `진입 방식/실행 흐름/안전 제어/운영 속도/감사 추적/적용 범위`로 고정해 의사결정 기준을 명확히 했다.
+- OP Stack 권고 및 ZK Stack 비활성화 정책을 비교 섹션에 직접 반영해 정책 일관성을 유지했다.
+
+## Review (2026-02-22 Dashboard Autonomy Cockpit MVP)
+
+- 기존 Agent Loop 패널 상단에 `Autonomy Cockpit`을 추가해 자율 엔진/큐/가드레일 상태를 한 눈에 확인할 수 있게 구성했다.
+- `goal-manager`와 `autonomy policy`를 주기 polling으로 연결해 큐 깊이, suppression, DLQ, 자율 레벨 정보를 실시간 반영했다.
+- 시나리오 주입, goal tick, dry-run dispatch를 대시보드 버튼으로 제공해 프롬프트 없이도 자율 흐름 데모가 가능해졌다.
+
+## Review (2026-02-22 Dashboard Autonomy Policy Level Control Expansion)
+
+- 대시보드에서 자율 정책 레벨을 `A0~A5`로 즉시 변경할 수 있게 해 자율 에이전트 데모의 제어 가능성을 시각적으로 강화했다.
+- 정책 레벨 변경과 데모 액션 실행 간 동시 실행을 차단해 UI 상태 경합과 오동작 가능성을 줄였다.
+- 임계치 값을 함께 노출하고 변경 결과를 즉시 피드백해 사용자가 정책 상태 변화를 즉시 인지할 수 있게 했다.
+
+## Review (2026-02-22 Autonomy Cockpit E2E + Level Tooltip)
+
+- 정책 레벨 버튼별 권한/가드레일 툴팁을 추가해 사용자가 자율 레벨 의미를 UI에서 즉시 이해할 수 있게 했다.
+- 정책 레벨 배지/버튼/피드백 영역에 테스트 셀렉터를 고정해 UI 구조 변경에도 e2e 안정성을 높였다.
+- Playwright에서 테스트 전용 API key로 정책 변경 성공 경로를 재현하고, 레벨 변경 성공 피드백까지 자동 검증하도록 시나리오를 확장했다.
+
+## Review (2026-02-22 Docs Reference Hygiene)
+
+- `docs/**/*.md` 링크 무결성 기준으로 재검사해 실제 네비게이션 깨짐을 제거했다.
+- 과거 감사 문서와 Proposal 28의 예정 산출물 경로에 Draft 스텁을 추가해 참조 유실을 방지했다.
+- 통합 안내 스텁 문서를 링크형으로 정리해 문서 이동 시 사용자가 즉시 본문으로 진입할 수 있게 개선했다.
 
 ---
 
