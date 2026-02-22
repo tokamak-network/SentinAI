@@ -18,6 +18,8 @@
 - Rule: Goal queue ordering must use stable tie-breakers (score -> risk -> enqueue time -> id) and suppression reason codes must be persisted for audit.
 - New autonomy subsystems must never break the core scaling loop on partial failure.
 - Rule: Agent-loop integrations for optional autonomy modules (goal manager, dispatch) run as best-effort and degrade gracefully without failing the main cycle.
+- Deterministic autonomy evaluation should include both planning outcomes and pre-planning goal-generation quality checks.
+- Rule: Extend replay scorecards with synthetic goal-signal scenarios that validate suppression rules (duplicate, low-confidence, stale) to prevent noisy autonomous dispatch.
 - Changing core planner APIs from sync to async can leave route/MCP tests green in some paths but fail on hidden mock contracts.
 - Rule: When changing function sync/async signatures, run a repo-wide reference search and update both direct callsites and vi-mock return shapes in the same patch.
 - Post-condition verification based on a single keyword (`ready`) is brittle across action executors and test doubles.

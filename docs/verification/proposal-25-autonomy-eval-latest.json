@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-02-22T06:17:17.601Z",
-  "scenarioCount": 10,
+  "generatedAt": "2026-02-22T07:18:14.546Z",
+  "scenarioCount": 14,
   "metrics": {
     "goalCompletionRate": 1,
     "falseActionRate": 0,
@@ -120,6 +120,50 @@
     {
       "scenarioId": "S10",
       "goal": "custom goal for diagnostics and rca",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    },
+    {
+      "scenarioId": "G01",
+      "goal": "high-pressure snapshot should produce queueable goal",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    },
+    {
+      "scenarioId": "G02",
+      "goal": "duplicate signature should be suppressed",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    },
+    {
+      "scenarioId": "G03",
+      "goal": "low confidence candidate should be suppressed",
+      "completed": true,
+      "falseActionCount": 0,
+      "policyViolationCount": 0,
+      "rollbackTriggered": 0,
+      "rollbackSucceeded": 0,
+      "timeToStabilitySec": 0,
+      "errors": []
+    },
+    {
+      "scenarioId": "G04",
+      "goal": "stale snapshot should be suppressed",
       "completed": true,
       "falseActionCount": 0,
       "policyViolationCount": 0,

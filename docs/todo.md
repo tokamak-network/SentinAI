@@ -48,7 +48,7 @@
 - [x] Implement priority/suppression engine (`src/lib/goal-priority-engine.ts`)
 - [x] Implement goal manager runtime and queue API (`src/lib/goal-manager.ts`, `src/app/api/goal-manager/route.ts`)
 - [x] Integrate agent-loop tick -> autonomous goal queue -> goal planner dispatch
-- [ ] Extend autonomy evaluation scenarios for goal generation quality gate
+- [x] Extend autonomy evaluation scenarios for goal generation quality gate
 
 ### In Progress (2026-02-22 Proposal 27 L1/L2 Core Ops Hardening Documentation)
 - [x] Define analysis scope and baseline evidence for EVM L1 + L2 core operations
@@ -262,6 +262,12 @@
   - `POST /api/goal-manager/dispatch` admin-key guarded dispatch trigger
 - Integrated `agent-loop` with best-effort goal manager tick/dispatch path (`src/lib/agent-loop.ts`) so failures do not break scaling loop and are tracked as degraded reasons.
 - Added coverage for runtime + API routes (`src/lib/__tests__/goal-manager.test.ts`, `src/app/api/goal-manager/*.test.ts`) and re-verified with targeted tests + `tsc --noEmit` + lint.
+
+## Review (2026-02-22 Proposal 26 Phase E Eval Extension)
+
+- Extended `scripts/autonomy-eval.ts` scenario set with goal-generation quality gates (`G01`~`G04`) covering queue generation and suppression paths (duplicate/low-confidence/stale).
+- Added deterministic synthetic goal-signal snapshots to evaluate candidate/prioritization behavior without external runtime dependency.
+- Updated evaluation report template (`docs/verification/proposal-25-autonomy-eval-report-template.md`) to include goal-generation scenarios.
 
 ## Review (2026-02-22 Proposal 27 L1/L2 Core Ops Hardening Documentation)
 

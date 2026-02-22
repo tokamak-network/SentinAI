@@ -1,7 +1,7 @@
 # Proposal 25 Autonomy Eval Report
 
-- Generated At: 2026-02-22T06:17:17.601Z
-- Scenarios: 10
+- Generated At: 2026-02-22T07:18:14.546Z
+- Scenarios: 14
 - Result: PASS
 
 ## Metrics
@@ -28,3 +28,7 @@
 | S08 | yes | 0 | 0 | 0/0 | 0 |
 | S09 | yes | 0 | 0 | 0/0 | 0 |
 | S10 | yes | 0 | 0 | 0/0 | 0 |
+| G01 | yes | 0 | 0 | 0/0 | 0 |
+| G02 | yes | 0 | 0 | 0/0 | 0 |
+| G03 | yes | 0 | 0 | 0/0 | 0 |
+| G04 | yes | 0 | 0 | 0/0 | 0 |
