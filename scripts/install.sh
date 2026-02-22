@@ -10,6 +10,7 @@
 # Environment overrides:
 #   SENTINAI_DIR=/opt/sentinai         # Install path (default: /opt/sentinai)
 #   SENTINAI_BRANCH=main               # Git branch (default: main)
+#   INSTALL_MODE=core                  # Interactive setup mode: core | advanced (default: core)
 #
 # Non-interactive mode (CI/CD, user-data):
 #   Uses the same variable names as .env.local — no prefix needed.
@@ -17,7 +18,7 @@
 #     L2_RPC_URL=https://rpc.example.com
 #     ANTHROPIC_API_KEY=sk-ant-...       # or OPENAI_API_KEY / GEMINI_API_KEY / QWEN_API_KEY
 #   Optional:
-#     CHAIN_TYPE=thanos                  # thanos | optimism | my-l2 | op-stack
+#     CHAIN_TYPE=thanos                  # thanos | optimism | my-l2 | op-stack | zkstack
 #     AI_GATEWAY_URL=https://...         # AI Gateway (default: official gateway)
 #     AWS_CLUSTER_NAME=my-cluster        # EKS cluster (simulation mode if not set)
 #     AWS_PROFILE=my-cluster             # AWS CLI profile (default: same as AWS_CLUSTER_NAME)
@@ -38,6 +39,17 @@
 #     DOCKER_COMPOSE_PROJECT=my-l2        # Docker Compose project name (docker mode only)
 #     SCALING_SIMULATION_MODE=false      # true = no real K8s scaling (default: auto)
 #     AUTO_REMEDIATION_ENABLED=true
+#     MCP_SERVER_ENABLED=true            # MCP control plane
+#     MCP_AUTH_MODE=api-key              # api-key | approval-token | dual
+#     MCP_APPROVAL_REQUIRED=true
+#     MCP_APPROVAL_TTL_SECONDS=300
+#     SENTINAI_API_KEY=your-admin-key    # required for MCP/api admin writes
+#     AI_ROUTING_ENABLED=true            # adaptive model routing
+#     AGENT_MEMORY_ENABLED=true          # decision trace memory
+#     SENTINAI_L1_RPC_URL=https://...    # SentinAI internal L1 read RPC
+#     FAULT_PROOF_ENABLED=true
+#     CHALLENGER_EOA_ADDRESS=0x...
+#     DISPUTE_GAME_FACTORY_ADDRESS=0x...
 #     ALERT_WEBHOOK_URL=https://...      # Slack webhook
 #     NEXT_PUBLIC_BASE_PATH=/thanos-sepolia  # URL base path (e.g., /thanos-sepolia)
 #     NEXT_PUBLIC_NETWORK_NAME="Thanos Sepolia"  # Network name in dashboard header
@@ -63,6 +75,12 @@ log()  { echo -e "${GREEN}[SentinAI]${NC} $*"; }
 warn() { echo -e "${YELLOW}[WARNING]${NC} $*"; }
 err()  { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 info() { echo -e "${CYAN}[INFO]${NC} $*"; }
+
+append_if_set() {
+  local key="$1"
+  local value="${!key:-}"
+  [ -n "${value}" ] && printf '%s=%s\n' "${key}" "${value}"
+}
 
 # Store AWS credentials in ~/.aws/credentials using aws CLI (standard location)
 store_aws_credentials() {
@@ -274,8 +292,9 @@ setup_env() {
 
     CHAIN_TYPE="${CHAIN_TYPE:-thanos}"
     case "${CHAIN_TYPE}" in
-      thanos|optimism|my-l2|op-stack) ;;
-      *) err "CHAIN_TYPE must be one of: thanos, optimism, my-l2, op-stack" ;;
+      thanos|optimism|my-l2|op-stack|zkstack) ;;
+      zksync|zk-stack) CHAIN_TYPE="zkstack" ;;
+      *) err "CHAIN_TYPE must be one of: thanos, optimism, my-l2, op-stack, zkstack" ;;
     esac
 
     AI_GATEWAY_URL="${AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
@@ -301,6 +320,29 @@ setup_env() {
     echo ""
     echo -e "${BOLD}--- SentinAI Environment Setup ---${NC}"
     echo ""
+
+    # Setup mode (interactive only)
+    local setup_mode="${INSTALL_MODE:-core}"
+    case "${setup_mode}" in
+      core|advanced) ;;
+      *)
+        warn "Invalid INSTALL_MODE='${setup_mode}'. Falling back to 'core'."
+        setup_mode="core"
+        ;;
+    esac
+
+    if [ -z "${INSTALL_MODE:-}" ]; then
+      echo "  Setup mode:"
+      echo "    1) Core (recommended) — Fast setup with safe defaults"
+      echo "    2) Advanced — Full optional settings"
+      read -rp "  Choose [1]: " setup_mode_choice
+      case "${setup_mode_choice:-1}" in
+        2) setup_mode="advanced" ;;
+        *) setup_mode="core" ;;
+      esac
+    else
+      info "Setup mode override detected: ${setup_mode}"
+    fi
 
     # L2 RPC URL (required)
     read -rp "  L2 RPC URL (required): " L2_RPC_URL
@@ -353,9 +395,11 @@ setup_env() {
     echo -e "  ${BOLD}Chain Plugin${NC}:"
     echo "    1) Thanos (default)"
     echo "    2) Optimism Tutorial (OP Stack)"
+    echo "    3) ZK Stack"
     read -rp "  Choose [1]: " chain_choice
     case "${chain_choice}" in
       2) CHAIN_TYPE="optimism" ;;
+      3) CHAIN_TYPE="zkstack" ;;
       *) CHAIN_TYPE="thanos" ;;
     esac
 
@@ -374,6 +418,19 @@ setup_env() {
       L2_IS_TESTNET="${L2_IS_TESTNET:-true}"
       read -rp "  L1_CHAIN (sepolia/mainnet) [sepolia]: " L1_CHAIN
       L1_CHAIN="${L1_CHAIN:-sepolia}"
+    elif [ "${CHAIN_TYPE}" = "zkstack" ]; then
+      echo ""
+      echo -e "  ${BOLD}ZK Stack Metadata${NC} (optional):"
+      read -rp "  ZKSTACK_MODE [legacy-era]: " ZKSTACK_MODE
+      ZKSTACK_MODE="${ZKSTACK_MODE:-legacy-era}"
+      read -rp "  ZKSTACK_COMPONENT_PROFILE [core-only]: " ZKSTACK_COMPONENT_PROFILE
+      ZKSTACK_COMPONENT_PROFILE="${ZKSTACK_COMPONENT_PROFILE:-core-only}"
+      read -rp "  ZK_BATCHER_STATUS_URL (optional): " ZK_BATCHER_STATUS_URL
+      read -rp "  ZK_PROOF_RPC_URL (optional): " ZK_PROOF_RPC_URL
+      read -rp "  ZK_SETTLEMENT_LAYER [l1]: " ZK_SETTLEMENT_LAYER
+      ZK_SETTLEMENT_LAYER="${ZK_SETTLEMENT_LAYER:-l1}"
+      read -rp "  ZK_FINALITY_MODE [confirmed]: " ZK_FINALITY_MODE
+      ZK_FINALITY_MODE="${ZK_FINALITY_MODE:-confirmed}"
     fi
 
     # Container Orchestrator
@@ -468,29 +525,104 @@ setup_env() {
     fi
     fi  # end orchestrator type branch
 
-    # L1 RPC Failover (optional)
-    echo ""
-    echo -e "  ${BOLD}L1 RPC Failover${NC} (spare endpoints for 429 auto-failover):"
-    read -rp "  L1_RPC_URLS (comma-separated, press Enter to skip): " L1_RPC_URLS
-    if [ -n "${L1_RPC_URLS}" ] && [ "${ORCHESTRATOR_TYPE}" != "docker" ]; then
-      read -rp "  Enable L1 Proxyd ConfigMap integration? (y/N): " proxyd_choice
-      if [[ "${proxyd_choice}" =~ ^[Yy]$ ]]; then
-        L1_PROXYD_ENABLED="true"
-        info "Proxyd ConfigMap name will be auto-detected at runtime."
-      fi
-    fi
-
-    # EOA Balance Monitoring (optional)
-    echo ""
-    echo -e "  ${BOLD}EOA Balance Monitoring${NC} (batcher/proposer L1 ETH balance):"
-    read -rp "  Enable EOA monitoring? (y/N): " eoa_choice
-    if [[ "${eoa_choice}" =~ ^[Yy]$ ]]; then
-      read -rp "  BATCHER_EOA_ADDRESS (0x..., press Enter to skip): " BATCHER_EOA_ADDRESS
-      read -rp "  PROPOSER_EOA_ADDRESS (0x..., press Enter to skip): " PROPOSER_EOA_ADDRESS
-      read -rsp "  TREASURY_PRIVATE_KEY (for auto-refill, press Enter for monitor-only): " TREASURY_PRIVATE_KEY
+    if [ "${setup_mode}" = "advanced" ]; then
+      # L1 RPC Failover (optional)
       echo ""
-      read -rp "  EOA_BALANCE_CRITICAL_ETH [0.1]: " EOA_BALANCE_CRITICAL_ETH
-      EOA_BALANCE_CRITICAL_ETH="${EOA_BALANCE_CRITICAL_ETH:-0.1}"
+      echo -e "  ${BOLD}L1 RPC Failover${NC} (spare endpoints for 429 auto-failover):"
+      read -rp "  L1_RPC_URLS (comma-separated, press Enter to skip): " L1_RPC_URLS
+      read -rp "  SENTINAI_L1_RPC_URL (internal read RPC, optional): " SENTINAI_L1_RPC_URL
+      if [ -n "${L1_RPC_URLS}" ] && [ "${ORCHESTRATOR_TYPE}" != "docker" ]; then
+        read -rp "  Enable L1 Proxyd ConfigMap integration? (y/N): " proxyd_choice
+        if [[ "${proxyd_choice}" =~ ^[Yy]$ ]]; then
+          L1_PROXYD_ENABLED="true"
+          info "Proxyd ConfigMap name will be auto-detected at runtime."
+          read -rp "  L1_PROXYD_CONFIGMAP_NAME [proxyd-config]: " L1_PROXYD_CONFIGMAP_NAME
+          L1_PROXYD_CONFIGMAP_NAME="${L1_PROXYD_CONFIGMAP_NAME:-proxyd-config}"
+          read -rp "  L1_PROXYD_DATA_KEY [proxyd-config.toml]: " L1_PROXYD_DATA_KEY
+          L1_PROXYD_DATA_KEY="${L1_PROXYD_DATA_KEY:-proxyd-config.toml}"
+          read -rp "  L1_PROXYD_UPSTREAM_GROUP [main]: " L1_PROXYD_UPSTREAM_GROUP
+          L1_PROXYD_UPSTREAM_GROUP="${L1_PROXYD_UPSTREAM_GROUP:-main}"
+        fi
+      fi
+
+      # EOA Balance Monitoring (optional)
+      echo ""
+      echo -e "  ${BOLD}EOA Balance Monitoring${NC} (batcher/proposer L1 ETH balance):"
+      read -rp "  Enable EOA monitoring? (y/N): " eoa_choice
+      if [[ "${eoa_choice}" =~ ^[Yy]$ ]]; then
+        read -rp "  BATCHER_EOA_ADDRESS (0x..., press Enter to skip): " BATCHER_EOA_ADDRESS
+        read -rp "  PROPOSER_EOA_ADDRESS (0x..., press Enter to skip): " PROPOSER_EOA_ADDRESS
+        read -rsp "  BATCHER_PRIVATE_KEY (optional): " BATCHER_PRIVATE_KEY
+        echo ""
+        read -rsp "  PROPOSER_PRIVATE_KEY (optional): " PROPOSER_PRIVATE_KEY
+        echo ""
+        read -rsp "  TREASURY_PRIVATE_KEY (for auto-refill, press Enter for monitor-only): " TREASURY_PRIVATE_KEY
+        echo ""
+        read -rp "  EOA_BALANCE_CRITICAL_ETH [0.1]: " EOA_BALANCE_CRITICAL_ETH
+        EOA_BALANCE_CRITICAL_ETH="${EOA_BALANCE_CRITICAL_ETH:-0.1}"
+      fi
+
+      # MCP Control Plane (optional)
+      echo ""
+      echo -e "  ${BOLD}MCP Control Plane${NC}:"
+      read -rp "  Enable MCP server? (y/N): " mcp_choice
+      if [[ "${mcp_choice}" =~ ^[Yy]$ ]]; then
+        MCP_SERVER_ENABLED="true"
+        read -rp "  MCP_AUTH_MODE [api-key]: " MCP_AUTH_MODE
+        MCP_AUTH_MODE="${MCP_AUTH_MODE:-api-key}"
+        read -rp "  MCP_APPROVAL_REQUIRED (true/false) [true]: " MCP_APPROVAL_REQUIRED
+        MCP_APPROVAL_REQUIRED="${MCP_APPROVAL_REQUIRED:-true}"
+        read -rp "  MCP_APPROVAL_TTL_SECONDS [300]: " MCP_APPROVAL_TTL_SECONDS
+        MCP_APPROVAL_TTL_SECONDS="${MCP_APPROVAL_TTL_SECONDS:-300}"
+        read -rsp "  SENTINAI_API_KEY (admin key for MCP/auth writes): " SENTINAI_API_KEY
+        echo ""
+        [[ -z "${SENTINAI_API_KEY}" ]] && err "SENTINAI_API_KEY is required when MCP server is enabled."
+      fi
+
+      # Adaptive AI Routing (optional)
+      echo ""
+      echo -e "  ${BOLD}Adaptive AI Routing${NC}:"
+      read -rp "  Enable AI routing? (y/N): " routing_choice
+      if [[ "${routing_choice}" =~ ^[Yy]$ ]]; then
+        AI_ROUTING_ENABLED="true"
+        read -rp "  AI_ROUTING_POLICY [balanced]: " AI_ROUTING_POLICY
+        AI_ROUTING_POLICY="${AI_ROUTING_POLICY:-balanced}"
+        read -rp "  AI_ROUTING_AB_PERCENT [10]: " AI_ROUTING_AB_PERCENT
+        AI_ROUTING_AB_PERCENT="${AI_ROUTING_AB_PERCENT:-10}"
+        read -rp "  AI_ROUTING_BUDGET_USD_DAILY [50]: " AI_ROUTING_BUDGET_USD_DAILY
+        AI_ROUTING_BUDGET_USD_DAILY="${AI_ROUTING_BUDGET_USD_DAILY:-50}"
+      fi
+
+      # Agent Memory (optional)
+      echo ""
+      echo -e "  ${BOLD}Agent Memory / Trace${NC}:"
+      read -rp "  Enable agent memory? (y/N): " memory_choice
+      if [[ "${memory_choice}" =~ ^[Yy]$ ]]; then
+        AGENT_MEMORY_ENABLED="true"
+        read -rp "  AGENT_MEMORY_RETENTION_DAYS [30]: " AGENT_MEMORY_RETENTION_DAYS
+        AGENT_MEMORY_RETENTION_DAYS="${AGENT_MEMORY_RETENTION_DAYS:-30}"
+        read -rp "  AGENT_TRACE_MASK_SECRETS (true/false) [true]: " AGENT_TRACE_MASK_SECRETS
+        AGENT_TRACE_MASK_SECRETS="${AGENT_TRACE_MASK_SECRETS:-true}"
+      fi
+
+      # Fault Proof (optional)
+      echo ""
+      echo -e "  ${BOLD}Fault Proof${NC}:"
+      read -rp "  Enable fault proof monitoring? (y/N): " fault_proof_choice
+      if [[ "${fault_proof_choice}" =~ ^[Yy]$ ]]; then
+        FAULT_PROOF_ENABLED="true"
+        read -rp "  CHALLENGER_EOA_ADDRESS (0x..., optional): " CHALLENGER_EOA_ADDRESS
+        read -rp "  DISPUTE_GAME_FACTORY_ADDRESS (0x..., optional): " DISPUTE_GAME_FACTORY_ADDRESS
+      fi
+
+      # Optional infra/runtime overrides
+      echo ""
+      read -rp "  REDIS_URL (optional, press Enter to keep docker default): " REDIS_URL
+      read -rp "  K8S_API_URL (optional override): " K8S_API_URL
+      read -rp "  K8S_INSECURE_TLS (true/false, optional): " K8S_INSECURE_TLS
+      read -rp "  DOCKER_ENV_FILE (optional, docker mode only): " DOCKER_ENV_FILE
+    else
+      info "Core mode: skipping advanced optional prompts (L1/EOA/MCP/AI routing/memory/fault-proof)."
     fi
 
     # Scaling Simulation Mode
@@ -509,42 +641,48 @@ setup_env() {
       SCALING_SIMULATION_MODE="true"
     fi
 
-    # Auto-Remediation (optional)
-    read -rp "  Enable auto-remediation? (y/N): " remediation_choice
-    if [[ "${remediation_choice}" =~ ^[Yy]$ ]]; then
-      AUTO_REMEDIATION_ENABLED="true"
-    fi
+    if [ "${setup_mode}" = "advanced" ]; then
+      # Auto-Remediation (optional)
+      read -rp "  Enable auto-remediation? (y/N): " remediation_choice
+      if [[ "${remediation_choice}" =~ ^[Yy]$ ]]; then
+        AUTO_REMEDIATION_ENABLED="true"
+      fi
 
-    # HTTPS Domain (optional -- Caddy auto-certificate)
-    echo ""
-    echo "  HTTPS domain setup (Caddy will automatically issue Let's Encrypt certificates):"
-    echo "  The server's public IP must be registered in DNS."
-    read -rp "  Public Domain (e.g., sentinai.tokamak.network, press Enter to skip): " DOMAIN_NAME
-    if [ -z "${DOMAIN_NAME}" ]; then
-      info "Domain not set. HTTP-only mode (localhost:3002)."
+      # HTTPS Domain (optional -- Caddy auto-certificate)
+      echo ""
+      echo "  HTTPS domain setup (Caddy will automatically issue Let's Encrypt certificates):"
+      echo "  The server's public IP must be registered in DNS."
+      read -rp "  Public Domain (e.g., sentinai.tokamak.network, press Enter to skip): " DOMAIN_NAME
+      if [ -z "${DOMAIN_NAME}" ]; then
+        info "Domain not set. HTTP-only mode (localhost:3002)."
+      else
+        info "Ports 80 (HTTP) and 443 (HTTPS) must be open in the firewall/Security List."
+      fi
+
+      # Base path (for multi-chain deployments under a subpath)
+      echo ""
+      echo "  URL base path for the dashboard (e.g., /thanos-sepolia, /titan-mainnet)."
+      echo "  This serves the app at https://domain/<base-path>."
+      read -rp "  Base Path (press Enter for root /): " NEXT_PUBLIC_BASE_PATH
+      NEXT_PUBLIC_BASE_PATH="${NEXT_PUBLIC_BASE_PATH:-}"
+
+      # Network name (shown in dashboard header)
+      echo ""
+      echo "  Network name displayed in the dashboard header (e.g., Thanos Sepolia, Titan Mainnet)."
+      local network_name_default="Thanos Sepolia"
+      if [ "${CHAIN_TYPE:-thanos}" = "optimism" ]; then
+        network_name_default="Optimism Tutorial L2"
+      elif [ "${CHAIN_TYPE:-thanos}" = "zkstack" ]; then
+        network_name_default="ZK Stack Local"
+      fi
+      read -rp "  Network Name (press Enter for '${network_name_default}'): " NEXT_PUBLIC_NETWORK_NAME
+      NEXT_PUBLIC_NETWORK_NAME="${NEXT_PUBLIC_NETWORK_NAME:-${network_name_default}}"
+
+      # Slack Webhook (optional)
+      read -rp "  Slack Webhook URL (optional, press Enter to skip): " ALERT_WEBHOOK_URL
     else
-      info "Ports 80 (HTTP) and 443 (HTTPS) must be open in the firewall/Security List."
+      info "Core mode: skipping advanced deployment/alert prompts."
     fi
-
-    # Base path (for multi-chain deployments under a subpath)
-    echo ""
-    echo "  URL base path for the dashboard (e.g., /thanos-sepolia, /titan-mainnet)."
-    echo "  This serves the app at https://domain/<base-path>."
-    read -rp "  Base Path (press Enter for root /): " NEXT_PUBLIC_BASE_PATH
-    NEXT_PUBLIC_BASE_PATH="${NEXT_PUBLIC_BASE_PATH:-}"
-
-    # Network name (shown in dashboard header)
-    echo ""
-    echo "  Network name displayed in the dashboard header (e.g., Thanos Sepolia, Titan Mainnet)."
-    local network_name_default="Thanos Sepolia"
-    if [ "${CHAIN_TYPE:-thanos}" = "optimism" ]; then
-      network_name_default="Optimism Tutorial L2"
-    fi
-    read -rp "  Network Name (press Enter for '${network_name_default}'): " NEXT_PUBLIC_NETWORK_NAME
-    NEXT_PUBLIC_NETWORK_NAME="${NEXT_PUBLIC_NETWORK_NAME:-${network_name_default}}"
-
-    # Slack Webhook (optional)
-    read -rp "  Slack Webhook URL (optional, press Enter to skip): " ALERT_WEBHOOK_URL
   fi
 
   # --- Defaults for unset optional variables (set -u safety) ---
@@ -560,16 +698,26 @@ setup_env() {
   : "${L1_CHAIN:=}"
   : "${DOCKER_COMPOSE_FILE:=docker-compose.yml}"
   : "${DOCKER_COMPOSE_PROJECT:=}"
+  : "${DOCKER_ENV_FILE:=}"
   : "${AWS_CLUSTER_NAME:=}"
   : "${K8S_NAMESPACE:=default}"
   : "${K8S_APP_PREFIX:=op}"
   : "${K8S_STATEFULSET_PREFIX:=}"
+  : "${K8S_API_URL:=}"
+  : "${K8S_INSECURE_TLS:=}"
   : "${AWS_PROFILE:=}"
   : "${AWS_REGION:=}"
+  : "${SENTINAI_L1_RPC_URL:=}"
   : "${L1_RPC_URLS:=}"
   : "${L1_PROXYD_ENABLED:=}"
+  : "${L1_PROXYD_CONFIGMAP_NAME:=}"
+  : "${L1_PROXYD_DATA_KEY:=}"
+  : "${L1_PROXYD_UPSTREAM_GROUP:=}"
   : "${BATCHER_EOA_ADDRESS:=}"
   : "${PROPOSER_EOA_ADDRESS:=}"
+  : "${BATCHER_PRIVATE_KEY:=}"
+  : "${PROPOSER_PRIVATE_KEY:=}"
+  : "${CHALLENGER_EOA_ADDRESS:=}"
   : "${TREASURY_PRIVATE_KEY:=}"
   : "${EOA_BALANCE_CRITICAL_ETH:=0.1}"
   : "${EOA_BALANCE_WARNING_ETH:=}"
@@ -578,7 +726,35 @@ setup_env() {
   : "${EOA_REFILL_COOLDOWN_MIN:=}"
   : "${EOA_GAS_GUARD_GWEI:=}"
   : "${EOA_TREASURY_MIN_ETH:=}"
+  : "${FAULT_PROOF_ENABLED:=}"
+  : "${DISPUTE_GAME_FACTORY_ADDRESS:=}"
   : "${AUTO_REMEDIATION_ENABLED:=}"
+  : "${MCP_SERVER_ENABLED:=}"
+  : "${MCP_AUTH_MODE:=}"
+  : "${MCP_APPROVAL_REQUIRED:=}"
+  : "${MCP_APPROVAL_TTL_SECONDS:=}"
+  : "${SENTINAI_API_KEY:=}"
+  : "${SENTINAI_ALLOW_SCALER_WRITE_IN_READONLY:=}"
+  : "${AI_ROUTING_ENABLED:=}"
+  : "${AI_ROUTING_POLICY:=}"
+  : "${AI_ROUTING_AB_PERCENT:=}"
+  : "${AI_ROUTING_BUDGET_USD_DAILY:=}"
+  : "${AGENT_MEMORY_ENABLED:=}"
+  : "${AGENT_MEMORY_RETENTION_DAYS:=}"
+  : "${AGENT_TRACE_MASK_SECRETS:=}"
+  : "${REDIS_URL:=}"
+  : "${LLM_TEST_PROXY_ENABLED:=}"
+  : "${LLM_TEST_PROXY_URL:=}"
+  : "${LLM_TEST_PROVIDERS:=}"
+  : "${LLM_TEST_TIMEOUT_FAST:=}"
+  : "${LLM_TEST_TIMEOUT_BEST:=}"
+  : "${LLM_TEST_OUTPUT_DIR:=}"
+  : "${ZKSTACK_MODE:=}"
+  : "${ZKSTACK_COMPONENT_PROFILE:=}"
+  : "${ZK_BATCHER_STATUS_URL:=}"
+  : "${ZK_PROOF_RPC_URL:=}"
+  : "${ZK_SETTLEMENT_LAYER:=}"
+  : "${ZK_FINALITY_MODE:=}"
   : "${ALERT_WEBHOOK_URL:=}"
   : "${DOMAIN_NAME:=${DOMAIN:-}}"
   : "${NEXT_PUBLIC_BASE_PATH:=}"
@@ -593,6 +769,8 @@ setup_env() {
     : "${L2_IS_TESTNET:=true}"
     : "${L1_CHAIN:=sepolia}"
     : "${NEXT_PUBLIC_NETWORK_NAME:=Optimism Tutorial L2}"
+  elif [ "${CHAIN_TYPE}" = "zkstack" ]; then
+    : "${NEXT_PUBLIC_NETWORK_NAME:=ZK Stack Local}"
   else
     : "${NEXT_PUBLIC_NETWORK_NAME:=Thanos Sepolia}"
   fi
@@ -629,12 +807,19 @@ ENVEOF
     [ -n "${L2_EXPLORER_URL}" ] && printf 'L2_EXPLORER_URL=%s\n' "${L2_EXPLORER_URL}"
     [ -n "${L2_IS_TESTNET}" ] && printf 'L2_IS_TESTNET=%s\n' "${L2_IS_TESTNET}"
     [ -n "${L1_CHAIN}" ] && printf 'L1_CHAIN=%s\n' "${L1_CHAIN}"
+    [ -n "${ZKSTACK_MODE}" ] && printf 'ZKSTACK_MODE=%s\n' "${ZKSTACK_MODE}"
+    [ -n "${ZKSTACK_COMPONENT_PROFILE}" ] && printf 'ZKSTACK_COMPONENT_PROFILE=%s\n' "${ZKSTACK_COMPONENT_PROFILE}"
+    [ -n "${ZK_BATCHER_STATUS_URL}" ] && printf 'ZK_BATCHER_STATUS_URL=%s\n' "${ZK_BATCHER_STATUS_URL}"
+    [ -n "${ZK_PROOF_RPC_URL}" ] && printf 'ZK_PROOF_RPC_URL=%s\n' "${ZK_PROOF_RPC_URL}"
+    [ -n "${ZK_SETTLEMENT_LAYER}" ] && printf 'ZK_SETTLEMENT_LAYER=%s\n' "${ZK_SETTLEMENT_LAYER}"
+    [ -n "${ZK_FINALITY_MODE}" ] && printf 'ZK_FINALITY_MODE=%s\n' "${ZK_FINALITY_MODE}"
 
     if [ "${ORCHESTRATOR_TYPE}" = "docker" ]; then
       printf '\n# === Container Orchestrator ===\n'
       printf 'ORCHESTRATOR_TYPE=docker\n'
       printf 'DOCKER_COMPOSE_FILE=%s\n' "${DOCKER_COMPOSE_FILE}"
       [ -n "${DOCKER_COMPOSE_PROJECT}" ] && printf 'DOCKER_COMPOSE_PROJECT=%s\n' "${DOCKER_COMPOSE_PROJECT}"
+      [ -n "${DOCKER_ENV_FILE}" ] && printf 'DOCKER_ENV_FILE=%s\n' "${DOCKER_ENV_FILE}"
     else
       printf '\n# === K8s Monitoring ===\n'
       printf 'AWS_CLUSTER_NAME=%s\n' "${AWS_CLUSTER_NAME:-}"
@@ -643,6 +828,8 @@ ENVEOF
       printf 'K8S_APP_PREFIX=%s\n' "${K8S_APP_PREFIX}"
       [ -n "${K8S_STATEFULSET_PREFIX}" ] && printf 'K8S_STATEFULSET_PREFIX=%s\n' "${K8S_STATEFULSET_PREFIX}"
       [ -n "${AWS_REGION}" ] && printf 'AWS_REGION=%s\n' "${AWS_REGION}"
+      [ -n "${K8S_API_URL}" ] && printf 'K8S_API_URL=%s\n' "${K8S_API_URL}"
+      [ -n "${K8S_INSECURE_TLS}" ] && printf 'K8S_INSECURE_TLS=%s\n' "${K8S_INSECURE_TLS}"
       # AWS credentials: stored in ~/.aws/credentials (mounted by Docker)
     fi
 
@@ -652,20 +839,27 @@ ENVEOF
     printf 'AGENT_LOOP_ENABLED=true\n'
     [ "${AUTO_REMEDIATION_ENABLED}" = "true" ] && printf 'AUTO_REMEDIATION_ENABLED=true\n'
 
-    # L1 RPC Failover (optional)
-    if [ -n "${L1_RPC_URLS}" ]; then
+    # L1 RPC (optional)
+    if [ -n "${SENTINAI_L1_RPC_URL}" ] || [ -n "${L1_RPC_URLS}" ]; then
       printf '\n# === L1 RPC Failover ===\n'
-      printf 'L1_RPC_URLS=%s\n' "${L1_RPC_URLS}"
+      [ -n "${SENTINAI_L1_RPC_URL}" ] && printf 'SENTINAI_L1_RPC_URL=%s\n' "${SENTINAI_L1_RPC_URL}"
+      [ -n "${L1_RPC_URLS}" ] && printf 'L1_RPC_URLS=%s\n' "${L1_RPC_URLS}"
       if [ "${L1_PROXYD_ENABLED}" = "true" ]; then
         printf 'L1_PROXYD_ENABLED=true\n'
+        [ -n "${L1_PROXYD_CONFIGMAP_NAME}" ] && printf 'L1_PROXYD_CONFIGMAP_NAME=%s\n' "${L1_PROXYD_CONFIGMAP_NAME}"
+        [ -n "${L1_PROXYD_DATA_KEY}" ] && printf 'L1_PROXYD_DATA_KEY=%s\n' "${L1_PROXYD_DATA_KEY}"
+        [ -n "${L1_PROXYD_UPSTREAM_GROUP}" ] && printf 'L1_PROXYD_UPSTREAM_GROUP=%s\n' "${L1_PROXYD_UPSTREAM_GROUP}"
       fi
     fi
 
     # EOA Balance Monitoring (optional)
-    if [ -n "${BATCHER_EOA_ADDRESS}${PROPOSER_EOA_ADDRESS}" ]; then
+    if [ -n "${BATCHER_EOA_ADDRESS}${PROPOSER_EOA_ADDRESS}${BATCHER_PRIVATE_KEY}${PROPOSER_PRIVATE_KEY}${CHALLENGER_EOA_ADDRESS}" ]; then
       printf '\n# === EOA Balance Monitoring ===\n'
       [ -n "${BATCHER_EOA_ADDRESS}" ] && printf 'BATCHER_EOA_ADDRESS=%s\n' "${BATCHER_EOA_ADDRESS}"
       [ -n "${PROPOSER_EOA_ADDRESS}" ] && printf 'PROPOSER_EOA_ADDRESS=%s\n' "${PROPOSER_EOA_ADDRESS}"
+      [ -n "${BATCHER_PRIVATE_KEY}" ] && printf 'BATCHER_PRIVATE_KEY=%s\n' "${BATCHER_PRIVATE_KEY}"
+      [ -n "${PROPOSER_PRIVATE_KEY}" ] && printf 'PROPOSER_PRIVATE_KEY=%s\n' "${PROPOSER_PRIVATE_KEY}"
+      [ -n "${CHALLENGER_EOA_ADDRESS}" ] && printf 'CHALLENGER_EOA_ADDRESS=%s\n' "${CHALLENGER_EOA_ADDRESS}"
       [ -n "${TREASURY_PRIVATE_KEY}" ] && printf 'TREASURY_PRIVATE_KEY=%s\n' "${TREASURY_PRIVATE_KEY}"
       printf 'EOA_BALANCE_CRITICAL_ETH=%s\n' "${EOA_BALANCE_CRITICAL_ETH:-0.1}"
       [ -n "${EOA_BALANCE_WARNING_ETH}" ] && printf 'EOA_BALANCE_WARNING_ETH=%s\n' "${EOA_BALANCE_WARNING_ETH}"
@@ -676,7 +870,50 @@ ENVEOF
       [ -n "${EOA_TREASURY_MIN_ETH}" ] && printf 'EOA_TREASURY_MIN_ETH=%s\n' "${EOA_TREASURY_MIN_ETH}"
     fi
 
-    # Note: REDIS_URL is set by docker-compose.yml (redis://redis:6379)
+    # Fault Proof (optional)
+    if [ "${FAULT_PROOF_ENABLED}" = "true" ] || [ -n "${DISPUTE_GAME_FACTORY_ADDRESS}${CHALLENGER_EOA_ADDRESS}" ]; then
+      printf '\n# === Fault Proof ===\n'
+      [ "${FAULT_PROOF_ENABLED}" = "true" ] && printf 'FAULT_PROOF_ENABLED=true\n'
+      [ -n "${CHALLENGER_EOA_ADDRESS}" ] && printf 'CHALLENGER_EOA_ADDRESS=%s\n' "${CHALLENGER_EOA_ADDRESS}"
+      [ -n "${DISPUTE_GAME_FACTORY_ADDRESS}" ] && printf 'DISPUTE_GAME_FACTORY_ADDRESS=%s\n' "${DISPUTE_GAME_FACTORY_ADDRESS}"
+    fi
+
+    # State store (optional)
+    [ -n "${REDIS_URL}" ] && printf 'REDIS_URL=%s\n' "${REDIS_URL}"
+
+    # Advanced optional features (passthrough)
+    local advanced_optional_keys=(
+      MCP_SERVER_ENABLED
+      MCP_AUTH_MODE
+      MCP_APPROVAL_REQUIRED
+      MCP_APPROVAL_TTL_SECONDS
+      SENTINAI_API_KEY
+      SENTINAI_ALLOW_SCALER_WRITE_IN_READONLY
+      AI_ROUTING_ENABLED
+      AI_ROUTING_POLICY
+      AI_ROUTING_AB_PERCENT
+      AI_ROUTING_BUDGET_USD_DAILY
+      AGENT_MEMORY_ENABLED
+      AGENT_MEMORY_RETENTION_DAYS
+      AGENT_TRACE_MASK_SECRETS
+      LLM_TEST_PROXY_ENABLED
+      LLM_TEST_PROXY_URL
+      LLM_TEST_PROVIDERS
+      LLM_TEST_TIMEOUT_FAST
+      LLM_TEST_TIMEOUT_BEST
+      LLM_TEST_OUTPUT_DIR
+    )
+    local advanced_optional_written=""
+    local advanced_key
+    for advanced_key in "${advanced_optional_keys[@]}"; do
+      if [ -n "${!advanced_key:-}" ]; then
+        if [ -z "${advanced_optional_written}" ]; then
+          printf '\n# === Advanced Optional Features ===\n'
+          advanced_optional_written="true"
+        fi
+        append_if_set "${advanced_key}"
+      fi
+    done
 
     # Deployment (optional)
     if [ -n "${NEXT_PUBLIC_BASE_PATH}" ] || [ -n "${NEXT_PUBLIC_NETWORK_NAME}" ]; then
