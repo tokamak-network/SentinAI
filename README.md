@@ -91,12 +91,10 @@ AWS_CLUSTER_NAME=my-cluster-name                # K8s (auto-detects K8S_API_URL 
 ```
 
 **L1 RPC Configuration (Important Architecture Note):**
-- **SentinAI monitoring**: Uses **public L1 RPC** (e.g., `publicnode.com`)
-  - Set via `L1_RPC_URL` or `L1_RPC_URLS` for automatic failover
-  - Rate limit optimized: 95% reduction via caching + polling adjustment
-- **L2 nodes** (op-node, op-batcher, op-proposer): Use **Proxyd with paid L1 RPC endpoints**
-  - Configured separately via Proxyd ConfigMap (not SentinAI env)
-  - See `docs/guide/proxyd-failover-setup.md` for details
+- **SentinAI monitoring path**: Set via `SENTINAI_L1_RPC_URL` (optional, has default fallback).
+- **L2 node failover pool**: Set via `L1_RPC_URLS` (comma-separated).
+- **Proxyd mode** (optional): controlled with `L1_PROXYD_*` variables.
+- See `docs/guide/proxyd-failover-setup.md` for details.
 
 > `K8S_API_URL` and `AWS_REGION` are auto-detected at runtime from `AWS_CLUSTER_NAME`.
 > AWS credentials use the standard chain: env vars, `~/.aws/credentials`, or IAM Role.
@@ -116,20 +114,40 @@ curl -sSL https://raw.githubusercontent.com/tokamak-network/SentinAI/main/script
 ```
 
 The installer prompts for:
-1. **L2 RPC URL** (required)
-2. **AI Provider + API Key** (required)
-3. **AWS EKS Cluster Name** (optional — skip for simulation mode)
-4. **Public Domain** for HTTPS (optional — Caddy auto-issues Let's Encrypt cert)
-5. **Slack Webhook URL** (optional)
+1. **Setup Mode**: `core` (recommended) or `advanced`
+2. **L2 RPC URL** (required)
+3. **AI Provider + API Key** (required)
+4. **Chain plugin** (`thanos` / `optimism` / `zkstack`)
+5. **Orchestrator** (`k8s` or `docker`) and cluster info (if needed)
+6. **Advanced mode only**: MCP, AI routing, agent memory, fault-proof, domain/alerts
 
 #### Non-interactive mode (CI/CD, EC2 User Data)
 
 ```bash
-SENTINAI_L2_RPC_URL=https://your-l2-rpc.example.com \
-SENTINAI_AI_PROVIDER=anthropic \
-SENTINAI_AI_KEY=sk-ant-... \
-SENTINAI_CLUSTER_NAME=your-cluster \
-SENTINAI_DOMAIN=sentinai.yourdomain.com \
+L2_RPC_URL=https://your-l2-rpc.example.com \
+ANTHROPIC_API_KEY=sk-ant-... \
+CHAIN_TYPE=thanos \
+AWS_CLUSTER_NAME=your-cluster \
+DOMAIN=sentinai.yourdomain.com \
+bash <(curl -sSL https://raw.githubusercontent.com/tokamak-network/SentinAI/main/scripts/install.sh)
+```
+
+Advanced example:
+
+```bash
+INSTALL_MODE=advanced \
+L2_RPC_URL=https://your-l2-rpc.example.com \
+QWEN_API_KEY=your-qwen-api-key \
+CHAIN_TYPE=zkstack \
+MCP_SERVER_ENABLED=true \
+MCP_AUTH_MODE=api-key \
+MCP_APPROVAL_REQUIRED=true \
+MCP_APPROVAL_TTL_SECONDS=300 \
+SENTINAI_API_KEY=your-admin-key \
+AI_ROUTING_ENABLED=true \
+SENTINAI_L1_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com \
+L1_RPC_URLS=https://ethereum-sepolia-rpc.publicnode.com,https://sepolia.drpc.org \
+DOMAIN=sentinai.yourdomain.com \
 bash <(curl -sSL https://raw.githubusercontent.com/tokamak-network/SentinAI/main/scripts/install.sh)
 ```
 

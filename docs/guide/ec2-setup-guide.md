@@ -26,8 +26,8 @@ Please check your usage environment before installation.
 | L2 RPC URL | Required | Required | Provided by the infrastructure team (e.g. `https://rpc.titok.tokamak.network`) |
 | AI API Key | Required | Required | https://console.anthropic.com (Anthropic recommended) |
 | EKS cluster name | Required | Not necessary | Provided by the infrastructure team (e.g. `my-l2-cluster`) |
-| Cloudflare Account | Required | Required | https://dash.cloudflare.com (free) |
-| 1 domain | Required | Required | Available directly from Cloudflare ($2-$10 per year) |
+| DNS provider account (Route 53/Cloudflare/etc.) | Required | Required | Existing DNS service account |
+| 1 domain | Required | Required | Existing domain or newly registered domain |
 
 > If you do not have an AI API Key, sign up at https://console.anthropic.com and create one from the API Keys menu.
 
@@ -37,13 +37,13 @@ Please check your usage environment before installation.
 
 **Scenario A (EKS Monitoring)**:
 ```
-[1] Create EC2 → [2] IAM settings → [3] Prepare Cloudflare → [4] SSH connection → [5] Execute installation → Complete
+[1] Create EC2 → [2] IAM settings → [3] DNS setup → [4] SSH connection → [5] Execute installation → Complete
 (5 minutes) (5 minutes) (10 minutes) (1 minute) (10 minutes)
 ```
 
 **Scenario B (AI monitoring only)**:
 ```
-[1] Create EC2 → [3] Prepare Cloudflare → [4] SSH connection → [5] Execute installation → Complete
+[1] Create EC2 → [3] DNS setup → [4] SSH connection → [5] Execute installation → Complete
 (5 minutes) (10 minutes) (1 minute) (10 minutes)
 ```
 
@@ -82,8 +82,8 @@ On the **Launch Instance** screen, click the **Edit** button in the **Network Se
 |------|------|------|------|
 | SSH | 22 | My IP | EC2 management access |
 
-> Since we use the Cloudflare Tunnel, there is no need to open the dashboard port (3002).
-> Tunnel only uses outbound port 443, and external connection is possible without opening the inbound port.
+> SentinAI dashboard traffic is handled by Caddy on ports 80/443.
+> You do not need to open port 3002 externally.
 
 **Outbound Rules** keep the default (allow all traffic).
 
@@ -111,7 +111,7 @@ Click on your SentinAI instance in the instance list to see its **public IPv4 ad
 
 ## Step 2: Create IAM role (EKS access)
 
-> **Scenario B**: Skip this step and go to [Step 3](#Step 3-cloudflare-settings-https-public-access).
+> **Scenario B**: Skip this step and go to [Step 3](#step-3-dns-setup-for-caddy-https).
 
 SentinAI requires AWS permissions to monitor your EKS cluster.
 
@@ -153,67 +153,32 @@ Required permissions: Pod query, StatefulSet query/patch
 
 ---
 
-## Step 3: Set up Cloudflare (HTTPS public access)
+## Step 3: DNS setup for Caddy HTTPS
 
-Using Cloudflare Tunnel:
-- Access an address such as `https://sentinai.yourdomain.com`
-- Automatically apply HTTPS (encryption)
-- Email authentication (only authorized people access)
-- No need to open inbound ports on EC2
+`install.sh` uses Caddy and auto-issues Let's Encrypt certificates when `DOMAIN` is provided.
 
-> Copy the **Tunnel token** in this step. Enter during Step 5 installation.
+### 3-1. Prepare domain
 
-### 3-1. Create a Cloudflare account and add a domain
+1. Use an existing domain or register a new one.
+2. Decide the dashboard hostname (example: `sentinai.yourdomain.com`).
 
-1. Access https://dash.cloudflare.com → Create account (free)
-2. **Add domain** or **Register domain**
-- If you do not have a domain: Left menu **Register domain** → Search for desired domain → Purchase (`.xyz` costs ~$2 per year)
-- If you already have one: **Add site** → Enter domain → Select Free plan → Follow name server change instructions
+### 3-2. Create DNS A record
 
-### 3-2. Tunnel creation
+In your DNS provider (Route 53, Cloudflare DNS, etc.):
 
-1. Left menu of Cloudflare dashboard → Click **Zero Trust**
-(If this is your first time, you will need to set a Zero Trust team name — enter any name)
-2. **Networks** → **Tunnels** → **Create a tunnel** 클릭
-3. Select **Cloudflared** → Next
-4. Tunnel name: `sentinai` → **Save tunnel**
-5. The **Install and run a connector** screen appears.
-- Copy the token here
-- The long string following `cloudflared service install` is the token.
-- Example: `eyJhIjoiYWJjMTIz...` (very long string)
-- Copy this token to notepad (used in step 5)
-- Click **Next**
-6. **Public Hostname** Settings:
-- Subdomain: `sentinai` (or desired name)
-- Domain: Select domain from dropdown
-   - Type: `HTTP`
-   - URL: `sentinai:8080`
-- Click **Save tunnel**
+- Record type: `A`
+- Name: `sentinai` (or desired subdomain)
+- Value: EC2 public IPv4
+- TTL: `300`
 
-> Enter `sentinai:8080` exactly in the URL. `http://` is not appended.
-> `sentinai` is the Docker container name, and `8080` is the internal port.
+### 3-3. Verify propagation
 
-### 3-3. Access policy settings (authentication)
+```bash
+dig sentinai.yourdomain.com
+nslookup sentinai.yourdomain.com
+```
 
-1. Zero Trust 좌측 메뉴 → **Access** → **Applications** → **Add an application**
-2. Select **Self-hosted**
-3. Settings:
-   - Application name: `SentinAI Dashboard`
-   - Session Duration: `24 hours`
-   - Application domain:
-     - Subdomain: `sentinai`
-- Domain: Select from dropdown
-4. Next → **Add a policy**:
-   - Policy name: `Allowed Users`
-   - Action: **Allow**
-- Include rules:
-     - Selector: **Emails**
-- Value: Enter the email address to allow access (e.g. `admin@company.com`)
-- If there are multiple people, add one by one.
-5. Next → **Add application**
-
-> Now, when you access `https://sentinai.yourdomain.com`, an email input screen appears,
-> You must receive an OTP code to your permitted email address to access the dashboard.
+If the returned IP matches your EC2 public IP, proceed to Step 5 and set `DOMAIN=sentinai.yourdomain.com`.
 
 ---
 
@@ -273,72 +238,45 @@ The script automatically installs Docker, Docker Compose, Git, and downloads Sen
 
 The script asks for the following information in order:
 
-**Scenario A (EKS Monitoring)**:
-```
---- SentinAI Preferences ---
+**Core mode (recommended)**:
+- Setup mode: `1) Core`
+- Required: `L2_RPC_URL`, `AI Provider + API Key`
+- Select: chain plugin (`thanos` / `optimism` / `zkstack`)
+- Select: orchestrator (`k8s` / `docker`)
+- If EKS monitoring is needed: enter `AWS_CLUSTER_NAME`
 
-L2 RPC URL (required): https://rpc.titok.tokamak.network ← Enter L2 chain address
-
-Select AI Provider:
-1) Anthropic (recommended)
-    2) OpenAI
-    3) Gemini
-Select [1]: 1 ← Enter or Enter 1
-
-Anthropic API Key: ← Enter API key (not displayed on screen)
-
-AWS EKS Cluster Name (for K8s monitoring, press Enter to skip): my-l2-cluster
-← Enter EKS cluster name
-
-Cloudflare Tunnel Token (select, skip to Enter): ← Paste the token copied in step 3
-
-Slack Webhook URL (select, press Enter to skip): ← Enter to skip
-```
-
-**Scenario B (AI monitoring only)**:
-```
---- SentinAI Preferences ---
-
-L2 RPC URL (required): https://rpc.titok.tokamak.network ← Enter L2 chain address
-
-Select AI Provider:
-1) Anthropic (recommended)
-Select [1]: 1 ← Enter
-
-Anthropic API Key: ← Enter API key
-
-AWS EKS Cluster Name (for K8s monitoring, press Enter to skip): ← Enter to skip
-[WARNING] AWS_CLUSTER_NAME not set. K8s runs in simulation mode without monitoring.
-[SentinAI] EKS cluster not set → Simulation mode enabled (SCALING_SIMULATION_MODE=true)
-
-Cloudflare Tunnel Token (select, skip to Enter): ← Paste the token copied in step 3
-
-Slack Webhook URL (select, press Enter to skip): ← Enter to skip
-```
+**Advanced mode**:
+- Setup mode: `2) Advanced`
+- Includes all core prompts
+- Adds optional prompts for:
+  - L1 failover (`SENTINAI_L1_RPC_URL`, `L1_RPC_URLS`, `L1_PROXYD_*`)
+  - EOA/Fault proof (`BATCHER_*`, `PROPOSER_*`, `CHALLENGER_*`, `DISPUTE_GAME_FACTORY_ADDRESS`)
+  - MCP control plane (`MCP_*`, `SENTINAI_API_KEY`)
+  - AI routing / memory (`AI_ROUTING_*`, `AGENT_MEMORY_*`)
+  - Deployment/alerts (`DOMAIN`, `NEXT_PUBLIC_BASE_PATH`, `NEXT_PUBLIC_NETWORK_NAME`, `ALERT_WEBHOOK_URL`)
 
 ### 5-3. Build and run
 
-After entering the settings, the Docker image build will automatically start. Once you have entered the Tunnel token, Cloudflare Tunnel will also be automatically enabled.
+After entering the settings, Docker image build starts automatically.
 
 ```
-[SentinAI] Cloudflare Tunnel enabled.
 [SentinAI] Building Docker image... (First build takes 5-10 minutes)
 [SentinAI] Service starting...
 [SentinAI] Waiting for service to start (30 seconds)...
 [SentinAI] ============================================
 [SentinAI] SentinAI installation complete!
 [SentinAI] ============================================
-[INFO] Dashboard: Via Cloudflare Tunnel (HTTPS)
+[INFO] Dashboard: https://<your-domain><base-path>   # if DOMAIN was set
+[INFO] Dashboard: http://<public-ip>:3002<base-path> # if DOMAIN was not set
 ```
 
 ### 5-4. Check connection
 
-Access `https://sentinai.yourdomain.com` in your browser.
+Access the dashboard URL printed at the end of installation.
 
-1. Cloudflare Access login screen appears
-2. Enter permitted email addresses
-3. Enter the 6-digit code received by email
-4. Success when SentinAI dashboard is displayed
+1. If `DOMAIN` is set: `https://sentinai.yourdomain.com`
+2. If no domain: `http://<public-ip>:3002`
+3. Success when SentinAI dashboard is displayed
 
 ---
 
@@ -348,39 +286,42 @@ Install silently without interactive input for CI/CD, Terraform user-data, or re
 
 ### Non-interactive mode based on environment variables
 
-Once the required environment variables (`SENTINAI_L2_RPC_URL` + `SENTINAI_AI_KEY`) are set, it will skip the interactive prompt and install silently.
+Once required variables (`L2_RPC_URL` + one AI key) are set, it skips interactive prompts.
 
 ```bash
 # Non-interactive installation (Scenario A: EKS monitoring)
-SENTINAI_L2_RPC_URL="https://rpc.titok.tokamak.network" \
-SENTINAI_AI_PROVIDER=anthropic \
-SENTINAI_AI_KEY="sk-ant-api03-..." \
-SENTINAI_CLUSTER_NAME="my-l2-cluster" \
-SENTINAI_TUNNEL_TOKEN="eyJhIjoiYWJj..." \
+L2_RPC_URL="https://rpc.titok.tokamak.network" \
+ANTHROPIC_API_KEY="sk-ant-api03-..." \
+CHAIN_TYPE="thanos" \
+AWS_CLUSTER_NAME="my-l2-cluster" \
+DOMAIN="sentinai.yourdomain.com" \
 bash <(curl -sSL https://raw.githubusercontent.com/tokamak-network/SentinAI/main/scripts/install.sh)
 ```
 
 ```bash
 # Non-interactive installation (Scenario B: AI monitoring only)
-SENTINAI_L2_RPC_URL="https://rpc.titok.tokamak.network" \
-SENTINAI_AI_PROVIDER=anthropic \
-SENTINAI_AI_KEY="sk-ant-api03-..." \
-SENTINAI_TUNNEL_TOKEN="eyJhIjoiYWJj..." \
+L2_RPC_URL="https://rpc.titok.tokamak.network" \
+QWEN_API_KEY="your-qwen-api-key" \
+CHAIN_TYPE="optimism" \
 bash <(curl -sSL https://raw.githubusercontent.com/tokamak-network/SentinAI/main/scripts/install.sh)
 ```
 
-> If you omit `SENTINAI_CLUSTER_NAME`, `SCALING_SIMULATION_MODE=true` will be automatically set.
+> If you omit `AWS_CLUSTER_NAME`, `SCALING_SIMULATION_MODE=true` is automatically applied.
 
 ### List of environment variables
 
 | Environment variables | Required | Description |
 |---------|:----:|------|
-| `SENTINAI_L2_RPC_URL` | Required | L2 chain RPC address |
-| `SENTINAI_AI_KEY` | Required | AI API Key |
-| `SENTINAI_AI_PROVIDER` | Select | `anthropic` (default), `openai`, `gemini` |
-| `SENTINAI_CLUSTER_NAME` | Select | EKS cluster name (simulation mode if not set) |
-| `SENTINAI_TUNNEL_TOKEN` | Select | Cloudflare Tunnel Token |
-| `SENTINAI_WEBHOOK_URL` | Select | Slack notification webhook URL |
+| `L2_RPC_URL` | Required | L2 chain RPC address |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY` / `QWEN_API_KEY` | Required (one) | AI API key |
+| `CHAIN_TYPE` | Select | `thanos` / `optimism` / `my-l2` / `op-stack` / `zkstack` |
+| `AWS_CLUSTER_NAME` | Select | EKS cluster name (simulation mode if not set) |
+| `DOMAIN` | Select | HTTPS domain (Caddy auto certificate) |
+| `INSTALL_MODE` | Select | `core` (default) / `advanced` |
+| `MCP_SERVER_ENABLED`, `MCP_AUTH_MODE`, `MCP_APPROVAL_REQUIRED`, `MCP_APPROVAL_TTL_SECONDS`, `SENTINAI_API_KEY` | Advanced | MCP control plane |
+| `AI_ROUTING_ENABLED`, `AI_ROUTING_POLICY`, `AI_ROUTING_AB_PERCENT`, `AI_ROUTING_BUDGET_USD_DAILY` | Advanced | Adaptive model routing |
+| `SENTINAI_L1_RPC_URL`, `L1_RPC_URLS`, `L1_PROXYD_*` | Advanced | L1 read/failover/proxyd settings |
+| `FAULT_PROOF_ENABLED`, `CHALLENGER_EOA_ADDRESS`, `DISPUTE_GAME_FACTORY_ADDRESS` | Advanced | Fault proof monitoring |
 | `SENTINAI_DIR` | Select | Installation path (default: `/opt/sentinai`) |
 | `SENTINAI_BRANCH` | Select | Git branch (default: `main`) |
 
@@ -390,10 +331,10 @@ When creating an EC2 instance, enter the script below in **Advanced Details → 
 
 ```bash
 #!/bin/bash
-SENTINAI_L2_RPC_URL="https://rpc.titok.tokamak.network" \
-SENTINAI_AI_PROVIDER=anthropic \
-SENTINAI_AI_KEY="sk-ant-api03-..." \
-SENTINAI_TUNNEL_TOKEN="eyJhIjoiYWJj..." \
+L2_RPC_URL="https://rpc.titok.tokamak.network" \
+ANTHROPIC_API_KEY="sk-ant-api03-..." \
+CHAIN_TYPE="thanos" \
+DOMAIN="sentinai.yourdomain.com" \
 bash <(curl -sSL https://raw.githubusercontent.com/tokamak-network/SentinAI/main/scripts/install.sh)
 ```
 
@@ -410,20 +351,20 @@ After connecting to EC2 via SSH, run it from the `/opt/sentinai` directory.
 
 ```bash
 cd /opt/sentinai
-sudo docker compose --profile tunnel ps
+sudo docker compose --profile production ps
 ```
 
 ### View log
 
 ```bash
 # Full log (real time)
-sudo docker compose --profile tunnel logs -f
+sudo docker compose --profile production logs -f
 
 # SentinAI log only
-sudo docker compose logs -f sentinai
+sudo docker compose --profile production logs -f sentinai
 
-# Tunnel log only
-sudo docker compose logs -f cloudflared
+# Caddy log only
+sudo docker logs sentinai-caddy -f
 ```
 
 Exit log view with `Ctrl + C`.
@@ -435,37 +376,37 @@ When a new version is released:
 ```bash
 cd /opt/sentinai
 git pull origin main
-sudo docker compose --profile tunnel build
-sudo docker compose --profile tunnel up -d
+sudo docker compose --profile production build
+sudo docker compose --profile production up -d
 ```
 
 ### Service stop
 
 ```bash
 cd /opt/sentinai
-sudo docker compose --profile tunnel down
+sudo docker compose --profile production down
 ```
 
 ### Restart service
 
 ```bash
 cd /opt/sentinai
-sudo docker compose --profile tunnel restart
+sudo docker compose --profile production restart
 ```
 
 ---
 
 ## Troubleshooting
 
-### "Can't access Cloudflare Tunnel"
+### "Can't access HTTPS dashboard"
 
 | Checklist | Command or method |
 |-----------|---------------|
-| Tunnel container running? | `sudo docker compose --profile tunnel ps` → check sentinai-tunnel |
-| Is SentinAI healthy? | Check if sentinai is `healthy` with the same command |
-| Tunnel error log | `sudo docker compose logs cloudflared` |
-| Is the token correct? | `grep CLOUDFLARE_TUNNEL_TOKEN /opt/sentinai/.env.local` |
-| DNS setup complete? | Cloudflare Dashboard → Check if CNAME record exists in DNS |
+| Caddy container running? | `sudo docker compose --profile production ps` → check `sentinai-caddy` |
+| Is SentinAI healthy? | Check if `sentinai` is `healthy` |
+| Caddy error log | `sudo docker logs sentinai-caddy --tail=50` |
+| Domain set correctly? | `grep DOMAIN /opt/sentinai/.env.local` |
+| DNS setup complete? | Check A record points to EC2 public IP |
 
 ### "K8s monitoring is not working"
 
@@ -486,7 +427,7 @@ sudo docker compose --profile tunnel restart
 # Check disk capacity
 df -h
 
-Error 500 (Server Error)!!1500.That’s an error.There was an error. Please try again later.That’s all we know.
+# Remove unused images/cache
 sudo docker system prune -af
 ```
 
@@ -502,14 +443,14 @@ EC2 → Volume → Modify → Change size → `sudo growpart /dev/xvda 1 && sudo
 | EC2 t3.medium (Seoul) | ~$36 |
 | EBS 20 GiB gp3 | ~$2 |
 | Data transfer (outbound) | ~$1-5 |
-| Cloudflare (Free plan) | Free |
+| DNS provider hosted zone | $0-1 (provider-dependent) |
 | domain (.xyz) | ~$2/year |
 | Anthropic API (mainly Haiku) | ~$5-20 (depending on usage) |
 | **Total** | **~$45-65/month** |
 
 > If you stop EC2 when not in use, no instance costs are incurred (only EBS storage costs are charged).
 > Stop: EC2 console → Select instance → Instance status → Stop instance
-> Restart: Instance status → Start instance → After connecting to SSH, `cd /opt/sentinai && sudo docker compose --profile tunnel up -d`
+> Restart: Instance status → Start instance → After connecting to SSH, `cd /opt/sentinai && sudo docker compose --profile production up -d`
 
 ---
 
@@ -520,19 +461,15 @@ EC2 → Volume → Modify → Change size → `sudo growpart /dev/xvda 1 && sudo
 - [ ] Create EC2 instance (t3.medium, Amazon Linux 2023, 20 GiB, hop limit 2)
 - [ ] Create IAM role and connect to EC2
 - [ ] Request EKS RBAC mapping from infrastructure team
-- [ ] Cloudflare account + domain settings
-- [ ] Create Cloudflare Tunnel + Copy Token
-- [ ] Cloudflare Access policy settings (allowed emails)
+- [ ] Domain DNS A record settings (Route 53/Cloudflare)
 - [ ] Connect to EC2 via SSH
-- [ ] Run install.sh (enter L2 RPC URL, AI API Key, EKS cluster name, Tunnel token)
+- [ ] Run install.sh (enter L2 RPC URL, AI API Key, EKS cluster name, domain)
 - [ ] Check connection to https://sentinai.domain.com
 
 ### Scenario B (AI monitoring only)
 
 - [ ] Create EC2 instance (t3.medium, Amazon Linux 2023, 20 GiB)
-- [ ] Cloudflare account + domain settings
-- [ ] Create Cloudflare Tunnel + Copy Token
-- [ ] Cloudflare Access policy settings (allowed emails)
+- [ ] Domain DNS A record settings (Route 53/Cloudflare)
 - [ ] Connect to EC2 via SSH
-- [ ] Run install.sh (Enter L2 RPC URL, AI API Key, Tunnel token — Skip EKS cluster name with Enter)
+- [ ] Run install.sh (Enter L2 RPC URL, AI API Key, Domain — Skip EKS cluster name with Enter)
 - [ ] Check connection to https://sentinai.domain.com
