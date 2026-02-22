@@ -43,9 +43,9 @@
 - [x] Document full-autonomy remaining backlog in TODO docs
 - [x] Create Proposal 26 document (`docs/todo/proposal-26-autonomous-goal-generation-engine.md`)
 - [x] Implement Goal Manager types and store contract (`src/types/goal-manager.ts`, `src/lib/redis-store.ts`)
-- [ ] Implement signal collector and candidate generator (`src/lib/goal-signal-collector.ts`, `src/lib/goal-candidate-generator.ts`)
-: 진행 상태: `goal-signal-collector` 완료, `goal-candidate-generator` 미착수
-- [ ] Implement priority/suppression engine (`src/lib/goal-priority-engine.ts`)
+- [x] Implement signal collector and candidate generator (`src/lib/goal-signal-collector.ts`, `src/lib/goal-candidate-generator.ts`)
+- [ ] Candidate generator LLM prompt/policy hardening and production tuning
+- [x] Implement priority/suppression engine (`src/lib/goal-priority-engine.ts`)
 - [ ] Implement goal manager runtime and queue API (`src/lib/goal-manager.ts`, `src/app/api/goal-manager/route.ts`)
 - [ ] Integrate agent-loop tick -> autonomous goal queue -> goal planner dispatch
 - [ ] Extend autonomy evaluation scenarios for goal generation quality gate
@@ -232,6 +232,20 @@
 - Implemented deterministic multi-source signal snapshot collector (`src/lib/goal-signal-collector.ts`) with per-source fallback guards.
 - Added coverage for signal normalization/fallback/determinism and store lifecycle (`src/lib/__tests__/goal-signal-collector.test.ts`, `src/lib/__tests__/redis-store.test.ts`).
 - Verified with targeted tests + type check + lint (existing unrelated warning only).
+
+## Review (2026-02-22 Proposal 26 Phase B Candidate Generator)
+
+- Added `src/lib/goal-candidate-generator.ts` with deterministic rule-based autonomous goal generation for pressure/failover/cost/memory/policy signals.
+- Added optional LLM phrasing enhancer path (env/option gated) with strict fallback to rule output when provider unavailable or parse fails.
+- Added targeted coverage for rule generation, fallback candidate, LLM enhancement, and fail-open behavior in `src/lib/__tests__/goal-candidate-generator.test.ts`.
+- Re-verified with targeted test + `tsc --noEmit` + lint (existing unrelated warning only).
+
+## Review (2026-02-22 Proposal 26 Phase C Priority/Suppression)
+
+- Added `src/lib/goal-priority-engine.ts` implementing deterministic score formula (`impact+urgency+confidence+policyFit`) and queue ordering.
+- Added suppression rules for duplicate signatures, low confidence, cooldown active, policy blocked(read-only), and stale signals.
+- Added suppression audit persistence helper (`persistSuppressionRecords`) to write suppression traces into state store.
+- Added coverage in `src/lib/__tests__/goal-priority-engine.test.ts` and re-verified with targeted tests + `tsc --noEmit` + lint (existing unrelated warning only).
 
 ## Review (2026-02-22 Proposal 27 L1/L2 Core Ops Hardening Documentation)
 

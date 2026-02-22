@@ -8,6 +8,10 @@
 - Rule: For autonomous-agent roadmap work, keep one proposal per core capability (goal generation, orchestration, policy, learning) and attach file-level deliverables before implementation.
 - Goal signal fusion across metrics/anomaly/failover/cost/memory is fragile if one source failure aborts the entire snapshot.
 - Rule: Autonomous signal collectors must apply per-source fallback defaults and still emit a schema-complete snapshot for deterministic downstream scoring.
+- Optional LLM enhancement on top of deterministic rules can silently degrade if provider/key/JSON parsing fails.
+- Rule: Candidate generation always returns rule-based results first, then applies LLM text enhancement as best-effort only (fail-open to rule output).
+- Priority queues drift in operator trust when ordering is not deterministic on equal/close scores.
+- Rule: Goal queue ordering must use stable tie-breakers (score -> risk -> enqueue time -> id) and suppression reason codes must be persisted for audit.
 - Changing core planner APIs from sync to async can leave route/MCP tests green in some paths but fail on hidden mock contracts.
 - Rule: When changing function sync/async signatures, run a repo-wide reference search and update both direct callsites and vi-mock return shapes in the same patch.
 - Post-condition verification based on a single keyword (`ready`) is brittle across action executors and test doubles.
