@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 interface TocItem {
   id: string;
@@ -13,11 +13,10 @@ interface TableOfContentsProps {
 }
 
 export default function TableOfContents({ content }: TableOfContentsProps) {
-  const [toc, setToc] = useState<TocItem[]>([]);
   const [activeId, setActiveId] = useState<string>('');
 
-  useEffect(() => {
-    // Extract headings from markdown
+  // Derive TOC items from content using useMemo instead of useEffect
+  const toc = useMemo(() => {
     const headingRegex = /^(#{2,3})\s+(.+)$/gm;
     const items: TocItem[] = [];
     let match;
@@ -33,7 +32,7 @@ export default function TableOfContents({ content }: TableOfContentsProps) {
       items.push({ id, text, level });
     }
 
-    setToc(items);
+    return items;
   }, [content]);
 
   useEffect(() => {

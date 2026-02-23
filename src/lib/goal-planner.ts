@@ -51,16 +51,21 @@ const planHistory: GoalPlan[] = [];
 
 function inferGoalIntent(goal: string): GoalPlanIntent {
   const normalized = goal.toLowerCase();
-  if (normalized.includes('cost') || normalized.includes('saving') || normalized.includes('optimiz')) {
+  // Support both English and Korean keywords
+  if (normalized.includes('cost') || normalized.includes('saving') || normalized.includes('optimiz') ||
+      normalized.includes('비용') || normalized.includes('절감') || normalized.includes('최적화')) {
     return 'cost-optimize';
   }
-  if (normalized.includes('recover') || normalized.includes('restart')) {
+  if (normalized.includes('recover') || normalized.includes('restart') ||
+      normalized.includes('복구') || normalized.includes('재시작')) {
     return 'recover';
   }
-  if (normalized.includes('investigate') || normalized.includes('diagnos') || normalized.includes('root cause')) {
+  if (normalized.includes('investigate') || normalized.includes('diagnos') || normalized.includes('root cause') ||
+      normalized.includes('조사') || normalized.includes('진단') || normalized.includes('원인')) {
     return 'investigate';
   }
-  if (normalized.includes('stabilize') || normalized.includes('safe')) {
+  if (normalized.includes('stabilize') || normalized.includes('safe') ||
+      normalized.includes('안정화') || normalized.includes('안전')) {
     return 'stabilize';
   }
   return 'custom';

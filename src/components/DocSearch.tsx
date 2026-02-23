@@ -150,7 +150,7 @@ export default function DocSearch({ className = '' }: DocSearchProps) {
 
       {isOpen && query.trim() && results.length === 0 && !isLoading && (
         <div className="absolute z-50 mt-2 w-full rounded-lg border border-slate-200 bg-white p-4 text-center text-sm text-slate-500 shadow-lg">
-          No results found for "{query}"
+          No results found for &ldquo;{query}&rdquo;
         </div>
       )}
     </div>

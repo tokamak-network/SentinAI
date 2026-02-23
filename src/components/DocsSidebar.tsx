@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronRight, FileText, Folder } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 
 interface DocSection {
