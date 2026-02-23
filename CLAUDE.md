@@ -29,7 +29,7 @@ npx vitest run src/lib/__tests__/k8s-scaler.test.ts   # Run single test file
 npx vitest run -t "test name"         # Run specific test by name
 ```
 
-Tests: `src/lib/__tests__/*.test.ts` (23 files, 541+ tests). Coverage scoped to `src/lib/**/*.ts`.
+Tests: `src/lib/__tests__/*.test.ts` (51+ files). Coverage scoped to `src/lib/**/*.ts`.
 
 ### E2E Verification (Cluster)
 
@@ -92,7 +92,7 @@ Enabled automatically when `L2_RPC_URL` is set. Override with `AGENT_LOOP_ENABLE
 
 ### Core Subsystems
 
-**Scaling Engine** — Hybrid scoring (0–100) = CPU 30% + Gas 30% + TxPool 20% + AI Severity 20%. Three tiers: Idle (<30, 1 vCPU), Normal (30–70, 2 vCPU), High (≥70, 4 vCPU). 5-minute cooldown. Stress mode simulates 8 vCPU.
+**Scaling Engine** — Hybrid scoring (0–100) = CPU 30% + Gas 30% + TxPool 20% + AI Severity 20%. Four tiers: Idle (<30, 1 vCPU), Normal (30–70, 2 vCPU), High (70–77, 4 vCPU), Emergency (≥77, 8 vCPU). 5-minute cooldown. Stress mode simulates 8 vCPU.
 - `scaling-decision.ts` → `k8s-scaler.ts` → `zero-downtime-scaler.ts`
 - `predictive-scaler.ts`: AI time-series prediction via Fast Tier (`qwen3-80b-next`, 1.8s response)
 
@@ -124,7 +124,7 @@ L1 → op-node → op-geth
 **AI Client** (`ai-client.ts`) — Unified AI interface. `chatCompletion()` single function for all AI calls.
 - **Model tiers (auto-selected, tier-based):**
   - Fast Tier: `qwen3-80b-next` (1.8s response, $30/mo) — Real-time anomaly detection, NLOps responses
-  - Best Tier: `qwen3-235b` (11s response, $60/mo) — RCA, daily reports, predictive scaling
+  - Best Tier: `qwen3-80b-next` (8s response, $30/mo) — RCA, daily reports, predictive scaling
 - Priority: Module Override > Gateway (with fallback) > Anthropic > OpenAI > Gemini
 - Gateway 400/401 errors auto-fallback to Anthropic Direct
 - All AI features have graceful degradation (service continues if AI fails)
@@ -140,19 +140,36 @@ idle → creating_standby → waiting_ready → switching_traffic → cleanup �
 
 ### API Routes (`src/app/api/`)
 
-| Route                       | Methods        | Purpose                                                |
-|-----------------------------|----------------|--------------------------------------------------------|
-| `metrics/route.ts`          | GET            | L1/L2 blocks, K8s pods, anomaly pipeline. `stress=true` → fast path |
-| `metrics/seed/route.ts`     | POST           | Dev-only: inject mock data (stable/rising/spike/falling/live) |
-| `scaler/route.ts`           | GET/POST/PATCH | Scaling state + AI prediction / execute / configure |
-| `anomalies/route.ts`        | GET            | Anomaly event list                                     |
-| `anomalies/config/route.ts` | GET/PUT        | Alert configuration                                    |
-| `nlops/route.ts`            | POST           | NLOps chat (natural language operations)               |
-| `rca/route.ts`              | POST           | Root cause analysis execution                          |
-| `cost-report/route.ts`      | GET            | Cost optimization report                               |
-| `reports/daily/route.ts`    | GET/POST       | Daily report generation and retrieval                  |
-| `eoa-balance/route.ts`      | GET/POST       | EOA balance status / manual refill trigger             |
-| `health/route.ts`           | GET            | Docker healthcheck                                     |
+| Route                            | Methods        | Purpose                                                |
+|----------------------------------|----------------|--------------------------------------------------------|
+| `metrics/route.ts`               | GET            | L1/L2 blocks, K8s pods, anomaly pipeline. `stress=true` → fast path |
+| `metrics/seed/route.ts`          | POST           | Dev-only: inject mock data (stable/rising/spike/falling/live) |
+| `scaler/route.ts`                | GET/POST/PATCH | Scaling state + AI prediction / execute / configure |
+| `anomalies/route.ts`             | GET            | Anomaly event list                                     |
+| `anomalies/config/route.ts`      | GET/POST       | Alert configuration                                    |
+| `nlops/route.ts`                 | GET/POST       | NLOps chat (natural language operations)               |
+| `rca/route.ts`                   | GET/POST       | Root cause analysis execution                          |
+| `cost-report/route.ts`           | GET            | Cost optimization report                               |
+| `reports/daily/route.ts`         | GET/POST       | Daily report generation and retrieval                  |
+| `reports/daily/send/route.ts`    | GET/POST       | Send daily report via email/webhook                    |
+| `reports/daily/view/route.ts`    | GET            | View daily report (HTML)                               |
+| `eoa-balance/route.ts`           | GET/POST       | EOA balance status / manual refill trigger             |
+| `health/route.ts`                | GET            | Docker healthcheck                                     |
+| `mcp/route.ts`                   | GET/POST       | MCP tool execution endpoint                            |
+| `l1-failover/route.ts`           | GET            | L1 RPC failover status                                 |
+| `remediation/route.ts`           | GET/POST/PATCH | Remediation action execution and status                |
+| `agent-loop/route.ts`            | GET            | Agent loop status and control                          |
+| `agent-decisions/route.ts`       | GET            | Agent decision history                                 |
+| `agent-memory/route.ts`          | GET            | Agent memory store                                     |
+| `goal-manager/route.ts`          | GET            | Goal manager state                                     |
+| `goal-manager/dispatch/route.ts` | POST           | Dispatch a new goal                                    |
+| `goal-manager/replay/route.ts`   | POST           | Replay a past goal                                     |
+| `goal-manager/tick/route.ts`     | POST           | Trigger goal manager tick                              |
+| `goals/route.ts`                 | GET/POST       | Goal CRUD                                              |
+| `ai-routing/policy/route.ts`     | GET/POST       | AI routing policy configuration                        |
+| `ai-routing/status/route.ts`     | GET            | AI routing status                                      |
+| `policy/autonomy-level/route.ts` | GET/POST       | Autonomy level configuration                           |
+| `savings-advisor/route.ts`       | GET            | Savings advisor recommendations                        |
 
 ### Types (`src/types/`)
 
@@ -170,7 +187,7 @@ idle → creating_standby → waiting_ready → switching_traffic → cleanup �
 
 ### UI
 
-Single-page dashboard (`src/app/page.tsx`, ~1186 lines). All UI is inline — no components extracted to `src/components/`. Uses `AbortController` for high-frequency polling. NLOps chat panel integrated with `data-testid` attributes for test automation.
+Single-page dashboard (`src/app/page.tsx`, ~2278 lines). All UI is inline — no components extracted to `src/components/`. Uses `AbortController` for high-frequency polling. NLOps chat panel integrated with `data-testid` attributes for test automation.
 
 Browser UI testing guide: `docs/verification/dashboard-ui-testing-guide.md`
 
@@ -242,7 +259,7 @@ cp .env.local.sample .env.local   # Then edit
 | `EOA_REFILL_AMOUNT_ETH` | `0.5` | ETH amount per refill |
 | **L1 RPC for SentinAI (Public)** | — | — |
 | `L1_RPC_URLS` | — | Comma-separated **public** L1 RPC endpoints for SentinAI (auto-failover, priority order) |
-| `L1_RPC_URL` | publicnode.com | Single **public** L1 RPC endpoint for SentinAI (fallback if `L1_RPC_URLS` not set) |
+| `SENTINAI_L1_RPC_URL` | publicnode.com | Single **public** L1 RPC endpoint for SentinAI monitoring (fallback if `L1_RPC_URLS` not set) |
 | **L1 RPC for L2 Nodes (via Proxyd)** | — | — |
 | `L1_PROXYD_ENABLED` | `false` | Enable Proxyd ConfigMap update for L1 failover (L2 nodes: op-node, op-batcher, op-proposer) |
 | `L1_PROXYD_CONFIGMAP_NAME` | `proxyd-config` | ConfigMap name containing Proxyd config (for L2 nodes) |
@@ -262,9 +279,9 @@ Full env guide: `ENV_GUIDE.md`
   - `ec2-setup-guide.md`: AWS EC2 deployment with Cloudflare Tunnel
   - `demo-scenarios.md`: Simulation scenarios for testing
   - `production-load-testing-guide.md`: EKS cluster verification
-- `docs/done/`: Completed proposals (1–7, implementation details)
+- `docs/done/`: Completed proposals (1–10, implementation details)
 - `docs/spec/`: Implementation specs for AI agent consumption
-- `docs/todo/`: Unimplemented proposals (8: Auto-Remediation, 9: Universal Blockchain Platform)
+- `docs/todo/`: Unimplemented proposals
 - `docs/verification/`: Test and verification reports
 - `FEATURES.md`: Complete feature inventory
 - `ARCHITECTURE.md`: System architecture with diagrams
