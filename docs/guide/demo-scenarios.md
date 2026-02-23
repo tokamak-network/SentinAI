@@ -282,7 +282,7 @@ curl -sX POST http://localhost:3002/api/remediation \
 ```
 
 **Expected results** (simulation mode):
-- `status`: "completed" 또는 "simulated"
+- `status`: "completed" or "simulated"
 - Actions are logged but not executed on actual K8s
 
 ---

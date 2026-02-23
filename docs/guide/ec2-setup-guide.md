@@ -126,7 +126,7 @@ SentinAI requires AWS permissions to monitor your EKS cluster.
 - Enter ‘EKS’ in the search box
 - Check **AmazonEKSClusterPolicy**
 - Enter ‘STS’ in the search box
-- **AWSSecurityTokenServiceFullAccess** 체크
+- **AWSSecurityTokenServiceFullAccess** Check
 - next
 5. Role name: `SentinAI-EC2-Role` → **Create role**
 

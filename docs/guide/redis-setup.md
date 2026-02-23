@@ -255,7 +255,7 @@ npm run dev
 
 ### Redis port conflict
 
-**증상:** `Address already in use: :::6379`
+**Symptom:** `Address already in use: :::6379`
 
 **solve:**
 

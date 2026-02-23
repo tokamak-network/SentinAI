@@ -162,7 +162,7 @@ docker compose -f /absolute/path/to/your-opstack/docker-compose.yml -p opstack-l
 
 2. SentinAI `components` is empty or partially displayed
 - Check `ORCHESTRATOR_TYPE=docker`
-- `DOCKER_COMPOSE_FILE`, `DOCKER_COMPOSE_PROJECT` 값 확인
+- `DOCKER_COMPOSE_FILE`, `DOCKER_COMPOSE_PROJECT` value check
 - If the compose service name is significantly different from the default name, such as `op-geth`, the mapping logic may need to be strengthened.
 
 3. Fault proof card is different from expectations

@@ -219,7 +219,7 @@ console.log(`\nCompleted: ${sent} transaction in ${elapsed.toFixed(0)}s`);
     }
     await Promise.allSettled(promises);
     sent += TPS;
-process.stdout.write(`\r  전송: ${sent} txs | 경과: ${elapsed.toFixed(0)}s`);
+process.stdout.write(`\r  send: ${sent} txs | elapsed: ${elapsed.toFixed(0)}s`);
   }, 1000);
 }
 
@@ -494,7 +494,7 @@ echo "Result"
 echo "========================================="
 FINAL_STATE=$(curl -s $BASE/api/scaler)
 echo "Initial vCPU: $INITIAL_VCPU"
-echo "  최종 vCPU:    $(echo $FINAL_STATE | jq -r '.currentVcpu')"
+echo "  final vCPU:    $(echo $FINAL_STATE | jq -r '.currentVcpu')"
 echo " Last scaling: $(echo $FINAL_STATE | jq -r '.lastScalingTime')"
 echo " simulation: $(echo $FINAL_STATE | jq -r '.simulationMode')"
 echo ""
@@ -575,7 +575,7 @@ curl -s $BASE/api/scaler | jq '.lastDecision | {score, reason, breakdown}'
 
 ```bash
 # Check cron initialization in server log
-# 찾기: [Scheduler] Agent loop started (every 30s)
+# find: [Scheduler] Agent loop started (every 30s)
 
 # Environment verification
 echo $AGENT_LOOP_ENABLED # Must be "true" or L2_RPC_URL must be set

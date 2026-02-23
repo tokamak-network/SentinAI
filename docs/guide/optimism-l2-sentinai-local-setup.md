@@ -105,12 +105,12 @@ In `docker-compose.yml`:
 - `op-node` port mapping: `8547:9545`
 - `op-node` execution argument: `--rpc.port=9545`
 - `op-node` healthcheck URL: `http://localhost:9545`
-- `propose/challenger`의 `--rollup-rpc=http://op-node:9545`
+- `propose/challenger` `--rollup-rpc=http://op-node:9545`
 
 Additionally, the file below was also modified to `8547 -> 9545`:
 
-- `batcher/.env`의 `OP_BATCHER_ROLLUP_RPC`
-- `dispute-mon/.env`의 `ROLLUP_RPC`
+- `batcher/.env` `OP_BATCHER_ROLLUP_RPC`
+- `dispute-mon/.env` `ROLLUP_RPC`
 
 ### 4.3 Reflection of dispute-mon address variable
 
@@ -213,7 +213,7 @@ expectation:
 
 ## 8. Frequently encountered problems
 
-1. `unknown field "minBaseFee"` 또는 `daFootprintGasScalar`
+1. `unknown field "minBaseFee"` or `daFootprintGasScalar`
 - Cause: `op-node` version is out of date.
 - Action: Use `op-node:latest`
 
@@ -227,7 +227,7 @@ expectation:
 
 4. `dispute-mon` restarts with `invalid address`
 - Cause: Address variable of root `.env` not set
-- 조치: `PROPOSER_ADDRESS`, `CHALLENGER_ADDRESS`, `GAME_FACTORY_ADDRESS` 설정
+- action: `PROPOSER_ADDRESS`, `CHALLENGER_ADDRESS`, `GAME_FACTORY_ADDRESS` 설정
 
 ---
 

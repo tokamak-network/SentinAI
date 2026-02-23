@@ -249,19 +249,19 @@ bash scripts/install.sh
 
 ### Best value for money 🏆
 **Qwen Turbo (fast tier)**
-- 비용: $0.50/M input, $0.50/M output
+- cost: $0.50/M input, $0.50/M output
 - Speed: ⚡⚡⚡ Fast
 - Recommendation: Real-time monitoring
 
 ### Top quality 🌟
 **Claude Sonnet (best tier)**
-- 비용: $3.00/M input, $15.00/M output
+- cost: $3.00/M input, $15.00/M output
 - Speed: ⚡⚡ Average
 - Recommended: Complex analysis, RCA
 
 ### Balanced choices ⚖️
 **Gemini Flash Lite (fast tier)**
-- 비용: $0.075/M input, $0.30/M output
+- cost: $0.075/M input, $0.30/M output
 - Speed: ⚡⚡⚡ Fast
 - Recommended: Cost + speed balance
 
