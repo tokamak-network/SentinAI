@@ -10,74 +10,74 @@
 
 ### 1.1 Health Checks
 
-1. Agent loop 상태 확인
+1. Check Agent loop status
 ```bash
 curl -s http://localhost:3002/api/agent-loop | jq '.scheduler, .lastCycle.phase, .lastCycle.decisionId'
 ```
-2. phase trace 확인
+2. Check phase trace
 ```bash
 curl -s http://localhost:3002/api/agent-loop | jq '.lastCycle.phaseTrace'
 ```
-3. verification 확인
+3. Check verification
 ```bash
 curl -s http://localhost:3002/api/agent-loop | jq '.lastCycle.verification'
 ```
 
 ### 1.2 Degraded Incident Handling
 
-1. degraded 여부 확인
+1. Check whether degraded
 ```bash
 curl -s http://localhost:3002/api/agent-loop | jq '.lastCycle.degraded'
 ```
-2. `observe-fallback:last-safe-metrics` 발생 시
-- L2 RPC 상태를 우선 점검한다.
-- 최근 수집 메트릭이 오래된 경우 seed/live 데이터 소스를 확인한다.
-3. `act-failed:*` 발생 시
-- 오케스트레이터(k8s/docker) 권한/연결 상태를 확인한다.
-- verify 결과와 실제 vCPU 상태를 대조한다.
+2. When `observe-fallback:last-safe-metrics` occurs
+- First, check the L2 RPC status.
+- If recently collected metrics are stale, check the seed/live data sources.
+3. When `act-failed:*` occurs
+- Check orchestrator (k8s/docker) permissions/connectivity.
+- Compare the verify result with the actual vCPU state.
 
 ## 2. Agent Memory / Decision Trace
 
-### 2.1 최근 메모리 조회
+### 2.1 Retrieve recent memory
 
 ```bash
 curl -s "http://localhost:3002/api/agent-memory?limit=20" | jq '.total, .entries[0]'
 ```
 
-### 2.2 Decision Trace 조회
+### 2.2 Retrieve Decision Trace
 
-1. 최근 trace 목록
+1. Recent trace list
 ```bash
 curl -s "http://localhost:3002/api/agent-decisions?limit=20" | jq '.total, .traces[0].decisionId'
 ```
-2. 단건 조회
+2. Retrieve a single trace
 ```bash
 curl -s "http://localhost:3002/api/agent-decisions?decisionId=<decisionId>" | jq '.trace'
 ```
 
-### 2.3 Incident Replay 기본 절차
+### 2.3 Incident Replay: standard procedure
 
-1. 실패 또는 고위험 cycle의 `decisionId`를 확보한다.
-2. trace의 `reasoningSummary`, `evidence`, `verification`을 확인한다.
-3. 동일 시간대 activity log와 phase trace를 함께 비교한다.
-4. 재발 시 memory query 조건(`component`, `severity`, `fromTs`)으로 유사 사례를 조회한다.
+1. Obtain the `decisionId` for a failed or high-risk cycle.
+2. Review the trace fields: `reasoningSummary`, `evidence`, `verification`.
+3. Compare the activity log and phase trace for the same time window.
+4. If it recurs, query similar cases using memory query filters (`component`, `severity`, `fromTs`).
 
 ## 3. Adaptive Routing Policy
 
-### 3.1 상태 확인
+### 3.1 Check status
 
 ```bash
 curl -s http://localhost:3002/api/ai-routing/status | jq '.policy, .budget, .circuitStates, .counters'
 ```
 
-점검 항목:
-- `budget.exceeded`: 일일 예산 초과 여부
-- `circuitStates[].isOpen`: provider circuit open 여부
-- `counters.fallbackRecovered`: fallback 복구 성공 건수
+Inspection items:
+- `budget.exceeded`: Whether the daily budget is exceeded
+- `circuitStates[].isOpen`: Whether the provider circuit is open
+- `counters.fallbackRecovered`: Number of successful fallback recoveries
 
-### 3.2 정책 변경 (관리자)
+### 3.2 Change policy (admin)
 
-`SENTINAI_API_KEY`가 설정된 경우에만 정책 변경이 허용된다.
+Policy changes are allowed only when `SENTINAI_API_KEY` is set.
 
 ```bash
 curl -s -X POST http://localhost:3002/api/ai-routing/policy \
@@ -86,14 +86,14 @@ curl -s -X POST http://localhost:3002/api/ai-routing/policy \
   -d '{"name":"balanced","enabled":true,"abPercent":25,"budgetUsdDaily":80}' | jq
 ```
 
-### 3.3 롤백 체크리스트
+### 3.3 Rollback checklist
 
-1. 즉시 정적 동작으로 회귀
+1. Immediately revert to static behavior
 - `AI_ROUTING_ENABLED=false`
-2. 정책 초기화
+2. Reset policy
 - `AI_ROUTING_POLICY=balanced`
 - `AI_ROUTING_AB_PERCENT=0`
-3. 장애 분석을 위해 상태/trace는 유지
+3. Preserve status/traces for incident analysis
 - `/api/ai-routing/status`
 - `/api/agent-decisions`
 
@@ -105,4 +105,3 @@ curl -s -X POST http://localhost:3002/api/ai-routing/policy \
 - `AI_ROUTING_POLICY=balanced`
 - `AI_ROUTING_AB_PERCENT=10`
 - `AI_ROUTING_BUDGET_USD_DAILY=50`
-
