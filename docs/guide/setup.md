@@ -8,7 +8,6 @@ npm install
 # Select chain-specific template
 cp .env.thanos.example .env.local     # Thanos (Tokamak)
 # cp .env.optimism.example .env.local  # Optimism / OP Stack
-# cp .env.zkstack.example .env.local   # ZK Stack
 
 npm run dev
 ```
@@ -30,23 +29,12 @@ AWS_CLUSTER_NAME=my-cluster-name                # K8s (auto-detects K8S_API_URL 
 > **Note**: `K8S_API_URL` and `AWS_REGION` are auto-detected at runtime from `AWS_CLUSTER_NAME`.  
 > AWS credentials use the standard chain: env vars, `~/.aws/credentials`, or IAM Role.
 
-### L1 RPC Configuration (Architecture Note)
-
-SentinAI separates monitoring RPC from L2 node failover pool:
-
-- **SentinAI monitoring path**: Set via `SENTINAI_L1_RPC_URL` (optional, has default fallback)
-- **L2 node failover pool**: Set via `L1_RPC_URLS` (comma-separated)
-- **Proxyd mode** (optional): controlled with `L1_PROXYD_*` variables
-
-See [Proxyd Failover Setup](proxyd-failover-setup.md) for details.
-
 ### Template Examples
 
 The repository includes chain-specific `.env` templates:
 
 - `.env.thanos.example` — Thanos (Tokamak Network)
 - `.env.optimism.example` — Optimism / OP Stack
-- `.env.zkstack.example` — ZK Stack
 
 Copy the relevant template to `.env.local` and customize.
 
@@ -77,7 +65,6 @@ After setup:
 1. **Run a demo**: [Demo Scenarios](demo-scenarios.md)
 2. **Configure scaling**: [Autonomy Cockpit User Guide](autonomy-cockpit-user-guide.md)
 3. **Production operations**: [Daily Operations Runbook](agentic-q1-operations-runbook.md)
-4. **L1 client setup**: [L1 Client Operations Automation](l1-client-operations-automation-guide.md)
 
 ---
 

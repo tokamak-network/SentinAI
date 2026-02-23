@@ -7,7 +7,7 @@ SentinAI is an **Autonomous Node Guardian** — a Next.js dashboard for monitori
 ## Key Features
 
 ### Real-Time Monitoring
-- **L1/L2 Block Monitoring**: Real-time block height display for both L1 and L2
+- **L2 Block Monitoring**: Real-time block height display and network metrics
 - **K8s Integration**: AWS EKS connection with cached dynamic token generation (10-minute expiry) for low-latency polling
 
 ### Intelligent Scaling
@@ -43,7 +43,6 @@ SentinAI is an **Autonomous Node Guardian** — a Next.js dashboard for monitori
 
 ## Supported Networks
 - Optimism / OP Stack
-- ZK Stack  
 - Thanos (Tokamak Network)
 
 ---

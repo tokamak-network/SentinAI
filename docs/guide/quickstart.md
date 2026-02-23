@@ -63,7 +63,7 @@ Open your browser: **http://localhost:3002**
 ### Option A: Dashboard UI
 
 You should see:
-- ✅ L1/L2 block heights updating
+- ✅ L2 block heights updating
 - ✅ Real-time metrics (CPU, TxPool, Gas)
 - ✅ Component status indicators (green = healthy)
 
@@ -107,7 +107,6 @@ Refresh the dashboard — you should see **anomaly alerts** and **AI analysis** 
 ### Production Setup
 - [Deploy to EC2](ec2-setup-guide.md) for production use
 - [Configure AWS EKS](setup.md#environment-variables) for real cluster scaling
-- [Set up L1 RPC failover](../guide/proxyd-failover-setup.md)
 
 ### Learn More
 - [Run full demo scenarios](demo-scenarios.md)

@@ -6,7 +6,6 @@
 - [What is SentinAI (project overview)](guide/overview.md)
 - [**⚡ Quick Start (5 minutes)**](guide/quickstart.md)
 - [10-min local quickstart (OP Stack)](guide/optimism-l2-sentinai-local-setup.md)
-- [10-min local quickstart (ZK Stack)](guide/zkstack-local-setup-guide.md)
 - [First incident simulation](guide/demo-scenarios.md)
 - [Core concepts & guardrails](guide/autonomy-cockpit-user-guide.md)
 - [🔧 Troubleshooting Guide](guide/troubleshooting.md)
@@ -16,16 +15,13 @@
 - [EC2 deployment guide](guide/ec2-setup-guide.md)
 - [Environment variables reference](guide/setup.md#environment-variables)
 - [OP Stack example runbook](guide/opstack-example-runbook.md)
-- [ZK L2 example runbook](guide/zk-l2-example-runbook.md)
 
 ## 2) Operate in Production
 - [Daily operations runbook](guide/agentic-q1-operations-runbook.md)
 - [Tokamak client ops runbook](guide/tokamak-client-ops-runbook.md)
-- [L1 client operations automation](guide/l1-client-operations-automation-guide.md)
 - [Autonomy cockpit user guide](guide/autonomy-cockpit-user-guide.md)
 
 ### Playbooks (by failure type)
-- [Proxyd failover setup](guide/proxyd-failover-setup.md)
 - [Minority client migration](guide/minority-client-migration-playbook.md)
 - [Partner diversity onboarding](guide/partner-diversity-onboarding.md)
 - [Redis setup/troubleshooting](guide/redis-setup.md)
@@ -75,7 +71,7 @@
 
 ### I need production operations guidance
 1. [Daily operations runbook](guide/agentic-q1-operations-runbook.md)
-2. [L1 client automation](guide/l1-client-operations-automation-guide.md)
+2. [Tokamak client ops runbook](guide/tokamak-client-ops-runbook.md)
 3. [Playbooks section](#playbooks-by-failure-type)
 
 ### I need API/MCP integration
