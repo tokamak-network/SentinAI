@@ -4,10 +4,12 @@
 
 ## 0) Start Here
 - [What is SentinAI (project overview)](guide/overview.md)
+- [**⚡ Quick Start (5 minutes)**](guide/quickstart.md)
 - [10-min local quickstart (OP Stack)](guide/optimism-l2-sentinai-local-setup.md)
 - [10-min local quickstart (ZK Stack)](guide/zkstack-local-setup-guide.md)
 - [First incident simulation](guide/demo-scenarios.md)
 - [Core concepts & guardrails](guide/autonomy-cockpit-user-guide.md)
+- [🔧 Troubleshooting Guide](guide/troubleshooting.md)
 
 ## 1) Setup & Deployment
 - [Local setup (Docker / compose)](guide/setup.md)
@@ -62,9 +64,14 @@
 ## Fast Paths
 
 ### I want to run a demo today
-1. [OP Stack local setup](guide/optimism-l2-sentinai-local-setup.md)
+1. [**⚡ Quick Start (5 min)**](guide/quickstart.md)
 2. [Demo scenarios](guide/demo-scenarios.md)
 3. [Autonomy cockpit controls](guide/autonomy-cockpit-user-guide.md)
+
+### I'm stuck / something's broken
+1. [🔧 Troubleshooting Guide](guide/troubleshooting.md)
+2. [Setup Guide (env vars reference)](guide/setup.md)
+3. [Redis setup/troubleshooting](guide/redis-setup.md)
 
 ### I need production operations guidance
 1. [Daily operations runbook](guide/agentic-q1-operations-runbook.md)
