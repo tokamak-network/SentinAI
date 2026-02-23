@@ -7,7 +7,8 @@ import type { McpJsonRpcId, McpJsonRpcResponse } from '@/types/mcp';
 
 type JsonObject = Record<string, unknown>;
 
-const HEADER_SEPARATOR = '\r\n\r\n';
+const HEADER_SEPARATOR_CRLF = '\r\n\r\n';
+const HEADER_SEPARATOR_LF = '\n\n';
 const CONTENT_LENGTH_PREFIX = 'content-length:';
 
 function isObject(value: unknown): value is JsonObject {
@@ -23,12 +24,12 @@ export interface ParsedStdioFrames {
 export function encodeStdioFrame(payload: unknown): Buffer {
   const body = JSON.stringify(payload);
   const bodyBuffer = Buffer.from(body, 'utf8');
-  const headerBuffer = Buffer.from(`Content-Length: ${bodyBuffer.length}${HEADER_SEPARATOR}`, 'utf8');
+  const headerBuffer = Buffer.from(`Content-Length: ${bodyBuffer.length}${HEADER_SEPARATOR_CRLF}`, 'utf8');
   return Buffer.concat([headerBuffer, bodyBuffer]);
 }
 
 function parseContentLength(headerBlock: string): number | null {
-  const lines = headerBlock.split('\r\n').map((line) => line.trim());
+  const lines = headerBlock.split(/\r?\n/).map((line) => line.trim());
   for (const line of lines) {
     if (!line) continue;
     const lower = line.toLowerCase();
@@ -41,18 +42,43 @@ function parseContentLength(headerBlock: string): number | null {
   return null;
 }
 
+function findHeaderBoundary(
+  buffer: Buffer<ArrayBufferLike>,
+  offset: number
+): { headerEnd: number; separatorLength: number } | null {
+  const headerEndCrlf = buffer.indexOf(HEADER_SEPARATOR_CRLF, offset, 'utf8');
+  const headerEndLf = buffer.indexOf(HEADER_SEPARATOR_LF, offset, 'utf8');
+
+  if (headerEndCrlf < 0 && headerEndLf < 0) {
+    return null;
+  }
+
+  if (headerEndCrlf >= 0 && (headerEndLf < 0 || headerEndCrlf <= headerEndLf)) {
+    return {
+      headerEnd: headerEndCrlf,
+      separatorLength: HEADER_SEPARATOR_CRLF.length,
+    };
+  }
+
+  return {
+    headerEnd: headerEndLf,
+    separatorLength: HEADER_SEPARATOR_LF.length,
+  };
+}
+
 export function parseStdioFrames(buffer: Buffer<ArrayBufferLike>): ParsedStdioFrames {
   let offset = 0;
   const messages: string[] = [];
   const protocolErrors: string[] = [];
 
   while (offset < buffer.length) {
-    const headerEnd = buffer.indexOf(HEADER_SEPARATOR, offset, 'utf8');
-    if (headerEnd < 0) break;
+    const boundary = findHeaderBoundary(buffer, offset);
+    if (!boundary) break;
 
+    const { headerEnd, separatorLength } = boundary;
     const headerBlock = buffer.slice(offset, headerEnd).toString('utf8');
     const contentLength = parseContentLength(headerBlock);
-    const bodyStart = headerEnd + HEADER_SEPARATOR.length;
+    const bodyStart = headerEnd + separatorLength;
 
     if (contentLength === null) {
       protocolErrors.push('Received an invalid Content-Length header.');

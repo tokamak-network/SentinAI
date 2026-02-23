@@ -39,6 +39,18 @@ describe('mcp-stdio-transport', () => {
     expect(parsed.rest.equals(partial)).toBe(true);
   });
 
+  it('should parse frame with LF-only header separator', () => {
+    const payload = { jsonrpc: '2.0', id: 3, method: 'initialize' };
+    const body = JSON.stringify(payload);
+    const frame = Buffer.from(`Content-Length: ${Buffer.byteLength(body)}\n\n${body}`, 'utf8');
+    const parsed = parseStdioFrames(frame);
+
+    expect(parsed.protocolErrors).toHaveLength(0);
+    expect(parsed.messages).toHaveLength(1);
+    expect(parsed.rest.length).toBe(0);
+    expect(JSON.parse(parsed.messages[0])).toEqual(payload);
+  });
+
   it('should extract approval token from direct params and tools/call arguments', () => {
     expect(extractApprovalToken({
       jsonrpc: '2.0',
@@ -73,4 +85,3 @@ describe('mcp-stdio-transport', () => {
     expect(response.error?.data).toEqual({ detail: 'failed' });
   });
 });
-
