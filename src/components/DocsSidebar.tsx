@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ChevronRight } from 'lucide-react';
+import { ChevronRight, Menu, X } from 'lucide-react';
 import { useState } from 'react';
 
 interface DocSection {
@@ -70,6 +70,7 @@ export default function DocsSidebar() {
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
     new Set(docStructure.map((s) => s.title))
   );
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   function toggleSection(title: string) {
     const newExpanded = new Set(expandedSections);
@@ -82,13 +83,47 @@ export default function DocsSidebar() {
   }
 
   return (
-    <aside className="w-64 flex-shrink-0 border-r border-slate-200 bg-slate-50 sticky top-0 h-screen overflow-y-auto">
-      <div className="p-6 min-w-0">
-        <Link href="/" className="flex items-center gap-2 text-lg font-bold text-slate-900 mb-6">
-          <span>SentinAI</span>
-        </Link>
+    <>
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white rounded-md shadow-md border border-slate-200 hover:bg-slate-50"
+        aria-label="Toggle menu"
+      >
+        {isMobileMenuOpen ? (
+          <X className="h-5 w-5 text-slate-700" />
+        ) : (
+          <Menu className="h-5 w-5 text-slate-700" />
+        )}
+      </button>
 
-        <nav className="space-y-6">
+      {/* Mobile Overlay */}
+      {isMobileMenuOpen && (
+        <div
+          className="lg:hidden fixed inset-0 bg-black/50 z-40"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar - Desktop: always visible, Mobile: slide-in */}
+      <aside
+        className={`
+          fixed lg:sticky top-0 left-0 z-40
+          w-64 h-screen
+          flex flex-col
+          border-r border-slate-200 bg-slate-50
+          overflow-hidden
+          transition-transform duration-300 ease-in-out
+          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
+        `}
+      >
+        <div className="p-6 border-b border-slate-200">
+          <Link href="/" className="flex items-center gap-2 text-lg font-bold text-slate-900">
+            <span>SentinAI</span>
+          </Link>
+        </div>
+
+        <nav className="p-6 space-y-6 overflow-y-auto flex-1">
           {docStructure.map((section) => {
             const isExpanded = expandedSections.has(section.title);
             return (
@@ -97,9 +132,9 @@ export default function DocsSidebar() {
                   onClick={() => toggleSection(section.title)}
                   className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-700 mb-2"
                 >
-                  <span>{section.title}</span>
+                  <span className="break-words text-left">{section.title}</span>
                   <ChevronRight
-                    className={`h-3 w-3 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                    className={`h-3 w-3 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
                   />
                 </button>
                 {isExpanded && (
@@ -110,6 +145,7 @@ export default function DocsSidebar() {
                         <li key={item.href}>
                           <Link
                             href={item.href}
+                            onClick={() => setIsMobileMenuOpen(false)}
                             className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
                               isActive
                                 ? 'bg-blue-50 font-medium text-blue-700'
@@ -117,7 +153,7 @@ export default function DocsSidebar() {
                             }`}
                           >
                             {item.emoji && <span className="text-base flex-shrink-0">{item.emoji}</span>}
-                            <span className="flex-1 min-w-0">{item.title}</span>
+                            <span className="flex-1 break-words">{item.title}</span>
                           </Link>
                         </li>
                       );
@@ -128,7 +164,7 @@ export default function DocsSidebar() {
             );
           })}
         </nav>
-      </div>
-    </aside>
+      </aside>
+    </>
   );
 }
