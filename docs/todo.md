@@ -14,6 +14,13 @@
 - [x] npm 실행 엔트리 추가 (`monitor:agent-heartbeat:alert`) 및 cron 예시를 alert 래퍼 기준으로 갱신 (`package.json`, `scripts/agent-heartbeat.cron.example`)
 - [x] 검증 실행 (`npm run lint`, `npx tsc --noEmit`, `node scripts/monitor-agent-heartbeat-alert.mjs`)
 
+### In Progress (2026-02-24 In-Process Heartbeat Watchdog Autorecovery)
+- [x] scheduler 내부에 heartbeat watchdog 루프 추가 (stale/read-write 실패 감지 + 알림 + recovery cycle 자동 시도) (`src/lib/scheduler.ts`)
+- [x] 서버 헬스/상태 API에 watchdog 상태 필드 노출 (`src/app/api/health/route.ts`, `src/app/api/agent-loop/route.ts`)
+- [x] 운영 환경변수 샘플 업데이트 (`.env.local.sample`)
+- [x] scheduler 상태 테스트 보강 (`src/lib/__tests__/scheduler.test.ts`)
+- [x] 검증 실행 (`npm run lint -- src/lib/scheduler.ts src/app/api/health/route.ts src/app/api/agent-loop/route.ts src/lib/__tests__/scheduler.test.ts`, `npx tsc --noEmit`, `npm run test:run -- src/lib/__tests__/scheduler.test.ts src/app/api/health/route.test.ts`)
+
 ### In Progress (2026-02-22 Dashboard Autonomy Cockpit MVP)
 - [x] 대시보드에 자율 에이전트 인지용 `Autonomy Cockpit` 패널 추가 (`src/app/page.tsx`)
 - [x] `goal-manager`/`autonomy policy` 상태 polling 연결
@@ -524,6 +531,12 @@
 - heartbeat 검사(exit code 2)를 그대로 유지하면서 webhook 알림을 붙이기 위해 래퍼 스크립트(`scripts/monitor-agent-heartbeat-alert.mjs`)를 추가했다.
 - 알림 URL은 `AGENT_HEARTBEAT_ALERT_WEBHOOK_URL` 우선, 미설정 시 `ALERT_WEBHOOK_URL` fallback으로 해 운영 일관성을 맞췄다.
 - `.env.local` 자동 로더가 빈 문자열 오버라이드를 덮지 않도록 보강해, 알림 비활성화/테스트 시나리오를 안전하게 지원하도록 수정했다.
+
+## Review (2026-02-24 In-Process Heartbeat Watchdog Autorecovery)
+
+- 외부 cron 없이 서버 기동만으로 heartbeat 감시가 실행되도록 scheduler 내부에 watchdog task를 추가했다.
+- watchdog이 `heartbeat stale` 또는 Redis heartbeat read/write 실패를 감지하면 Slack webhook으로 알리고, 동일 프로세스에서 recovery cycle을 자동 시도하도록 연결했다.
+- `/api/health`와 `/api/agent-loop`에서 watchdog 상태(실패 횟수, 최근 오류, 최근 복구 상태)를 조회할 수 있어 운영자가 즉시 동작 여부를 확인할 수 있게 했다.
 
 ---
 

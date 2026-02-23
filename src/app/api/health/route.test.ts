@@ -40,6 +40,15 @@ describe('/api/health', () => {
       snapshotTaskRunning: false,
       reportTaskRunning: false,
       scheduledScalingTaskRunning: false,
+      watchdogEnabled: true,
+      watchdogTaskRunning: false,
+      watchdogRecoveryRunning: false,
+      watchdogFailureStreak: 0,
+      watchdogLastError: null,
+      watchdogLastHealthyAt: '2026-02-23T15:59:00.000Z',
+      watchdogLastAlertAt: null,
+      watchdogLastRecoveryAt: null,
+      watchdogLastRecoveryStatus: 'idle',
     });
   });
 

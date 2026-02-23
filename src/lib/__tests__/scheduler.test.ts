@@ -113,6 +113,9 @@ describe('scheduler', () => {
       expect(status).toHaveProperty('initialized');
       expect(status).toHaveProperty('snapshotTaskRunning');
       expect(status).toHaveProperty('reportTaskRunning');
+      expect(status).toHaveProperty('watchdogEnabled');
+      expect(status).toHaveProperty('watchdogTaskRunning');
+      expect(status).toHaveProperty('watchdogFailureStreak');
     });
 
     it('should have boolean values for all status properties', async () => {
@@ -123,6 +126,10 @@ describe('scheduler', () => {
       expect(typeof status.initialized).toBe('boolean');
       expect(typeof status.snapshotTaskRunning).toBe('boolean');
       expect(typeof status.reportTaskRunning).toBe('boolean');
+      expect(typeof status.watchdogEnabled).toBe('boolean');
+      expect(typeof status.watchdogTaskRunning).toBe('boolean');
+      expect(typeof status.watchdogRecoveryRunning).toBe('boolean');
+      expect(typeof status.watchdogFailureStreak).toBe('number');
     });
   });
 

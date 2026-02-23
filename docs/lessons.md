@@ -8,6 +8,10 @@
 - Rule: Every new operational guard script should ship with a runnable cron example to reduce deployment ambiguity.
 - 운영자가 환경변수로 알림 URL을 비우거나 덮어써도 `.env.local` 자동 로딩이 다시 값을 덮으면 테스트/롤백이 어려워진다.
 - Rule: `.env.local` 로더는 `env key exists` 기준으로 동작해, 빈 문자열 포함 사용자 오버라이드를 절대 덮어쓰지 않는다.
+- heartbeat 장애 대응을 외부 cron에만 의존하면 프로세스 내부 정지/지연 상황에서 복구 시점이 늦어진다.
+- Rule: Heartbeat guardrails should include an in-process watchdog that performs `detect -> alert -> recovery attempt` without external schedulers.
+- Slack 알림과 자동 복구를 결합할 때 쿨다운이 없으면 장애 구간에서 알림/복구 폭주가 발생한다.
+- Rule: Watchdog alerting and auto-recovery paths must enforce independent cooldown windows to prevent storm loops.
 
 ## 2026-02-22
 
