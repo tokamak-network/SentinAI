@@ -82,8 +82,8 @@ export default function DocsSidebar() {
   }
 
   return (
-    <aside className="w-64 border-r border-slate-200 bg-slate-50 sticky top-0 h-screen overflow-y-auto">
-      <div className="p-6">
+    <aside className="w-64 flex-shrink-0 border-r border-slate-200 bg-slate-50 sticky top-0 h-screen overflow-y-auto">
+      <div className="p-6 min-w-0">
         <Link href="/" className="flex items-center gap-2 text-lg font-bold text-slate-900 mb-6">
           <span>SentinAI</span>
         </Link>
@@ -116,8 +116,8 @@ export default function DocsSidebar() {
                                 : 'text-slate-700 hover:bg-slate-100'
                             }`}
                           >
-                            {item.emoji && <span className="text-base">{item.emoji}</span>}
-                            <span className="flex-1">{item.title}</span>
+                            {item.emoji && <span className="text-base flex-shrink-0">{item.emoji}</span>}
+                            <span className="flex-1 min-w-0">{item.title}</span>
                           </Link>
                         </li>
                       );
