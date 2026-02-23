@@ -75,6 +75,8 @@ export interface IStateStore {
   getAgentCycleHistory(limit?: number): Promise<any[]>;
   getAgentCycleCount(): Promise<number>;
   getLastAgentCycleResult(): Promise<any | null>;
+  setAgentLoopHeartbeat(heartbeatAt: string): Promise<void>;
+  getAgentLoopHeartbeat(): Promise<string | null>;
   clearAgentCycleHistory(): Promise<void>;
 
   // --- MCP Approval Tickets ---

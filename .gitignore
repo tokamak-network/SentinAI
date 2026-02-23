@@ -1,5 +1,6 @@
 node_modules
 .env.local
+.mcp.json
 .next
 next-env.d.ts
 *.log

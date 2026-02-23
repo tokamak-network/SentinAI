@@ -1,5 +1,14 @@
 # Lessons Learned
 
+## 2026-02-24
+
+- Agent loop 장애는 체인 자체 장애와 구분되지 않으면 원인 파악이 지연된다.
+- Rule: Agent-loop scheduler must emit a Redis heartbeat on every cycle and expose `heartbeat lag + stale` in `/api/health` for on-call detection.
+- 단순 스크립트 추가만으로는 운영 연결이 지연될 수 있다.
+- Rule: Every new operational guard script should ship with a runnable cron example to reduce deployment ambiguity.
+- 운영자가 환경변수로 알림 URL을 비우거나 덮어써도 `.env.local` 자동 로딩이 다시 값을 덮으면 테스트/롤백이 어려워진다.
+- Rule: `.env.local` 로더는 `env key exists` 기준으로 동작해, 빈 문자열 포함 사용자 오버라이드를 절대 덮어쓰지 않는다.
+
 ## 2026-02-22
 
 - 자율 에이전트 데모는 실행 알고리즘 설명보다 사용자가 바로 보는 상태 요약(엔진/큐/가드레일)이 먼저 있어야 인지율이 높다.

@@ -14,6 +14,7 @@ import { deliverDailyReport } from '@/lib/daily-report-mailer';
 import { runAgentCycle } from '@/lib/agent-loop';
 import { applyScheduledScaling, buildScheduleProfile } from '@/lib/scheduled-scaler';
 import { cleanupExpiredAgentMemory } from '@/lib/agent-memory';
+import { getStore } from '@/lib/redis-store';
 
 let initialized = false;
 let agentTask: ScheduledTask | null = null;
@@ -24,6 +25,15 @@ let agentTaskRunning = false;
 let snapshotTaskRunning = false;
 let reportTaskRunning = false;
 let scheduledScalingTaskRunning = false;
+
+async function recordAgentLoopHeartbeat(heartbeatAt: string = new Date().toISOString()): Promise<void> {
+  try {
+    await getStore().setAgentLoopHeartbeat(heartbeatAt);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown error';
+    console.warn('[Scheduler] Failed to update agent heartbeat:', msg);
+  }
+}
 
 // Agent loop enable check — defaults to true if L2_RPC_URL is set
 function isAgentLoopEnabled(): boolean {
@@ -48,6 +58,7 @@ export async function initializeScheduler(): Promise<void> {
   // Agent loop: every 60 seconds — autonomous observe-detect-decide-act
   // Increased from 30s to 60s to prevent scheduler overload
   if (isAgentLoopEnabled()) {
+    await recordAgentLoopHeartbeat();
     agentTask = cron.schedule('*/60 * * * * *', async () => {
       if (agentTaskRunning) return;
       agentTaskRunning = true;
@@ -70,6 +81,7 @@ export async function initializeScheduler(): Promise<void> {
         const msg = error instanceof Error ? error.message : 'Unknown error';
         console.error('[Scheduler] Agent loop error:', msg);
       } finally {
+        await recordAgentLoopHeartbeat();
         agentTaskRunning = false;
       }
     });

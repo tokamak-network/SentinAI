@@ -2,6 +2,18 @@
 
 ## Current Status
 
+### In Progress (2026-02-24 Agent Loop Heartbeat Guardrail)
+- [x] Redis state store에 agent loop heartbeat 저장/조회 메서드 추가 (`src/types/redis.ts`, `src/lib/redis-store.ts`)
+- [x] Scheduler가 agent cycle마다 heartbeat를 갱신하도록 연결 (`src/lib/scheduler.ts`)
+- [x] `/api/health`에 `agentLoop.heartbeatLagSec` 및 `stale` 상태를 노출 (`src/app/api/health/route.ts`)
+- [x] stale 감시 스크립트/cron 예시 추가 (`scripts/check-agent-heartbeat.mjs`, `scripts/agent-heartbeat.cron.example`, `package.json`)
+- [x] 검증 실행 (`npm run lint`, `npx tsc --noEmit`, `npm run test:run -- src/lib/__tests__/redis-store.test.ts src/lib/__tests__/scheduler.test.ts src/app/api/health/route.test.ts`)
+
+### In Progress (2026-02-24 Agent Heartbeat Alert Hookup)
+- [x] heartbeat 검사 결과(exit code 2) 기반 webhook 알림 래퍼 스크립트 추가 (`scripts/monitor-agent-heartbeat-alert.mjs`)
+- [x] npm 실행 엔트리 추가 (`monitor:agent-heartbeat:alert`) 및 cron 예시를 alert 래퍼 기준으로 갱신 (`package.json`, `scripts/agent-heartbeat.cron.example`)
+- [x] 검증 실행 (`npm run lint`, `npx tsc --noEmit`, `node scripts/monitor-agent-heartbeat-alert.mjs`)
+
 ### In Progress (2026-02-22 Dashboard Autonomy Cockpit MVP)
 - [x] 대시보드에 자율 에이전트 인지용 `Autonomy Cockpit` 패널 추가 (`src/app/page.tsx`)
 - [x] `goal-manager`/`autonomy policy` 상태 polling 연결
@@ -501,6 +513,18 @@
 - 과거 감사 문서와 Proposal 28의 예정 산출물 경로에 Draft 스텁을 추가해 참조 유실을 방지했다.
 - 통합 안내 스텁 문서를 링크형으로 정리해 문서 이동 시 사용자가 즉시 본문으로 진입할 수 있게 개선했다.
 
+## Review (2026-02-24 Agent Loop Heartbeat Guardrail)
+
+- Agent loop가 멈춰도 원인을 빠르게 식별할 수 있도록 Redis heartbeat 키(`sentinai:agent:last_heartbeat`)를 추가하고 scheduler cycle마다 갱신하도록 연결했다.
+- `/api/health` 응답에 `agentLoop.heartbeatLagSec`, `stale`, `lastCycleAt`를 포함해 외부 모니터링이 stale 상태를 즉시 판단할 수 있게 했다.
+- cron에 바로 연결 가능한 stale 검사 스크립트(`scripts/check-agent-heartbeat.mjs`)와 예시 크론 엔트리(`scripts/agent-heartbeat.cron.example`)를 추가했다.
+
+## Review (2026-02-24 Agent Heartbeat Alert Hookup)
+
+- heartbeat 검사(exit code 2)를 그대로 유지하면서 webhook 알림을 붙이기 위해 래퍼 스크립트(`scripts/monitor-agent-heartbeat-alert.mjs`)를 추가했다.
+- 알림 URL은 `AGENT_HEARTBEAT_ALERT_WEBHOOK_URL` 우선, 미설정 시 `ALERT_WEBHOOK_URL` fallback으로 해 운영 일관성을 맞췄다.
+- `.env.local` 자동 로더가 빈 문자열 오버라이드를 덮지 않도록 보강해, 알림 비활성화/테스트 시나리오를 안전하게 지원하도록 수정했다.
+
 ---
 
-**Updated:** 2026-02-22
+**Updated:** 2026-02-24

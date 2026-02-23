@@ -88,6 +88,7 @@ const KEYS = {
   seedScenario: 'seed:scenario',
   // Agent Cycle History (cross-worker persistence)
   agentCycleHistory: 'agent:cycle:history',
+  agentLoopHeartbeat: 'agent:last_heartbeat',
   // MCP Approval Ticket
   mcpApprovalTicket: (id: string) => `mcp:approval:${id}`,
   // Agent Memory and Decision Trace
@@ -786,6 +787,16 @@ export class RedisStateStore implements IStateStore {
     return record ? JSON.parse(record) : null;
   }
 
+  async setAgentLoopHeartbeat(heartbeatAt: string): Promise<void> {
+    const key = this.key(KEYS.agentLoopHeartbeat);
+    await this.client.set(key, heartbeatAt);
+  }
+
+  async getAgentLoopHeartbeat(): Promise<string | null> {
+    const key = this.key(KEYS.agentLoopHeartbeat);
+    return this.client.get(key);
+  }
+
   async clearAgentCycleHistory(): Promise<void> {
     const key = this.key(KEYS.agentCycleHistory);
     await this.client.del(key);
@@ -1292,6 +1303,7 @@ export class InMemoryStateStore implements IStateStore {
 
   // Agent Cycle History (Cross-Worker Persistence)
   private agentCycleHistory: any[] = [];
+  private agentLoopHeartbeat: string | null = null;
 
   // MCP Approval Tickets
   private mcpApprovalTickets: Map<string, McpApprovalTicket> = new Map();
@@ -1458,6 +1470,14 @@ export class InMemoryStateStore implements IStateStore {
     return this.agentCycleHistory.length > 0
       ? this.agentCycleHistory[this.agentCycleHistory.length - 1]
       : null;
+  }
+
+  async setAgentLoopHeartbeat(heartbeatAt: string): Promise<void> {
+    this.agentLoopHeartbeat = heartbeatAt;
+  }
+
+  async getAgentLoopHeartbeat(): Promise<string | null> {
+    return this.agentLoopHeartbeat;
   }
 
   async clearAgentCycleHistory(): Promise<void> {

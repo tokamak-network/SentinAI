@@ -817,6 +817,26 @@ describe('redis-store (InMemoryStateStore)', () => {
     });
   });
 
+  describe('Agent Loop Heartbeat', () => {
+    it('should persist and read heartbeat timestamp', async () => {
+      const heartbeatAt = '2026-02-23T15:00:00.000Z';
+
+      await store.setAgentLoopHeartbeat(heartbeatAt);
+      const stored = await store.getAgentLoopHeartbeat();
+
+      expect(stored).toBe(heartbeatAt);
+    });
+
+    it('should update heartbeat to the latest timestamp', async () => {
+      await store.setAgentLoopHeartbeat('2026-02-23T15:00:00.000Z');
+      await store.setAgentLoopHeartbeat('2026-02-23T15:01:00.000Z');
+
+      const stored = await store.getAgentLoopHeartbeat();
+
+      expect(stored).toBe('2026-02-23T15:01:00.000Z');
+    });
+  });
+
   describe('MCP Approval Tickets', () => {
     it('should create and retrieve MCP approval ticket', async () => {
       const now = Date.now();

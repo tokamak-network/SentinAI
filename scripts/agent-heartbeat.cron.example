@@ -1,0 +1,4 @@
+# Run every minute with webhook alert on stale agent heartbeat.
+# Update <SENTINAI_PATH> and optional log path for your host.
+# Uses AGENT_HEARTBEAT_ALERT_WEBHOOK_URL first, then ALERT_WEBHOOK_URL.
+* * * * * cd <SENTINAI_PATH> && /usr/bin/env bash -lc 'npm run monitor:agent-heartbeat:alert' >> /tmp/sentinai-agent-heartbeat.log 2>&1
