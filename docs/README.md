@@ -37,6 +37,8 @@
 - [RCA engine spec](spec/rca-engine-guide.md)
 - [Daily report spec](spec/daily-report-spec.md)
 - [Zero-downtime scaling spec](spec/zero-downtime-scaling-spec.md)
+- [Agent loop vs goal manager](spec/agent-loop-vs-goal-manager.md)
+- [Tier comparison: General vs Premium](spec/tier-comparison.md)
 
 ## 4) Verify & Improve
 - [Testing guide](verification/testing-guide.md)
