@@ -154,7 +154,7 @@ async function executeHealthCheck(
     if (action.target === 'op-geth') {
       try {
         const { stdout: rpcResponse } = await runK8sCommand(
-          `exec ${podName} -n ${namespace} -- curl -sf -X POST http://localhost:8545 -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'`,
+          `exec ${podName} -n ${namespace} -- wget -qO- --timeout=5 --header='Content-Type: application/json' --post-data='{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' http://localhost:8545`,
           { timeout: 15000 }
         );
         const parsed = JSON.parse(rpcResponse);
