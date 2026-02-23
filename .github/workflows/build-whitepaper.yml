@@ -1,0 +1,35 @@
+name: Build Whitepaper PDF
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/whitepaper.tex'
+  workflow_dispatch:
+
+jobs:
+  build-pdf:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Compile LaTeX
+        uses: xu-cheng/latex-action@v3
+        with:
+          root_file: docs/whitepaper.tex
+          args: -pdf -file-line-error -halt-on-error -interaction=nonstopmode
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: whitepaper
+          path: docs/whitepaper.pdf
+
+      - name: Commit PDF to repository
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add docs/whitepaper.pdf
+          git diff --quiet && git diff --staged --quiet || git commit -m "chore: update whitepaper PDF [skip ci]"
+          git push

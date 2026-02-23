@@ -41,15 +41,6 @@ Modern L2 rollup deployments face:
 - Exportable audit trails for compliance
 - Post-mortem analysis support
 
-### 📊 Performance Metrics (Simulation Results)
-
-| Metric | Manual Baseline | SentinAI Target | Observed |
-|--------|----------------|-----------------|----------|
-| **MTTR (Low risk)** | 30-60 min | <5 min | 2.3 min |
-| **MTTR (Medium risk)** | 30-60 min | <5 min | 4.7 min |
-| **Auto-resolution rate** | 0% | ≥70% | 88-95% |
-| **False action rate** | N/A | <5% | 0% |
-
 ### 🏗️ System Architecture
 
 **Six Core Subsystems**:
@@ -61,19 +52,30 @@ Modern L2 rollup deployments face:
 5. **Action Planning & Execution**: Risk-based policy framework with automatic rollback
 6. **MCP Integration**: External AI agent access (Claude Desktop, Claude Code)
 
-**Data Flow**:
-```
-L2 RPC → 30s polling → Ring buffer (60 points, 30-min window)
-    ↓
-Anomaly Detection (z-score > 2.0)
-    ↓
-RCA Engine (Claude Haiku 4.5)
-    ↓
-Action Planning (Policy-based)
-    ↓
-Execution (Auto or Approval-gated)
-    ↓
-Verification & Rollback
+**System Data Flow**:
+
+```mermaid
+graph TB
+    A[L2 RPC<br/>eth_blockNumber<br/>eth_gasPrice<br/>txpool_status] -->|30s polling| B[Ring Buffer<br/>60 points<br/>30-min window]
+    B --> C[Anomaly Detection<br/>z-score > 2.0]
+    C -->|Anomaly Event| D[RCA Engine<br/>Claude Haiku 4.5]
+    D -->|Root Cause| E[Action Planning<br/>Policy-based]
+    E -->|Low/Medium Risk| F[Auto-Execute]
+    E -->|High/Critical Risk| G[Approval Gate]
+    F --> H[Verification]
+    G -->|Approved| F
+    H -->|Success| I[Complete]
+    H -->|Failure| J[Automatic Rollback]
+    
+    style A fill:#e1f5ff
+    style C fill:#fff3cd
+    style D fill:#f8d7da
+    style E fill:#d1ecf1
+    style F fill:#d4edda
+    style G fill:#f8d7da
+    style H fill:#fff3cd
+    style I fill:#d4edda
+    style J fill:#f8d7da
 ```
 
 ### 🔒 Risk & Control Framework
@@ -115,44 +117,25 @@ Verification & Rollback
 
 ## Full Whitepaper (Academic Version)
 
-For the complete technical whitepaper with detailed architecture, evaluation methodology, security analysis, and roadmap, download the LaTeX version:
+For the complete technical whitepaper with detailed architecture, evaluation methodology, security analysis, and roadmap:
 
 <div style="margin: 2em 0; padding: 1.5em; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 8px; text-align: center;">
   <p style="color: white; font-size: 1.1em; margin-bottom: 1em;">
-    📄 <strong>Complete Whitepaper (LaTeX)</strong>
+    📄 <strong>Complete Whitepaper (PDF)</strong>
   </p>
   <p style="color: rgba(255,255,255,0.9); font-size: 0.9em; margin-bottom: 1.5em;">
-    Professional academic format with mathematical notation, citations, and detailed sections
+    Professional academic format with mathematical notation, detailed sections, and comprehensive analysis
   </p>
   <a 
-    href="https://github.com/tokamak-network/SentinAI/raw/main/docs/whitepaper.tex" 
+    href="https://github.com/tokamak-network/SentinAI/raw/main/docs/whitepaper.pdf" 
     download
     style="display: inline-block; padding: 12px 32px; background: white; color: #667eea; text-decoration: none; border-radius: 6px; font-weight: 600; transition: transform 0.2s;"
     onmouseover="this.style.transform='scale(1.05)'"
     onmouseout="this.style.transform='scale(1)'"
   >
-    ⬇️ Download whitepaper.tex
+    ⬇️ Download Whitepaper (PDF)
   </a>
 </div>
-
-### Compiling to PDF
-
-**Option 1: Online (No installation)**
-1. Visit [Overleaf](https://www.overleaf.com/)
-2. Upload `whitepaper.tex`
-3. Click "Compile" → Download PDF
-
-**Option 2: Local (TeX Live required)**
-```bash
-# Install TeX Live
-sudo apt-get install texlive-full  # Ubuntu/Debian
-brew install --cask mactex          # macOS
-
-# Compile (run twice for TOC)
-cd docs
-pdflatex whitepaper.tex
-pdflatex whitepaper.tex
-```
 
 **Sections in Full Whitepaper**:
 1. Problem Statement (Operational complexity, manual limits, autopilot dilemma)
@@ -192,14 +175,19 @@ pdflatex whitepaper.tex
 
 ## Learn More
 
+### Documentation & Resources
+
 - **Documentation**: [https://sentinai-xi.vercel.app/docs](https://sentinai-xi.vercel.app/docs)
-- **GitHub**: [https://github.com/tokamak-network/SentinAI](https://github.com/tokamak-network/SentinAI)
-- **Quick Start**: [5-minute setup guide](/docs/guide/quickstart)
-- **Architecture Guide**: [Deep dive into system design](/docs/guide/architecture)
+- **GitHub Repository**: [https://github.com/tokamak-network/SentinAI](https://github.com/tokamak-network/SentinAI)
+- **Quick Start Guide**: [5-minute setup guide](/docs/guide/quickstart)
+- **Architecture Deep Dive**: [System design documentation](/docs/guide/architecture)
 - **API Reference**: [Complete API documentation](/docs/guide/api-reference)
 
----
+### Community & Support
 
-**Contact**: contact@sentinai.ai
+- **Contact**: contact@sentinai.ai
+- **Issues & Feature Requests**: [GitHub Issues](https://github.com/tokamak-network/SentinAI/issues)
+
+---
 
 **Acknowledgments**: This work builds on open-source contributions from the Optimism, Ethereum, and AI research communities.
