@@ -17,21 +17,39 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, rehypeHighlight]}
         components={{
-          h1: ({ children }) => (
-            <h1 className="text-4xl font-bold text-slate-900 mb-6 mt-8 first:mt-0">
-              {children}
-            </h1>
-          ),
-          h2: ({ children }) => (
-            <h2 className="text-3xl font-semibold text-slate-800 mb-4 mt-8 border-b border-slate-200 pb-2">
-              {children}
-            </h2>
-          ),
-          h3: ({ children }) => (
-            <h3 className="text-2xl font-semibold text-slate-800 mb-3 mt-6">
-              {children}
-            </h3>
-          ),
+          h1: ({ children }) => {
+            const id = String(children)
+              .toLowerCase()
+              .replace(/[^\w\s-]/g, '')
+              .replace(/\s+/g, '-');
+            return (
+              <h1 id={id} className="text-4xl font-bold text-slate-900 mb-6 mt-8 first:mt-0">
+                {children}
+              </h1>
+            );
+          },
+          h2: ({ children }) => {
+            const id = String(children)
+              .toLowerCase()
+              .replace(/[^\w\s-]/g, '')
+              .replace(/\s+/g, '-');
+            return (
+              <h2 id={id} className="text-3xl font-semibold text-slate-800 mb-4 mt-8 border-b border-slate-200 pb-2">
+                {children}
+              </h2>
+            );
+          },
+          h3: ({ children }) => {
+            const id = String(children)
+              .toLowerCase()
+              .replace(/[^\w\s-]/g, '')
+              .replace(/\s+/g, '-');
+            return (
+              <h3 id={id} className="text-2xl font-semibold text-slate-800 mb-3 mt-6">
+                {children}
+              </h3>
+            );
+          },
           a: ({ href, children }) => (
             <a
               href={href}
