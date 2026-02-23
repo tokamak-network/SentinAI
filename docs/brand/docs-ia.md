@@ -1,58 +1,39 @@
-# SentinAI Docs IA (v1)
+# SentinAI Docs IA (v2, Journey-first)
 
-## 1. Introduction
-- What is SentinAI
-- Core concepts (Incident, ActionPlan, Approval, Rollback)
+## A. Start Here
+1. What is SentinAI (value, scope, non-goals)
+2. 10-minute quickstart (local demo)
+3. Core concepts (Incident, ActionPlan, Approval, Rollback)
 
-## 2. Quickstart (10 min)
-- Prerequisites
-- Run locally (Docker)
-- First incident simulation
+## B. Setup & Deployment
+4. Local setup (Docker / OP Stack / ZK Stack)
+5. Infrastructure deployment (EC2 / EKS)
+6. Environment & policy configuration
 
-## 3. Installation
-- Local Container (Docker Compose)
-- EKS deployment (Helm)
+## C. Operate in Production
+7. Daily operations runbook
+8. Incident lifecycle and approval workflow
+9. Playbooks by failure type
 
-## 4. Configuration
-- Environment variables
-- Risk policy levels
-- Integrations (Prometheus/Loki/RPC)
+## D. Integrate & Extend
+10. API / MCP guide
+11. Integrations and chain-specific examples
+12. Contracts/spec references
 
-## 5. Operations Runbook
-- Daily checks
-- Incident lifecycle
-- Approval workflow
+## E. Verify & Improve
+13. Testing and verification guide
+14. Benchmarks, stress tests, and validation reports
+15. Lessons learned and quality gates
 
-## 6. Playbooks
-- Sync stall
-- Committer issues
-- Infra pressure
-- Error burst handling
+## F. Project Governance
+16. Proposals (todo/done)
+17. Changelog and release notes
+18. Contributing workflow
 
-## 7. API & MCP
-- REST API reference
-- MCP endpoints
-- Auth and limits
+---
 
-## 8. Safety Model
-- Risk tiers
-- Forbidden actions
-- Rollback guarantees
-
-## 9. Observability
-- Metrics catalog
-- Dashboard map
-- Audit log schema
-
-## 10. Troubleshooting
-- Common failure patterns
-- WS/RPC instability
-- Dependency/toolchain issues
-
-## 11. Contributing
-- Dev setup
-- Test matrix
-- PR checklist
-
-## 12. Changelog
-- Release notes and migration notes
+## Design Principles
+- **Journey-first:** New operator can go from zero to first successful run without context switching.
+- **Task-first labels:** Titles should describe operator intent (e.g., “Recover sequencer stall”).
+- **Progressive depth:** Guide pages first, deep spec pages second.
+- **Evidence-linked:** Every major claim links to verification/report artifacts.

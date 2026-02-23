@@ -1,78 +1,77 @@
 # SentinAI Documentation
 
-> Autonomous Node Guardian for L2 / Rollup operations
+> Journey-first docs index (aligned to `docs/brand/docs-ia.md`)
 
-This index follows the IA defined in `docs/brand/docs-ia.md`.
+## 0) Start Here
+- [What is SentinAI (project overview)](../README.md#overview)
+- [10-min local quickstart (OP Stack)](guide/optimism-l2-sentinai-local-setup.md)
+- [10-min local quickstart (ZK Stack)](guide/zkstack-local-setup-guide.md)
+- [First incident simulation](guide/demo-scenarios.md)
+- [Core concepts & guardrails](guide/autonomy-cockpit-user-guide.md)
 
-## 1. Introduction
-- [What is SentinAI](../README.md#overview)
-- [Core concepts](guide/autonomy-cockpit-user-guide.md)
-
-## 2. Quickstart (10 min)
-- [Prerequisites + local setup](guide/optimism-l2-sentinai-local-setup.md)
-- [Demo scenarios (first incident simulation)](guide/demo-scenarios.md)
-
-## 3. Installation
-- [Local Container (Docker Compose)](../README.md#setup)
-- [EKS / EC2 deployment path](guide/ec2-setup-guide.md)
-
-## 4. Configuration
+## 1) Setup & Deployment
+- [Local setup (Docker / compose)](../README.md#setup)
+- [EC2 deployment guide](guide/ec2-setup-guide.md)
 - [Environment variables sample](../.env.local.sample)
-- [Autonomy/risk policy controls](guide/autonomy-cockpit-user-guide.md)
-- [Integration examples (OP Stack / ZK Stack)](guide/opstack-example-runbook.md)
+- [OP Stack example runbook](guide/opstack-example-runbook.md)
+- [ZK L2 example runbook](guide/zk-l2-example-runbook.md)
 
-## 5. Operations Runbook
-- [Daily operations + lifecycle guidance](guide/agentic-q1-operations-runbook.md)
+## 2) Operate in Production
+- [Daily operations runbook](guide/agentic-q1-operations-runbook.md)
+- [Tokamak client ops runbook](guide/tokamak-client-ops-runbook.md)
 - [L1 client operations automation](guide/l1-client-operations-automation-guide.md)
+- [Autonomy cockpit user guide](guide/autonomy-cockpit-user-guide.md)
 
-## 6. Playbooks
+### Playbooks (by failure type)
 - [Proxyd failover setup](guide/proxyd-failover-setup.md)
-- [Minority client migration playbook](guide/minority-client-migration-playbook.md)
+- [Minority client migration](guide/minority-client-migration-playbook.md)
 - [Partner diversity onboarding](guide/partner-diversity-onboarding.md)
+- [Redis setup/troubleshooting](guide/redis-setup.md)
 
-## 7. API & MCP
-- [MCP user guide](guide/sentinai-mcp-user-guide.md)
+## 3) Integrate & Extend
+- [SentinAI MCP user guide](guide/sentinai-mcp-user-guide.md)
 - [Claude Code MCP setup](guide/claude-code-mcp-setup.md)
-- [Claude Code MCP operations guide](guide/claude-code-mcp-operations-guide.md)
-
-## 8. Safety Model
-- [Autonomy cockpit guardrails](guide/autonomy-cockpit-user-guide.md)
+- [Claude Code MCP operations](guide/claude-code-mcp-operations-guide.md)
 - [Client ops contract](spec/client-ops-contract.md)
-
-## 9. Observability
-- [Anomaly detection guide](spec/anomaly-detection-guide.md)
-- [RCA engine guide](spec/rca-engine-guide.md)
+- [Anomaly detection spec](spec/anomaly-detection-guide.md)
+- [RCA engine spec](spec/rca-engine-guide.md)
 - [Daily report spec](spec/daily-report-spec.md)
+- [Zero-downtime scaling spec](spec/zero-downtime-scaling-spec.md)
 
-## 10. Troubleshooting
-- [Redis troubleshooting/setup](guide/redis-setup.md)
+## 4) Verify & Improve
+- [Testing guide](verification/testing-guide.md)
+- [Integration test report](verification/integration-test-report.md)
+- [Unit test coverage report](verification/unit-test-coverage-report.md)
+- [Daily report verification](verification/daily-report-verification.md)
+- [Dashboard UI testing guide](verification/dashboard-ui-testing-guide.md)
 - [Production load testing guide](guide/production-load-testing-guide.md)
 - [Scaling accuracy testing guide](guide/scaling-accuracy-testing-guide.md)
+- [Model benchmark guide](guide/MODEL_BENCHMARK_GUIDE.md)
+- [LLM stress test env guide](guide/LLM_STRESS_TEST_ENV_GUIDE.md)
+- [LLM stress test framework spec](spec/LLM-STRESS-TEST-FRAMEWORK.md)
 
-## 11. Contributing
-- [Repository setup and scripts](../README.md)
-- [Verification/testing guide](verification/testing-guide.md)
-
-## 12. Changelog
-- [Latest verification snapshots](verification/)
-- [Done proposals archive](done/)
+## 5) Governance & History
+- [Todo proposals](todo/)
+- [Completed proposals](done/)
+- [Verification artifacts](verification/)
+- [Project lessons](lessons.md)
+- [Main project README](../README.md)
 
 ---
 
-## Legacy Catalog
+## Fast Paths
 
-### Completed Proposals
-- [Proposal 1: Predictive Scaling](done/proposal-1-predictive-scaling.md)
-- [Proposal 2: Anomaly Detection](done/proposal-2-anomaly-detection.md)
-- [Proposal 3: RCA Engine](done/proposal-3-rca-engine.md)
-- [Proposal 4: Cost Optimizer](done/proposal-4-cost-optimizer.md)
-- [Proposal 5: NLOps](done/proposal-5-nlops.md)
-- [Proposal 6: Zero-Downtime Scaling](done/proposal-6-zero-downtime-scaling.md)
-- [Proposal 7: Redis State Store](done/proposal-7-redis-state-store.md)
-- [Proposal 8: Auto-Remediation Engine](done/proposal-8-auto-remediation.md)
+### I want to run a demo today
+1. [OP Stack local setup](guide/optimism-l2-sentinai-local-setup.md)
+2. [Demo scenarios](guide/demo-scenarios.md)
+3. [Autonomy cockpit controls](guide/autonomy-cockpit-user-guide.md)
 
-### Verification
-- [Predictive scaling verification](verification/predictive-scaling-verification.md)
-- [Predictive scaling result report](verification/predictive-scaling-verification-report.md)
-- [Seed UI verification](verification/seed-ui-verification.md)
-- [Seed UI verification report](verification/seed-ui-verification-report.md)
+### I need production operations guidance
+1. [Daily operations runbook](guide/agentic-q1-operations-runbook.md)
+2. [L1 client automation](guide/l1-client-operations-automation-guide.md)
+3. [Playbooks section](#playbooks-by-failure-type)
+
+### I need API/MCP integration
+1. [MCP user guide](guide/sentinai-mcp-user-guide.md)
+2. [Claude MCP setup](guide/claude-code-mcp-setup.md)
+3. [Contracts/specs](#3-integrate--extend)
