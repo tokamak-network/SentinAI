@@ -37,22 +37,37 @@ const MAX_AUTO_SCALE_VCPU = parseInt(process.env.REMEDIATION_MAX_VCPU || '4', 10
 // Component to Pod Name Mapping
 // ============================================================
 
-function getPodName(component: RCAComponent, config: ScalingConfig): string {
-  const { statefulSetName } = config;
+async function getPodName(component: RCAComponent, config: ScalingConfig): Promise<string> {
+  const { statefulSetName, namespace } = config;
   const plugin = getChainPlugin();
 
-  // Primary execution client uses the config's statefulSetName
+  // Primary execution client uses the config's statefulSetName directly (StatefulSet)
   if (component === plugin.primaryExecutionClient) {
     return `${statefulSetName}-0`;
   }
 
-  // Other components: derive from statefulSetName prefix + plugin k8s config
+  // Extract base prefix from statefulSetName
+  // e.g., 'sepolia-thanos-stack-op-geth' → 'sepolia-thanos-stack'
+  const primarySuffix = plugin.primaryExecutionClient;
+  const basePrefix = statefulSetName.endsWith(`-${primarySuffix}`)
+    ? statefulSetName.slice(0, -(primarySuffix.length + 1))
+    : statefulSetName;
+
   const k8sConfig = plugin.k8sComponents.find(c => c.component === component);
   if (k8sConfig) {
-    // Extract prefix from statefulSetName (e.g. 'op-geth' → prefix not needed, use env-based naming)
-    const prefix = process.env.K8S_APP_PREFIX || 'op';
-    // Build pod name: prefix-statefulSetSuffix-0
-    return `${prefix}-${k8sConfig.statefulSetSuffix}-0`;
+    // Deployment pods: resolve actual pod name via label selector
+    const label = `app=${basePrefix}-${k8sConfig.statefulSetSuffix}`;
+    try {
+      const { stdout } = await runK8sCommand(
+        `get pod -l ${label} -n ${namespace} --no-headers -o custom-columns=NAME:.metadata.name`,
+        { timeout: 10000 }
+      );
+      const podName = stdout.trim().split('\n')[0];
+      if (podName) return podName;
+    } catch {
+      // fall through to best-guess fallback
+    }
+    return `${basePrefix}-${k8sConfig.statefulSetSuffix}-0`;
   }
 
   return `${statefulSetName}-0`;
@@ -76,7 +91,7 @@ async function executeCollectLogs(
     return `Collected ${logs.split('\n').length} log lines from ${target}`;
   }
 
-  const podName = getPodName(target, config);
+  const podName = await getPodName(target, config);
   const { namespace } = config;
 
   try {
@@ -119,7 +134,7 @@ async function executeHealthCheck(
     }
   }
 
-  const podName = getPodName(target, config);
+  const podName = await getPodName(target, config);
   const { namespace } = config;
 
   try {
@@ -135,11 +150,11 @@ async function executeHealthCheck(
       return `Health check: ${podName} is NOT ready`;
     }
 
-    // RPC check (op-geth only)
+    // RPC check (op-geth only) — use curl which is available in geth images
     if (action.target === 'op-geth') {
       try {
         const { stdout: rpcResponse } = await runK8sCommand(
-          `exec ${podName} -n ${namespace} -- wget -qO- --timeout=5 http://localhost:8545 --post-data='{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'`,
+          `exec ${podName} -n ${namespace} -- curl -sf -X POST http://localhost:8545 -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'`,
           { timeout: 15000 }
         );
         const parsed = JSON.parse(rpcResponse);
@@ -185,7 +200,7 @@ async function executeDescribePod(
     return `Container inspection:\n${output.substring(0, 500)}...`;
   }
 
-  const podName = getPodName(target, config);
+  const podName = await getPodName(target, config);
   const { namespace } = config;
 
   try {
@@ -214,7 +229,7 @@ async function executeRestartPod(
     return `Restarted ${target} via docker compose restart`;
   }
 
-  const podName = getPodName(target, config);
+  const podName = await getPodName(target, config);
   const { namespace } = config;
 
   try {
