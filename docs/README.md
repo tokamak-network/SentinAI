@@ -27,6 +27,8 @@
 - [Redis setup/troubleshooting](guide/redis-setup.md)
 
 ## 3) Integrate & Extend
+- [🏗️ Architecture Guide](guide/architecture.md)
+- [📡 API Reference](guide/api-reference.md)
 - [SentinAI MCP user guide](guide/sentinai-mcp-user-guide.md)
 - [Claude Code MCP setup](guide/claude-code-mcp-setup.md)
 - [Claude Code MCP operations](guide/claude-code-mcp-operations-guide.md)

@@ -46,6 +46,8 @@ const docStructure: DocSection[] = [
   {
     title: 'Integrate & Extend',
     items: [
+      { title: 'Architecture', href: '/docs/guide/architecture', emoji: '🏗️' },
+      { title: 'API Reference', href: '/docs/guide/api-reference', emoji: '📡' },
       { title: 'MCP User Guide', href: '/docs/guide/sentinai-mcp-user-guide' },
       { title: 'Claude MCP Setup', href: '/docs/guide/claude-code-mcp-setup' },
       { title: 'Client Ops Contract', href: '/docs/spec/client-ops-contract' },
