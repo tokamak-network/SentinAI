@@ -3,16 +3,16 @@
 > Journey-first docs index (aligned to `docs/brand/docs-ia.md`)
 
 ## 0) Start Here
-- [What is SentinAI (project overview)](../README.md#overview)
+- [What is SentinAI (project overview)](guide/overview.md)
 - [10-min local quickstart (OP Stack)](guide/optimism-l2-sentinai-local-setup.md)
 - [10-min local quickstart (ZK Stack)](guide/zkstack-local-setup-guide.md)
 - [First incident simulation](guide/demo-scenarios.md)
 - [Core concepts & guardrails](guide/autonomy-cockpit-user-guide.md)
 
 ## 1) Setup & Deployment
-- [Local setup (Docker / compose)](../README.md#setup)
+- [Local setup (Docker / compose)](guide/setup.md)
 - [EC2 deployment guide](guide/ec2-setup-guide.md)
-- [Environment variables sample](../.env.local.sample)
+- [Environment variables reference](guide/setup.md#environment-variables)
 - [OP Stack example runbook](guide/opstack-example-runbook.md)
 - [ZK L2 example runbook](guide/zk-l2-example-runbook.md)
 
@@ -55,7 +55,7 @@
 - [Completed proposals](done/)
 - [Verification artifacts](verification/)
 - [Project lessons](lessons.md)
-- [Main project README](../README.md)
+- [Project overview](guide/overview.md)
 
 ---
 
