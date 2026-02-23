@@ -17,12 +17,12 @@ npm run dev
 ## Features
 - **L1/L2 Block Monitoring**: Real-time block height display for both L1 and L2
 - **Dynamic Resource Scaling**: Hybrid auto-scaling engine using CPU, TxPool, and AI insights.
-- **Predictive Scaling**: AI-powered time-series analysis (Claude Haiku 4.5) predicts optimal vCPU/MEM allocation 5 minutes ahead.
+- **Predictive Scaling**: AI-powered time-series analysis (Fast Tier model) predicts optimal vCPU allocation 5 minutes ahead.
 - **AI-Powered Log Analysis**: Claude-based anomaly detection for Optimism Rollup components
 - **Stress Test Simulation**: Simulate peak load scenarios (8 vCPU / 16 GiB)
 - **K8s Integration**: AWS EKS connection with **cached dynamic token generation** (10-minute expiry) for low-latency polling.
 - **Model Benchmarking** (New!): Compare AI model performance (Qwen, Claude, GPT, Gemini) using 5 production prompts. Generate CSV/Markdown reports with latency, cost, and accuracy metrics.
-- **Automatic Tier-Based Model Selection**: Fast Tier (qwen3-80b-next, 1.8s) and Best Tier (qwen3-235b, 11s) auto-selected based on operation needs.
+- **Automatic Tier-Based Model Selection**: Fast Tier (qwen3-80b-next, 1.8s) and Best Tier (qwen3-80b-next, 8s) auto-selected based on operation needs.
 
 ## Dynamic Resource Scaling
 Combines **Rule-based Metrics** and **AI-driven Insights** to optimize `op-geth` resources automatically.
@@ -34,8 +34,9 @@ Combines **Rule-based Metrics** and **AI-driven Insights** to optimize `op-geth`
 
 2.  **Adaptive Tiers**:
     *   **Idle (<30)**: 1 vCPU (Cost Saving)
-    *   **Normal (30-70)**: 2 vCPU (Standard Operation)
-    *   **High (>70)**: 4 vCPU (Peak Performance)
+    *   **Normal (30–70)**: 2 vCPU (Standard Operation)
+    *   **High (70–77)**: 4 vCPU (Peak Performance)
+    *   **Emergency (≥77)**: 8 vCPU (Auto-triggered burst)
 
 3.  **Safety Mechanisms**:
     *   **Cooldown**: 5-minute freeze after scaling to prevent flapping.
@@ -47,14 +48,14 @@ Uses **Tier-based AI models** via LiteLLM AI Gateway to analyze time-series metr
 1.  **Data Collection**: In-memory ring buffer (60 data points) stores CPU, TxPool, Gas ratio, and block interval metrics.
 2.  **AI Analysis**: Sends statistical summary + recent 15 data points to AI for prediction.
    - **Fast Tier**: `qwen3-80b-next` (1.8s response) — Real-time analysis
-   - **Best Tier**: `qwen3-235b` (11s response) — Complex pattern recognition
+   - **Best Tier**: `qwen3-80b-next` (8s response) — Complex pattern recognition
 3.  **Output**: Predicted vCPU (1/2/4), confidence score, trend direction, key factors, and reasoning.
 4.  **Seed Testing**: Dev-only UI for injecting mock scenarios (`stable`, `rising`, `spike`, `falling`) or using live accumulated data (`live`).
 
 ## AI Log Analysis Engine
 SentinAI uses **tier-based AI models** via a custom AI Gateway to audit network health in real-time.
 - **Fast Tier**: `qwen3-80b-next` for real-time anomaly detection
-- **Best Tier**: `qwen3-235b` for deep-dive analysis
+- **Best Tier**: `qwen3-80b-next` for deep-dive analysis
 
 1.  **Holistic Context Window**: Instead of analyzing logs in isolation, it aggregates logs from 4 core components to detect complex cross-component issues:
     *   `op-geth` (Execution Engine)
