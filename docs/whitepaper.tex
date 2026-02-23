@@ -270,10 +270,10 @@ Task:
 \begin{tabular}{@{}lcccp{3cm}@{}}
 \toprule
 \textbf{Risk Tier} & \textbf{Auto-Execute} & \textbf{Approval} & \textbf{Cooldown} & \textbf{Examples} \\ \midrule
-Low       & ✓ & ✗ & 5 min  & CPU 1→2 \\
-Medium    & ✓ & ✗ & 5 min  & Restart \\
-High      & ✗ & ✓ & 10 min & Scale 4→1 \\
-Critical  & ✗ & ✓ & 30 min & DB ops \\ \bottomrule
+Low       & $\checkmark$ & $\times$ & 5 min  & CPU 1→2 \\
+Medium    & $\checkmark$ & $\times$ & 5 min  & Restart \\
+High      & $\times$ & $\checkmark$ & 10 min & Scale 4→1 \\
+Critical  & $\times$ & $\checkmark$ & 30 min & DB ops \\ \bottomrule
 \end{tabular}
 \caption{Risk-based execution policy}
 \end{table}
@@ -360,10 +360,10 @@ Critical  & ✗ & ✓ & 30 min & DB ops \\ \bottomrule
 \begin{tabular}{@{}lcccc@{}}
 \toprule
 \textbf{Tier} & \textbf{Auto-Execute} & \textbf{ChatOps} & \textbf{Multi-Approval} & \textbf{Timeout} \\ \midrule
-Low      & ✓ & ✗ & ✗ & N/A \\
-Medium   & ✓ & ✗ & ✗ & N/A \\
-High     & ✗ & ✓ & ✗ & 5 min \\
-Critical & ✗ & ✗ & ✓ & 10 min \\ \bottomrule
+Low      & $\checkmark$ & $\times$ & $\times$ & N/A \\
+Medium   & $\checkmark$ & $\times$ & $\times$ & N/A \\
+High     & $\times$ & $\checkmark$ & $\times$ & 5 min \\
+Critical & $\times$ & $\times$ & $\checkmark$ & 10 min \\ \bottomrule
 \end{tabular}
 \caption{Approval requirements by risk tier}
 \end{table}
