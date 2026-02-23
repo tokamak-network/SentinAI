@@ -39,7 +39,6 @@ const docStructure: DocSection[] = [
     title: 'Operations',
     items: [
       { title: 'Daily Operations', href: '/docs/guide/agentic-q1-operations-runbook' },
-      { title: 'Tokamak Client Ops', href: '/docs/guide/tokamak-client-ops-runbook' },
       { title: 'Autonomy Cockpit', href: '/docs/guide/autonomy-cockpit-user-guide' },
     ],
   },

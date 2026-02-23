@@ -28,14 +28,14 @@ npm install
 Copy the example environment file:
 
 ```bash
-cp .env.thanos.example .env.local
+cp .env.optimism.example .env.local
 ```
 
 **Minimum required for demo mode:**
 
 ```bash
 # .env.local
-L2_RPC_URL=https://rpc.thanos-sepolia.tokamak.network
+L2_RPC_URL=https://your-l2-rpc-endpoint.com
 ANTHROPIC_API_KEY=sk-ant-...  # Optional for AI features
 SCALING_SIMULATION_MODE=true   # Already set in template
 ```

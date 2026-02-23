@@ -18,7 +18,6 @@
 
 ## 2) Operate in Production
 - [Daily operations runbook](guide/agentic-q1-operations-runbook.md)
-- [Tokamak client ops runbook](guide/tokamak-client-ops-runbook.md)
 - [Autonomy cockpit user guide](guide/autonomy-cockpit-user-guide.md)
 
 ### Playbooks (by failure type)
@@ -73,8 +72,7 @@
 
 ### I need production operations guidance
 1. [Daily operations runbook](guide/agentic-q1-operations-runbook.md)
-2. [Tokamak client ops runbook](guide/tokamak-client-ops-runbook.md)
-3. [Playbooks section](#playbooks-by-failure-type)
+2. [Playbooks section](#playbooks-by-failure-type)
 
 ### I need API/MCP integration
 1. [MCP user guide](guide/sentinai-mcp-user-guide.md)

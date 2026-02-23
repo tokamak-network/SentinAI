@@ -43,7 +43,6 @@ SentinAI is an **Autonomous Node Guardian** — a Next.js dashboard for monitori
 
 ## Supported Networks
 - Optimism / OP Stack
-- Thanos (Tokamak Network)
 
 ---
 

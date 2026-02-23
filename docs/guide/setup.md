@@ -5,9 +5,8 @@
 ```bash
 npm install
 
-# Select chain-specific template
-cp .env.thanos.example .env.local     # Thanos (Tokamak)
-# cp .env.optimism.example .env.local  # Optimism / OP Stack
+# Copy environment template
+cp .env.optimism.example .env.local  # Optimism / OP Stack
 
 npm run dev
 ```
@@ -29,14 +28,13 @@ AWS_CLUSTER_NAME=my-cluster-name                # K8s (auto-detects K8S_API_URL 
 > **Note**: `K8S_API_URL` and `AWS_REGION` are auto-detected at runtime from `AWS_CLUSTER_NAME`.  
 > AWS credentials use the standard chain: env vars, `~/.aws/credentials`, or IAM Role.
 
-### Template Examples
+### Template Example
 
-The repository includes chain-specific `.env` templates:
+The repository includes a `.env` template:
 
-- `.env.thanos.example` — Thanos (Tokamak Network)
 - `.env.optimism.example` — Optimism / OP Stack
 
-Copy the relevant template to `.env.local` and customize.
+Copy the template to `.env.local` and customize.
 
 ---
 
