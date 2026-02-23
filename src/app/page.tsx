@@ -3,7 +3,6 @@ import {
   ArrowRight,
   CheckCircle2,
   CircleDot,
-  ExternalLink,
   Github,
   Shield,
 } from 'lucide-react';
@@ -54,27 +53,6 @@ const safetyControls: string[] = [
   'Destructive actions forbidden by default',
   'High-risk actions require explicit approval',
   'Full audit history for every decision and action',
-];
-
-const proofPlaceholders: string[] = [
-  'Incident detection latency (Observed in DRY_RUN)',
-  'Auto-remediation success rate (Observed in DRY_RUN)',
-  'False action rate (Observed in DRY_RUN)',
-];
-
-const docsNavigation = [
-  { title: 'Introduction', href: '/docs/README.md#1-introduction' },
-  { title: 'Quickstart', href: '/docs/README.md#2-quickstart-10-min' },
-  { title: 'Installation', href: '/docs/README.md#3-installation' },
-  { title: 'Configuration', href: '/docs/README.md#4-configuration' },
-  { title: 'Operations Runbook', href: '/docs/README.md#5-operations-runbook' },
-  { title: 'Playbooks', href: '/docs/README.md#6-playbooks' },
-  { title: 'API & MCP', href: '/docs/README.md#7-api--mcp' },
-  { title: 'Safety Model', href: '/docs/README.md#8-safety-model' },
-  { title: 'Observability', href: '/docs/README.md#9-observability' },
-  { title: 'Troubleshooting', href: '/docs/README.md#10-troubleshooting' },
-  { title: 'Contributing', href: '/docs/README.md#11-contributing' },
-  { title: 'Changelog', href: '/docs/README.md#12-changelog' },
 ];
 
 function SectionTitle({ eyebrow, title, subtitle }: { eyebrow: string; title: string; subtitle?: string }) {
@@ -180,31 +158,6 @@ export default function LandingPage() {
                 </li>
               ))}
             </ul>
-          </div>
-        </section>
-
-        <section>
-          <SectionTitle eyebrow="Evidence" title="Proof / evidence" subtitle="Production baselines are pending publication. Until then, present metrics with an explicit DRY_RUN label." />
-          <div className="rounded-2xl border border-slate-200 bg-white p-6">
-            <ul className="space-y-3">
-              {proofPlaceholders.map((item) => (
-                <li key={item} className="text-sm text-slate-700">• {item}</li>
-              ))}
-            </ul>
-          </div>
-        </section>
-
-        <section>
-          <SectionTitle eyebrow="Docs" title="Docs navigation" subtitle="Information architecture from docs/brand/docs-ia.md wired into the docs index." />
-          <div className="grid gap-2 md:grid-cols-2">
-            {docsNavigation.map((item) => (
-              <Link key={item.title} href={item.href} className="group rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 hover:bg-slate-100">
-                <span className="inline-flex items-center gap-2">
-                  {item.title}
-                  <ExternalLink className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" />
-                </span>
-              </Link>
-            ))}
           </div>
         </section>
       </div>
