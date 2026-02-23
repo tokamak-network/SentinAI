@@ -21,6 +21,7 @@ const docStructure: DocSection[] = [
     title: 'Start Here',
     items: [
       { title: 'Overview', href: '/docs/guide/overview', emoji: '📖' },
+      { title: 'Whitepaper', href: '/docs/whitepaper', emoji: '📄' },
       { title: 'Quick Start (5 min)', href: '/docs/guide/quickstart', emoji: '⚡' },
       { title: 'OP Stack Setup', href: '/docs/guide/optimism-l2-sentinai-local-setup' },
       { title: 'Demo Scenarios', href: '/docs/guide/demo-scenarios' },

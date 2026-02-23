@@ -4,6 +4,7 @@
 
 ## 0) Start Here
 - [What is SentinAI (project overview)](guide/overview.md)
+- [📄 Whitepaper](whitepaper.md)
 - [**⚡ Quick Start (5 minutes)**](guide/quickstart.md)
 - [10-min local quickstart (OP Stack)](guide/optimism-l2-sentinai-local-setup.md)
 - [First incident simulation](guide/demo-scenarios.md)
