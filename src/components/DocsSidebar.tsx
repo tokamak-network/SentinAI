@@ -109,7 +109,7 @@ export default function DocsSidebar() {
       <aside
         className={`
           fixed lg:sticky top-0 left-0 z-40
-          w-64 h-screen
+          w-56 h-screen
           flex flex-col
           border-r border-slate-200 bg-slate-50
           overflow-hidden
@@ -117,20 +117,20 @@ export default function DocsSidebar() {
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}
       >
-        <div className="p-6 border-b border-slate-200">
-          <Link href="/" className="flex items-center gap-2 text-lg font-bold text-slate-900">
+        <div className="px-4 py-5 border-b border-slate-200">
+          <Link href="/" className="flex items-center gap-2 text-base font-bold text-slate-900">
             <span>SentinAI</span>
           </Link>
         </div>
 
-        <nav className="p-6 space-y-6 overflow-y-auto flex-1">
+        <nav className="px-4 py-4 space-y-5 overflow-y-auto flex-1">
           {docStructure.map((section) => {
             const isExpanded = expandedSections.has(section.title);
             return (
               <div key={section.title}>
                 <button
                   onClick={() => toggleSection(section.title)}
-                  className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-700 mb-2"
+                  className="flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-700 mb-1.5"
                 >
                   <span className="break-words text-left">{section.title}</span>
                   <ChevronRight
@@ -138,7 +138,7 @@ export default function DocsSidebar() {
                   />
                 </button>
                 {isExpanded && (
-                  <ul className="space-y-1">
+                  <ul className="space-y-0.5">
                     {section.items.map((item) => {
                       const isActive = pathname === item.href;
                       return (
@@ -146,14 +146,14 @@ export default function DocsSidebar() {
                           <Link
                             href={item.href}
                             onClick={() => setIsMobileMenuOpen(false)}
-                            className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors ${
+                            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
                               isActive
                                 ? 'bg-blue-50 font-medium text-blue-700'
                                 : 'text-slate-700 hover:bg-slate-100'
                             }`}
                           >
-                            {item.emoji && <span className="text-base flex-shrink-0">{item.emoji}</span>}
-                            <span className="flex-1 break-words">{item.title}</span>
+                            {item.emoji && <span className="text-sm flex-shrink-0">{item.emoji}</span>}
+                            <span className="flex-1 break-words leading-snug">{item.title}</span>
                           </Link>
                         </li>
                       );

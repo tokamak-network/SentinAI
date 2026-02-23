@@ -52,28 +52,28 @@ export default async function DocsPage({ params }: PageProps) {
     <div className="flex min-h-screen">
       <DocsSidebar />
       
-      <main className="flex-1 px-4 sm:px-6 py-10 lg:ml-0">
-        <div className="mx-auto max-w-5xl">
-          <div className="mb-8 flex flex-col sm:flex-row items-start justify-between gap-4 sm:gap-6">
+      <main className="flex-1 px-3 sm:px-4 lg:px-6 py-8 lg:ml-0">
+        <div className="mx-auto max-w-[1400px]">
+          <div className="mb-6 flex flex-col sm:flex-row items-start justify-between gap-3 sm:gap-4">
             <div className="flex-1 w-full">
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500 mb-2">SentinAI Docs</p>
-              <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 break-words">{title}</h1>
-              <p className="text-sm text-slate-500 mt-1 break-all">{target.relativePath}</p>
+              <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500 mb-1.5">SentinAI Docs</p>
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 break-words leading-tight">{title}</h1>
+              <p className="text-xs text-slate-500 mt-1 break-all">{target.relativePath}</p>
             </div>
-            <div className="flex items-center gap-3 w-full sm:w-auto">
-              <DocSearch className="flex-1 sm:w-64" />
-              <Link href="/" className="whitespace-nowrap rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50 transition-colors">
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <DocSearch className="flex-1 sm:w-56" />
+              <Link href="/" className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors">
                 ← Landing
               </Link>
             </div>
           </div>
 
-          <div className="flex flex-col xl:flex-row gap-8">
-            <article className="flex-1 rounded-2xl border border-slate-200 bg-white p-6 sm:p-8 shadow-sm overflow-hidden">
+          <div className="flex flex-col xl:flex-row gap-6">
+            <article className="flex-1 rounded-xl border border-slate-200 bg-white px-6 py-5 sm:px-8 sm:py-6 shadow-sm overflow-hidden">
               <MarkdownRenderer content={content} />
             </article>
             
-            <div className="xl:w-56">
+            <div className="xl:w-52">
               <TableOfContents content={content} />
             </div>
           </div>

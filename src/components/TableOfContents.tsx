@@ -56,16 +56,16 @@ export default function TableOfContents({ content }: TableOfContentsProps) {
   if (toc.length === 0) return null;
 
   return (
-    <nav className="sticky top-24 hidden xl:block">
-      <p className="mb-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
+    <nav className="sticky top-20 hidden xl:block">
+      <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
         On this page
       </p>
-      <ul className="space-y-2 text-sm">
+      <ul className="space-y-1.5 text-xs">
         {toc.map((item) => (
-          <li key={item.id} className={item.level === 3 ? 'pl-4' : ''}>
+          <li key={item.id} className={item.level === 3 ? 'pl-3' : ''}>
             <a
               href={`#${item.id}`}
-              className={`block transition-colors ${
+              className={`block transition-colors leading-snug ${
                 activeId === item.id
                   ? 'font-medium text-blue-600'
                   : 'text-slate-600 hover:text-slate-900'

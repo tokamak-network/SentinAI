@@ -12,7 +12,7 @@ interface MarkdownRendererProps {
 
 export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   return (
-    <div className="prose prose-slate max-w-none prose-headings:scroll-mt-20 prose-a:text-blue-600 hover:prose-a:text-blue-500 prose-code:text-sm prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-[''] prose-code:after:content-[''] prose-pre:bg-slate-900 prose-pre:text-slate-100">
+    <div className="prose prose-slate max-w-none prose-sm lg:prose-base prose-headings:scroll-mt-20 prose-a:text-blue-600 hover:prose-a:text-blue-500 prose-code:text-xs prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-[''] prose-code:after:content-[''] prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-p:leading-relaxed prose-li:leading-relaxed">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, rehypeHighlight]}
@@ -23,7 +23,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
               .replace(/[^\w\s-]/g, '')
               .replace(/\s+/g, '-');
             return (
-              <h1 id={id} className="text-4xl font-bold text-slate-900 mb-6 mt-8 first:mt-0">
+              <h1 id={id} className="text-3xl lg:text-4xl font-bold text-slate-900 mb-5 mt-6 first:mt-0 leading-tight">
                 {children}
               </h1>
             );
@@ -34,7 +34,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
               .replace(/[^\w\s-]/g, '')
               .replace(/\s+/g, '-');
             return (
-              <h2 id={id} className="text-3xl font-semibold text-slate-800 mb-4 mt-8 border-b border-slate-200 pb-2">
+              <h2 id={id} className="text-2xl lg:text-3xl font-semibold text-slate-800 mb-3.5 mt-7 border-b border-slate-200 pb-2 leading-tight">
                 {children}
               </h2>
             );
@@ -45,7 +45,7 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
               .replace(/[^\w\s-]/g, '')
               .replace(/\s+/g, '-');
             return (
-              <h3 id={id} className="text-2xl font-semibold text-slate-800 mb-3 mt-6">
+              <h3 id={id} className="text-xl lg:text-2xl font-semibold text-slate-800 mb-2.5 mt-5 leading-snug">
                 {children}
               </h3>
             );
