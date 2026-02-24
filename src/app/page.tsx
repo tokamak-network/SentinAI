@@ -1047,14 +1047,6 @@ export default function Dashboard() {
                 </p>
                 <p className="text-[10px] text-gray-400 mt-0.5">last cycle</p>
               </div>
-              {publicStatus && (
-                <div className="text-center">
-                  <p className="text-sm font-mono font-semibold text-gray-700 leading-none">
-                    #{publicStatus.metrics.blockHeight.toLocaleString()}
-                  </p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">block height</p>
-                </div>
-              )}
             </div>
           </div>
         </div>
