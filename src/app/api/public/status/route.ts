@@ -135,12 +135,12 @@ function buildIncidentSummary(event: AnomalyEvent): PublicIncident {
   const severity = event.deepAnalysis?.severity ?? 'warning';
 
   const summaryMap: Record<string, string> = {
-    critical: '체인 운영에 중요한 이상이 감지되었습니다',
-    high: '주요 메트릭에서 이상이 감지되었습니다',
-    medium: '메트릭 이상이 감지되어 모니터링 중입니다',
-    warning: '마이너 이상이 감지되어 모니터링 중입니다',
-    low: '경미한 이상이 감지되었습니다',
-    none: '이상이 감지되었으나 영향이 미미합니다',
+    critical: 'A critical anomaly has been detected affecting chain operations',
+    high: 'An anomaly has been detected in key metrics',
+    medium: 'A metric anomaly has been detected and is being monitored',
+    warning: 'A minor anomaly has been detected and is being monitored',
+    low: 'A low-severity anomaly has been detected',
+    none: 'An anomaly was detected with minimal impact',
   };
 
   return {
@@ -148,7 +148,7 @@ function buildIncidentSummary(event: AnomalyEvent): PublicIncident {
     detectedAt: new Date(event.timestamp).toISOString(),
     resolvedAt: event.resolvedAt ? new Date(event.resolvedAt).toISOString() : undefined,
     status: event.status === 'active' ? 'active' : 'resolved',
-    summary: summaryMap[severity] ?? '이상이 감지되었습니다',
+    summary: summaryMap[severity] ?? 'An anomaly has been detected',
     affectedArea,
   };
 }
@@ -233,7 +233,7 @@ export async function GET(): Promise<NextResponse<PublicStatusResponse | { error
     const message = error instanceof Error ? error.message : 'Internal error';
     console.error('[Public Status API] Error:', message);
     return NextResponse.json(
-      { error: '상태 정보를 일시적으로 사용할 수 없습니다' },
+      { error: 'Status information is temporarily unavailable' },
       { status: 500 },
     );
   }
