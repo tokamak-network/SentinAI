@@ -88,6 +88,7 @@ const KEYS = {
   seedScenario: 'seed:scenario',
   // Agent Cycle History (cross-worker persistence)
   agentCycleHistory: 'agent:cycle:history',
+  agentCycleCounter: 'agent:cycle:counter',
   agentLoopHeartbeat: 'agent:last_heartbeat',
   // MCP Approval Ticket
   mcpApprovalTicket: (id: string) => `mcp:approval:${id}`,
@@ -768,6 +769,7 @@ export class RedisStateStore implements IStateStore {
     if (len > AGENT_CYCLE_HISTORY_MAX) {
       await this.client.ltrim(key, len - AGENT_CYCLE_HISTORY_MAX, -1);
     }
+    await this.client.incr(this.key(KEYS.agentCycleCounter));
   }
 
   async getAgentCycleHistory(limit: number = AGENT_CYCLE_HISTORY_DEFAULT_LIMIT): Promise<any[]> {
@@ -777,8 +779,8 @@ export class RedisStateStore implements IStateStore {
   }
 
   async getAgentCycleCount(): Promise<number> {
-    const key = this.key(KEYS.agentCycleHistory);
-    return this.client.llen(key);
+    const val = await this.client.get(this.key(KEYS.agentCycleCounter));
+    return val ? parseInt(val, 10) : 0;
   }
 
   async getLastAgentCycleResult(): Promise<any | null> {
@@ -1303,6 +1305,7 @@ export class InMemoryStateStore implements IStateStore {
 
   // Agent Cycle History (Cross-Worker Persistence)
   private agentCycleHistory: any[] = [];
+  private agentCycleCounter: number = 0;
   private agentLoopHeartbeat: string | null = null;
 
   // MCP Approval Tickets
@@ -1456,6 +1459,7 @@ export class InMemoryStateStore implements IStateStore {
     if (this.agentCycleHistory.length > AGENT_CYCLE_HISTORY_MAX) {
       this.agentCycleHistory = this.agentCycleHistory.slice(-AGENT_CYCLE_HISTORY_MAX);
     }
+    this.agentCycleCounter++;
   }
 
   async getAgentCycleHistory(limit: number = AGENT_CYCLE_HISTORY_DEFAULT_LIMIT): Promise<any[]> {
@@ -1463,7 +1467,7 @@ export class InMemoryStateStore implements IStateStore {
   }
 
   async getAgentCycleCount(): Promise<number> {
-    return this.agentCycleHistory.length;
+    return this.agentCycleCounter;
   }
 
   async getLastAgentCycleResult(): Promise<any | null> {
