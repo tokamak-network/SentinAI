@@ -1,113 +1,72 @@
-# OP Stack Create L2 Rollup Example (Docker)
+# OP Stack Launcher (Minimal)
 
-This directory is a Docker-based OP Stack L2 deployment example for local operation.
-It is based on Optimism's official tutorial and example repository.
+This directory keeps only the minimum files needed to run an OP Stack local L2 for SentinAI.
 
-- Tutorial: https://docs.optimism.io/chain-operators/tutorials/create-l2-rollup/create-l2-rollup
-- Upstream example: https://github.com/ethereum-optimism/docs/tree/main/create-l2-rollup-example
+## Kept files
 
-## What this example deploys
+- `.env.example`
+- `README.md`
+- `scripts/start-op-stack.sh`
+- `scripts/fetch-opstack.sh`
 
-- `op-geth` (execution client)
-- `op-node` (rollup node)
-- `op-batcher`
-- `op-proposer`
-- `op-challenger`
-- `dispute-mon`
+All heavy upstream example files are fetched on demand from `ethereum-optimism/docs` and cached under:
 
-The L2 services run locally in Docker. L1 contract deployment and data publishing use Sepolia RPC endpoints configured in `.env`.
-
-## Prerequisites
-
-- Docker (with Docker Compose plugin)
-- `make`
-- `jq`
-- `git`
-- Sepolia RPC + Beacon RPC
-- Sepolia ETH in the deployment wallet
+- `.cache/opstack/<OPSTACK_UPSTREAM_REF>/create-l2-rollup-example`
 
 ## Quick start
 
 ```bash
 cd /absolute/path/to/SentinAI/examples/opstack
 cp .env.example .env
-# Edit .env: L1_RPC_URL, L1_BEACON_URL, PRIVATE_KEY, L2_CHAIN_ID
+# edit .env (L1_RPC_URL, L1_BEACON_URL, PRIVATE_KEY, L2_CHAIN_ID)
 
 ./scripts/start-op-stack.sh
-make status
-make test-l1
-make test-l2
 ```
 
-One-click behavior:
-- First run: downloads `op-deployer` (if missing), deploys/contracts/configures, then starts services.
-- Later runs: reuses existing deployment artifacts and only starts/stabilizes services.
-- To force full redeploy: `./scripts/start-op-stack.sh --force-setup`
-- Makefile alias is also available: `make start-op-stack` / `make start-op-stack-force`
+## What `start-op-stack.sh` does
 
-## Common commands
+1. Validates required `.env` values.
+2. Calls `scripts/fetch-opstack.sh`.
+3. Fetches pinned upstream example (`OPSTACK_UPSTREAM_REF`) into `.cache/opstack/<ref>/...`.
+4. Syncs local `.env` to runtime `.env` via symbolic link.
+5. Applies compatibility patches and pins toolchain refs:
+   - `OPSTACK_OP_DEPLOYER_REF` (op-deployer release tag)
+   - `OPSTACK_OPTIMISM_REF` (optimism ref for op-program prestate)
+6. Runs setup if needed (`setup-rollup.sh`) and starts Docker services.
+7. Runs L2/L1 connectivity smoke checks.
+
+## Options
 
 ```bash
-# Show status
-make status
+# Re-fetch upstream cache and run
+./scripts/start-op-stack.sh --force-fetch
 
-# Follow all logs
-make logs
+# Force full setup/redeploy
+./scripts/start-op-stack.sh --force-setup
 
-# Follow logs from one service
-make logs-op-node
-
-# Stop
-make down
-
-# Remove containers and volumes
-make clean
+# Skip L1 RPC smoke check
+./scripts/start-op-stack.sh --skip-l1-test
 ```
 
-## Service ports
+## SentinAI `.env.local` mapping
 
-| Service | Port | Purpose |
-| --- | --- | --- |
-| `op-geth` | `8545` | L2 HTTP RPC |
-| `op-geth` | `8546` | L2 WS RPC |
-| `op-geth` | `8551` | Auth RPC for `op-node` |
-| `op-node` | `8547` | Rollup RPC |
-| `op-node` | `9222` | P2P |
-| `dispute-mon` | `7300` | Metrics |
-
-## Connect SentinAI
-
-1. Open `<repo-root>/.env.local`.
-2. Set values using `examples/opstack/.env.example`.
-3. Ensure:
+Use printed runtime path from launcher output, then set:
 
 ```bash
 ORCHESTRATOR_TYPE=docker
-DOCKER_COMPOSE_FILE=/absolute/path/to/SentinAI/examples/opstack/docker-compose.yml
+DOCKER_COMPOSE_FILE=<printed-runtime-dir>/docker-compose.yml
 DOCKER_COMPOSE_PROJECT=create-l2-rollup-example
-L2_RPC_URL=http://localhost:8545
 CHAIN_TYPE=optimism
+L2_RPC_URL=http://localhost:8545
 ```
 
-4. Start SentinAI:
+## Update policy
 
-```bash
-cd /absolute/path/to/SentinAI
-npm run dev
-```
-
-5. Verify:
-
-```bash
-curl -s http://localhost:3002/api/metrics | jq '{status: .status, blockHeight: .metrics.blockHeight, errors: (.errors // [])}'
-```
-
-## Notes
-
-- This example keeps `op-node` P2P disabled by default (`--p2p.disable`) for single-node local runs.
-- For production/public networking, remove `--p2p.disable` and configure P2P advertise/listen settings.
-- Never commit real private keys to version control.
-
-## Detailed Guide
-
-- `SENTINAI_INTEGRATION_GUIDE.md` includes end-to-end steps from L2 deployment to SentinAI integration and verification.
+- Do not use `latest`.
+- Change only pinned refs in `.env` when updating:
+  - `OPSTACK_UPSTREAM_REF`
+  - `OPSTACK_OP_DEPLOYER_REF`
+  - `OPSTACK_OPTIMISM_REF`
+- After changing pinned refs, run with full refresh:
+  - `./scripts/start-op-stack.sh --force-fetch --force-setup`
+- Review fetch logs and startup verification output after ref changes.
