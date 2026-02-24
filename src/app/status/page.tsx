@@ -13,6 +13,7 @@ import { CheckCircle2, AlertTriangle, XCircle, HelpCircle, Activity, Clock, Zap,
 import type { PublicStatusResponse, ChainOperationalStatus } from '@/app/api/public/status/route';
 
 const REFRESH_INTERVAL_MS = 30_000;
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || '';
 
 // ============================================================================
 // Status config
@@ -29,36 +30,36 @@ interface StatusConfig {
 
 const STATUS_CONFIG: Record<ChainOperationalStatus, StatusConfig> = {
   operational: {
-    label: '정상 운영',
+    label: 'Operational',
     color: 'text-green-400',
     bgColor: 'bg-green-500/10',
     borderColor: 'border-green-500/30',
     Icon: CheckCircle2,
-    description: '모든 시스템이 정상적으로 작동 중입니다.',
+    description: 'All systems are operating normally.',
   },
   degraded: {
-    label: '성능 저하',
+    label: 'Degraded',
     color: 'text-yellow-400',
     bgColor: 'bg-yellow-500/10',
     borderColor: 'border-yellow-500/30',
     Icon: AlertTriangle,
-    description: '일부 메트릭에서 이상이 감지되었습니다. 모니터링 중입니다.',
+    description: 'Anomalies detected in some metrics. Monitoring in progress.',
   },
   major_outage: {
-    label: '주요 장애',
+    label: 'Major Outage',
     color: 'text-red-400',
     bgColor: 'bg-red-500/10',
     borderColor: 'border-red-500/30',
     Icon: XCircle,
-    description: '심각한 이상이 감지되었습니다. 즉시 대응 중입니다.',
+    description: 'A critical anomaly has been detected. Responding immediately.',
   },
   unknown: {
-    label: '상태 확인 중',
+    label: 'Checking Status',
     color: 'text-gray-400',
     bgColor: 'bg-gray-500/10',
     borderColor: 'border-gray-500/30',
     Icon: HelpCircle,
-    description: '상태 정보를 수집 중입니다.',
+    description: 'Collecting status information.',
   },
 };
 
@@ -104,7 +105,7 @@ function IncidentRow({
   nowMs: number;
 }) {
   const isActive = incident.status === 'active';
-  const detectedAt = new Date(incident.detectedAt).toLocaleString('ko-KR', {
+  const detectedAt = new Date(incident.detectedAt).toLocaleString('en-US', {
     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
   });
 
@@ -120,14 +121,14 @@ function IncidentRow({
         <p className="text-xs text-gray-500 mt-0.5">
           {incident.affectedArea} · {detectedAt}
           {incident.resolvedAt
-            ? ` · ${duration}분 후 해결`
-            : ` · ${duration}분 경과`}
+            ? ` · resolved after ${duration}m`
+            : ` · ongoing for ${duration}m`}
         </p>
       </div>
       <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${
         isActive ? 'bg-red-500/20 text-red-400' : 'bg-gray-700 text-gray-400'
       }`}>
-        {isActive ? '진행 중' : '해결됨'}
+        {isActive ? 'Active' : 'Resolved'}
       </span>
     </div>
   );
@@ -146,18 +147,18 @@ export default function StatusPage() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch('/api/public/status', { cache: 'no-store' });
+      const res = await fetch(`${BASE_PATH}/api/public/status`, { cache: 'no-store' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       if (!json.chain || !json.status || !json.metrics) {
-        throw new Error(typeof json.error === 'string' ? json.error : '응답 형식이 올바르지 않습니다');
+        throw new Error(typeof json.error === 'string' ? json.error : 'Invalid response format');
       }
       setData(json as PublicStatusResponse);
       setError(null);
       setLastRefreshed(new Date());
       setCountdown(REFRESH_INTERVAL_MS / 1000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '상태 정보를 불러올 수 없습니다');
+      setError(err instanceof Error ? err.message : 'Unable to load status information');
     } finally {
       setLoading(false);
     }
@@ -188,14 +189,14 @@ export default function StatusPage() {
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-blue-400" />
             <span className="font-semibold text-gray-100">SentinAI</span>
-            <span className="text-gray-500 text-sm">/ 체인 상태</span>
+            <span className="text-gray-500 text-sm">/ Chain Status</span>
           </div>
           <div className="flex items-center gap-2 text-xs text-gray-500">
             <RefreshCw className="w-3 h-3" />
-            <span>{countdown}초 후 갱신</span>
+            <span>Refreshes in {countdown}s</span>
             {lastRefreshed && (
               <span className="text-gray-600">
-                · 마지막 갱신 {lastRefreshed.toLocaleTimeString('ko-KR')}
+                · Last updated {lastRefreshed.toLocaleTimeString('en-US')}
               </span>
             )}
           </div>
@@ -207,14 +208,14 @@ export default function StatusPage() {
         {loading && (
           <div className="text-center py-16 text-gray-500">
             <Activity className="w-8 h-8 mx-auto mb-3 animate-pulse" />
-            <p>상태 정보를 불러오는 중...</p>
+            <p>Loading status information...</p>
           </div>
         )}
 
         {/* Error state */}
         {!loading && error && (
           <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-4 text-red-400">
-            <p className="font-medium">상태 정보를 불러올 수 없습니다</p>
+            <p className="font-medium">Unable to load status information</p>
             <p className="text-sm mt-1 text-red-400/70">{error}</p>
           </div>
         )}
@@ -243,7 +244,7 @@ export default function StatusPage() {
                 {data.incidents.active > 0 && (
                   <div className="text-center flex-shrink-0">
                     <div className="text-2xl font-bold text-red-400">{data.incidents.active}</div>
-                    <div className="text-xs text-gray-400">활성 이상</div>
+                    <div className="text-xs text-gray-400">Active Incidents</div>
                   </div>
                 )}
               </div>
@@ -254,7 +255,7 @@ export default function StatusPage() {
               <div className="rounded-lg border border-gray-700/50 bg-gray-900/50 p-4">
                 <div className="flex items-center gap-1.5 text-gray-400 mb-2">
                   <Activity className="w-3.5 h-3.5" />
-                  <span className="text-xs uppercase tracking-wider">L2 블록 높이</span>
+                  <span className="text-xs uppercase tracking-wider">L2 Block Height</span>
                 </div>
                 <p className="text-xl font-mono font-semibold text-gray-100">
                   {data.metrics.blockHeight > 0
@@ -262,69 +263,69 @@ export default function StatusPage() {
                     : '—'}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {new Date(data.metrics.lastUpdatedAt).toLocaleTimeString('ko-KR')} 기준
+                  as of {new Date(data.metrics.lastUpdatedAt).toLocaleTimeString('en-US')}
                 </p>
               </div>
 
               <div className="rounded-lg border border-gray-700/50 bg-gray-900/50 p-4">
                 <div className="flex items-center gap-1.5 text-gray-400 mb-2">
                   <Clock className="w-3.5 h-3.5" />
-                  <span className="text-xs uppercase tracking-wider">블록 간격</span>
+                  <span className="text-xs uppercase tracking-wider">Block Interval</span>
                 </div>
                 <p className="text-xl font-mono font-semibold text-gray-100">
                   {data.metrics.blockIntervalSec.toFixed(1)}s
                 </p>
-                <p className="text-xs text-gray-500 mt-1">현재 블록 생산 속도</p>
+                <p className="text-xs text-gray-500 mt-1">Current block production rate</p>
               </div>
 
               <div className="rounded-lg border border-gray-700/50 bg-gray-900/50 p-4">
                 <div className="flex items-center gap-1.5 text-gray-400 mb-2">
                   <Zap className="w-3.5 h-3.5" />
-                  <span className="text-xs uppercase tracking-wider">에이전트</span>
+                  <span className="text-xs uppercase tracking-wider">Agent</span>
                 </div>
                 <p className={`text-xl font-semibold ${data.agent.running ? 'text-green-400' : 'text-gray-400'}`}>
-                  {data.agent.running ? '활성' : '대기'}
+                  {data.agent.running ? 'Active' : 'Idle'}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">
-                  총 {data.agent.totalCycles.toLocaleString()}회 사이클
+                  {data.agent.totalCycles.toLocaleString()} total cycles
                 </p>
               </div>
             </div>
 
             {/* Uptime */}
             <div className="rounded-lg border border-gray-700/50 bg-gray-900/50 p-5">
-              <h2 className="text-sm font-medium text-gray-300 mb-4">가동률</h2>
+              <h2 className="text-sm font-medium text-gray-300 mb-4">Uptime</h2>
               <div className="space-y-3">
                 <div>
                   <div className="flex justify-between text-xs text-gray-400 mb-1.5">
-                    <span>최근 24시간</span>
-                    <span className="text-gray-500">{data.incidents.last24h}건 감지</span>
+                    <span>Last 24 hours</span>
+                    <span className="text-gray-500">{data.incidents.last24h} incident{data.incidents.last24h !== 1 ? 's' : ''} detected</span>
                   </div>
                   <UptimeBar percentage={data.uptime.h24} />
                 </div>
                 <div>
                   <div className="flex justify-between text-xs text-gray-400 mb-1.5">
-                    <span>최근 7일</span>
+                    <span>Last 7 days</span>
                   </div>
                   <UptimeBar percentage={data.uptime.d7} />
                 </div>
               </div>
               <p className="text-xs text-gray-600 mt-3">
-                * 가동률은 이상 탐지 이벤트 발생 시간을 기준으로 계산됩니다.
+                * Uptime is calculated based on anomaly detection event durations.
               </p>
             </div>
 
             {/* Recent Incidents */}
             <div className="rounded-lg border border-gray-700/50 bg-gray-900/50 p-5">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-sm font-medium text-gray-300">최근 이상 이벤트</h2>
-                <span className="text-xs text-gray-500">최대 5건</span>
+                <h2 className="text-sm font-medium text-gray-300">Recent Incidents</h2>
+                <span className="text-xs text-gray-500">up to 5 shown</span>
               </div>
 
               {data.incidents.recent.length === 0 ? (
                 <div className="text-center py-6 text-gray-500">
                   <CheckCircle2 className="w-6 h-6 mx-auto mb-2 text-green-500/50" />
-                  <p className="text-sm">최근 이상 이벤트가 없습니다.</p>
+                  <p className="text-sm">No recent incidents.</p>
                 </div>
               ) : (
                 <div>
@@ -342,10 +343,10 @@ export default function StatusPage() {
             {/* Footer */}
             <div className="text-center text-xs text-gray-600 pb-4">
               <p>
-                이 페이지는 SentinAI 자율 에이전트가 실시간으로 모니터링하는 데이터를 기반으로 합니다.
+                This page is powered by real-time data monitored by the SentinAI autonomous agent.
               </p>
               <p className="mt-1">
-                생성 시각: {new Date(data.generatedAt).toLocaleString('ko-KR')}
+                Generated at: {new Date(data.generatedAt).toLocaleString('en-US')}
               </p>
             </div>
           </>
