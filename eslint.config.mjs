@@ -34,6 +34,10 @@ const eslintConfig = defineConfig([
     'src/app/v2/**',
     'external/**',
     'docs/**',
+    // Separate Next.js app with its own ESLint config
+    'website/**',
+    // Fetched upstream cache (op-stack example, not project code)
+    'examples/**',
   ]),
 ]);
 
