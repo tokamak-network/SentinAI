@@ -12,6 +12,12 @@
 - Rule: Heartbeat guardrails should include an in-process watchdog that performs `detect -> alert -> recovery attempt` without external schedulers.
 - Slack 알림과 자동 복구를 결합할 때 쿨다운이 없으면 장애 구간에서 알림/복구 폭주가 발생한다.
 - Rule: Watchdog alerting and auto-recovery paths must enforce independent cooldown windows to prevent storm loops.
+- 저장소 구조 문서는 루트 디렉토리 나열만 있으면 실제 탐색 시 핵심 API/도메인 경로를 놓치기 쉽다.
+- Rule: Codebase structure docs should include a focused subtree for `src/app/api`, `src/lib`, and runtime-generated directories separately.
+- 구조 문서는 트리만 있을 때 “어디를 수정해야 하는지” 판단이 어렵다.
+- Rule: For codebase structure docs, always add `path -> role -> when to modify` guidance for major directories and root files.
+- 브라우저 기반 성능/E2E 스케줄 CI는 외부 환경 의존도 때문에 운영 파이프라인 신뢰도를 떨어뜨릴 수 있다.
+- Rule: Keep Lighthouse/Playwright checks out of scheduled required CI unless the environment is fully stabilized and deterministic.
 
 ## 2026-02-22
 

@@ -2,12 +2,23 @@
 
 ## Current Status
 
+### In Progress (2026-02-24 Remove Lighthouse/Playwright CI)
+- [x] Lighthouse 전용 scheduled CI 제거 (`.github/workflows/prod-gate-tier2.yml`)
+- [x] Playwright/LHCI 포함 scheduled CI 제거 (`.github/workflows/prod-gate-tier3.yml`)
+- [x] 워크플로우 참조 확인 (`rg -n "prod-gate-tier2|prod-gate-tier3|playwright|lighthouse"`)
+
 ### In Progress (2026-02-24 Agent Loop Heartbeat Guardrail)
 - [x] Redis state store에 agent loop heartbeat 저장/조회 메서드 추가 (`src/types/redis.ts`, `src/lib/redis-store.ts`)
 - [x] Scheduler가 agent cycle마다 heartbeat를 갱신하도록 연결 (`src/lib/scheduler.ts`)
 - [x] `/api/health`에 `agentLoop.heartbeatLagSec` 및 `stale` 상태를 노출 (`src/app/api/health/route.ts`)
 - [x] stale 감시 스크립트/cron 예시 추가 (`scripts/check-agent-heartbeat.mjs`, `scripts/agent-heartbeat.cron.example`, `package.json`)
 - [x] 검증 실행 (`npm run lint`, `npx tsc --noEmit`, `npm run test:run -- src/lib/__tests__/redis-store.test.ts src/lib/__tests__/scheduler.test.ts src/app/api/health/route.test.ts`)
+
+### In Progress (2026-02-24 ARCHITECTURE.md Codebase Alignment)
+- [x] 기존 아키텍처 문서의 구현 불일치 영역 식별 (기본 체인, scheduler 간격, state store 구조, MCP/goal/runtime 정책)
+- [x] 코드 기준으로 문서 전면 재구성 (`ARCHITECTURE.md`)
+- [x] 최신 런타임 흐름 반영 (agent loop + heartbeat watchdog + recovery, MCP policy, goal orchestrator)
+- [x] quick file reference 섹션 추가로 코드 추적 경로 고정
 
 ### In Progress (2026-02-24 Agent Heartbeat Alert Hookup)
 - [x] heartbeat 검사 결과(exit code 2) 기반 webhook 알림 래퍼 스크립트 추가 (`scripts/monitor-agent-heartbeat-alert.mjs`)
@@ -20,6 +31,13 @@
 - [x] 운영 환경변수 샘플 업데이트 (`.env.local.sample`)
 - [x] scheduler 상태 테스트 보강 (`src/lib/__tests__/scheduler.test.ts`)
 - [x] 검증 실행 (`npm run lint -- src/lib/scheduler.ts src/app/api/health/route.ts src/app/api/agent-loop/route.ts src/lib/__tests__/scheduler.test.ts`, `npx tsc --noEmit`, `npm run test:run -- src/lib/__tests__/scheduler.test.ts src/app/api/health/route.test.ts`)
+
+### In Progress (2026-02-24 Codebase Directory Structure Documentation)
+- [x] 저장소 디렉토리 구조 수집 (`find`, `ls`)
+- [x] 전체 트리 문서 신규 작성 (`docs/guide/codebase-directory-structure.md`)
+- [x] 주요 디렉토리/주요 루트 파일 설명 섹션 추가 (`docs/guide/codebase-directory-structure.md`)
+- [x] 문서 인덱스에 링크 추가 (`docs/README.md`)
+- [x] 검증 실행 (`npm run lint`, `npx tsc --noEmit`)
 
 ### In Progress (2026-02-22 Dashboard Autonomy Cockpit MVP)
 - [x] 대시보드에 자율 에이전트 인지용 `Autonomy Cockpit` 패널 추가 (`src/app/page.tsx`)
@@ -537,6 +555,19 @@
 - 외부 cron 없이 서버 기동만으로 heartbeat 감시가 실행되도록 scheduler 내부에 watchdog task를 추가했다.
 - watchdog이 `heartbeat stale` 또는 Redis heartbeat read/write 실패를 감지하면 Slack webhook으로 알리고, 동일 프로세스에서 recovery cycle을 자동 시도하도록 연결했다.
 - `/api/health`와 `/api/agent-loop`에서 watchdog 상태(실패 횟수, 최근 오류, 최근 복구 상태)를 조회할 수 있어 운영자가 즉시 동작 여부를 확인할 수 있게 했다.
+
+## Review (2026-02-24 Codebase Directory Structure Documentation)
+
+- 코드베이스 전체를 빠르게 파악할 수 있도록 루트~핵심 서브디렉토리 기준의 트리 문서를 신규 작성했다.
+- 런타임/생성 디렉토리(`node_modules`, `.next`, `coverage`)를 별도 구분해 소스 탐색 시 혼선을 줄였다.
+- `docs/README.md`에 문서 링크를 연결해 온보딩 시 바로 접근할 수 있게 했다.
+- 요청에 따라 주요 디렉토리와 주요 루트 파일의 역할/수정 시점을 표로 추가해, 구조 문서를 실사용 가이드로 확장했다.
+
+## Review (2026-02-24 ARCHITECTURE.md Codebase Alignment)
+
+- 과거 제안 중심/가정 중심 설명을 제거하고 실제 코드 경로(`src/lib/scheduler.ts`, `src/lib/agent-loop.ts`, `src/lib/redis-store.ts`) 기준으로 아키텍처 문서를 재작성했다.
+- 기본 체인(Thanos), 스케줄 주기(60s agent + 30s watchdog), dual-state 모델(Redis + process-local store) 등 현재 동작을 반영했다.
+- 운영자가 즉시 코드로 이동할 수 있도록 Quick File References 섹션을 추가했다.
 
 ---
 

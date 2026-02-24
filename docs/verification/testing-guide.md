@@ -236,10 +236,12 @@ TIER3_FIRST_LOAD_JS_MAX_BYTES=230400 node scripts/check-bundle-size.mjs
 4. Check whether `coverage/coverage-summary.json` is created (Coverage gate prerequisite)
 5. Check if the CWV measurement URL is opened (`http://localhost:3002/v2`)
 
-#### CI auto-run
+#### CI status
 
-- 워크플로: `.github/workflows/prod-gate-tier3.yml`
-- Trigger: Every day at UTC 00:00 (KST 09:00), manual execution (`workflow_dispatch`)
+- Browser-based Tier 3 CI (`Playwright` + `Lighthouse`) workflow was removed on 2026-02-24.
+- Use local/manual execution instead:
+  - `npm run prod:gate:tier3`
+  - or run each gate command individually (Coverage/Bundle/E2E/CWV)
 
 ---
 

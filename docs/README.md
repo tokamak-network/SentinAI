@@ -28,6 +28,7 @@
 
 ## 3) Integrate & Extend
 - [🏗️ Architecture Guide](guide/architecture.md)
+- [Codebase directory structure](../ARCHITECTURE.md)
 - [📡 API Reference](guide/api-reference.md)
 - [SentinAI MCP user guide](guide/sentinai-mcp-user-guide.md)
 - [Claude Code MCP setup](guide/claude-code-mcp-setup.md)
