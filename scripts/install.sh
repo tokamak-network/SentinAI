@@ -18,7 +18,7 @@
 #     L2_RPC_URL=https://rpc.example.com
 #     ANTHROPIC_API_KEY=sk-ant-...       # or OPENAI_API_KEY / GEMINI_API_KEY / QWEN_API_KEY
 #   Optional:
-#     CHAIN_TYPE=thanos                  # thanos | optimism | my-l2 | op-stack | zkstack
+#     CHAIN_TYPE=thanos                  # thanos | optimism | my-l2 | op-stack | zkstack | arbitrum | arbitrum-orbit | nitro
 #     AI_GATEWAY_URL=https://...         # AI Gateway (default: official gateway)
 #     AWS_CLUSTER_NAME=my-cluster        # EKS cluster (simulation mode if not set)
 #     AWS_PROFILE=my-cluster             # AWS CLI profile (default: same as AWS_CLUSTER_NAME)
@@ -26,13 +26,15 @@
 #     AWS_SECRET_ACCESS_KEY=xxxx         # (only needed if ~/.aws/credentials doesn't exist yet)
 #     AWS_REGION=ap-northeast-2          # AWS region (auto-detect from profile or EC2 IMDS)
 #     K8S_NAMESPACE=default              # K8s namespace
-#     K8S_APP_PREFIX=op                  # K8s pod label prefix
+#     K8S_APP_PREFIX=op                  # K8s pod label prefix (Arbitrum: use 'arb' or 'nitro')
 #     K8S_STATEFULSET_PREFIX=            # StatefulSet name prefix (e.g., sepolia-thanos-stack)
 #     L1_RPC_URLS=https://...            # Comma-separated spare L1 RPC endpoints
 #     L1_PROXYD_ENABLED=true             # L1 Proxyd ConfigMap integration
-#     BATCHER_EOA_ADDRESS=0x...          # EOA balance monitoring
-#     PROPOSER_EOA_ADDRESS=0x...
-#     TREASURY_PRIVATE_KEY=0x...         # Auto-refill
+#     BATCHER_EOA_ADDRESS=0x...          # EOA balance monitoring (OP Stack)
+#     PROPOSER_EOA_ADDRESS=0x...         # (OP Stack)
+#     BATCH_POSTER_EOA_ADDRESS=0x...     # EOA balance monitoring (Arbitrum)
+#     VALIDATOR_EOA_ADDRESS=0x...        # (Arbitrum)
+#     TREASURY_PRIVATE_KEY=0x...         # Auto-refill (all chains)
 #     EOA_BALANCE_CRITICAL_ETH=0.1
 #     ORCHESTRATOR_TYPE=docker            # 'k8s' (default) or 'docker' for Docker Compose L2
 #     DOCKER_COMPOSE_FILE=docker-compose.yml  # L2 Docker Compose file (docker mode only)
@@ -292,15 +294,23 @@ setup_env() {
 
     CHAIN_TYPE="${CHAIN_TYPE:-thanos}"
     case "${CHAIN_TYPE}" in
-      thanos|optimism|my-l2|op-stack|zkstack) ;;
+      thanos|optimism|my-l2|op-stack|zkstack|arbitrum) ;;
       zksync|zk-stack) CHAIN_TYPE="zkstack" ;;
-      *) err "CHAIN_TYPE must be one of: thanos, optimism, my-l2, op-stack, zkstack" ;;
+      arbitrum-orbit|nitro) CHAIN_TYPE="arbitrum" ;;
+      *) err "CHAIN_TYPE must be one of: thanos, optimism, my-l2, op-stack, zkstack, arbitrum" ;;
     esac
 
     AI_GATEWAY_URL="${AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
     ORCHESTRATOR_TYPE="${ORCHESTRATOR_TYPE:-k8s}"
     K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
-    K8S_APP_PREFIX="${K8S_APP_PREFIX:-op}"
+    # K8S_APP_PREFIX default varies by chain type
+    if [ -z "${K8S_APP_PREFIX:-}" ]; then
+      case "${CHAIN_TYPE}" in
+        arbitrum) K8S_APP_PREFIX="arb" ;;
+        zkstack)  K8S_APP_PREFIX="zk" ;;
+        *)        K8S_APP_PREFIX="op" ;;
+      esac
+    fi
     K8S_STATEFULSET_PREFIX="${K8S_STATEFULSET_PREFIX:-}"
     DOCKER_COMPOSE_FILE="${DOCKER_COMPOSE_FILE:-docker-compose.yml}"
     DOCKER_COMPOSE_PROJECT="${DOCKER_COMPOSE_PROJECT:-}"
@@ -396,10 +406,12 @@ setup_env() {
     echo "    1) Thanos (default)"
     echo "    2) Optimism Tutorial (OP Stack)"
     echo "    3) ZK Stack"
+    echo "    4) Arbitrum Orbit (Nitro)"
     read -rp "  Choose [1]: " chain_choice
     case "${chain_choice}" in
       2) CHAIN_TYPE="optimism" ;;
       3) CHAIN_TYPE="zkstack" ;;
+      4) CHAIN_TYPE="arbitrum" ;;
       *) CHAIN_TYPE="thanos" ;;
     esac
 
@@ -431,6 +443,19 @@ setup_env() {
       ZK_SETTLEMENT_LAYER="${ZK_SETTLEMENT_LAYER:-l1}"
       read -rp "  ZK_FINALITY_MODE [confirmed]: " ZK_FINALITY_MODE
       ZK_FINALITY_MODE="${ZK_FINALITY_MODE:-confirmed}"
+    elif [ "${CHAIN_TYPE}" = "arbitrum" ]; then
+      echo ""
+      echo -e "  ${BOLD}Arbitrum Orbit Chain Metadata${NC}:"
+      read -rp "  L2_CHAIN_ID (your Orbit chain ID, e.g., 412346): " L2_CHAIN_ID
+      L2_CHAIN_ID="${L2_CHAIN_ID:-412346}"
+      read -rp "  L2_CHAIN_NAME [Arbitrum Orbit L2]: " L2_CHAIN_NAME
+      L2_CHAIN_NAME="${L2_CHAIN_NAME:-Arbitrum Orbit L2}"
+      read -rp "  L2_EXPLORER_URL [http://localhost:4000]: " L2_EXPLORER_URL
+      L2_EXPLORER_URL="${L2_EXPLORER_URL:-http://localhost:4000}"
+      read -rp "  L2_IS_TESTNET [true]: " L2_IS_TESTNET
+      L2_IS_TESTNET="${L2_IS_TESTNET:-true}"
+      read -rp "  L1_CHAIN (sepolia/mainnet) [sepolia]: " L1_CHAIN
+      L1_CHAIN="${L1_CHAIN:-sepolia}"
     fi
 
     # Container Orchestrator
@@ -445,6 +470,14 @@ setup_env() {
       3) ORCHESTRATOR_TYPE="docker" ;;
       *) ORCHESTRATOR_TYPE="k8s"; _k8s_deploy="eks" ;;
     esac
+
+    # Chain-aware K8s app prefix default
+    local _k8s_prefix_default="op"
+    if [ "${CHAIN_TYPE}" = "arbitrum" ]; then
+      _k8s_prefix_default="arb"
+    elif [ "${CHAIN_TYPE}" = "zkstack" ]; then
+      _k8s_prefix_default="zk"
+    fi
 
     if [ "${ORCHESTRATOR_TYPE}" = "docker" ]; then
       # Docker Compose L2 node settings
@@ -462,8 +495,8 @@ setup_env() {
       info "Using existing kubeconfig (~/.kube/config)."
       read -rp "  K8S_NAMESPACE [default]: " K8S_NAMESPACE
       K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
-      read -rp "  K8S_APP_PREFIX [op]: " K8S_APP_PREFIX
-      K8S_APP_PREFIX="${K8S_APP_PREFIX:-op}"
+      read -rp "  K8S_APP_PREFIX [${_k8s_prefix_default}]: " K8S_APP_PREFIX
+      K8S_APP_PREFIX="${K8S_APP_PREFIX:-${_k8s_prefix_default}}"
       read -rp "  K8S_STATEFULSET_PREFIX (press Enter if none): " K8S_STATEFULSET_PREFIX
       K8S_STATEFULSET_PREFIX="${K8S_STATEFULSET_PREFIX:-}"
     else
@@ -477,8 +510,8 @@ setup_env() {
       # K8s namespace and pod prefix (only if cluster is set)
       read -rp "  K8S_NAMESPACE [${AWS_CLUSTER_NAME}]: " K8S_NAMESPACE
       K8S_NAMESPACE="${K8S_NAMESPACE:-${AWS_CLUSTER_NAME}}"
-      read -rp "  K8S_APP_PREFIX [op]: " K8S_APP_PREFIX
-      K8S_APP_PREFIX="${K8S_APP_PREFIX:-op}"
+      read -rp "  K8S_APP_PREFIX [${_k8s_prefix_default}]: " K8S_APP_PREFIX
+      K8S_APP_PREFIX="${K8S_APP_PREFIX:-${_k8s_prefix_default}}"
       read -rp "  K8S_STATEFULSET_PREFIX (e.g., sepolia-thanos-stack, press Enter if none): " K8S_STATEFULSET_PREFIX
       K8S_STATEFULSET_PREFIX="${K8S_STATEFULSET_PREFIX:-}"
 
@@ -547,15 +580,28 @@ setup_env() {
 
       # EOA Balance Monitoring (optional)
       echo ""
-      echo -e "  ${BOLD}EOA Balance Monitoring${NC} (batcher/proposer L1 ETH balance):"
+      if [ "${CHAIN_TYPE}" = "arbitrum" ]; then
+        echo -e "  ${BOLD}EOA Balance Monitoring${NC} (batch-poster/validator L1 ETH balance):"
+      else
+        echo -e "  ${BOLD}EOA Balance Monitoring${NC} (batcher/proposer L1 ETH balance):"
+      fi
       read -rp "  Enable EOA monitoring? (y/N): " eoa_choice
       if [[ "${eoa_choice}" =~ ^[Yy]$ ]]; then
-        read -rp "  BATCHER_EOA_ADDRESS (0x..., press Enter to skip): " BATCHER_EOA_ADDRESS
-        read -rp "  PROPOSER_EOA_ADDRESS (0x..., press Enter to skip): " PROPOSER_EOA_ADDRESS
-        read -rsp "  BATCHER_PRIVATE_KEY (optional): " BATCHER_PRIVATE_KEY
-        echo ""
-        read -rsp "  PROPOSER_PRIVATE_KEY (optional): " PROPOSER_PRIVATE_KEY
-        echo ""
+        if [ "${CHAIN_TYPE}" = "arbitrum" ]; then
+          read -rp "  BATCH_POSTER_EOA_ADDRESS (0x..., press Enter to skip): " BATCH_POSTER_EOA_ADDRESS
+          read -rp "  VALIDATOR_EOA_ADDRESS (0x..., press Enter to skip): " VALIDATOR_EOA_ADDRESS
+          read -rsp "  BATCH_POSTER_PRIVATE_KEY (optional, for address derivation): " BATCH_POSTER_PRIVATE_KEY
+          echo ""
+          read -rsp "  VALIDATOR_PRIVATE_KEY (optional, for address derivation): " VALIDATOR_PRIVATE_KEY
+          echo ""
+        else
+          read -rp "  BATCHER_EOA_ADDRESS (0x..., press Enter to skip): " BATCHER_EOA_ADDRESS
+          read -rp "  PROPOSER_EOA_ADDRESS (0x..., press Enter to skip): " PROPOSER_EOA_ADDRESS
+          read -rsp "  BATCHER_PRIVATE_KEY (optional): " BATCHER_PRIVATE_KEY
+          echo ""
+          read -rsp "  PROPOSER_PRIVATE_KEY (optional): " PROPOSER_PRIVATE_KEY
+          echo ""
+        fi
         read -rsp "  TREASURY_PRIVATE_KEY (for auto-refill, press Enter for monitor-only): " TREASURY_PRIVATE_KEY
         echo ""
         read -rp "  EOA_BALANCE_CRITICAL_ETH [0.1]: " EOA_BALANCE_CRITICAL_ETH
@@ -674,6 +720,8 @@ setup_env() {
         network_name_default="Optimism Tutorial L2"
       elif [ "${CHAIN_TYPE:-thanos}" = "zkstack" ]; then
         network_name_default="ZK Stack Local"
+      elif [ "${CHAIN_TYPE:-thanos}" = "arbitrum" ]; then
+        network_name_default="Arbitrum Orbit L2"
       fi
       read -rp "  Network Name (press Enter for '${network_name_default}'): " NEXT_PUBLIC_NETWORK_NAME
       NEXT_PUBLIC_NETWORK_NAME="${NEXT_PUBLIC_NETWORK_NAME:-${network_name_default}}"
@@ -755,6 +803,10 @@ setup_env() {
   : "${ZK_PROOF_RPC_URL:=}"
   : "${ZK_SETTLEMENT_LAYER:=}"
   : "${ZK_FINALITY_MODE:=}"
+  : "${BATCH_POSTER_EOA_ADDRESS:=}"
+  : "${VALIDATOR_EOA_ADDRESS:=}"
+  : "${BATCH_POSTER_PRIVATE_KEY:=}"
+  : "${VALIDATOR_PRIVATE_KEY:=}"
   : "${ALERT_WEBHOOK_URL:=}"
   : "${DOMAIN_NAME:=${DOMAIN:-}}"
   : "${NEXT_PUBLIC_BASE_PATH:=}"
@@ -771,6 +823,14 @@ setup_env() {
     : "${NEXT_PUBLIC_NETWORK_NAME:=Optimism Tutorial L2}"
   elif [ "${CHAIN_TYPE}" = "zkstack" ]; then
     : "${NEXT_PUBLIC_NETWORK_NAME:=ZK Stack Local}"
+  elif [ "${CHAIN_TYPE}" = "arbitrum" ]; then
+    : "${L2_CHAIN_ID:=412346}"
+    : "${L2_CHAIN_NAME:=Arbitrum Orbit L2}"
+    : "${L2_IS_TESTNET:=true}"
+    : "${L1_CHAIN:=sepolia}"
+    : "${NEXT_PUBLIC_NETWORK_NAME:=Arbitrum Orbit L2}"
+    # Arbitrum Orbit K8s app prefix default
+    : "${K8S_APP_PREFIX:=arb}"
   else
     : "${NEXT_PUBLIC_NETWORK_NAME:=Thanos Sepolia}"
   fi
@@ -813,6 +873,9 @@ ENVEOF
     [ -n "${ZK_PROOF_RPC_URL}" ] && printf 'ZK_PROOF_RPC_URL=%s\n' "${ZK_PROOF_RPC_URL}"
     [ -n "${ZK_SETTLEMENT_LAYER}" ] && printf 'ZK_SETTLEMENT_LAYER=%s\n' "${ZK_SETTLEMENT_LAYER}"
     [ -n "${ZK_FINALITY_MODE}" ] && printf 'ZK_FINALITY_MODE=%s\n' "${ZK_FINALITY_MODE}"
+    # Arbitrum Orbit — K8s L1 RPC env var names (used by l1-rpc-failover to update pod env)
+    # These default to ARB_NODE_L1_ETH_RPC / ARB_BATCHPOSTER_L1_ETH_RPC / ARB_VALIDATOR_L1_ETH_RPC
+    # Override only if your node pods use different env var names for the L1 RPC URL
 
     if [ "${ORCHESTRATOR_TYPE}" = "docker" ]; then
       printf '\n# === Container Orchestrator ===\n'
@@ -853,13 +916,20 @@ ENVEOF
     fi
 
     # EOA Balance Monitoring (optional)
-    if [ -n "${BATCHER_EOA_ADDRESS}${PROPOSER_EOA_ADDRESS}${BATCHER_PRIVATE_KEY}${PROPOSER_PRIVATE_KEY}${CHALLENGER_EOA_ADDRESS}" ]; then
+    if [ -n "${BATCHER_EOA_ADDRESS}${PROPOSER_EOA_ADDRESS}${BATCHER_PRIVATE_KEY}${PROPOSER_PRIVATE_KEY}${CHALLENGER_EOA_ADDRESS}${BATCH_POSTER_EOA_ADDRESS}${VALIDATOR_EOA_ADDRESS}${BATCH_POSTER_PRIVATE_KEY}${VALIDATOR_PRIVATE_KEY}" ]; then
       printf '\n# === EOA Balance Monitoring ===\n'
+      # OP Stack (thanos / optimism)
       [ -n "${BATCHER_EOA_ADDRESS}" ] && printf 'BATCHER_EOA_ADDRESS=%s\n' "${BATCHER_EOA_ADDRESS}"
       [ -n "${PROPOSER_EOA_ADDRESS}" ] && printf 'PROPOSER_EOA_ADDRESS=%s\n' "${PROPOSER_EOA_ADDRESS}"
       [ -n "${BATCHER_PRIVATE_KEY}" ] && printf 'BATCHER_PRIVATE_KEY=%s\n' "${BATCHER_PRIVATE_KEY}"
       [ -n "${PROPOSER_PRIVATE_KEY}" ] && printf 'PROPOSER_PRIVATE_KEY=%s\n' "${PROPOSER_PRIVATE_KEY}"
       [ -n "${CHALLENGER_EOA_ADDRESS}" ] && printf 'CHALLENGER_EOA_ADDRESS=%s\n' "${CHALLENGER_EOA_ADDRESS}"
+      # Arbitrum Orbit
+      [ -n "${BATCH_POSTER_EOA_ADDRESS}" ] && printf 'BATCH_POSTER_EOA_ADDRESS=%s\n' "${BATCH_POSTER_EOA_ADDRESS}"
+      [ -n "${VALIDATOR_EOA_ADDRESS}" ] && printf 'VALIDATOR_EOA_ADDRESS=%s\n' "${VALIDATOR_EOA_ADDRESS}"
+      [ -n "${BATCH_POSTER_PRIVATE_KEY}" ] && printf 'BATCH_POSTER_PRIVATE_KEY=%s\n' "${BATCH_POSTER_PRIVATE_KEY}"
+      [ -n "${VALIDATOR_PRIVATE_KEY}" ] && printf 'VALIDATOR_PRIVATE_KEY=%s\n' "${VALIDATOR_PRIVATE_KEY}"
+      # Shared
       [ -n "${TREASURY_PRIVATE_KEY}" ] && printf 'TREASURY_PRIVATE_KEY=%s\n' "${TREASURY_PRIVATE_KEY}"
       printf 'EOA_BALANCE_CRITICAL_ETH=%s\n' "${EOA_BALANCE_CRITICAL_ETH:-0.1}"
       [ -n "${EOA_BALANCE_WARNING_ETH}" ] && printf 'EOA_BALANCE_WARNING_ETH=%s\n' "${EOA_BALANCE_WARNING_ETH}"

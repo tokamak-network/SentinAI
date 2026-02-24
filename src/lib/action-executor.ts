@@ -84,7 +84,7 @@ async function executeCollectLogs(
   action: RemediationAction,
   config: ScalingConfig
 ): Promise<string> {
-  const target = action.target || 'op-geth';
+  const target = action.target || getChainPlugin().primaryExecutionClient;
 
   if (isDockerMode()) {
     const logs = await getDockerContainerLogs(target, 100);
@@ -113,12 +113,12 @@ async function executeHealthCheck(
   action: RemediationAction,
   config: ScalingConfig
 ): Promise<string> {
-  const target = action.target || 'op-geth';
+  const target = action.target || getChainPlugin().primaryExecutionClient;
 
   if (isDockerMode()) {
     try {
-      // RPC check for op-geth
-      if (target === 'op-geth') {
+      // RPC check for primary execution client
+      if (target === getChainPlugin().primaryExecutionClient) {
         const rpcResponse = await execInDocker(target,
           'wget -qO- --timeout=5 http://localhost:8545 --post-data=\'{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}\''
         );
@@ -150,8 +150,8 @@ async function executeHealthCheck(
       return `Health check: ${podName} is NOT ready`;
     }
 
-    // RPC check (op-geth only) — use curl which is available in geth images
-    if (action.target === 'op-geth') {
+    // RPC check for primary execution client
+    if (action.target === getChainPlugin().primaryExecutionClient) {
       try {
         const { stdout: rpcResponse } = await runK8sCommand(
           `exec ${podName} -n ${namespace} -- wget -qO- --timeout=5 --header='Content-Type: application/json' --post-data='{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' http://localhost:8545`,
@@ -193,7 +193,7 @@ async function executeDescribePod(
   action: RemediationAction,
   config: ScalingConfig
 ): Promise<string> {
-  const target = action.target || 'op-geth';
+  const target = action.target || getChainPlugin().primaryExecutionClient;
 
   if (isDockerMode()) {
     const output = await inspectDockerContainer(target);
@@ -222,7 +222,7 @@ async function executeRestartPod(
   action: RemediationAction,
   config: ScalingConfig
 ): Promise<string> {
-  const target = action.target || 'op-geth';
+  const target = action.target || getChainPlugin().primaryExecutionClient;
 
   if (isDockerMode()) {
     await restartDockerContainer(target);

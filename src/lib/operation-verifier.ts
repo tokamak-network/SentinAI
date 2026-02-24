@@ -7,6 +7,7 @@ import { getCurrentVcpu } from '@/lib/k8s-scaler';
 import { executeAction } from '@/lib/action-executor';
 import { getActiveL1RpcUrl, healthCheckEndpoint, maskUrl } from '@/lib/l1-rpc-failover';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
+import { getChainPlugin } from '@/chains';
 import type {
   OperationVerificationInput,
   OperationVerificationResult,
@@ -69,7 +70,7 @@ async function verifyScale(input: OperationVerificationInput): Promise<Operation
 }
 
 async function verifyRestart(input: OperationVerificationInput): Promise<OperationVerificationResult> {
-  const target = toStringValue(input.expected.target, 'op-geth');
+  const target = toStringValue(input.expected.target, getChainPlugin().primaryExecutionClient);
   const healthAction: RemediationAction = {
     type: 'health_check',
     safetyLevel: 'safe',

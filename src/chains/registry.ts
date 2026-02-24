@@ -8,6 +8,7 @@ import type { ChainPlugin } from './types';
 import { ThanosPlugin } from './thanos';
 import { OptimismPlugin } from './optimism';
 import { ZkstackPlugin } from './zkstack';
+import { ArbitrumPlugin } from './arbitrum';
 
 let activePlugin: ChainPlugin | null = null;
 
@@ -27,6 +28,10 @@ function resolvePluginFromEnv(): ChainPlugin {
     case 'zksync':
     case 'zk-stack':
       return new ZkstackPlugin();
+    case 'arbitrum':
+    case 'arbitrum-orbit':
+    case 'nitro':
+      return new ArbitrumPlugin();
     default:
       console.warn(`[ChainRegistry] Unknown CHAIN_TYPE "${chainType}", falling back to thanos`);
       return new ThanosPlugin();

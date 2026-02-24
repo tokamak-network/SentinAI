@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { ThanosPlugin } from '@/chains/thanos';
 import { OptimismPlugin } from '@/chains/optimism';
 import { ZkstackPlugin } from '@/chains/zkstack';
+import { ArbitrumPlugin } from '@/chains/arbitrum';
 import {
   getChainPlugin,
   resetChainRegistry,
@@ -338,6 +339,237 @@ describe('ZkstackPlugin', () => {
 });
 
 // ============================================================
+// ArbitrumPlugin Tests
+// ============================================================
+
+describe('ArbitrumPlugin', () => {
+  let plugin: ArbitrumPlugin;
+
+  beforeEach(() => {
+    plugin = new ArbitrumPlugin();
+  });
+
+  describe('metadata', () => {
+    it('should have correct chain type', () => {
+      expect(plugin.chainType).toBe('arbitrum');
+      expect(plugin.chainMode).toBe('standard');
+    });
+
+    it('should have nitro-node as primary execution client', () => {
+      expect(plugin.primaryExecutionClient).toBe('nitro-node');
+    });
+
+    it('should have 0.25s block interval', () => {
+      expect(plugin.expectedBlockIntervalSeconds).toBe(0.25);
+    });
+
+    it('should have correct capabilities', () => {
+      expect(plugin.capabilities.l1Failover).toBe(true);
+      expect(plugin.capabilities.eoaBalanceMonitoring).toBe(true);
+      expect(plugin.capabilities.disputeGameMonitoring).toBe(false);
+    });
+  });
+
+  describe('components', () => {
+    it('should define 3 L2 components', () => {
+      expect(plugin.components).toEqual(['nitro-node', 'batch-poster', 'validator']);
+    });
+
+    it('should define 2 meta-components', () => {
+      expect(plugin.metaComponents).toEqual(['l1', 'system']);
+    });
+  });
+
+  describe('dependency graph', () => {
+    it('should include all components and meta-components', () => {
+      const allComponents = [...plugin.components, ...plugin.metaComponents];
+      for (const comp of allComponents) {
+        expect(plugin.dependencyGraph[comp]).toBeDefined();
+      }
+    });
+
+    it('should have nitro-node depend on l1 and feed batch-poster + validator', () => {
+      const deps = plugin.dependencyGraph['nitro-node'];
+      expect(deps.dependsOn).toEqual(['l1']);
+      expect(deps.feeds).toContain('batch-poster');
+      expect(deps.feeds).toContain('validator');
+    });
+
+    it('should have l1 as root dependency (no upstream)', () => {
+      const deps = plugin.dependencyGraph['l1'];
+      expect(deps.dependsOn).toEqual([]);
+      expect(deps.feeds.length).toBeGreaterThan(0);
+    });
+
+    it('should have no circular dependencies', () => {
+      const visited = new Set<string>();
+      const visiting = new Set<string>();
+
+      function hasCycle(node: string): boolean {
+        if (visiting.has(node)) return true;
+        if (visited.has(node)) return false;
+        visiting.add(node);
+        const deps = plugin.dependencyGraph[node];
+        if (deps) {
+          for (const dep of deps.dependsOn) {
+            if (hasCycle(dep)) return true;
+          }
+        }
+        visiting.delete(node);
+        visited.add(node);
+        return false;
+      }
+
+      for (const comp of Object.keys(plugin.dependencyGraph)) {
+        expect(hasCycle(comp)).toBe(false);
+      }
+    });
+
+    it('should have consistent bidirectional references', () => {
+      for (const [comp, deps] of Object.entries(plugin.dependencyGraph)) {
+        for (const upstream of deps.dependsOn) {
+          const upstreamDeps = plugin.dependencyGraph[upstream];
+          expect(upstreamDeps).toBeDefined();
+          expect(upstreamDeps.feeds).toContain(comp);
+        }
+      }
+    });
+  });
+
+  describe('normalizeComponentName', () => {
+    it('should normalize aliases to canonical names', () => {
+      expect(plugin.normalizeComponentName('nitro')).toBe('nitro-node');
+      expect(plugin.normalizeComponentName('sequencer')).toBe('nitro-node');
+      expect(plugin.normalizeComponentName('batcher')).toBe('batch-poster');
+      expect(plugin.normalizeComponentName('staker')).toBe('validator');
+    });
+
+    it('should pass through full component names', () => {
+      expect(plugin.normalizeComponentName('nitro-node')).toBe('nitro-node');
+      expect(plugin.normalizeComponentName('batch-poster')).toBe('batch-poster');
+      expect(plugin.normalizeComponentName('validator')).toBe('validator');
+    });
+
+    it('should handle case-insensitive input', () => {
+      expect(plugin.normalizeComponentName('NITRO')).toBe('nitro-node');
+      expect(plugin.normalizeComponentName('Batcher')).toBe('batch-poster');
+    });
+
+    it('should return system for unknown names', () => {
+      expect(plugin.normalizeComponentName('unknown')).toBe('system');
+      expect(plugin.normalizeComponentName('op-geth')).toBe('system');
+    });
+  });
+
+  describe('mapMetricToComponent', () => {
+    it('should map CPU/memory/txPool metrics to nitro-node', () => {
+      expect(plugin.mapMetricToComponent('cpuUsage')).toBe('nitro-node');
+      expect(plugin.mapMetricToComponent('memoryUsage')).toBe('nitro-node');
+      expect(plugin.mapMetricToComponent('txPoolPending')).toBe('nitro-node');
+    });
+
+    it('should map batch metrics to batch-poster', () => {
+      expect(plugin.mapMetricToComponent('batchPosterBalance')).toBe('batch-poster');
+      expect(plugin.mapMetricToComponent('batchLag')).toBe('batch-poster');
+    });
+
+    it('should map validator metrics to validator', () => {
+      expect(plugin.mapMetricToComponent('validatorBalance')).toBe('validator');
+      expect(plugin.mapMetricToComponent('rblockCount')).toBe('validator');
+    });
+
+    it('should return system for unknown metrics', () => {
+      expect(plugin.mapMetricToComponent('unknownMetric')).toBe('system');
+    });
+  });
+
+  describe('k8sComponents', () => {
+    it('should define 3 K8s components', () => {
+      expect(plugin.k8sComponents).toHaveLength(3);
+    });
+
+    it('should have exactly one primary execution component (nitro-node)', () => {
+      const primary = plugin.k8sComponents.filter(c => c.isPrimaryExecution);
+      expect(primary).toHaveLength(1);
+      expect(primary[0].component).toBe('nitro-node');
+    });
+
+    it('should have L1 RPC env vars for all components', () => {
+      const withL1Env = plugin.k8sComponents.filter(c => c.l1RpcEnvVar);
+      expect(withL1Env.length).toBe(3);
+    });
+
+    it('should have unique label suffixes', () => {
+      const suffixes = plugin.k8sComponents.map(c => c.labelSuffix);
+      expect(new Set(suffixes).size).toBe(suffixes.length);
+    });
+  });
+
+  describe('eoaConfigs', () => {
+    it('should define configs for batcher and validator roles', () => {
+      expect(plugin.eoaConfigs).toHaveLength(2);
+      const roles = plugin.eoaConfigs.map(c => c.role);
+      expect(roles).toContain('batcher');
+      expect(roles).toContain('validator');
+    });
+
+    it('should have env var names for each role', () => {
+      for (const config of plugin.eoaConfigs) {
+        expect(config.addressEnvVar).toBeTruthy();
+        expect(config.displayName).toBeTruthy();
+      }
+    });
+  });
+
+  describe('getPlaybooks', () => {
+    it('should return 8 playbooks', () => {
+      const playbooks = plugin.getPlaybooks();
+      expect(playbooks).toHaveLength(8);
+    });
+
+    it('should have valid playbook structure', () => {
+      const playbooks = plugin.getPlaybooks();
+      for (const pb of playbooks) {
+        expect(pb.name).toBeTruthy();
+        expect(pb.description).toBeTruthy();
+        expect(pb.trigger).toBeDefined();
+        expect(pb.trigger.component).toBeTruthy();
+        expect(pb.trigger.indicators.length).toBeGreaterThan(0);
+        expect(pb.actions.length).toBeGreaterThan(0);
+        expect(typeof pb.maxAttempts).toBe('number');
+      }
+    });
+
+    it('should only reference known components in triggers', () => {
+      const playbooks = plugin.getPlaybooks();
+      const allComponents = [...plugin.components, ...plugin.metaComponents];
+      for (const pb of playbooks) {
+        expect(allComponents).toContain(pb.trigger.component);
+      }
+    });
+  });
+
+  describe('aiPrompts', () => {
+    it('should have all required prompt fields', () => {
+      const prompts = plugin.aiPrompts;
+      expect(prompts.rcaSystemPrompt).toBeTruthy();
+      expect(prompts.anomalyAnalyzerContext).toBeTruthy();
+      expect(prompts.predictiveScalerContext).toBeTruthy();
+      expect(prompts.costOptimizerContext).toBeTruthy();
+      expect(prompts.dailyReportContext).toBeTruthy();
+      expect(prompts.nlopsSystemContext).toBeTruthy();
+      expect(prompts.failurePatterns).toBeTruthy();
+    });
+
+    it('should reference Arbitrum components in RCA prompt', () => {
+      expect(plugin.aiPrompts.rcaSystemPrompt).toContain('nitro-node');
+      expect(plugin.aiPrompts.rcaSystemPrompt).toContain('batch-poster');
+      expect(plugin.aiPrompts.rcaSystemPrompt).toContain('validator');
+    });
+  });
+});
+
+// ============================================================
 // Registry Tests
 // ============================================================
 
@@ -445,5 +677,32 @@ describe('ChainRegistry', () => {
     const plugin = getChainPlugin();
     expect(plugin.chainType).toBe('zkstack');
     expect(plugin).toBeInstanceOf(ZkstackPlugin);
+  });
+
+  it('should load ArbitrumPlugin when CHAIN_TYPE is arbitrum', () => {
+    process.env.CHAIN_TYPE = 'arbitrum';
+    resetChainRegistry();
+
+    const plugin = getChainPlugin();
+    expect(plugin.chainType).toBe('arbitrum');
+    expect(plugin).toBeInstanceOf(ArbitrumPlugin);
+  });
+
+  it('should map CHAIN_TYPE=arbitrum-orbit to ArbitrumPlugin', () => {
+    process.env.CHAIN_TYPE = 'arbitrum-orbit';
+    resetChainRegistry();
+
+    const plugin = getChainPlugin();
+    expect(plugin.chainType).toBe('arbitrum');
+    expect(plugin).toBeInstanceOf(ArbitrumPlugin);
+  });
+
+  it('should map CHAIN_TYPE=nitro to ArbitrumPlugin', () => {
+    process.env.CHAIN_TYPE = 'nitro';
+    resetChainRegistry();
+
+    const plugin = getChainPlugin();
+    expect(plugin.chainType).toBe('arbitrum');
+    expect(plugin).toBeInstanceOf(ArbitrumPlugin);
   });
 });

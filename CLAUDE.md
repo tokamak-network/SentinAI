@@ -112,6 +112,7 @@ L1 → op-node → op-geth
 - `ChainPlugin` interface encapsulates all chain-specific knowledge
 - `getChainPlugin()` returns the active plugin (defaults to Thanos)
 - Components, dependency graphs, AI prompts, playbooks, K8s configs, EOA roles — all from plugin
+- Supported chains: `thanos` (OP Stack), `optimism` (OP Stack alias), `zkstack` (ZK Stack), `arbitrum` / `arbitrum-orbit` / `nitro` (Arbitrum Orbit Nitro)
 - Adding new chain = 4 files in `src/chains/<chain>/` (index, components, prompts, playbooks)
 
 **NLOps Chat** — Natural language operations interface:
