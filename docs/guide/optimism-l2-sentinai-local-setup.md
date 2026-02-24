@@ -163,6 +163,15 @@ expectation:
 
 The following is reflected in `/Users/theo/workspace_tokamak/SentinAI/.env.local`.
 
+Core setup note:
+- In Core mode, setup asks only `L2_RPC_URL` and one AI key.
+- For OP Stack local monitoring, set the following env vars before running setup (or use Advanced mode):
+  - `CHAIN_TYPE=optimism`
+  - `L2_CHAIN_ID=<your-chain-id>`
+  - `ORCHESTRATOR_TYPE=docker`
+  - `DOCKER_COMPOSE_FILE=<path-to-opstack-compose>`
+- If Docker mode is selected but compose file cannot be resolved, setup exits with a fail-fast error.
+
 ```bash
 # L2 RPC
 L2_RPC_URL=http://localhost:8545

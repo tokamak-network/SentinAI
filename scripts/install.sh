@@ -84,6 +84,21 @@ append_if_set() {
   [ -n "${value}" ] && printf '%s=%s\n' "${key}" "${value}"
 }
 
+resolve_default_compose_file() {
+  local candidates=(
+    "external/docs/create-l2-rollup-example/docker-compose.yml"
+    "docker-compose.yml"
+  )
+  local candidate
+  for candidate in "${candidates[@]}"; do
+    if [ -f "${candidate}" ]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
 # Store AWS credentials in ~/.aws/credentials using aws CLI (standard location)
 store_aws_credentials() {
   local profile="$1" key_id="$2" secret="$3" region="${4:-}"
@@ -360,11 +375,15 @@ setup_env() {
     [[ ! "${L2_RPC_URL}" =~ ^https?:// ]] && err "L2_RPC_URL must start with http:// or https://."
 
     # AI Gateway URL (optional -- uses official Gateway if not entered)
-    echo ""
-    echo "  AI Gateway URL configuration:"
-    echo "  All AI requests will be routed through the Gateway server."
-    read -rp "  AI Gateway URL [https://api.ai.tokamak.network]: " AI_GATEWAY_URL
-    AI_GATEWAY_URL="${AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
+    if [ "${setup_mode}" = "advanced" ]; then
+      echo ""
+      echo "  AI Gateway URL configuration:"
+      echo "  All AI requests will be routed through the Gateway server."
+      read -rp "  AI Gateway URL [https://api.ai.tokamak.network]: " AI_GATEWAY_URL
+      AI_GATEWAY_URL="${AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
+    else
+      AI_GATEWAY_URL="${AI_GATEWAY_URL:-https://api.ai.tokamak.network}"
+    fi
 
     # AI Provider (required)
     echo ""
@@ -400,163 +419,211 @@ setup_env() {
     esac
     [[ -z "${ai_key_value}" ]] && err "AI API Key is required."
 
-    # Chain plugin
-    echo ""
-    echo -e "  ${BOLD}Chain Plugin${NC}:"
-    echo "    1) Thanos (default)"
-    echo "    2) Optimism Tutorial (OP Stack)"
-    echo "    3) ZK Stack"
-    echo "    4) Arbitrum Orbit (Nitro)"
-    read -rp "  Choose [1]: " chain_choice
-    case "${chain_choice}" in
-      2) CHAIN_TYPE="optimism" ;;
-      3) CHAIN_TYPE="zkstack" ;;
-      4) CHAIN_TYPE="arbitrum" ;;
-      *) CHAIN_TYPE="thanos" ;;
-    esac
-
-    if [ "${CHAIN_TYPE}" = "optimism" ]; then
-      echo ""
-      echo -e "  ${BOLD}Optimism Tutorial Chain Metadata${NC} (optional):"
-      read -rp "  L2_CHAIN_ID [42069]: " L2_CHAIN_ID
-      L2_CHAIN_ID="${L2_CHAIN_ID:-42069}"
-      read -rp "  L2_CHAIN_NAME [Optimism Tutorial L2]: " L2_CHAIN_NAME
-      L2_CHAIN_NAME="${L2_CHAIN_NAME:-Optimism Tutorial L2}"
-      read -rp "  L2_NETWORK_SLUG [optimism-tutorial-l2]: " L2_NETWORK_SLUG
-      L2_NETWORK_SLUG="${L2_NETWORK_SLUG:-optimism-tutorial-l2}"
-      read -rp "  L2_EXPLORER_URL [http://localhost:4000]: " L2_EXPLORER_URL
-      L2_EXPLORER_URL="${L2_EXPLORER_URL:-http://localhost:4000}"
-      read -rp "  L2_IS_TESTNET [true]: " L2_IS_TESTNET
-      L2_IS_TESTNET="${L2_IS_TESTNET:-true}"
-      read -rp "  L1_CHAIN (sepolia/mainnet) [sepolia]: " L1_CHAIN
-      L1_CHAIN="${L1_CHAIN:-sepolia}"
-    elif [ "${CHAIN_TYPE}" = "zkstack" ]; then
-      echo ""
-      echo -e "  ${BOLD}ZK Stack Metadata${NC} (optional):"
-      read -rp "  ZKSTACK_MODE [legacy-era]: " ZKSTACK_MODE
-      ZKSTACK_MODE="${ZKSTACK_MODE:-legacy-era}"
-      read -rp "  ZKSTACK_COMPONENT_PROFILE [core-only]: " ZKSTACK_COMPONENT_PROFILE
-      ZKSTACK_COMPONENT_PROFILE="${ZKSTACK_COMPONENT_PROFILE:-core-only}"
-      read -rp "  ZK_BATCHER_STATUS_URL (optional): " ZK_BATCHER_STATUS_URL
-      read -rp "  ZK_PROOF_RPC_URL (optional): " ZK_PROOF_RPC_URL
-      read -rp "  ZK_SETTLEMENT_LAYER [l1]: " ZK_SETTLEMENT_LAYER
-      ZK_SETTLEMENT_LAYER="${ZK_SETTLEMENT_LAYER:-l1}"
-      read -rp "  ZK_FINALITY_MODE [confirmed]: " ZK_FINALITY_MODE
-      ZK_FINALITY_MODE="${ZK_FINALITY_MODE:-confirmed}"
-    elif [ "${CHAIN_TYPE}" = "arbitrum" ]; then
-      echo ""
-      echo -e "  ${BOLD}Arbitrum Orbit Chain Metadata${NC}:"
-      read -rp "  L2_CHAIN_ID (your Orbit chain ID, e.g., 412346): " L2_CHAIN_ID
-      L2_CHAIN_ID="${L2_CHAIN_ID:-412346}"
-      read -rp "  L2_CHAIN_NAME [Arbitrum Orbit L2]: " L2_CHAIN_NAME
-      L2_CHAIN_NAME="${L2_CHAIN_NAME:-Arbitrum Orbit L2}"
-      read -rp "  L2_EXPLORER_URL [http://localhost:4000]: " L2_EXPLORER_URL
-      L2_EXPLORER_URL="${L2_EXPLORER_URL:-http://localhost:4000}"
-      read -rp "  L2_IS_TESTNET [true]: " L2_IS_TESTNET
-      L2_IS_TESTNET="${L2_IS_TESTNET:-true}"
-      read -rp "  L1_CHAIN (sepolia/mainnet) [sepolia]: " L1_CHAIN
-      L1_CHAIN="${L1_CHAIN:-sepolia}"
-    fi
-
-    # Container Orchestrator
-    echo ""
-    echo -e "  ${BOLD}Container Orchestrator${NC}:"
-    echo "    1) Kubernetes — AWS EKS (default)"
-    echo "    2) Kubernetes — Local (minikube, kind, k3s, etc.)"
-    echo "    3) Docker Compose — local L2 node"
-    read -rp "  Choose [1]: " orch_choice
-    case "${orch_choice}" in
-      2) ORCHESTRATOR_TYPE="k8s"; _k8s_deploy="local" ;;
-      3) ORCHESTRATOR_TYPE="docker" ;;
-      *) ORCHESTRATOR_TYPE="k8s"; _k8s_deploy="eks" ;;
-    esac
-
-    # Chain-aware K8s app prefix default
+    local _k8s_deploy="eks"
     local _k8s_prefix_default="op"
-    if [ "${CHAIN_TYPE}" = "arbitrum" ]; then
-      _k8s_prefix_default="arb"
-    elif [ "${CHAIN_TYPE}" = "zkstack" ]; then
-      _k8s_prefix_default="zk"
-    fi
 
-    if [ "${ORCHESTRATOR_TYPE}" = "docker" ]; then
-      # Docker Compose L2 node settings
-      echo ""
-      echo -e "  ${BOLD}Docker Compose L2 Node${NC}:"
-      echo "  Path to the L2 node's docker-compose.yml file."
-      read -rp "  Docker Compose file [docker-compose.yml]: " DOCKER_COMPOSE_FILE
-      DOCKER_COMPOSE_FILE="${DOCKER_COMPOSE_FILE:-docker-compose.yml}"
-      read -rp "  Docker Compose project name (press Enter for auto-detect): " DOCKER_COMPOSE_PROJECT
-      DOCKER_COMPOSE_PROJECT="${DOCKER_COMPOSE_PROJECT:-}"
-    elif [ "${_k8s_deploy}" = "local" ]; then
-      # Local K8s — uses existing kubeconfig, no AWS setup needed
-      echo ""
-      echo -e "  ${BOLD}Local Kubernetes${NC}:"
-      info "Using existing kubeconfig (~/.kube/config)."
-      read -rp "  K8S_NAMESPACE [default]: " K8S_NAMESPACE
+    if [ "${setup_mode}" = "core" ]; then
+      info "Core mode: auto-configuring chain and orchestrator defaults."
+      CHAIN_TYPE="${CHAIN_TYPE:-thanos}"
+      case "${CHAIN_TYPE}" in
+        thanos|optimism|my-l2|op-stack|zkstack|arbitrum) ;;
+        zksync|zk-stack) CHAIN_TYPE="zkstack" ;;
+        arbitrum-orbit|nitro) CHAIN_TYPE="arbitrum" ;;
+        *) err "Unsupported CHAIN_TYPE='${CHAIN_TYPE}' in core mode." ;;
+      esac
+
+      if [ -n "${ORCHESTRATOR_TYPE:-}" ]; then
+        case "${ORCHESTRATOR_TYPE}" in
+          k8s|docker) ;;
+          *) err "ORCHESTRATOR_TYPE must be 'k8s' or 'docker'." ;;
+        esac
+      elif [ -n "${DOCKER_COMPOSE_FILE:-}" ]; then
+        ORCHESTRATOR_TYPE="docker"
+      else
+        ORCHESTRATOR_TYPE="k8s"
+      fi
+
+      if [ "${CHAIN_TYPE}" = "arbitrum" ]; then
+        _k8s_prefix_default="arb"
+      elif [ "${CHAIN_TYPE}" = "zkstack" ]; then
+        _k8s_prefix_default="zk"
+      fi
       K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
-      read -rp "  K8S_APP_PREFIX [${_k8s_prefix_default}]: " K8S_APP_PREFIX
       K8S_APP_PREFIX="${K8S_APP_PREFIX:-${_k8s_prefix_default}}"
-      read -rp "  K8S_STATEFULSET_PREFIX (press Enter if none): " K8S_STATEFULSET_PREFIX
-      K8S_STATEFULSET_PREFIX="${K8S_STATEFULSET_PREFIX:-}"
-    else
 
-    # AWS EKS Cluster Name
-    echo ""
-    read -rp "  AWS EKS Cluster Name (for K8s monitoring, press Enter to skip): " AWS_CLUSTER_NAME
-    if [ -z "${AWS_CLUSTER_NAME}" ]; then
-      warn "AWS_CLUSTER_NAME not set. Running in simulation mode without K8s monitoring."
-    else
-      # K8s namespace and pod prefix (only if cluster is set)
-      read -rp "  K8S_NAMESPACE [${AWS_CLUSTER_NAME}]: " K8S_NAMESPACE
-      K8S_NAMESPACE="${K8S_NAMESPACE:-${AWS_CLUSTER_NAME}}"
-      read -rp "  K8S_APP_PREFIX [${_k8s_prefix_default}]: " K8S_APP_PREFIX
-      K8S_APP_PREFIX="${K8S_APP_PREFIX:-${_k8s_prefix_default}}"
-      read -rp "  K8S_STATEFULSET_PREFIX (e.g., sepolia-thanos-stack, press Enter if none): " K8S_STATEFULSET_PREFIX
-      K8S_STATEFULSET_PREFIX="${K8S_STATEFULSET_PREFIX:-}"
-
-      # AWS Authentication — credentials stored in ~/.aws/ (standard, mounted by Docker)
-      echo ""
-      echo -e "  ${BOLD}AWS Authentication${NC}"
-      if [ -f "$HOME/.aws/credentials" ] && command -v aws &>/dev/null; then
-        echo "  Existing AWS profiles found:"
-        aws configure list-profiles 2>/dev/null | sed 's/^/    /'
-        read -rp "  AWS Profile [${AWS_CLUSTER_NAME}]: " _profile_input
-        AWS_PROFILE="${_profile_input:-${AWS_CLUSTER_NAME}}"
-        # Create profile if it doesn't exist
-        if ! aws configure list-profiles 2>/dev/null | grep -qx "${AWS_PROFILE}"; then
-          warn "Profile '${AWS_PROFILE}' not found. Creating with 'aws configure'..."
-          aws configure --profile "${AWS_PROFILE}"
+      if [ "${ORCHESTRATOR_TYPE}" = "docker" ]; then
+        if [ -z "${DOCKER_COMPOSE_FILE:-}" ]; then
+          if DOCKER_COMPOSE_FILE="$(resolve_default_compose_file)"; then
+            info "Docker compose file detected: ${DOCKER_COMPOSE_FILE}"
+          else
+            err "Docker mode requires DOCKER_COMPOSE_FILE. Tried: external/docs/create-l2-rollup-example/docker-compose.yml, docker-compose.yml"
+          fi
+        elif [ ! -f "${DOCKER_COMPOSE_FILE}" ]; then
+          err "DOCKER_COMPOSE_FILE not found: ${DOCKER_COMPOSE_FILE}"
         fi
-      else
-        echo "  No AWS credentials found (~/.aws/credentials)."
-        echo "  Setting up AWS CLI profile: ${AWS_CLUSTER_NAME}"
-        echo ""
-        AWS_PROFILE="${AWS_CLUSTER_NAME}"
-        aws configure --profile "${AWS_PROFILE}"
       fi
 
-      # Region auto-detect from profile
-      local _profile_region
-      _profile_region=$(aws configure get region --profile "${AWS_PROFILE}" 2>/dev/null || echo "")
-      if [ -n "${_profile_region}" ]; then
-        AWS_REGION="${_profile_region}"
-        info "Region: ${AWS_REGION} (from profile: ${AWS_PROFILE})"
+      if [ "${CHAIN_TYPE}" = "optimism" ] && [ -z "${L2_CHAIN_ID:-}" ]; then
+        err "L2_CHAIN_ID is required for Optimism. Set L2_CHAIN_ID and rerun."
+      fi
+    else
+      # Chain plugin
+      echo ""
+      echo -e "  ${BOLD}Chain Plugin${NC}:"
+      echo "    1) Thanos (default)"
+      echo "    2) Optimism Tutorial (OP Stack)"
+      echo "    3) ZK Stack"
+      echo "    4) Arbitrum Orbit (Nitro)"
+      read -rp "  Choose [1]: " chain_choice
+      case "${chain_choice}" in
+        2) CHAIN_TYPE="optimism" ;;
+        3) CHAIN_TYPE="zkstack" ;;
+        4) CHAIN_TYPE="arbitrum" ;;
+        *) CHAIN_TYPE="thanos" ;;
+      esac
+
+      if [ "${CHAIN_TYPE}" = "optimism" ]; then
+        echo ""
+        echo -e "  ${BOLD}Optimism Tutorial Chain Metadata${NC} (L2_CHAIN_ID required):"
+        read -rp "  L2_CHAIN_ID (required): " L2_CHAIN_ID
+        [[ -z "${L2_CHAIN_ID}" ]] && err "L2_CHAIN_ID is required for Optimism."
+        [[ ! "${L2_CHAIN_ID}" =~ ^[0-9]+$ ]] && err "L2_CHAIN_ID must be a positive integer."
+        read -rp "  L2_CHAIN_NAME [Optimism Tutorial L2]: " L2_CHAIN_NAME
+        L2_CHAIN_NAME="${L2_CHAIN_NAME:-Optimism Tutorial L2}"
+        read -rp "  L2_NETWORK_SLUG [optimism-tutorial-l2]: " L2_NETWORK_SLUG
+        L2_NETWORK_SLUG="${L2_NETWORK_SLUG:-optimism-tutorial-l2}"
+        read -rp "  L2_EXPLORER_URL [http://localhost:4000]: " L2_EXPLORER_URL
+        L2_EXPLORER_URL="${L2_EXPLORER_URL:-http://localhost:4000}"
+        read -rp "  L2_IS_TESTNET [true]: " L2_IS_TESTNET
+        L2_IS_TESTNET="${L2_IS_TESTNET:-true}"
+        read -rp "  L1_CHAIN (sepolia/mainnet) [sepolia]: " L1_CHAIN
+        L1_CHAIN="${L1_CHAIN:-sepolia}"
+      elif [ "${CHAIN_TYPE}" = "zkstack" ]; then
+        echo ""
+        echo -e "  ${BOLD}ZK Stack Metadata${NC} (optional):"
+        read -rp "  ZKSTACK_MODE [legacy-era]: " ZKSTACK_MODE
+        ZKSTACK_MODE="${ZKSTACK_MODE:-legacy-era}"
+        read -rp "  ZKSTACK_COMPONENT_PROFILE [core-only]: " ZKSTACK_COMPONENT_PROFILE
+        ZKSTACK_COMPONENT_PROFILE="${ZKSTACK_COMPONENT_PROFILE:-core-only}"
+        read -rp "  ZK_BATCHER_STATUS_URL (optional): " ZK_BATCHER_STATUS_URL
+        read -rp "  ZK_PROOF_RPC_URL (optional): " ZK_PROOF_RPC_URL
+        read -rp "  ZK_SETTLEMENT_LAYER [l1]: " ZK_SETTLEMENT_LAYER
+        ZK_SETTLEMENT_LAYER="${ZK_SETTLEMENT_LAYER:-l1}"
+        read -rp "  ZK_FINALITY_MODE [confirmed]: " ZK_FINALITY_MODE
+        ZK_FINALITY_MODE="${ZK_FINALITY_MODE:-confirmed}"
+      elif [ "${CHAIN_TYPE}" = "arbitrum" ]; then
+        echo ""
+        echo -e "  ${BOLD}Arbitrum Orbit Chain Metadata${NC}:"
+        read -rp "  L2_CHAIN_ID (your Orbit chain ID, e.g., 412346): " L2_CHAIN_ID
+        L2_CHAIN_ID="${L2_CHAIN_ID:-412346}"
+        read -rp "  L2_CHAIN_NAME [Arbitrum Orbit L2]: " L2_CHAIN_NAME
+        L2_CHAIN_NAME="${L2_CHAIN_NAME:-Arbitrum Orbit L2}"
+        read -rp "  L2_EXPLORER_URL [http://localhost:4000]: " L2_EXPLORER_URL
+        L2_EXPLORER_URL="${L2_EXPLORER_URL:-http://localhost:4000}"
+        read -rp "  L2_IS_TESTNET [true]: " L2_IS_TESTNET
+        L2_IS_TESTNET="${L2_IS_TESTNET:-true}"
+        read -rp "  L1_CHAIN (sepolia/mainnet) [sepolia]: " L1_CHAIN
+        L1_CHAIN="${L1_CHAIN:-sepolia}"
+      fi
+
+      # Container Orchestrator
+      echo ""
+      echo -e "  ${BOLD}Container Orchestrator${NC}:"
+      echo "    1) Kubernetes — AWS EKS (default)"
+      echo "    2) Kubernetes — Local (minikube, kind, k3s, etc.)"
+      echo "    3) Docker Compose — local L2 node"
+      read -rp "  Choose [1]: " orch_choice
+      case "${orch_choice}" in
+        2) ORCHESTRATOR_TYPE="k8s"; _k8s_deploy="local" ;;
+        3) ORCHESTRATOR_TYPE="docker" ;;
+        *) ORCHESTRATOR_TYPE="k8s"; _k8s_deploy="eks" ;;
+      esac
+
+      # Chain-aware K8s app prefix default
+      if [ "${CHAIN_TYPE}" = "arbitrum" ]; then
+        _k8s_prefix_default="arb"
+      elif [ "${CHAIN_TYPE}" = "zkstack" ]; then
+        _k8s_prefix_default="zk"
+      fi
+
+      if [ "${ORCHESTRATOR_TYPE}" = "docker" ]; then
+        # Docker Compose L2 node settings
+        echo ""
+        echo -e "  ${BOLD}Docker Compose L2 Node${NC}:"
+        echo "  Path to the L2 node's docker-compose.yml file."
+        read -rp "  Docker Compose file [docker-compose.yml]: " DOCKER_COMPOSE_FILE
+        DOCKER_COMPOSE_FILE="${DOCKER_COMPOSE_FILE:-docker-compose.yml}"
+        read -rp "  Docker Compose project name (press Enter for auto-detect): " DOCKER_COMPOSE_PROJECT
+        DOCKER_COMPOSE_PROJECT="${DOCKER_COMPOSE_PROJECT:-}"
+      elif [ "${_k8s_deploy}" = "local" ]; then
+        # Local K8s — uses existing kubeconfig, no AWS setup needed
+        echo ""
+        echo -e "  ${BOLD}Local Kubernetes${NC}:"
+        info "Using existing kubeconfig (~/.kube/config)."
+        read -rp "  K8S_NAMESPACE [default]: " K8S_NAMESPACE
+        K8S_NAMESPACE="${K8S_NAMESPACE:-default}"
+        read -rp "  K8S_APP_PREFIX [${_k8s_prefix_default}]: " K8S_APP_PREFIX
+        K8S_APP_PREFIX="${K8S_APP_PREFIX:-${_k8s_prefix_default}}"
+        read -rp "  K8S_STATEFULSET_PREFIX (press Enter if none): " K8S_STATEFULSET_PREFIX
+        K8S_STATEFULSET_PREFIX="${K8S_STATEFULSET_PREFIX:-}"
       else
-        # Fallback to EC2 IMDS
-        local _imds_region="" _imds_tok
-        _imds_tok=$(curl -sf -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 30" \
-          --connect-timeout 1 http://169.254.169.254/latest/api/token 2>/dev/null || echo "")
-        if [ -n "${_imds_tok}" ]; then
-          _imds_region=$(curl -sf -H "X-aws-ec2-metadata-token: ${_imds_tok}" \
-            --connect-timeout 2 http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || echo "")
+        # AWS EKS Cluster Name
+        echo ""
+        read -rp "  AWS EKS Cluster Name (for K8s monitoring, press Enter to skip): " AWS_CLUSTER_NAME
+        if [ -z "${AWS_CLUSTER_NAME}" ]; then
+          warn "AWS_CLUSTER_NAME not set. Running in simulation mode without K8s monitoring."
+        else
+          # K8s namespace and pod prefix (only if cluster is set)
+          read -rp "  K8S_NAMESPACE [${AWS_CLUSTER_NAME}]: " K8S_NAMESPACE
+          K8S_NAMESPACE="${K8S_NAMESPACE:-${AWS_CLUSTER_NAME}}"
+          read -rp "  K8S_APP_PREFIX [${_k8s_prefix_default}]: " K8S_APP_PREFIX
+          K8S_APP_PREFIX="${K8S_APP_PREFIX:-${_k8s_prefix_default}}"
+          read -rp "  K8S_STATEFULSET_PREFIX (e.g., sepolia-thanos-stack, press Enter if none): " K8S_STATEFULSET_PREFIX
+          K8S_STATEFULSET_PREFIX="${K8S_STATEFULSET_PREFIX:-}"
+
+          # AWS Authentication — credentials stored in ~/.aws/ (standard, mounted by Docker)
+          echo ""
+          echo -e "  ${BOLD}AWS Authentication${NC}"
+          if [ -f "$HOME/.aws/credentials" ] && command -v aws &>/dev/null; then
+            echo "  Existing AWS profiles found:"
+            aws configure list-profiles 2>/dev/null | sed 's/^/    /'
+            read -rp "  AWS Profile [${AWS_CLUSTER_NAME}]: " _profile_input
+            AWS_PROFILE="${_profile_input:-${AWS_CLUSTER_NAME}}"
+            # Create profile if it doesn't exist
+            if ! aws configure list-profiles 2>/dev/null | grep -qx "${AWS_PROFILE}"; then
+              warn "Profile '${AWS_PROFILE}' not found. Creating with 'aws configure'..."
+              aws configure --profile "${AWS_PROFILE}"
+            fi
+          else
+            echo "  No AWS credentials found (~/.aws/credentials)."
+            echo "  Setting up AWS CLI profile: ${AWS_CLUSTER_NAME}"
+            echo ""
+            AWS_PROFILE="${AWS_CLUSTER_NAME}"
+            aws configure --profile "${AWS_PROFILE}"
+          fi
+
+          # Region auto-detect from profile
+          local _profile_region
+          _profile_region=$(aws configure get region --profile "${AWS_PROFILE}" 2>/dev/null || echo "")
+          if [ -n "${_profile_region}" ]; then
+            AWS_REGION="${_profile_region}"
+            info "Region: ${AWS_REGION} (from profile: ${AWS_PROFILE})"
+          else
+            # Fallback to EC2 IMDS
+            local _imds_region="" _imds_tok
+            _imds_tok=$(curl -sf -X PUT -H "X-aws-ec2-metadata-token-ttl-seconds: 30" \
+              --connect-timeout 1 http://169.254.169.254/latest/api/token 2>/dev/null || echo "")
+            if [ -n "${_imds_tok}" ]; then
+              _imds_region=$(curl -sf -H "X-aws-ec2-metadata-token: ${_imds_tok}" \
+                --connect-timeout 2 http://169.254.169.254/latest/meta-data/placement/region 2>/dev/null || echo "")
+            fi
+            local region_default="${_imds_region:-ap-northeast-2}"
+            read -rp "  AWS Region [${region_default}]: " AWS_REGION
+            AWS_REGION="${AWS_REGION:-${region_default}}"
+          fi
         fi
-        local region_default="${_imds_region:-ap-northeast-2}"
-        read -rp "  AWS Region [${region_default}]: " AWS_REGION
-        AWS_REGION="${AWS_REGION:-${region_default}}"
       fi
     fi
-    fi  # end orchestrator type branch
 
     if [ "${setup_mode}" = "advanced" ]; then
       # L1 RPC Failover (optional)
@@ -674,15 +741,17 @@ setup_env() {
     # Scaling Simulation Mode
     if [ "${ORCHESTRATOR_TYPE}" = "docker" ]; then
       SCALING_SIMULATION_MODE="false"
-    elif [ -n "${AWS_CLUSTER_NAME}" ] || [ "${_k8s_deploy:-}" = "local" ]; then
+    elif [ "${setup_mode}" = "advanced" ] && ( [ -n "${AWS_CLUSTER_NAME:-}" ] || [ "${_k8s_deploy:-}" = "local" ] ); then
       echo ""
       echo "  Simulation mode disables real K8s scaling (safe for testing)."
       read -rp "  Enable simulation mode? (y/N): " sim_choice
-      if [[ "${sim_choice}" =~ ^[Yy]$ ]]; then
+      if [[ "${sim_choice:-N}" =~ ^[Yy]$ ]]; then
         SCALING_SIMULATION_MODE="true"
       else
         SCALING_SIMULATION_MODE="false"
       fi
+    elif [ -n "${AWS_CLUSTER_NAME:-}" ]; then
+      SCALING_SIMULATION_MODE="false"
     else
       SCALING_SIMULATION_MODE="true"
     fi

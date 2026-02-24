@@ -48,17 +48,41 @@ cp .env.example .env
 ./scripts/start-op-stack.sh --skip-l1-test
 ```
 
+## Expected execution time
+
+- Re-run with existing setup artifacts: ~20s to 90s
+- Re-run when containers are already up: ~3s to 15s
+- With `--force-fetch`: add ~30s to 2m for upstream fetch/patch
+- With `--force-setup`: ~10m to 25m+ (L1 deploy + prestate generation)
+
+Notes:
+- The longest step is typically `reproducible-prestate` in `setup-rollup.sh`.
+- Sepolia RPC throughput limits (for example HTTP 429 from Alchemy/Infura) can significantly increase total time or cause setup failure.
+- To measure your environment directly:
+
+```bash
+time ./scripts/start-op-stack.sh
+time ./scripts/start-op-stack.sh --force-fetch --force-setup
+```
+
 ## SentinAI `.env.local` mapping
 
-Use printed runtime path from launcher output, then set:
+The launcher prints a ready-to-copy block at the end. EOA addresses are auto-extracted from `deployer/.deployer/state.json` when available:
 
 ```bash
 ORCHESTRATOR_TYPE=docker
 DOCKER_COMPOSE_FILE=<printed-runtime-dir>/docker-compose.yml
 DOCKER_COMPOSE_PROJECT=create-l2-rollup-example
 CHAIN_TYPE=optimism
+L2_CHAIN_ID=<your-L2_CHAIN_ID>
 L2_RPC_URL=http://localhost:8545
+SENTINAI_L1_RPC_URL=<your-L1_RPC_URL>
+BATCHER_EOA_ADDRESS=<auto-extracted>
+PROPOSER_EOA_ADDRESS=<auto-extracted>
+CHALLENGER_EOA_ADDRESS=<auto-extracted>
 ```
+
+EOA address lines are omitted if `state.json` is missing or does not contain the fields.
 
 ## Update policy
 

@@ -414,6 +414,14 @@ test_l1_connectivity() {
 print_summary() {
   local runtime_dir="$1"
   local compose_project="${OPSTACK_DOCKER_PROJECT:-$OPSTACK_DOCKER_PROJECT_DEFAULT}"
+  local state_file="${runtime_dir}/deployer/.deployer/state.json"
+  local batcher_addr='' proposer_addr='' challenger_addr=''
+
+  if [ -f "$state_file" ]; then
+    batcher_addr="$(jq -r '.appliedIntent.chains[0].roles.batcher // empty' "$state_file" 2>/dev/null || true)"
+    proposer_addr="$(jq -r '.appliedIntent.chains[0].roles.proposer // empty' "$state_file" 2>/dev/null || true)"
+    challenger_addr="$(jq -r '.appliedIntent.chains[0].roles.challenger // empty' "$state_file" 2>/dev/null || true)"
+  fi
 
   cat <<EOF
 
@@ -430,14 +438,25 @@ Endpoints:
   Rollup RPC:        http://localhost:8547
   Dispute Metrics:   http://localhost:7300/metrics
 
-Next:
-  1) Configure SentinAI .env.local with:
-     - ORCHESTRATOR_TYPE=docker
-     - DOCKER_COMPOSE_FILE=${runtime_dir}/docker-compose.yml
-     - DOCKER_COMPOSE_PROJECT=${compose_project}
-     - CHAIN_TYPE=optimism
-     - L2_RPC_URL=http://localhost:8545
-  2) Start SentinAI: npm run dev
+Copy the following into SentinAI .env.local:
+────────────────────────────────────────────────────
+ORCHESTRATOR_TYPE=docker
+DOCKER_COMPOSE_FILE=${runtime_dir}/docker-compose.yml
+DOCKER_COMPOSE_PROJECT=${compose_project}
+CHAIN_TYPE=optimism
+L2_CHAIN_ID=${L2_CHAIN_ID}
+L2_RPC_URL=http://localhost:8545
+SENTINAI_L1_RPC_URL=${L1_RPC_URL}
+EOF
+
+  [ -n "$batcher_addr" ]    && printf 'BATCHER_EOA_ADDRESS=%s\n'    "$batcher_addr"
+  [ -n "$proposer_addr" ]   && printf 'PROPOSER_EOA_ADDRESS=%s\n'   "$proposer_addr"
+  [ -n "$challenger_addr" ] && printf 'CHALLENGER_EOA_ADDRESS=%s\n' "$challenger_addr"
+
+  cat <<EOF
+────────────────────────────────────────────────────
+
+Then start SentinAI: npm run dev
 EOF
 }
 

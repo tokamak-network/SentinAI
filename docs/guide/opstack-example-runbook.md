@@ -22,6 +22,15 @@ Template:
 
 ### 2.1 SentinAI `.env.local` reflection
 
+Core setup note:
+- Core wizard asks only `L2_RPC_URL` and one AI key.
+- To bind OP Stack local docker topology, pre-set these before running setup (or use Advanced mode):
+  - `CHAIN_TYPE=optimism`
+  - `L2_CHAIN_ID=<your-chain-id>`
+  - `ORCHESTRATOR_TYPE=docker`
+  - `DOCKER_COMPOSE_FILE=/absolute/path/to/your-opstack/docker-compose.yml`
+- Setup fails fast when Docker mode is chosen and compose file is missing.
+
 Set `.env.local` based on the value below.
 
 ```bash
