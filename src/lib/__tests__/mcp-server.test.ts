@@ -42,6 +42,13 @@ const hoisted = vi.hoisted(() => ({
     buildRollbackPlan: vi.fn(),
     runRollbackPlan: vi.fn(),
   },
+  autonomousMock: {
+    getAutonomousCapabilities: vi.fn(),
+    planAutonomousOperation: vi.fn(),
+    executeAutonomousOperation: vi.fn(),
+    verifyAutonomousOperation: vi.fn(),
+    rollbackAutonomousOperation: vi.fn(),
+  },
   approvalTicketMap: new Map<string, McpApprovalTicket>(),
 }));
 
@@ -111,6 +118,14 @@ vi.mock('@/lib/operation-verifier', () => ({
 vi.mock('@/lib/rollback-runner', () => ({
   buildRollbackPlan: hoisted.rollbackRunnerMock.buildRollbackPlan,
   runRollbackPlan: hoisted.rollbackRunnerMock.runRollbackPlan,
+}));
+
+vi.mock('@/lib/autonomous/service', () => ({
+  getAutonomousCapabilities: hoisted.autonomousMock.getAutonomousCapabilities,
+  planAutonomousOperation: hoisted.autonomousMock.planAutonomousOperation,
+  executeAutonomousOperation: hoisted.autonomousMock.executeAutonomousOperation,
+  verifyAutonomousOperation: hoisted.autonomousMock.verifyAutonomousOperation,
+  rollbackAutonomousOperation: hoisted.autonomousMock.rollbackAutonomousOperation,
 }));
 
 vi.mock('@/lib/redis-store', () => ({
@@ -251,6 +266,41 @@ describe('mcp-server', () => {
       success: false,
       message: 'not-needed',
       executedAt: new Date().toISOString(),
+    });
+    hoisted.autonomousMock.getAutonomousCapabilities.mockReturnValue({
+      chainType: 'optimism',
+      intents: ['stabilize_throughput'],
+      actions: ['collect_metrics'],
+      policies: [],
+    });
+    hoisted.autonomousMock.planAutonomousOperation.mockReturnValue({
+      planId: 'autonomous-plan-1',
+      chainType: 'optimism',
+      intent: 'stabilize_throughput',
+      dryRun: true,
+      generatedAt: new Date().toISOString(),
+      summary: 'summary',
+      steps: [],
+    });
+    hoisted.autonomousMock.executeAutonomousOperation.mockResolvedValue({
+      operationId: 'autonomous-op-1',
+      chainType: 'optimism',
+      intent: 'stabilize_throughput',
+      dryRun: true,
+      success: true,
+      steps: [],
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+    });
+    hoisted.autonomousMock.verifyAutonomousOperation.mockResolvedValue({
+      operationId: 'autonomous-op-1',
+      passed: true,
+      results: [],
+    });
+    hoisted.autonomousMock.rollbackAutonomousOperation.mockResolvedValue({
+      operationId: 'autonomous-op-1',
+      success: true,
+      rollbackSteps: [],
     });
   });
 
@@ -489,6 +539,26 @@ describe('mcp-server', () => {
 
     expect(response.error).toBeUndefined();
     expect(hoisted.componentOperatorMock.runHealthDiagnostics).toHaveBeenCalled();
+  });
+
+  it('should execute get_autonomous_capabilities tool', async () => {
+    const response = await handleMcpRequest(
+      {
+        jsonrpc: '2.0',
+        id: 90,
+        method: 'get_autonomous_capabilities',
+        params: {},
+      },
+      {
+        requestId: 'req-autonomous',
+        apiKey: 'test-key',
+        readOnlyMode: false,
+        allowScalerWriteInReadOnly: false,
+      }
+    );
+
+    expect(response.error).toBeUndefined();
+    expect(hoisted.autonomousMock.getAutonomousCapabilities).toHaveBeenCalled();
   });
 
   it('should execute restart_batcher with valid approval token', async () => {

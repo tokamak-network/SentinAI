@@ -21,6 +21,19 @@ import {
 import { ZKSTACK_AI_PROMPTS } from './prompts';
 import { ZKSTACK_PLAYBOOKS } from './playbooks';
 import { getZkstackL1Chain, zkstackLocalChain } from './chain';
+import {
+  defaultBuildRollback,
+  defaultTranslateIntentToActions,
+  defaultVerifyActionOutcome,
+  getDefaultAutonomousActions,
+  getDefaultAutonomousIntents,
+} from '../autonomous-defaults';
+import type {
+  AutonomousExecutionContext,
+  AutonomousIntent,
+  AutonomousPlanStep,
+  AutonomousVerificationResult,
+} from '@/types/autonomous-ops';
 
 function getMode(): 'legacy-era' | 'os-preview' {
   const mode = process.env.ZKSTACK_MODE?.trim().toLowerCase();
@@ -65,6 +78,8 @@ export class ZkstackPlugin implements ChainPlugin {
     // Hide proof/settlement cards unless dedicated probes are configured.
     proofMonitoring: hasProofProbe(),
     settlementMonitoring: hasSettlementProbe(),
+    autonomousIntents: getDefaultAutonomousIntents('zkstack'),
+    autonomousActions: getDefaultAutonomousActions('zkstack'),
   } as const;
 
   readonly components: ChainComponent[] = [...ZKSTACK_COMPONENTS];
@@ -109,5 +124,28 @@ export class ZkstackPlugin implements ChainPlugin {
 
   getPlaybooks(): Playbook[] {
     return ZKSTACK_PLAYBOOKS;
+  }
+
+  getSupportedIntents(): AutonomousIntent[] {
+    return [...this.capabilities.autonomousIntents];
+  }
+
+  translateIntentToActions(
+    intent: AutonomousIntent,
+    context: AutonomousExecutionContext
+  ): AutonomousPlanStep[] {
+    return defaultTranslateIntentToActions(this.chainType, intent, context);
+  }
+
+  verifyActionOutcome(
+    step: AutonomousPlanStep,
+    before: Record<string, unknown>,
+    after: Record<string, unknown>
+  ): AutonomousVerificationResult {
+    return defaultVerifyActionOutcome(this.chainType, step, before, after);
+  }
+
+  buildRollback(step: AutonomousPlanStep): AutonomousPlanStep[] {
+    return defaultBuildRollback(this.chainType, step);
   }
 }

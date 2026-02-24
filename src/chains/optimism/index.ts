@@ -27,6 +27,19 @@ import {
 import { THANOS_AI_PROMPTS } from '../thanos/prompts';
 import { THANOS_PLAYBOOKS } from '../thanos/playbooks';
 import { optimismTutorialChain } from './chain';
+import {
+  defaultBuildRollback,
+  defaultTranslateIntentToActions,
+  defaultVerifyActionOutcome,
+  getDefaultAutonomousActions,
+  getDefaultAutonomousIntents,
+} from '../autonomous-defaults';
+import type {
+  AutonomousExecutionContext,
+  AutonomousIntent,
+  AutonomousPlanStep,
+  AutonomousVerificationResult,
+} from '@/types/autonomous-ops';
 
 function getL1Chain(): Chain {
   const configured = process.env.L1_CHAIN?.trim().toLowerCase();
@@ -47,6 +60,8 @@ export class OptimismPlugin implements ChainPlugin {
     disputeGameMonitoring: true,
     proofMonitoring: false,
     settlementMonitoring: true,
+    autonomousIntents: getDefaultAutonomousIntents('optimism'),
+    autonomousActions: getDefaultAutonomousActions('optimism'),
   } as const;
 
   // Component Topology (standard OP Stack)
@@ -103,5 +118,28 @@ export class OptimismPlugin implements ChainPlugin {
 
   getPlaybooks(): Playbook[] {
     return THANOS_PLAYBOOKS;
+  }
+
+  getSupportedIntents(): AutonomousIntent[] {
+    return [...this.capabilities.autonomousIntents];
+  }
+
+  translateIntentToActions(
+    intent: AutonomousIntent,
+    context: AutonomousExecutionContext
+  ): AutonomousPlanStep[] {
+    return defaultTranslateIntentToActions(this.chainType, intent, context);
+  }
+
+  verifyActionOutcome(
+    step: AutonomousPlanStep,
+    before: Record<string, unknown>,
+    after: Record<string, unknown>
+  ): AutonomousVerificationResult {
+    return defaultVerifyActionOutcome(this.chainType, step, before, after);
+  }
+
+  buildRollback(step: AutonomousPlanStep): AutonomousPlanStep[] {
+    return defaultBuildRollback(this.chainType, step);
   }
 }

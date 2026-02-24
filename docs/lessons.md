@@ -2,6 +2,13 @@
 
 ## 2026-02-24
 
+- 멀티스택 자율 운영을 기존 goal planner에 붙일 때 기존 step enum을 바로 확장하면 회귀 범위가 급격히 커진다.
+- Rule: Introduce chain-specific autonomous adapters first, then map adapter steps into existing planner actions to preserve backward compatibility.
+- 자율 실행/검증/롤백 API를 분리하지 않으면 운영자가 어느 단계에서 실패했는지 추적이 어렵다.
+- Rule: Autonomous ops must expose explicit `plan -> execute -> verify -> rollback` endpoints/tools with operationId-correlated outputs.
+- 체인 플러그인 capability에 자율 intent/action 목록이 없으면 지원 범위가 코드/문서/MCP 사이에서 쉽게 불일치한다.
+- Rule: Chain capability metadata must include autonomous intents/actions and be treated as the single source of truth for dashboard/API/MCP exposure.
+
 - Agent loop 장애는 체인 자체 장애와 구분되지 않으면 원인 파악이 지연된다.
 - Rule: Agent-loop scheduler must emit a Redis heartbeat on every cycle and expose `heartbeat lag + stale` in `/api/health` for on-call detection.
 - 단순 스크립트 추가만으로는 운영 연결이 지연될 수 있다.

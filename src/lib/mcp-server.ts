@@ -29,6 +29,13 @@ import {
   evaluateMcpApprovalIssuePolicy,
   evaluateMcpToolPolicy,
 } from '@/lib/policy-engine';
+import {
+  executeAutonomousOperation,
+  getAutonomousCapabilities,
+  rollbackAutonomousOperation,
+  verifyAutonomousOperation,
+  planAutonomousOperation,
+} from '@/lib/autonomous/service';
 import type { TargetMemoryGiB, TargetVcpu } from '@/types/scaling';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 import type {
@@ -43,6 +50,7 @@ import type {
 } from '@/types/mcp';
 import type { PolicyReasonCode } from '@/types/policy';
 import type { OperationActionType } from '@/types/operation-control';
+import type { AutonomousIntent } from '@/types/autonomous-ops';
 
 const MCP_ERROR = {
   PARSE_ERROR: -32700,
@@ -64,6 +72,8 @@ const WRITE_TOOLS = new Set<McpToolName>([
   'restart_proposer',
   'switch_l1_rpc',
   'update_proxyd_backend',
+  'execute_autonomous_operation',
+  'rollback_autonomous_operation',
 ]);
 
 const TOOL_NAMES = new Set<McpToolName>([
@@ -79,6 +89,11 @@ const TOOL_NAMES = new Set<McpToolName>([
   'switch_l1_rpc',
   'update_proxyd_backend',
   'run_health_diagnostics',
+  'get_autonomous_capabilities',
+  'plan_autonomous_operation',
+  'execute_autonomous_operation',
+  'verify_autonomous_operation',
+  'rollback_autonomous_operation',
 ]);
 
 const DEFAULT_APPROVAL_TTL_SECONDS = 300;
@@ -233,6 +248,72 @@ export const MCP_TOOLS: McpToolDefinition[] = [
       properties: {},
     },
     writeOperation: false,
+  },
+  {
+    name: 'get_autonomous_capabilities',
+    description: 'Returns chain-specific autonomous intents/actions/policies.',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+    writeOperation: false,
+  },
+  {
+    name: 'plan_autonomous_operation',
+    description: 'Builds a chain-aware autonomous plan from a standard intent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        intent: { type: 'string' },
+        dryRun: { type: 'boolean', default: true },
+        allowWrites: { type: 'boolean', default: false },
+      },
+      required: ['intent'],
+    },
+    writeOperation: false,
+  },
+  {
+    name: 'execute_autonomous_operation',
+    description: 'Executes a chain-aware autonomous operation. Accepts planId or intent.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        planId: { type: 'string' },
+        intent: { type: 'string' },
+        dryRun: { type: 'boolean', default: true },
+        allowWrites: { type: 'boolean', default: false },
+        approvalToken: { type: 'string' },
+      },
+    },
+    writeOperation: true,
+  },
+  {
+    name: 'verify_autonomous_operation',
+    description: 'Verifies post-conditions for an autonomous operation by operationId.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        operationId: { type: 'string' },
+        before: { type: 'object' },
+        after: { type: 'object' },
+      },
+      required: ['operationId'],
+    },
+    writeOperation: false,
+  },
+  {
+    name: 'rollback_autonomous_operation',
+    description: 'Runs rollback steps for failed autonomous operation steps.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        operationId: { type: 'string' },
+        dryRun: { type: 'boolean', default: true },
+        approvalToken: { type: 'string' },
+      },
+      required: ['operationId'],
+    },
+    writeOperation: true,
   },
 ];
 
@@ -674,6 +755,77 @@ async function executeRunHealthDiagnostics(): Promise<unknown> {
   return runHealthDiagnostics();
 }
 
+function isAutonomousIntent(value: unknown): value is AutonomousIntent {
+  return value === 'stabilize_throughput' ||
+    value === 'recover_sequencer_path' ||
+    value === 'reduce_cost_idle_window' ||
+    value === 'restore_l1_connectivity' ||
+    value === 'protect_critical_eoa';
+}
+
+async function executeGetAutonomousCapabilities(): Promise<unknown> {
+  return getAutonomousCapabilities();
+}
+
+async function executePlanAutonomousOperation(params: unknown): Promise<unknown> {
+  if (!isObject(params) || !isAutonomousIntent(params.intent)) {
+    throw new Error('intent parameter is required for autonomous planning.');
+  }
+
+  return planAutonomousOperation({
+    intent: params.intent,
+    context: {
+      dryRun: params.dryRun !== false,
+      allowWrites: params.allowWrites === true,
+    },
+  });
+}
+
+async function executeAutonomousOperationTool(params: unknown): Promise<unknown> {
+  if (!isObject(params)) {
+    throw new Error('autonomous operation parameters are required.');
+  }
+
+  const planId = typeof params.planId === 'string' ? params.planId : undefined;
+  const intent = isAutonomousIntent(params.intent) ? params.intent : undefined;
+  if (!planId && !intent) {
+    throw new Error('planId or intent is required for autonomous execution.');
+  }
+
+  return executeAutonomousOperation({
+    planId,
+    intent,
+    context: {
+      dryRun: params.dryRun !== false,
+      allowWrites: params.allowWrites === true,
+      confidence: typeof params.confidence === 'number' ? params.confidence : undefined,
+    },
+  });
+}
+
+async function executeVerifyAutonomousOperationTool(params: unknown): Promise<unknown> {
+  if (!isObject(params) || typeof params.operationId !== 'string') {
+    throw new Error('operationId is required for autonomous verification.');
+  }
+
+  return verifyAutonomousOperation({
+    operationId: params.operationId,
+    before: isObject(params.before) ? params.before : undefined,
+    after: isObject(params.after) ? params.after : undefined,
+  });
+}
+
+async function executeRollbackAutonomousOperationTool(params: unknown): Promise<unknown> {
+  if (!isObject(params) || typeof params.operationId !== 'string') {
+    throw new Error('operationId is required for autonomous rollback.');
+  }
+
+  return rollbackAutonomousOperation({
+    operationId: params.operationId,
+    dryRun: params.dryRun !== false,
+  });
+}
+
 async function executeTool(toolName: McpToolName, params: unknown): Promise<unknown> {
   switch (toolName) {
     case 'get_metrics':
@@ -700,6 +852,16 @@ async function executeTool(toolName: McpToolName, params: unknown): Promise<unkn
       return executeUpdateProxydBackend(params);
     case 'run_health_diagnostics':
       return executeRunHealthDiagnostics();
+    case 'get_autonomous_capabilities':
+      return executeGetAutonomousCapabilities();
+    case 'plan_autonomous_operation':
+      return executePlanAutonomousOperation(params);
+    case 'execute_autonomous_operation':
+      return executeAutonomousOperationTool(params);
+    case 'verify_autonomous_operation':
+      return executeVerifyAutonomousOperationTool(params);
+    case 'rollback_autonomous_operation':
+      return executeRollbackAutonomousOperationTool(params);
     default: {
       const exhaustiveCheck: never = toolName;
       throw new Error(`Unknown MCP tool: ${exhaustiveCheck}`);

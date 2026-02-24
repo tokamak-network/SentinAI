@@ -26,6 +26,7 @@ import { DEFAULT_SCALING_CONFIG, type TargetMemoryGiB, type TargetVcpu } from '@
 import type { RemediationAction } from '@/types/remediation';
 import type { RoutingPolicyName } from '@/types/ai-routing';
 import type { OperationActionType } from '@/types/operation-control';
+import type { AutonomousIntent, AutonomousPlanStep } from '@/types/autonomous-ops';
 import type {
   GoalExecutionOptions,
   GoalExecutionResult,
@@ -114,7 +115,83 @@ function makeStep(
   };
 }
 
-function buildSteps(intent: GoalPlanIntent, goal: string): GoalPlanStep[] {
+function mapGoalIntentToAutonomousIntent(intent: GoalPlanIntent): AutonomousIntent | null {
+  switch (intent) {
+    case 'stabilize':
+      return 'stabilize_throughput';
+    case 'recover':
+      return 'recover_sequencer_path';
+    case 'cost-optimize':
+      return 'reduce_cost_idle_window';
+    case 'investigate':
+      return 'restore_l1_connectivity';
+    default:
+      return null;
+  }
+}
+
+function mapAutonomousActionToGoalAction(step: AutonomousPlanStep): GoalPlanStepAction {
+  switch (step.action) {
+    case 'collect_metrics':
+      return 'collect_state';
+    case 'inspect_anomalies':
+      return 'inspect_anomalies';
+    case 'run_rca':
+      return 'run_rca';
+    case 'set_routing_policy':
+      return 'set_routing_policy';
+    case 'scale_execution':
+    case 'scale_sequencer':
+    case 'scale_core_execution':
+      return 'scale_execution';
+    case 'restart_execution':
+    case 'restart_batcher':
+    case 'restart_proposer':
+    case 'restart_batch_poster':
+    case 'restart_validator':
+    case 'restart_prover':
+    case 'restart_batcher_pipeline':
+      return 'restart_execution';
+    default:
+      return 'collect_state';
+  }
+}
+
+function mapAutonomousStepToGoalStep(step: AutonomousPlanStep): GoalPlanStep {
+  const mappedRisk: GoalPlanStep['risk'] = step.risk === 'critical' ? 'high' : step.risk;
+  return makeStep(
+    mapAutonomousActionToGoalAction(step),
+    step.title,
+    step.reason,
+    {
+      risk: mappedRisk,
+      requiresApproval: step.requiresApproval,
+      parameters: {
+        ...(step.params || {}),
+        ...(step.targetComponent ? { targetComponent: step.targetComponent } : {}),
+      },
+      preconditions: step.safetyChecks,
+      rollbackHint: step.rollbackHint,
+    }
+  );
+}
+
+function buildSteps(intent: GoalPlanIntent, goal: string, dryRun: boolean): GoalPlanStep[] {
+  const plugin = getChainPlugin();
+  const autonomousIntent = mapGoalIntentToAutonomousIntent(intent);
+  if (autonomousIntent && plugin.getSupportedIntents().includes(autonomousIntent)) {
+    const autonomousSteps = plugin.translateIntentToActions(autonomousIntent, {
+      chainType: plugin.chainType,
+      runtime: process.env.ORCHESTRATOR_TYPE === 'docker' ? 'docker' : 'k8s',
+      dryRun,
+      allowWrites: !dryRun,
+      metadata: { goal },
+    });
+    if (autonomousSteps.length > 0) {
+      return autonomousSteps.map(mapAutonomousStepToGoalStep);
+    }
+  }
+
   const explicitTarget = parseTargetVcpu(goal);
   const explicitPolicy = parseRoutingPolicy(goal);
 
@@ -237,7 +314,7 @@ function createRuleBasedPlan(
   }
 
   const intent = inferGoalIntent(normalizedGoal);
-  const steps = buildSteps(intent, normalizedGoal);
+  const steps = buildSteps(intent, normalizedGoal, dryRun);
   const summary = `${steps.length} steps generated for ${intent} intent`;
   return createGoalPlan(
     normalizedGoal,
@@ -515,7 +592,9 @@ async function executePlanStep(
       return '[DRY RUN] restart execution component';
     }
 
-    const target = getChainPlugin().primaryExecutionClient;
+    const target = typeof step.parameters?.targetComponent === 'string'
+      ? step.parameters.targetComponent
+      : getChainPlugin().primaryExecutionClient;
     const action: RemediationAction = {
       type: 'restart_pod',
       safetyLevel: 'guarded',

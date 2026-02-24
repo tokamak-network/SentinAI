@@ -21,6 +21,19 @@ import {
 import { ARBITRUM_AI_PROMPTS } from './prompts';
 import { ARBITRUM_PLAYBOOKS } from './playbooks';
 import { getArbitrumL1Chain, arbitrumOrbitChain } from './chain';
+import {
+  defaultBuildRollback,
+  defaultTranslateIntentToActions,
+  defaultVerifyActionOutcome,
+  getDefaultAutonomousActions,
+  getDefaultAutonomousIntents,
+} from '../autonomous-defaults';
+import type {
+  AutonomousExecutionContext,
+  AutonomousIntent,
+  AutonomousPlanStep,
+  AutonomousVerificationResult,
+} from '@/types/autonomous-ops';
 
 export class ArbitrumPlugin implements ChainPlugin {
   readonly chainType = 'arbitrum';
@@ -32,6 +45,8 @@ export class ArbitrumPlugin implements ChainPlugin {
     disputeGameMonitoring: false,
     proofMonitoring: false,
     settlementMonitoring: false,
+    autonomousIntents: getDefaultAutonomousIntents('arbitrum'),
+    autonomousActions: getDefaultAutonomousActions('arbitrum'),
   } as const;
 
   readonly components: ChainComponent[] = [...ARBITRUM_COMPONENTS];
@@ -76,5 +91,28 @@ export class ArbitrumPlugin implements ChainPlugin {
 
   getPlaybooks(): Playbook[] {
     return ARBITRUM_PLAYBOOKS;
+  }
+
+  getSupportedIntents(): AutonomousIntent[] {
+    return [...this.capabilities.autonomousIntents];
+  }
+
+  translateIntentToActions(
+    intent: AutonomousIntent,
+    context: AutonomousExecutionContext
+  ): AutonomousPlanStep[] {
+    return defaultTranslateIntentToActions(this.chainType, intent, context);
+  }
+
+  verifyActionOutcome(
+    step: AutonomousPlanStep,
+    before: Record<string, unknown>,
+    after: Record<string, unknown>
+  ): AutonomousVerificationResult {
+    return defaultVerifyActionOutcome(this.chainType, step, before, after);
+  }
+
+  buildRollback(step: AutonomousPlanStep): AutonomousPlanStep[] {
+    return defaultBuildRollback(this.chainType, step);
   }
 }

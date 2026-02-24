@@ -5,6 +5,13 @@
 
 import type { Chain } from 'viem';
 import type { Playbook } from '@/types/remediation';
+import type {
+  AutonomousAction,
+  AutonomousExecutionContext,
+  AutonomousIntent,
+  AutonomousPlanStep,
+  AutonomousVerificationResult,
+} from '@/types/autonomous-ops';
 
 // ============================================================
 // Primitive Aliases
@@ -96,6 +103,8 @@ export interface ChainCapabilities {
   readonly disputeGameMonitoring: boolean;
   readonly proofMonitoring: boolean;
   readonly settlementMonitoring: boolean;
+  readonly autonomousIntents: AutonomousIntent[];
+  readonly autonomousActions: AutonomousAction[];
 }
 
 // ============================================================
@@ -172,4 +181,23 @@ export interface ChainPlugin {
 
   /** Get chain-specific remediation playbooks */
   getPlaybooks(): Playbook[];
+
+  /** Supported autonomous intents for this chain */
+  getSupportedIntents(): AutonomousIntent[];
+
+  /** Translate abstract intent to chain-specific action steps */
+  translateIntentToActions(
+    intent: AutonomousIntent,
+    context: AutonomousExecutionContext
+  ): AutonomousPlanStep[];
+
+  /** Verify chain-specific action outcome */
+  verifyActionOutcome(
+    step: AutonomousPlanStep,
+    before: Record<string, unknown>,
+    after: Record<string, unknown>
+  ): AutonomousVerificationResult;
+
+  /** Build rollback steps for a failed action */
+  buildRollback(step: AutonomousPlanStep): AutonomousPlanStep[];
 }

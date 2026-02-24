@@ -2,6 +2,18 @@
 
 ## Current Status
 
+### In Progress (2026-02-24 Multi-Stack Autonomous Ops Capability Layer)
+- [x] Autonomous operations domain types 추가 (`src/types/autonomous-ops.ts`)
+- [x] 체인별 autonomous adapter 추가 (`src/lib/autonomous/adapters/*`)
+- [x] `ChainPlugin`/`ChainCapabilities` 계약 확장 및 플러그인 구현 동기화 (`src/chains/types.ts`, `src/chains/*/index.ts`)
+- [x] `goal-planner`를 adapter 기반 step 생성으로 확장 (`src/lib/goal-planner.ts`)
+- [x] `action-executor`에 `executeAutonomousAction` 진입점 추가 (`src/lib/action-executor.ts`)
+- [x] `operation-verifier`에 autonomous verify 경로 추가 (`src/lib/operation-verifier.ts`)
+- [x] autonomous 서비스/API 추가 (`src/lib/autonomous/service.ts`, `src/app/api/autonomous/*`)
+- [x] MCP 도구 확장 (`src/types/mcp.ts`, `src/lib/mcp-server.ts`)
+- [x] 검증 문서 추가 및 인덱스 연결 (`docs/guide/multistack-autonomous-ops-validation.md`, `docs/README.md`, `docs/guide/api-reference.md`)
+- [x] 검증 실행 (`npm run lint`, `npx tsc --noEmit`, `npm run test:run -- src/lib/__tests__/autonomous-service.test.ts src/lib/__tests__/goal-planner.test.ts src/lib/__tests__/mcp-server.test.ts`)
+
 ### In Progress (2026-02-24 Arbitrum Orbit Example Onboarding)
 - [x] Arbitrum 공식 Orbit 예제(`create-rollup-eth`) 레퍼런스 확인 및 파일 구조 수집
 - [x] `examples/arbitrum-orbit/create-rollup-eth` 예제 코드/환경 템플릿 추가 (`README.md`, `.env.example`, `index.ts`, `low_level.ts`, `package.json`, `tsconfig.json`)

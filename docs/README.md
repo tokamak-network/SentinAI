@@ -45,6 +45,7 @@
 
 ## 4) Verify & Improve
 - [Testing guide](verification/testing-guide.md)
+- [Multi-stack autonomous ops validation](guide/multistack-autonomous-ops-validation.md)
 - [Integration test report](verification/integration-test-report.md)
 - [Unit test coverage report](verification/unit-test-coverage-report.md)
 - [Daily report verification](verification/daily-report-verification.md)

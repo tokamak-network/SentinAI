@@ -15,7 +15,12 @@ export type McpToolName =
   | 'restart_proposer'
   | 'switch_l1_rpc'
   | 'update_proxyd_backend'
-  | 'run_health_diagnostics';
+  | 'run_health_diagnostics'
+  | 'get_autonomous_capabilities'
+  | 'plan_autonomous_operation'
+  | 'execute_autonomous_operation'
+  | 'verify_autonomous_operation'
+  | 'rollback_autonomous_operation';
 
 export type McpAuthMode = 'api-key' | 'approval-token' | 'dual';
 

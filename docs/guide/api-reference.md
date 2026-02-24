@@ -566,3 +566,77 @@ curl http://localhost:3002/api/agent-decisions?limit=10
 
 For architecture details, see [Architecture Guide](architecture.md).  
 For MCP integration, see [MCP User Guide](sentinai-mcp-user-guide.md).
+
+---
+
+## Autonomous Operations Endpoints
+
+### POST /api/autonomous/plan
+
+Build chain-aware autonomous plan from standard intent.
+
+**Body:**
+```json
+{
+  "intent": "recover_sequencer_path",
+  "dryRun": true,
+  "allowWrites": false
+}
+```
+
+### POST /api/autonomous/execute
+
+Execute autonomous operation by `planId` or direct `intent`.
+
+**Body:**
+```json
+{
+  "intent": "stabilize_throughput",
+  "dryRun": true,
+  "allowWrites": false
+}
+```
+
+Notes:
+- When `dryRun=false` and `allowWrites=true`, `x-api-key` is required.
+
+### POST /api/autonomous/verify
+
+Verify autonomous operation post-condition.
+
+**Body:**
+```json
+{
+  "operationId": "op-uuid",
+  "before": { "blockHeight": 100 },
+  "after": { "blockHeight": 101 }
+}
+```
+
+### POST /api/autonomous/rollback
+
+Run rollback actions for failed autonomous steps.
+
+**Body:**
+```json
+{
+  "operationId": "op-uuid",
+  "dryRun": true
+}
+```
+
+Notes:
+- Rollback API always requires `x-api-key` when `SENTINAI_API_KEY` is configured.
+
+---
+
+## MCP Autonomous Tools
+
+- `get_autonomous_capabilities`
+- `plan_autonomous_operation`
+- `execute_autonomous_operation`
+- `verify_autonomous_operation`
+- `rollback_autonomous_operation`
+
+Write tool policy:
+- `execute_autonomous_operation`, `rollback_autonomous_operation` follow the same auth/approval guardrail as existing write tools.

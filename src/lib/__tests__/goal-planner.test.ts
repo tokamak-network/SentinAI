@@ -32,7 +32,10 @@ const hoisted = vi.hoisted(() => ({
 
 vi.mock('@/chains', () => ({
   getChainPlugin: vi.fn(() => ({
+    chainType: 'optimism',
     primaryExecutionClient: 'op-geth',
+    getSupportedIntents: () => [],
+    translateIntentToActions: () => [],
   })),
 }));
 

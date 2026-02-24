@@ -13,6 +13,10 @@ import type {
   OperationVerificationResult,
 } from '@/types/operation-control';
 import type { RemediationAction } from '@/types/remediation';
+import type {
+  AutonomousPlanStep,
+  AutonomousVerificationResult,
+} from '@/types/autonomous-ops';
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -161,4 +165,38 @@ export async function verifyOperationOutcome(
   }
 
   return buildVerification('no-op', 'no-op', true, 'no verifier rule for action');
+}
+
+type PluginVerifier = (
+  step: AutonomousPlanStep,
+  before: Record<string, unknown>,
+  after: Record<string, unknown>
+) => AutonomousVerificationResult;
+
+export async function verifyAutonomousActionOutcome(input: {
+  step: AutonomousPlanStep;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  dryRun: boolean;
+  pluginVerifier?: PluginVerifier;
+}): Promise<AutonomousVerificationResult> {
+  if (input.dryRun) {
+    return {
+      stepId: input.step.id,
+      action: input.step.action,
+      passed: true,
+      checks: [{ check: 'dry_run', passed: true, details: 'verification skipped in dry-run mode' }],
+      summary: 'Dry-run verification pass',
+      verifiedAt: nowIso(),
+    };
+  }
+
+  const plugin = getChainPlugin();
+  const verifier = input.pluginVerifier || plugin.verifyActionOutcome.bind(plugin);
+  const result = verifier(input.step, input.before, input.after);
+
+  return {
+    ...result,
+    verifiedAt: result.verifiedAt || nowIso(),
+  };
 }

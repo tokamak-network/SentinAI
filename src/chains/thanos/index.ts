@@ -27,6 +27,19 @@ import {
 } from './components';
 import { THANOS_AI_PROMPTS } from './prompts';
 import { THANOS_PLAYBOOKS } from './playbooks';
+import {
+  defaultBuildRollback,
+  defaultTranslateIntentToActions,
+  defaultVerifyActionOutcome,
+  getDefaultAutonomousActions,
+  getDefaultAutonomousIntents,
+} from '../autonomous-defaults';
+import type {
+  AutonomousExecutionContext,
+  AutonomousIntent,
+  AutonomousPlanStep,
+  AutonomousVerificationResult,
+} from '@/types/autonomous-ops';
 
 export class ThanosPlugin implements ChainPlugin {
   readonly chainType = 'thanos';
@@ -38,6 +51,8 @@ export class ThanosPlugin implements ChainPlugin {
     disputeGameMonitoring: true,
     proofMonitoring: false,
     settlementMonitoring: true,
+    autonomousIntents: getDefaultAutonomousIntents('thanos'),
+    autonomousActions: getDefaultAutonomousActions('thanos'),
   } as const;
 
   // Component Topology
@@ -105,5 +120,28 @@ export class ThanosPlugin implements ChainPlugin {
    */
   getPlaybooks(): Playbook[] {
     return THANOS_PLAYBOOKS;
+  }
+
+  getSupportedIntents(): AutonomousIntent[] {
+    return [...this.capabilities.autonomousIntents];
+  }
+
+  translateIntentToActions(
+    intent: AutonomousIntent,
+    context: AutonomousExecutionContext
+  ): AutonomousPlanStep[] {
+    return defaultTranslateIntentToActions(this.chainType, intent, context);
+  }
+
+  verifyActionOutcome(
+    step: AutonomousPlanStep,
+    before: Record<string, unknown>,
+    after: Record<string, unknown>
+  ): AutonomousVerificationResult {
+    return defaultVerifyActionOutcome(this.chainType, step, before, after);
+  }
+
+  buildRollback(step: AutonomousPlanStep): AutonomousPlanStep[] {
+    return defaultBuildRollback(this.chainType, step);
   }
 }

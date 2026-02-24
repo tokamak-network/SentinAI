@@ -282,12 +282,23 @@ interface RuntimeAutonomyPolicyData {
   minConfidenceWrite: number;
 }
 
+type AutonomousIntentData =
+  | 'stabilize_throughput'
+  | 'recover_sequencer_path'
+  | 'reduce_cost_idle_window'
+  | 'restore_l1_connectivity'
+  | 'protect_critical_eoa';
+
 type AutonomyDemoAction =
   | 'seed-stable'
   | 'seed-rising'
   | 'seed-spike'
   | 'goal-tick'
-  | 'goal-dispatch-dry-run';
+  | 'goal-dispatch-dry-run'
+  | 'autonomous-plan'
+  | 'autonomous-execute'
+  | 'autonomous-verify'
+  | 'autonomous-rollback';
 
 interface DecisionTraceData {
   decisionId: string;
@@ -410,6 +421,13 @@ const METRICS_REFRESH_INTERVAL_MS = 60_000;
 const AGENT_LOOP_REFRESH_INTERVAL_MS = 30_000;
 
 const AUTONOMY_LEVEL_OPTIONS: RuntimeAutonomyPolicyData['level'][] = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5'];
+const AUTONOMOUS_INTENT_OPTIONS: Array<{ value: AutonomousIntentData; label: string }> = [
+  { value: 'stabilize_throughput', label: 'Stabilize Throughput' },
+  { value: 'recover_sequencer_path', label: 'Recover Sequencer Path' },
+  { value: 'reduce_cost_idle_window', label: 'Reduce Cost Idle Window' },
+  { value: 'restore_l1_connectivity', label: 'Restore L1 Connectivity' },
+  { value: 'protect_critical_eoa', label: 'Protect Critical EOA' },
+];
 
 const AUTONOMY_LEVEL_GUIDE: Record<RuntimeAutonomyPolicyData['level'], {
   permission: string;
@@ -476,6 +494,9 @@ export default function Dashboard() {
   const [autonomyPolicy, setAutonomyPolicy] = useState<RuntimeAutonomyPolicyData | null>(null);
   const [autonomyActionRunning, setAutonomyActionRunning] = useState<AutonomyDemoAction | null>(null);
   const [autonomyPolicyUpdating, setAutonomyPolicyUpdating] = useState<RuntimeAutonomyPolicyData['level'] | null>(null);
+  const [autonomousIntent, setAutonomousIntent] = useState<AutonomousIntentData>('recover_sequencer_path');
+  const [autonomousPlanId, setAutonomousPlanId] = useState<string | null>(null);
+  const [autonomousOperationId, setAutonomousOperationId] = useState<string | null>(null);
   const [autonomyActionFeedback, setAutonomyActionFeedback] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -712,7 +733,7 @@ export default function Dashboard() {
           type: 'success',
           message: `Goal tick completed (generated ${generated}, queued ${queued}, queue depth ${depth})`,
         });
-      } else {
+      } else if (action === 'goal-dispatch-dry-run') {
         const res = await fetch(`${BASE_PATH}/api/goal-manager/dispatch`, {
           method: 'POST',
           headers: writeHeaders(),
@@ -736,6 +757,102 @@ export default function Dashboard() {
         setAutonomyActionFeedback({
           type: 'success',
           message: `Dry-run dispatch completed (status: ${status})`,
+        });
+      } else if (action === 'autonomous-plan') {
+        const res = await fetch(`${BASE_PATH}/api/autonomous/plan`, {
+          method: 'POST',
+          headers: writeHeaders(),
+          body: JSON.stringify({
+            intent: autonomousIntent,
+            dryRun: true,
+            allowWrites: false,
+          }),
+        });
+        const body = await res.json().catch(() => ({} as Record<string, unknown>));
+        if (!res.ok) {
+          const message = typeof body.error === 'string' ? body.error : 'Failed to create autonomous plan.';
+          throw new Error(message);
+        }
+        const plan = (body as { plan?: { planId?: string; steps?: unknown[] } }).plan;
+        if (plan?.planId) {
+          setAutonomousPlanId(plan.planId);
+        }
+        const stepCount = Array.isArray(plan?.steps) ? plan.steps.length : 0;
+        setAutonomyActionFeedback({
+          type: 'success',
+          message: `Autonomous plan created (${stepCount} steps) for ${autonomousIntent}.`,
+        });
+      } else if (action === 'autonomous-execute') {
+        const res = await fetch(`${BASE_PATH}/api/autonomous/execute`, {
+          method: 'POST',
+          headers: writeHeaders(),
+          body: JSON.stringify({
+            planId: autonomousPlanId || undefined,
+            intent: autonomousPlanId ? undefined : autonomousIntent,
+            dryRun: true,
+            allowWrites: false,
+          }),
+        });
+        const body = await res.json().catch(() => ({} as Record<string, unknown>));
+        if (!res.ok) {
+          const message = typeof body.error === 'string' ? body.error : 'Failed to execute autonomous operation.';
+          throw new Error(message);
+        }
+        const result = (body as { result?: { operationId?: string; steps?: unknown[]; success?: boolean } }).result;
+        if (result?.operationId) {
+          setAutonomousOperationId(result.operationId);
+        }
+        const stepCount = Array.isArray(result?.steps) ? result.steps.length : 0;
+        setAutonomyActionFeedback({
+          type: 'success',
+          message: `Autonomous execute completed (${stepCount} steps, success=${result?.success === true ? 'true' : 'false'}).`,
+        });
+      } else if (action === 'autonomous-verify') {
+        if (!autonomousOperationId) {
+          throw new Error('Run Autonomous Execute first to get operationId.');
+        }
+        const res = await fetch(`${BASE_PATH}/api/autonomous/verify`, {
+          method: 'POST',
+          headers: writeHeaders(),
+          body: JSON.stringify({
+            operationId: autonomousOperationId,
+            before: { blockHeight: 100 },
+            after: { blockHeight: 101 },
+          }),
+        });
+        const body = await res.json().catch(() => ({} as Record<string, unknown>));
+        if (!res.ok) {
+          const message = typeof body.error === 'string' ? body.error : 'Failed to verify autonomous operation.';
+          throw new Error(message);
+        }
+        const result = (body as { result?: { passed?: boolean; results?: unknown[] } }).result;
+        const checks = Array.isArray(result?.results) ? result.results.length : 0;
+        setAutonomyActionFeedback({
+          type: 'success',
+          message: `Autonomous verify completed (passed=${result?.passed === true ? 'true' : 'false'}, checks=${checks}).`,
+        });
+      } else {
+        if (!autonomousOperationId) {
+          throw new Error('Run Autonomous Execute first to get operationId.');
+        }
+        const res = await fetch(`${BASE_PATH}/api/autonomous/rollback`, {
+          method: 'POST',
+          headers: writeHeaders(),
+          body: JSON.stringify({
+            operationId: autonomousOperationId,
+            dryRun: true,
+          }),
+        });
+        const body = await res.json().catch(() => ({} as Record<string, unknown>));
+        if (!res.ok) {
+          const message = typeof body.error === 'string' ? body.error : 'Failed to execute autonomous rollback.';
+          throw new Error(message);
+        }
+        const result = (body as { result?: { success?: boolean; rollbackSteps?: unknown[] } }).result;
+        const rollbackCount = Array.isArray(result?.rollbackSteps) ? result.rollbackSteps.length : 0;
+        setAutonomyActionFeedback({
+          type: 'success',
+          message: `Autonomous rollback completed (success=${result?.success === true ? 'true' : 'false'}, steps=${rollbackCount}).`,
         });
       }
 
@@ -1633,6 +1750,55 @@ export default function Dashboard() {
               </button>
             </div>
 
+            <div className="mt-3 pt-3 border-t border-gray-200">
+              <p className="text-[10px] text-gray-500 font-semibold uppercase">Autonomous Ops API</p>
+              <select
+                value={autonomousIntent}
+                onChange={(event) => setAutonomousIntent(event.target.value as AutonomousIntentData)}
+                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                className="mt-2 w-full px-2 py-1.5 rounded-lg border border-gray-200 text-[11px] text-gray-700 bg-white disabled:opacity-50"
+              >
+                {AUTONOMOUS_INTENT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <button
+                  onClick={() => runAutonomyDemoAction('autonomous-plan')}
+                  disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                  className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 disabled:opacity-50"
+                >
+                  {autonomyActionRunning === 'autonomous-plan' ? 'Planning' : 'Plan'}
+                </button>
+                <button
+                  onClick={() => runAutonomyDemoAction('autonomous-execute')}
+                  disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                  className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-cyan-100 text-cyan-700 hover:bg-cyan-200 disabled:opacity-50"
+                >
+                  {autonomyActionRunning === 'autonomous-execute' ? 'Executing' : 'Execute'}
+                </button>
+                <button
+                  onClick={() => runAutonomyDemoAction('autonomous-verify')}
+                  disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || !autonomousOperationId}
+                  className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-violet-100 text-violet-700 hover:bg-violet-200 disabled:opacity-50"
+                >
+                  {autonomyActionRunning === 'autonomous-verify' ? 'Verifying' : 'Verify'}
+                </button>
+                <button
+                  onClick={() => runAutonomyDemoAction('autonomous-rollback')}
+                  disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || !autonomousOperationId}
+                  className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-rose-100 text-rose-700 hover:bg-rose-200 disabled:opacity-50"
+                >
+                  {autonomyActionRunning === 'autonomous-rollback' ? 'Rolling Back' : 'Rollback'}
+                </button>
+              </div>
+
+              <p className="mt-2 text-[10px] text-gray-500">
+                planId: <span className="font-mono text-gray-700">{shortId(autonomousPlanId, 14)}</span> · operationId: <span className="font-mono text-gray-700">{shortId(autonomousOperationId, 14)}</span>
+              </p>
+            </div>
+
             {autonomyActionFeedback && (
               <div
                 className={`mt-3 text-[11px] px-2.5 py-2 rounded-lg border ${
@@ -1648,7 +1814,7 @@ export default function Dashboard() {
 
             {(!API_KEY || API_KEY.trim().length === 0) && (
               <p className="mt-2 text-[10px] text-amber-600">
-                Note: changing policy level or running dispatch demo requires `NEXT_PUBLIC_SENTINAI_API_KEY`.
+                Note: changing policy level, dispatch demo, and rollback write endpoints require `NEXT_PUBLIC_SENTINAI_API_KEY`.
               </p>
             )}
           </div>
