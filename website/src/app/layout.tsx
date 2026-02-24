@@ -13,15 +13,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "SentinAI Dashboard",
-  description: "Autonomous Node Guardian — Monitoring and auto-scaling dashboard for L2 networks",
+  title: "SentinAI — AI-Native Ops for L2 & Rollup Infrastructure",
+  description:
+    "SentinAI detects incidents, plans actions by policy, and helps teams recover safely with approval-gated automation.",
+  openGraph: {
+    title: "SentinAI — AI-Native Ops for L2 & Rollup Infrastructure",
+    description:
+      "Autonomous monitoring and auto-scaling for L2 networks. Observe, Decide, Act.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({
   children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+}: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
       <body

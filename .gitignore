@@ -13,6 +13,18 @@ coverage
 # Generated data
 data/
 
+# OP Stack local runtime artifacts
+examples/opstack/.env
+examples/opstack/.cache/
+examples/opstack/deployer/
+examples/opstack/sequencer/
+examples/opstack/batcher/
+examples/opstack/proposer/
+examples/opstack/challenger/
+examples/opstack/dispute-mon/
+examples/opstack/op-deployer
+examples/opstack/optimism/
+
 # Local external references / large experiment artifacts
 external/
 foundryup-zksync
@@ -20,3 +32,10 @@ foundryup-zksync
 # Playwright
 playwright-report/
 test-results/
+
+# Website (Vercel landing page)
+website/node_modules
+website/.next
+website/out
+website/next-env.d.ts
+website/*.tsbuildinfo
