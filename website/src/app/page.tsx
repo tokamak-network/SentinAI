@@ -48,9 +48,7 @@ function Navbar() {
             GitHub
           </a>
           <a
-            href={`${GITHUB_URL}#readme`}
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/docs"
             className="transition-colors hover:text-slate-100"
           >
             Docs
@@ -122,9 +120,7 @@ function Hero() {
               Run Local Demo
             </a>
             <a
-              href={`${GITHUB_URL}#readme`}
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/docs"
               className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/50 px-6 py-3 text-sm font-semibold text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100"
             >
               Read Docs
@@ -523,9 +519,7 @@ function Footer() {
         {/* Links */}
         <nav className="flex items-center gap-6">
           <a
-            href={`${GITHUB_URL}#readme`}
-            target="_blank"
-            rel="noopener noreferrer"
+            href="/docs"
             className="hover:text-slate-300"
           >
             Docs
