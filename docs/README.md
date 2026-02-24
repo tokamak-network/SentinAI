@@ -7,6 +7,7 @@
 - [📄 Whitepaper](whitepaper.md)
 - [**⚡ Quick Start (5 minutes)**](guide/quickstart.md)
 - [10-min local quickstart (OP Stack)](guide/optimism-l2-sentinai-local-setup.md)
+- [10-min local quickstart (Arbitrum Orbit)](guide/arbitrum-orbit-local-setup.md)
 - [First incident simulation](guide/demo-scenarios.md)
 - [Core concepts & guardrails](guide/autonomy-cockpit-user-guide.md)
 - [🔧 Troubleshooting Guide](guide/troubleshooting.md)
@@ -29,6 +30,7 @@
 ## 3) Integrate & Extend
 - [🏗️ Architecture Guide](guide/architecture.md)
 - [Codebase directory structure](../ARCHITECTURE.md)
+- [Arbitrum Orbit example (ETH gas token rollup)](../examples/arbitrum-orbit/create-rollup-eth/README.md)
 - [📡 API Reference](guide/api-reference.md)
 - [SentinAI MCP user guide](guide/sentinai-mcp-user-guide.md)
 - [Claude Code MCP setup](guide/claude-code-mcp-setup.md)

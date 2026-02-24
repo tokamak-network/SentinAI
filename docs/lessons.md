@@ -18,6 +18,8 @@
 - Rule: For codebase structure docs, always add `path -> role -> when to modify` guidance for major directories and root files.
 - 브라우저 기반 성능/E2E 스케줄 CI는 외부 환경 의존도 때문에 운영 파이프라인 신뢰도를 떨어뜨릴 수 있다.
 - Rule: Keep Lighthouse/Playwright checks out of scheduled required CI unless the environment is fully stabilized and deterministic.
+- 공식 예제 코드를 별도 저장소에 옮겨올 때 peer dependency를 그대로 추적하지 않으면 설치 단계에서 즉시 깨질 수 있다.
+- Rule: When importing upstream examples, validate peer dependency ranges first and pin compatible major versions in the local example `package.json`.
 
 ## 2026-02-22
 

@@ -1063,7 +1063,7 @@ export default function Dashboard() {
                 All data shown on this dashboard is collected in real-time from {chainName}.
               </p>
               <a
-                href="mailto:contact@tokamak.network?subject=SentinAI Connection Inquiry"
+                href="mailto:theo@tokamak.network?subject=SentinAI Connection Inquiry"
                 className="inline-flex items-center gap-1 mt-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800 underline underline-offset-2"
               >
                 Connect your chain →

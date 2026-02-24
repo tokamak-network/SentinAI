@@ -2,6 +2,12 @@
 
 ## Current Status
 
+### In Progress (2026-02-24 Arbitrum Orbit Example Onboarding)
+- [x] Arbitrum 공식 Orbit 예제(`create-rollup-eth`) 레퍼런스 확인 및 파일 구조 수집
+- [x] `examples/arbitrum-orbit/create-rollup-eth` 예제 코드/환경 템플릿 추가 (`README.md`, `.env.example`, `index.ts`, `low_level.ts`, `package.json`, `tsconfig.json`)
+- [x] 문서 인덱스 링크 추가 (`docs/README.md`)
+- [x] 예제 단위 검증 실행 (`npm install --package-lock=false`, `npm run typecheck`, `npm run lint -- examples/arbitrum-orbit/create-rollup-eth/index.ts examples/arbitrum-orbit/create-rollup-eth/low_level.ts`)
+
 ### In Progress (2026-02-24 Remove Lighthouse/Playwright CI)
 - [x] Lighthouse 전용 scheduled CI 제거 (`.github/workflows/prod-gate-tier2.yml`)
 - [x] Playwright/LHCI 포함 scheduled CI 제거 (`.github/workflows/prod-gate-tier3.yml`)

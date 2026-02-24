@@ -22,7 +22,8 @@
     "monitor:agent-heartbeat:alert": "node scripts/monitor-agent-heartbeat-alert.mjs",
     "mcp:bridge:stdio": "npx tsx scripts/mcp-stdio-bridge.ts",
     "autonomy:eval": "npx tsx scripts/autonomy-eval.ts --strict",
-    "goal:train-policy": "npx tsx scripts/train-goal-policy.ts"
+    "goal:train-policy": "npx tsx scripts/train-goal-policy.ts",
+    "l2:arbitrum": "bash scripts/start-arbitrum-orbit.sh"
   },
   "dependencies": {
     "@iarna/toml": "^3.0.0",
@@ -51,12 +52,12 @@
     "@types/node-cron": "^3.0.11",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitest/coverage-v8": "^2.1.9",
-    "eslint": "^9",
-    "eslint-config-next": "16.1.6",
-    "firebase-tools": "^15.5.1",
+    "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^10.0.2",
+    "eslint-config-next": "^12.0.4",
+    "firebase-tools": "^3.18.2",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^2.1.9"
+    "vitest": "^4.0.18"
   }
 }
