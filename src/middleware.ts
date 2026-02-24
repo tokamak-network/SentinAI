@@ -2,7 +2,7 @@
  * Middleware for API Authentication and Read-Only Mode Protection
  *
  * 1. API Key Guard: When SENTINAI_API_KEY is set, all write operations (POST/PATCH/DELETE/PUT)
- *    require a valid x-api-key header. Internal routes (health, agent-loop, metrics/seed) are exempt.
+ *    require a valid x-api-key header. Internal routes (health, agent-loop) are exempt.
  * 2. Read-Only Mode: When SENTINAI_READ_ONLY_MODE is enabled, blocks write operations
  *    except for whitelisted safe endpoints.
  */
@@ -44,7 +44,6 @@ export const config = {
 const AUTH_EXEMPT_ROUTES = new Set([
   '/api/health',
   '/api/agent-loop',
-  '/api/metrics/seed',
 ]);
 
 /**
