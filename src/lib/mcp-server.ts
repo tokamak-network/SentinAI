@@ -884,13 +884,33 @@ function toStandardToolCallResult(
   widgetUri?: string,
   widgetSessionId?: string
 ): Record<string, unknown> {
+  const content: unknown[] = [
+    {
+      type: 'text',
+      text: JSON.stringify(payload, null, 2),
+    },
+  ];
+
+  // Include widget HTML as EmbeddedResource for Claude Desktop (io.modelcontextprotocol/ui)
+  if (widgetUri && !isError) {
+    const html = getWidgetHtml(widgetUri);
+    if (html) {
+      // Inject data so widget renders immediately without waiting for postMessage
+      const dataScript = `<script>window.addEventListener('DOMContentLoaded',function(){try{render(${JSON.stringify(payload)})}catch(e){}});</script>`;
+      const htmlWithData = html.replace('</body>', dataScript + '</body>');
+      content.push({
+        type: 'resource',
+        resource: {
+          uri: widgetUri,
+          mimeType: 'text/html;profile=mcp-app',
+          text: htmlWithData,
+        },
+      });
+    }
+  }
+
   return {
-    content: [
-      {
-        type: 'text',
-        text: JSON.stringify(payload, null, 2),
-      },
-    ],
+    content,
     structuredContent: payload,
     isError,
     ...(widgetUri && !isError
