@@ -5,13 +5,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import { getPublicBase } from '@/lib/public-url';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: NextRequest) {
-  const origin = new URL(request.url).origin;
-  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
-  const base = `${origin}${basePath}`;
+  const base = getPublicBase(request);
 
   return NextResponse.json({
     resource: base,

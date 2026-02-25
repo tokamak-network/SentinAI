@@ -8,13 +8,12 @@ import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { getMcpConfig, getMcpToolManifest, handleMcpRequest } from '@/lib/mcp-server';
 import { validateBearerToken } from '@/lib/oauth-token';
+import { getPublicBase } from '@/lib/public-url';
 
 export const dynamic = 'force-dynamic';
 
 function buildWwwAuthenticate(request: NextRequest): string {
-  const origin = new URL(request.url).origin;
-  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
-  const base = `${origin}${basePath}`;
+  const base = getPublicBase(request);
   return `Bearer realm="SentinAI", resource_metadata="${base}/.well-known/oauth-protected-resource"`;
 }
 
