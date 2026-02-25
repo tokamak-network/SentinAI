@@ -718,6 +718,7 @@ export default function Dashboard() {
         }
         const injectedCount = typeof body.injectedCount === 'number' ? body.injectedCount : null;
         const goalsQueued = typeof body.goalsQueued === 'number' ? body.goalsQueued : 0;
+        const goalManagerEnabled = body.goalManagerEnabled !== false;
         const goalsSuffix = goalsQueued > 0 ? ` · ${goalsQueued} goals queued` : '';
         // Auto-select the most relevant intent for this scenario
         const suggestedIntent = SEED_INTENT_MAP[scenario];
@@ -728,9 +729,13 @@ export default function Dashboard() {
         setAutonomousPlanSteps(null);
         setAutonomyActionFeedback({
           type: 'success',
-          message: injectedCount !== null
-            ? `Scenario ${scenario} injected (${injectedCount} data points)${goalsSuffix}`
-            : `Scenario ${scenario} injected${goalsSuffix}`,
+          message: goalManagerEnabled
+            ? injectedCount !== null
+              ? `Scenario ${scenario} injected (${injectedCount} data points)${goalsSuffix}`
+              : `Scenario ${scenario} injected${goalsSuffix}`
+            : injectedCount !== null
+              ? `Scenario ${scenario} injected (${injectedCount} data points). Goal Manager is disabled, so queue will not change.`
+              : `Scenario ${scenario} injected. Goal Manager is disabled, so queue will not change.`,
         });
       } else if (action === 'goal-tick') {
         const res = await fetch(`${BASE_PATH}/api/goal-manager/tick`, {
@@ -742,6 +747,9 @@ export default function Dashboard() {
         if (!res.ok) {
           const message = typeof body.error === 'string' ? body.error : 'Failed to execute goal tick.';
           throw new Error(message);
+        }
+        if (body.enabled === false) {
+          throw new Error('Goal Manager is disabled. Set GOAL_MANAGER_ENABLED=true and restart.');
         }
         const generated = typeof body.generatedCount === 'number' ? body.generatedCount : 0;
         const queued = typeof body.queuedCount === 'number' ? body.queuedCount : 0;
@@ -1119,6 +1127,7 @@ export default function Dashboard() {
   );
 
   const isReadOnlyMode = process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE === 'true';
+  const isGoalManagerEnabled = goalManager?.config.enabled === true;
   const networkName = current?.chain?.displayName || process.env.NEXT_PUBLIC_NETWORK_NAME;
   const eoaRoleEntries = Object.entries(current?.eoaBalances?.roles || {}).filter(([, value]) => value !== null);
   const showL1Failover = Boolean(l1Failover && current?.chain?.capabilities?.l1Failover !== false);
@@ -1759,19 +1768,24 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 gap-2 mt-2">
               <button
                 onClick={() => runAutonomyDemoAction('goal-tick')}
-                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || !isGoalManagerEnabled}
                 className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50"
               >
                 {autonomyActionRunning === 'goal-tick' ? 'Running Tick' : 'Goal Tick'}
               </button>
               <button
                 onClick={() => runAutonomyDemoAction('goal-dispatch-dry-run')}
-                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || !isGoalManagerEnabled}
                 className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 disabled:opacity-50"
               >
                 {autonomyActionRunning === 'goal-dispatch-dry-run' ? 'Running Dispatch' : 'Dispatch Dry-run'}
               </button>
             </div>
+            {!isGoalManagerEnabled && (
+              <p className="text-[10px] text-amber-700 mt-2">
+                Goal Manager is disabled. Set <code>GOAL_MANAGER_ENABLED=true</code> and restart.
+              </p>
+            )}
 
             <div className="mt-3 pt-3 border-t border-gray-200">
               <p className="text-[10px] text-gray-500 font-semibold uppercase">Autonomous Ops API</p>

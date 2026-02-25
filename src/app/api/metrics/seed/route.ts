@@ -230,8 +230,10 @@ export async function POST(request: NextRequest) {
 
   // Trigger Goal Manager tick so the queue reflects the injected scenario immediately
   let goalsQueued = 0;
+  let goalManagerEnabled = false;
   try {
     const tickResult = await tickGoalManager();
+    goalManagerEnabled = tickResult.enabled;
     goalsQueued = tickResult.queuedCount;
     if (tickResult.enabled) {
       logger.info(`[Seed API] Goal Manager tick: ${goalsQueued} goals queued for scenario=${scenario}`);
@@ -244,6 +246,7 @@ export async function POST(request: NextRequest) {
     success: true,
     scenario,
     injectedCount: dataPoints.length,
+    goalManagerEnabled,
     goalsQueued,
     ttlSeconds: SEED_TTL_SECONDS,
     ttlExpiry: new Date(Date.now() + SEED_TTL_SECONDS * 1000).toISOString(),
