@@ -59,8 +59,8 @@ COPY --from=builder /app/public ./public
 RUN mkdir .next \
     && chown nextjs:nodejs .next
 
-RUN mkdir -p data/reports \
-    && chown nextjs:nodejs data/reports
+RUN mkdir -p data/audit data/reports \
+    && chown nextjs:nodejs data/audit data/reports
 
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static

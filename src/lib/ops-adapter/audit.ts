@@ -14,9 +14,16 @@ export async function writeAuditLog(entry: {
   requestId?: string;
   metadata?: Record<string, unknown>;
 }): Promise<void> {
-  const file = auditPath();
-  const dir = path.dirname(file);
-  await mkdir(dir, { recursive: true });
-  const line = JSON.stringify(entry);
-  await appendFile(file, line + '\n', { encoding: 'utf-8' });
+  try {
+    const file = auditPath();
+    const dir = path.dirname(file);
+    await mkdir(dir, { recursive: true });
+    const line = JSON.stringify(entry);
+    await appendFile(file, line + '\n', { encoding: 'utf-8' });
+  } catch (error) {
+    // Graceful degradation: log to console if filesystem write fails
+    // This ensures audit failures don't break critical operations
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn('[audit] Failed to write audit log:', message);
+  }
 }
