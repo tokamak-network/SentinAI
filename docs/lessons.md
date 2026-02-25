@@ -2,6 +2,17 @@
 
 ## 2026-02-24
 
+- 멀티체인 운영 문서에서 “공통 UI”와 “체인별 기능 차이”를 분리하지 않으면 운영자가 capability 불일치를 장애로 오판하기 쉽다.
+- Rule: For multi-stack ops docs, always split guidance into `common dashboard surface` vs `chain-specific capabilities/actions` with one comparison table.
+- 동일 스택이라도 배포 환경(local docker/k8s/production)에 따른 실행 가능 기능이 달라 문서에 환경축이 빠지면 운영 절차가 깨진다.
+- Rule: Multi-stack ops docs must include a second comparison axis for deployment environment (`orchestrator`, `simulation mode`, `production restrictions`, `auth guard`) alongside chain differences.
+- 운영 문서가 여러 개로 분리될수록 의사결정 속도가 떨어진다.
+- Rule: When operators must choose runtime policy quickly, add one consolidated decision matrix page (`stack × environment`) with actionable defaults.
+- 실제 운영에서는 문서보다 `.env.local` 값을 먼저 보게 되므로, 환경값에서 바로 프로파일을 추론하는 가이드가 없으면 적용 속도가 느리다.
+- Rule: Provide an env-first quick-decider that maps concrete env combinations to named operational profiles and immediate actions.
+- 운영 판정 규칙이 문서에만 있으면 온콜 중 실수(오독/누락)가 반복된다.
+- Rule: For every env-based decision guide, ship an executable checker script and expose both text/json outputs for automation and human review.
+
 - 멀티스택 자율 운영을 기존 goal planner에 붙일 때 기존 step enum을 바로 확장하면 회귀 범위가 급격히 커진다.
 - Rule: Introduce chain-specific autonomous adapters first, then map adapter steps into existing planner actions to preserve backward compatibility.
 - 자율 실행/검증/롤백 API를 분리하지 않으면 운영자가 어느 단계에서 실패했는지 추적이 어렵다.
@@ -130,7 +141,33 @@
 - Adding a write-capable API to read-only exceptions can accidentally bypass global safety policies.
 - Rule: If a route is exempted in middleware for read-only compatibility, enforce write restrictions again in the route handler based on tool-level policy.
 
-## 2026-02-20 (추가)
+## 2026-02-20
+
+### Chain & Plugin Configuration
+
+- Reproducible verification is difficult with just the expression “executed” in the local chain guide.
+- Rule: The chain execution document must specify the `eth_chainId`, `eth_blockNumber`, `eth_syncing`, `zks_L1BatchNumber` commands and the passing criteria (expected value/range).
+- When expanding the chain, if the API returns OP-only fields as default, the UI isolation principle is immediately broken.
+- Rule: `/api/metrics` conditionally creates fields based on `plugin.capabilities`, and the dashboard renders sections only with the same capabilities.
+- In a topology where multiple components are embedded in a single container, such as `server-v2`, status collection fails if there is no service name mapping.
+- Rule: If the plug-in component and runtime service are different, leave a `dockerServiceName` mapping field and enable overriding with an environment variable.
+- Even if a chain plugin is added, if the registry does not make selections based on environment variables, the new plugin will never be activated in actual operation.
+- Rule: When adding a new plugin, include the optional branch of `registry` (`CHAIN_TYPE`) and corresponding tests in the same change set.
+- OP Stack series chains have mostly the same components/dependencies/playbooks.
+- Rule: Differences by chain focus on `chain metadata (l1/l2 chain, display name, chain id)`, and common topologies are reused to reduce duplication.
+- The container tags in the create-l2-rollup example may be inconsistent with the latest op-deployer output.
+- Rule: When L2 bootstrap fails, check the `op-node/op-geth` version and `rollup-rpc` port (8547 vs 9545) consistency first, and when changing genesis, initialize the data volume with `docker-compose down -v`.
+- Even if you expand the EOA based on the chain plugin, the new role will not appear on the screen unless you also increase the API response/dashboard type.
+- Rule: When a role is added to `eoaRoles`, `eoa-balance-monitor` → `/api/metrics` → `page.tsx` type/rendering is synchronized in one change set.
+
+### Troubleshooting & Verification
+
+- The speed of responding to a problem largely depends on whether the confirmation sequence for each symptom is documented.
+- Rule: Troubleshooting in the execution/operation guide is written in a four-stage structure: ‘Symptom -> Check command -> Cause -> Action.’
+- If network call failure is left to the original error in the verification script, user readability is reduced.
+- Rule: `curl` failure is caught in the wrapper function, standardized and output in the form of `FAIL + call target (url/method)`.
+
+### Build & Deployment
 
 - Tier 3 bundle gate fails excessively when looking only at the raw sum, so it is best to look at the transmission standard (gzip) figures together to determine the correct operation.
 - Rule: First Load JS limit is measured based on the sum of `rootMain + polyfill` gzip, and raw/gzip figures are also output.
@@ -138,22 +175,19 @@
 - Rule: Tier2 separates mobile (360px) and desktop (1920px) settings and forces assertions for each.
 - If samples/external repo are mixed in the production gate, build/ts/lint will be broken regardless of feature quality.
 - Rule: `external/**`, test, and document paths are separated from the operational build/type check target and fixedly verified with Tier1 gate script.
-- New automation (scheduled scaling) can conflict with real-time load, which can be counterproductive without a CPU-based override.
-- Rule: cron-based scale-down is always skipped if the recent real-time CPU is above the threshold, and the reason is left in the execution results.
-- Even if you expand the EOA based on the chain plugin, the new role will not appear on the screen unless you also increase the API response/dashboard type.
-- Rule: When a role is added to `eoaRoles`, `eoa-balance-monitor` → `/api/metrics` → `page.tsx` type/rendering is synchronized in one change set.
-- The container tags in the create-l2-rollup example may be inconsistent with the latest op-deployer output.
-- Rule: When L2 bootstrap fails, check the `op-node/op-geth` version and `rollup-rpc` port (8547 vs 9545) consistency first, and when changing genesis, initialize the data volume with `docker-compose down -v`.
-- Even if a chain plugin is added, if the registry does not make selections based on environment variables, the new plugin will never be activated in actual operation.
-- Rule: When adding a new plugin, include the optional branch of `registry` (`CHAIN_TYPE`) and corresponding tests in the same change set.
-- OP Stack series chains have mostly the same components/dependencies/playbooks.
-- Rule: Differences by chain focus on `chain metadata (l1/l2 chain, display name, chain id)`, and common topologies are reused to reduce duplication.
+- If you directly reference an external reference repo through the runtime path, reproducibility and deployment stability will be poor.
+- Rule: `external/*` is only for analysis/reference purposes, and the actual interconnection contract is extracted and managed with the `examples/*` template.
+
+### API & Installation
+
 - In complex API routes, the actual HTTP smoke route catches regression faster than unit mocking.
 - Rule: `/api/*` At least one core endpoint starts the server + maintains the actual curl verification script.
 - If the installation script does not know the new feature, the operator cannot set it up even if there is runtime support.
 - Rule: When a parent option such as chain/orchestrator is added, the `install.sh` prompt, non-interactive env validation, and `.env.local` output are updated together.
 
 ## 2026-02-19
+
+### UI Layout & Space Management
 
 - When list-type data accumulates on a dashboard card, the card itself expands and the layout collapses.
 - Rule: Like logs/components, incremental data fixes the card height and applies `overflow-y-auto` only to the inner area.
@@ -163,6 +197,9 @@
 - Rule: If it is necessary to secure the right area, reduce the width of the left column first, and merge auxiliary icons into the right meta area instead of a separate column.
 - If space utilization is a priority in the log UI, floating rows based on `flex-wrap` are more stable than fixed column sorting.
 - Rule: When readability and information density are more important than alignment consistency, select line-by-line fluid layout as the default.
+
+### Data Flow & Seed Testing
+
 - If the seed scenario TTL is shorter than the agent-loop period, the injection load may not be reflected in the scaling loop.
 - Rule: The seed TTL for verification is maintained beyond the agent-loop cycle, and the seed API TTL and state storage TTL are set to be the same.
 - `currentVcpu` in the seed data may be for observation purposes only, so using it as is for execution decisions will result in misjudgments.
@@ -170,28 +207,18 @@
 
 ## 2026-02-16
 
+### Code Quality & Type Safety
+
 - Reinitialization of common variables in branching logic easily overwrites the parent branch value.
 - Rule: Paths with different meanings, such as `seed/live`, separate calculation functions and minimize reallocation of shared variables.
 - Reducing the runtime contract with type assertions (`as`) hides the defect.
 - Rule: For core domains such as scaling tier, create a common type alias and use the same type in all sections.
+
+### API Design & Security
+
 - The same external RPC call pattern must have a unified timeout/retry policy.
 - Rule: Forces a common fetch utility or the same timeout policy for both API/agent-loop.
 - The metadata (`source`) of the observation API must match the actual data path (seed/live).
 - Rule: Do not hardcode the response field, and set the value derived from the branch result as a single variable.
 - For authentication-exempted paths, exact path matching is safer than prefix matching.
 - Rule: Sensitive middleware exceptions use exact allowlist as the default instead of `startsWith`.
-
-## 2026-02-20
-
-- Reproducible verification is difficult with just the expression “executed” in the local chain guide.
-- Rule: The chain execution document must specify the `eth_chainId`, `eth_blockNumber`, `eth_syncing`, `zks_L1BatchNumber` commands and the passing criteria (expected value/range).
-- The speed of responding to a problem largely depends on whether the confirmation sequence for each symptom is documented.
-- Rule: Troubleshooting in the execution/operation guide is written in a four-stage structure: ‘Symptom -> Check command -> Cause -> Action.’
-- If network call failure is left to the original error in the verification script, user readability is reduced.
-- Rule: `curl` failure is caught in the wrapper function, standardized and output in the form of `FAIL + call target (url/method)`.
-- When expanding the chain, if the API returns OP-only fields as default, the UI isolation principle is immediately broken.
-- Rule: `/api/metrics` conditionally creates fields based on `plugin.capabilities`, and the dashboard renders sections only with the same capabilities.
-- In a topology where multiple components are embedded in a single container, such as `server-v2`, status collection fails if there is no service name mapping.
-- Rule: If the plug-in component and runtime service are different, leave a `dockerServiceName` mapping field and enable overriding with an environment variable.
-- If you directly reference an external reference repo through the runtime path, reproducibility and deployment stability will be poor.
-- Rule: `external/*` is only for analysis/reference purposes, and the actual interconnection contract is extracted and managed with the `examples/*` template.
