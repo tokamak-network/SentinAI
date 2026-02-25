@@ -6,8 +6,10 @@ info:
     ChatGPT Actions용 SentinAI 운영 API (MVP). 기본 정책은 안전 우선이며,
     execute/rollback은 confirmToken이 필요합니다.
 servers:
-  - url: https://sentinai.tokamak.network/thanos-sepolia
+  - url: https://sentinai.tokamak.network/thanos-sepolia/thanos-sepolia
     description: Thanos Sepolia Network (Production)
+  - url: http://localhost:3002/thanos-sepolia
+    description: Local Development (port 3002)
 security:
   - bearerAuth: []
 tags:
