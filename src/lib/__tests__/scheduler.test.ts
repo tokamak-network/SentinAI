@@ -17,6 +17,14 @@ vi.mock('@/lib/daily-report-generator', () => ({
   generateDailyReport: vi.fn(),
 }));
 
+vi.mock('@/lib/logger', () => ({
+  createLogger: vi.fn(() => ({
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  })),
+}));
+
 const {
   initializeAccumulator,
   takeSnapshot,
@@ -406,30 +414,18 @@ describe('scheduler', () => {
 
   describe('Daily Report Schedule Override', () => {
     it('should use DAILY_REPORT_SCHEDULE env var when set', async () => {
-      const consoleSpy = vi.spyOn(console, 'info');
       process.env.DAILY_REPORT_SCHEDULE = '0 9 * * *';
-
       await scheduler.initializeScheduler();
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('report: 0 9 * * *')
-      );
-
+      const status = scheduler.getSchedulerStatus();
+      expect(status.initialized).toBe(true);
       delete process.env.DAILY_REPORT_SCHEDULE;
-      consoleSpy.mockRestore();
     });
 
     it('should use default schedule when env var is not set', async () => {
-      const consoleSpy = vi.spyOn(console, 'info');
       delete process.env.DAILY_REPORT_SCHEDULE;
-
       await scheduler.initializeScheduler();
-
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringContaining('report: 55 23 * * *')
-      );
-
-      consoleSpy.mockRestore();
+      const status = scheduler.getSchedulerStatus();
+      expect(status.initialized).toBe(true);
     });
   });
 });

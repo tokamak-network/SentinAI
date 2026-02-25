@@ -11,6 +11,7 @@ import TOML from '@iarna/toml';
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import { isDockerMode } from '@/lib/docker-config';
 import { setDockerEnvAndRecreate } from '@/lib/docker-orchestrator';
+import { createLogger } from '@/lib/logger';
 import type {
   L1RpcEndpoint,
   FailoverEvent,
@@ -21,6 +22,8 @@ import type {
   BackendReplacementEvent,
   L2NodeL1RpcStatus,
 } from '@/types/l1-failover';
+
+const logger = createLogger('L1 Failover');
 
 // ============================================================
 // Constants
@@ -104,7 +107,7 @@ export async function resolveProxydConfigMapName(): Promise<string> {
     );
     if (proxydCm) {
       proxydConfigMapNameCache = proxydCm;
-      console.info(`[L1 Failover] Auto-detected Proxyd ConfigMap: ${proxydCm}`);
+      logger.info(`Auto-detected Proxyd ConfigMap: ${proxydCm}`);
       return proxydCm;
     }
   } catch {
@@ -209,7 +212,7 @@ async function restartProxydPod(namespace: string): Promise<boolean> {
   try {
     const cmd = `rollout restart deployment/${deploymentName} -n ${namespace}`;
     await runK8sCommand(cmd, { timeout: 15000 });
-    console.info(`[L1 Failover] Restarted Proxyd via rollout: ${deploymentName} (${namespace})`);
+    logger.info(`Restarted Proxyd via rollout: ${deploymentName} (${namespace})`);
     return true;
   } catch {
     // Fall through to delete-pod strategy
@@ -221,12 +224,12 @@ async function restartProxydPod(namespace: string): Promise<boolean> {
     const cmd = `delete pod -l ${labelSelector} -n ${namespace}`;
     await runK8sCommand(cmd, { timeout: 15000 });
 
-    console.info(`[L1 Failover] Restarted Proxyd pod(s) via delete: -l ${labelSelector} (${namespace})`);
+    logger.info(`Restarted Proxyd pod(s) via delete: -l ${labelSelector} (${namespace})`);
     return true;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.warn(
-      `[L1 Failover] Failed to restart Proxyd (${deploymentName}) in ${namespace}: ${errorMessage} ` +
+    logger.warn(
+      `Failed to restart Proxyd (${deploymentName}) in ${namespace}: ${errorMessage} ` +
         `(ConfigMap update applied, but pod restart may be needed manually)`
     );
     return false;
@@ -263,8 +266,8 @@ async function applyBackendReplacement(
     const cmd = `patch configmap ${configMapName} -n ${namespace} --type='json' -p='${patchJson}'`;
     await runK8sCommand(cmd, { timeout: 15000 });
 
-    console.info(
-      `[L1 Failover] Updated Proxyd backend ${backendName}: ${maskUrl(previousUrl)} → ${maskUrl(newUrl)}`
+    logger.info(
+      `Updated Proxyd backend ${backendName}: ${maskUrl(previousUrl)} → ${maskUrl(newUrl)}`
     );
 
     // 4. Restart Proxyd pod to apply ConfigMap changes
@@ -278,7 +281,7 @@ async function applyBackendReplacement(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[L1 Failover] Failed to replace backend ${backendName}: ${errorMessage}`);
+    logger.error(`Failed to replace backend ${backendName}: ${errorMessage}`);
     return {
       success: false,
       configMapName,
@@ -315,8 +318,8 @@ function initFromEnv(): L1FailoverState {
   if (urls.length === 0) {
     urls.push(getDefaultL1RpcUrl());
     if (!warnedMissingL2FailoverPool) {
-      console.warn(
-        '[L1 Failover] L1_RPC_URLS is not configured. L2 failover pool defaults to a single public endpoint.'
+      logger.warn(
+        'L1_RPC_URLS is not configured. L2 failover pool defaults to a single public endpoint.'
       );
       warnedMissingL2FailoverPool = true;
     }
@@ -334,7 +337,7 @@ function initFromEnv(): L1FailoverState {
   const spareUrls: string[] = [];
   const spareUrlsList = process.env.L1_RPC_URLS || process.env.L1_PROXYD_SPARE_URLS;
   if (process.env.L1_PROXYD_SPARE_URLS && !process.env.L1_RPC_URLS) {
-    console.warn('[L1 Failover] L1_PROXYD_SPARE_URLS is deprecated — use L1_RPC_URLS instead');
+    logger.warn('L1_PROXYD_SPARE_URLS is deprecated — use L1_RPC_URLS instead');
   }
   spareUrls.push(...parseUrlList(spareUrlsList));
 
@@ -396,7 +399,7 @@ export function getSentinaiL1RpcUrl(): string {
   const deprecatedUrl = process.env.L1_RPC_URL?.trim();
   if (deprecatedUrl) {
     if (!warnedDeprecatedSentinaiL1Rpc) {
-      console.warn('[L1 Failover] L1_RPC_URL is deprecated — use SENTINAI_L1_RPC_URL instead.');
+      logger.warn('L1_RPC_URL is deprecated — use SENTINAI_L1_RPC_URL instead.');
       warnedDeprecatedSentinaiL1Rpc = true;
     }
     return deprecatedUrl;
@@ -452,8 +455,8 @@ export async function reportL1Failure(
     state.lastFailoverTime &&
     Date.now() - state.lastFailoverTime < FAILOVER_COOLDOWN_MS
   ) {
-    console.warn(
-      `[L1 Failover] Cooldown active, ${Math.ceil((FAILOVER_COOLDOWN_MS - (Date.now() - state.lastFailoverTime)) / 1000)}s remaining`
+    logger.warn(
+      `Cooldown active, ${Math.ceil((FAILOVER_COOLDOWN_MS - (Date.now() - state.lastFailoverTime)) / 1000)}s remaining`
     );
     return null;
   }
@@ -504,8 +507,8 @@ export async function executeFailover(
       (startIndex + i) % state.endpoints.length;
     const candidate = state.endpoints[candidateIndex];
 
-    console.info(
-      `[L1 Failover] Checking candidate: ${maskUrl(candidate.url)}`
+    logger.info(
+      `Checking candidate: ${maskUrl(candidate.url)}`
     );
 
     const isHealthy = await healthCheckEndpoint(candidate.url);
@@ -524,8 +527,8 @@ export async function executeFailover(
     state.activeIndex = candidateIndex;
     state.lastFailoverTime = Date.now();
 
-    console.info(
-      `[L1 Failover] Switched: ${maskUrl(fromUrl)} → ${maskUrl(candidate.url)} (reason: ${reason})`
+    logger.info(
+      `Switched: ${maskUrl(fromUrl)} → ${maskUrl(candidate.url)} (reason: ${reason})`
     );
 
     // Update K8s components (skip StatefulSet env patch when Proxyd handles L1 routing)
@@ -553,8 +556,8 @@ export async function executeFailover(
     return event;
   }
 
-  console.error(
-    '[L1 Failover] All endpoints unhealthy, cannot failover'
+  logger.error(
+    'All endpoints unhealthy, cannot failover'
   );
   return null;
 }
@@ -646,7 +649,7 @@ export async function updateK8sL1Rpc(
             [comp.envVarName]: newUrl,
           });
           result.updated.push(comp.statefulSetName || comp.envVarName);
-          console.info(`[L1 Failover] Docker: Updated ${comp.envVarName}`);
+          logger.info(`Docker: Updated ${comp.envVarName}`);
         }
       } catch (error) {
         const msg = error instanceof Error ? error.message : 'Unknown error';
@@ -657,8 +660,8 @@ export async function updateK8sL1Rpc(
   }
 
   if (!hasK8sCluster()) {
-    console.info(
-      '[L1 Failover] No K8s cluster configured, skipping component update'
+    logger.info(
+      'No K8s cluster configured, skipping component update'
     );
     return result;
   }
@@ -672,15 +675,15 @@ export async function updateK8sL1Rpc(
         const cmd = `set env statefulset/${comp.statefulSetName} -n ${namespace} ${comp.envVarName}=${newUrl}`;
         await runK8sCommand(cmd, { timeout: 15000 });
         result.updated.push(comp.statefulSetName);
-        console.info(
-          `[L1 Failover] Updated ${comp.statefulSetName} ${comp.envVarName}`
+        logger.info(
+          `Updated ${comp.statefulSetName} ${comp.envVarName}`
         );
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       result.errors.push(`${comp.statefulSetName}: ${msg}`);
-      console.error(
-        `[L1 Failover] Failed to update ${comp.statefulSetName}: ${msg}`
+      logger.error(
+        `Failed to update ${comp.statefulSetName}: ${msg}`
       );
     }
   }
@@ -736,7 +739,7 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
   try {
     tomlContent = await getConfigMapToml(configMapName, dataKey, namespace);
   } catch (error) {
-    console.warn(`[L1 Failover] Cannot read Proxyd ConfigMap: ${error instanceof Error ? error.message : error}`);
+    logger.warn(`Cannot read Proxyd ConfigMap: ${error instanceof Error ? error.message : error}`);
     return null;
   }
 
@@ -787,15 +790,15 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
     if (isProxydFailoverCandidate(probe)) {
       health.consecutiveFailures++;
       health.healthy = false;
-      console.warn(
-        `[L1 Failover] Backend ${backendName} probe failed (${describeProbeFailure(probe)}): ${health.consecutiveFailures}/${replacementThreshold}`
+      logger.warn(
+        `Backend ${backendName} probe failed (${describeProbeFailure(probe)}): ${health.consecutiveFailures}/${replacementThreshold}`
       );
 
       if (health.consecutiveFailures >= replacementThreshold) {
         // Threshold reached — replace with spare URL
         if (state.spareUrls.length === 0) {
-          console.error(
-            `[L1 Failover] Backend ${backendName} needs replacement but no spare URLs available (L1_RPC_URLS)`
+          logger.error(
+            `Backend ${backendName} needs replacement but no spare URLs available (L1_RPC_URLS)`
           );
           return null;
         }
@@ -988,7 +991,7 @@ export async function getL2NodesL1RpcStatus(): Promise<L2NodeL1RpcStatus[]> {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[getL2NodesL1RpcStatus] Failed:', message);
+    logger.error('[getL2NodesL1RpcStatus] Failed: ' + message);
     return []; // Graceful degradation
   }
 }
@@ -1036,7 +1039,7 @@ async function getL2NodesL1RpcFromProxyd(): Promise<L2NodeL1RpcStatus[]> {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     if (process.env.DEBUG_K8S === 'true') {
-      console.error('[getL2NodesL1RpcFromProxyd] Failed:', message);
+      logger.error('[getL2NodesL1RpcFromProxyd] Failed: ' + message);
     }
     return [];
   }
@@ -1084,11 +1087,11 @@ async function resolveProxydBackend(
       throw new Error(`Backend ${firstBackendName} has no rpc_url`);
     }
 
-    console.info(`[L1 Failover] Resolved Proxyd backend: ${firstBackendName} → ${maskUrl(rpcUrl)}`);
+    logger.info(`Resolved Proxyd backend: ${firstBackendName} → ${maskUrl(rpcUrl)}`);
     return rpcUrl;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[resolveProxydBackend] Failed: ${message}`);
+    logger.error(`[resolveProxydBackend] Failed: ${message}`);
     throw error;
   }
 }
@@ -1145,7 +1148,7 @@ async function getL2NodesL1RpcFromK8s(): Promise<L2NodeL1RpcStatus[]> {
           };
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
-          console.error(`[getL2NodesL1RpcFromK8s] Failed for ${name}: ${message}`);
+          logger.error(`[getL2NodesL1RpcFromK8s] Failed for ${name}: ${message}`);
           return {
             component: name as L2NodeL1RpcStatus['component'],
             l1RpcUrl: 'Error',
@@ -1158,7 +1161,7 @@ async function getL2NodesL1RpcFromK8s(): Promise<L2NodeL1RpcStatus[]> {
     return results;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[getL2NodesL1RpcFromK8s] Failed:', message);
+    logger.error('[getL2NodesL1RpcFromK8s] Failed: ' + message);
     return [];
   }
 }

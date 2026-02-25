@@ -16,6 +16,9 @@ import { runAgentCycle } from '@/lib/agent-loop';
 import { applyScheduledScaling, buildScheduleProfile } from '@/lib/scheduled-scaler';
 import { cleanupExpiredAgentMemory } from '@/lib/agent-memory';
 import { getStore } from '@/lib/redis-store';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('Scheduler');
 
 const AGENT_CYCLE_TIMEOUT_MS = 50000;
 const DEFAULT_AGENT_HEARTBEAT_STALE_SECONDS = 120;
@@ -146,7 +149,7 @@ function buildWatchdogAlertText(
 async function sendWatchdogAlert(text: string): Promise<void> {
   const webhookUrl = getAlertWebhookUrl();
   if (!webhookUrl) {
-    console.warn('[Scheduler] AGENT_HEARTBEAT_ALERT_WEBHOOK_URL/ALERT_WEBHOOK_URL is not configured.');
+    logger.warn('AGENT_HEARTBEAT_ALERT_WEBHOOK_URL/ALERT_WEBHOOK_URL is not configured.');
     return;
   }
 
@@ -163,10 +166,10 @@ async function sendWatchdogAlert(text: string): Promise<void> {
       throw new Error(`webhook responded ${response.status}: ${body || 'empty response body'}`);
     }
 
-    console.info(`[Scheduler] Watchdog alert sent via ${maskWebhookUrl(webhookUrl)}`);
+    logger.info(`Watchdog alert sent via ${maskWebhookUrl(webhookUrl)}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Scheduler] Watchdog alert delivery failed:', message);
+    logger.error('Watchdog alert delivery failed: ' + message);
   }
 }
 
@@ -193,7 +196,7 @@ function markWatchdogHealthy(): void {
   watchdogLastHealthyAt = new Date().toISOString();
 
   if (hadFailures) {
-    console.info('[Scheduler] Agent heartbeat watchdog recovered');
+    logger.info('Agent heartbeat watchdog recovered');
   }
 }
 
@@ -203,7 +206,7 @@ async function recordAgentLoopHeartbeat(heartbeatAt: string = new Date().toISOSt
     return true;
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    console.warn('[Scheduler] Failed to update agent heartbeat:', msg);
+    logger.warn('Failed to update agent heartbeat: ' + msg);
     return false;
   }
 }
@@ -291,19 +294,19 @@ async function executeAgentCycle(source: AgentCycleSource): Promise<AgentCycleEx
 
     if (result.phase === 'error') {
       const message = result.error || 'Unknown cycle error';
-      console.error(`[AgentLoop] ${source} cycle error:`, message);
+      logger.error(`${source} cycle error: ${message}`);
       cycleResult = {
         outcome: 'error',
         detail: message,
       };
     } else if (result.scaling?.executed) {
-      console.info(`[AgentLoop] ${source} scaling executed: ${result.scaling.reason} (${durationMs}ms)`);
+      logger.info(`${source} scaling executed: ${result.scaling.reason} (${durationMs}ms)`);
       cycleResult = {
         outcome: 'completed',
         detail: `scaling executed (${durationMs}ms)`,
       };
     } else {
-      console.info(`[AgentLoop] ${source} cycle completed (${durationMs}ms)`);
+      logger.info(`${source} cycle completed (${durationMs}ms)`);
       cycleResult = {
         outcome: 'completed',
         detail: `cycle completed (${durationMs}ms)`,
@@ -311,7 +314,7 @@ async function executeAgentCycle(source: AgentCycleSource): Promise<AgentCycleEx
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[Scheduler] Agent loop ${source} execution failed:`, msg);
+    logger.error(`Agent loop ${source} execution failed: ${msg}`);
     cycleResult = {
       outcome: 'failed',
       detail: msg,
@@ -417,7 +420,7 @@ async function runHeartbeatWatchdog(): Promise<void> {
  */
 export async function initializeScheduler(): Promise<void> {
   if (initialized) {
-    console.info('[Scheduler] Already initialized, skipping');
+    logger.info('Already initialized, skipping');
     return;
   }
 
@@ -446,7 +449,7 @@ export async function initializeScheduler(): Promise<void> {
         return;
       }
     });
-    console.info('[Scheduler] Agent loop enabled (every 60s, 50s timeout)');
+    logger.info('Agent loop enabled (every 60s, 50s timeout)');
 
     if (isHeartbeatWatchdogEnabled()) {
       watchdogTask = cron.schedule(WATCHDOG_SCHEDULE, async () => {
@@ -466,12 +469,12 @@ export async function initializeScheduler(): Promise<void> {
           watchdogTaskRunning = false;
         }
       });
-      console.info('[Scheduler] Agent heartbeat watchdog enabled (every 30s)');
+      logger.info('Agent heartbeat watchdog enabled (every 30s)');
     } else {
-      console.info('[Scheduler] Agent heartbeat watchdog disabled');
+      logger.info('Agent heartbeat watchdog disabled');
     }
   } else {
-    console.info('[Scheduler] Agent loop disabled (set AGENT_LOOP_ENABLED=true or L2_RPC_URL to enable)');
+    logger.info('Agent loop disabled (set AGENT_LOOP_ENABLED=true or L2_RPC_URL to enable)');
   }
 
   // 5-minute snapshot cron
@@ -482,7 +485,7 @@ export async function initializeScheduler(): Promise<void> {
       await takeSnapshot();
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[Scheduler] Snapshot error:', msg);
+      logger.error('Snapshot error: ' + msg);
     } finally {
       snapshotTaskRunning = false;
     }
@@ -494,35 +497,35 @@ export async function initializeScheduler(): Promise<void> {
     if (reportTaskRunning) return;
     reportTaskRunning = true;
     try {
-      console.info('[Scheduler] Starting daily report generation...');
+      logger.info('Starting daily report generation...');
       const removedMemoryEntries = await cleanupExpiredAgentMemory();
       if (removedMemoryEntries > 0) {
-        console.info(`[Scheduler] Agent memory cleanup removed ${removedMemoryEntries} entries`);
+        logger.info(`Agent memory cleanup removed ${removedMemoryEntries} entries`);
       }
       const data = await getAccumulatedData();
       if (data) {
         const result = await generateDailyReport(data);
         if (result.success) {
-          console.info(`[Scheduler] Daily report generated: ${result.reportPath}`);
+          logger.info(`Daily report generated: ${result.reportPath}`);
 
           // Deliver report via Slack
           const yesterday = new Date();
           yesterday.setDate(yesterday.getDate() - 1);
           const deliveryResult = await deliverDailyReport(yesterday);
           if (deliveryResult.success) {
-            console.info(`[Scheduler] Daily report delivered via ${deliveryResult.method}`);
+            logger.info(`Daily report delivered via ${deliveryResult.method}`);
           } else {
-            console.error(`[Scheduler] Daily report delivery failed: ${deliveryResult.error}`);
+            logger.error(`Daily report delivery failed: ${deliveryResult.error}`);
           }
         } else {
-          console.error(`[Scheduler] Daily report failed: ${result.error}`);
+          logger.error(`Daily report failed: ${result.error}`);
         }
       } else {
-        console.warn('[Scheduler] No accumulated data available for report');
+        logger.warn('No accumulated data available for report');
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[Scheduler] Report generation error:', msg);
+      logger.error('Report generation error: ' + msg);
     } finally {
       reportTaskRunning = false;
     }
@@ -536,13 +539,13 @@ export async function initializeScheduler(): Promise<void> {
       await buildScheduleProfile();
       const result = await applyScheduledScaling();
       if (result.executed) {
-        console.info(`[Scheduler] Scheduled scaling executed: ${result.message}`);
+        logger.info(`Scheduled scaling executed: ${result.message}`);
       } else {
-        console.info(`[Scheduler] Scheduled scaling skipped: ${result.message}`);
+        logger.info(`Scheduled scaling skipped: ${result.message}`);
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[Scheduler] Scheduled scaling error:', msg);
+      logger.error('Scheduled scaling error: ' + msg);
     } finally {
       scheduledScalingTaskRunning = false;
     }
@@ -550,8 +553,8 @@ export async function initializeScheduler(): Promise<void> {
 
   const watchdogStatus = isHeartbeatWatchdogEnabled() ? WATCHDOG_SCHEDULE : 'off';
   initialized = true;
-  console.info(
-    `[Scheduler] Initialized — snapshot: */5 * * * *, report: ${reportSchedule}, scheduled-scaling: 0 * * * * (KST), watchdog: ${watchdogStatus}`
+  logger.info(
+    `Initialized — snapshot: */5 * * * *, report: ${reportSchedule}, scheduled-scaling: 0 * * * * (KST), watchdog: ${watchdogStatus}`
   );
 }
 
@@ -594,7 +597,7 @@ export function stopScheduler(): void {
   lastWatchdogAlertAtMs = 0;
   lastWatchdogRecoveryAtMs = 0;
   initialized = false;
-  console.info('[Scheduler] Stopped');
+  logger.info('Stopped');
 }
 
 /**
