@@ -9,6 +9,7 @@ import { pushMetric, clearMetrics, getRecentMetrics, getMetricsCount } from '@/l
 import { resetPredictionState } from '@/lib/predictive-scaler';
 import { initVcpuProfile, clearVcpuProfile, getVcpuValuesForScenario } from '@/lib/seed-vcpu-manager';
 import { getStore } from '@/lib/redis-store';
+import { tickGoalManager } from '@/lib/goal-manager';
 import { MetricDataPoint } from '@/types/prediction';
 import logger from '@/lib/logger';
 
@@ -227,10 +228,23 @@ export async function POST(request: NextRequest) {
 
   logger.info(`[Seed API] Scheduled automatic cleanup in ${SEED_TTL_SECONDS}s`);
 
+  // Trigger Goal Manager tick so the queue reflects the injected scenario immediately
+  let goalsQueued = 0;
+  try {
+    const tickResult = await tickGoalManager();
+    goalsQueued = tickResult.queuedCount;
+    if (tickResult.enabled) {
+      logger.info(`[Seed API] Goal Manager tick: ${goalsQueued} goals queued for scenario=${scenario}`);
+    }
+  } catch {
+    // Goal Manager errors must not affect seed response
+  }
+
   return NextResponse.json({
     success: true,
     scenario,
     injectedCount: dataPoints.length,
+    goalsQueued,
     ttlSeconds: SEED_TTL_SECONDS,
     ttlExpiry: new Date(Date.now() + SEED_TTL_SECONDS * 1000).toISOString(),
     timeRange: {

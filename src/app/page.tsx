@@ -709,11 +709,13 @@ export default function Dashboard() {
           throw new Error(message);
         }
         const injectedCount = typeof body.injectedCount === 'number' ? body.injectedCount : null;
+        const goalsQueued = typeof body.goalsQueued === 'number' ? body.goalsQueued : 0;
+        const goalsSuffix = goalsQueued > 0 ? ` · ${goalsQueued} goals queued` : '';
         setAutonomyActionFeedback({
           type: 'success',
           message: injectedCount !== null
-            ? `Scenario ${scenario} injected (${injectedCount} data points)`
-            : `Scenario ${scenario} injected`,
+            ? `Scenario ${scenario} injected (${injectedCount} data points)${goalsSuffix}`
+            : `Scenario ${scenario} injected${goalsSuffix}`,
         });
       } else if (action === 'goal-tick') {
         const res = await fetch(`${BASE_PATH}/api/goal-manager/tick`, {
