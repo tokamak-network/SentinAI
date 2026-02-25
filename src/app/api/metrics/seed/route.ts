@@ -131,10 +131,11 @@ function generateScenarioData(scenario: Scenario): MetricDataPoint[] {
  * Injects mock time-series data into MetricsStore
  */
 export async function POST(request: NextRequest) {
-  // Block in production to prevent data corruption
-  if (process.env.NODE_ENV === 'production') {
+  // Block if explicitly disabled (SENTINAI_SEED_DISABLED=true)
+  // Note: NODE_ENV guard removed — seed is protected by API key auth + 80s TTL auto-expiry
+  if (process.env.SENTINAI_SEED_DISABLED === 'true') {
     return NextResponse.json(
-      { error: 'This endpoint is only available in development mode' },
+      { error: 'Seed endpoint is disabled on this server' },
       { status: 403 }
     );
   }
