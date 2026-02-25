@@ -898,6 +898,7 @@ function toStandardToolCallResult(
           _meta: {
             'openai/outputTemplate': widgetUri,
             'openai/widgetSessionId': widgetSessionId,
+            ui: { resourceUri: widgetUri },
           },
         }
       : {}),
@@ -1080,7 +1081,7 @@ export async function handleMcpRequest(
       jsonrpc: '2.0',
       id,
       result: {
-        contents: [{ uri, mimeType: 'text/html', text: html }],
+        contents: [{ uri, mimeType: 'text/html;profile=mcp-app', text: html }],
       },
     };
   }

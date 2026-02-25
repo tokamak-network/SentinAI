@@ -8,17 +8,17 @@ const WIDGET_RESOURCES: Record<string, { name: string; description: string; mime
   'ui://widget/metrics.html': {
     name: 'SentinAI Metrics',
     description: 'Real-time L1/L2 network metrics and scaling status',
-    mimeType: 'text/html',
+    mimeType: 'text/html;profile=mcp-app',
   },
   'ui://widget/anomalies.html': {
     name: 'SentinAI Anomalies',
     description: 'Anomaly event list with severity indicators',
-    mimeType: 'text/html',
+    mimeType: 'text/html;profile=mcp-app',
   },
   'ui://widget/health.html': {
     name: 'SentinAI Health',
     description: 'System health diagnostics dashboard',
-    mimeType: 'text/html',
+    mimeType: 'text/html;profile=mcp-app',
   },
 };
 
