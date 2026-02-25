@@ -5,9 +5,11 @@
 
 import { exec, execFile } from 'child_process';
 import { promisify } from 'util';
+import { createLogger } from '@/lib/logger';
 
 const execAsync = promisify(exec);
 const execFileAsync = promisify(execFile);
+const logger = createLogger('K8s Config');
 
 // ============================================================
 // Environment Detection
@@ -26,7 +28,7 @@ function isDevelopmentEnvironment(): boolean {
  */
 function logK8sWarning(message: string): void {
   if (!isDevelopmentEnvironment()) {
-    console.warn(`[K8s Config] ${message}`);
+    logger.warn(message);
   } else if (process.env.DEBUG_K8S === 'true') {
     console.debug(`[K8s Config] ${message}`);
   }
@@ -119,7 +121,7 @@ async function resolveAwsRegion(): Promise<string | undefined> {
     const region = stdout.trim();
     if (region) {
       regionCache = region;
-      console.info(`[K8s Config] Auto-detected AWS region: ${region}`);
+      logger.info(`Auto-detected AWS region: ${region}`);
       return regionCache;
     }
   } catch {
@@ -169,7 +171,7 @@ async function resolveK8sApiUrl(): Promise<string | undefined> {
 
     if (endpoint && endpoint !== 'None') {
       apiUrlCache = endpoint;
-      console.info(`[K8s Config] Auto-detected API URL: ${endpoint} (${Date.now() - startTime}ms)`);
+      logger.info(`Auto-detected API URL: ${endpoint} (${Date.now() - startTime}ms)`);
       return apiUrlCache;
     }
   } catch (e) {
@@ -217,7 +219,7 @@ async function getK8sToken(): Promise<string | undefined> {
 
     const startTime = Date.now();
     const { stdout } = await execFileAsync('aws', args, { timeout: 10000 });
-    console.info(`[K8s Config] Token generated (${Date.now() - startTime}ms)`);
+    logger.info(`Token generated (${Date.now() - startTime}ms)`);
 
     const tokenData = JSON.parse(stdout);
     const token = tokenData.status.token;
@@ -302,12 +304,12 @@ export async function runK8sCommand(
     const result = await execAsync(fullCmd, {
       timeout: options?.timeout ?? 10000,
     });
-    console.info(`[K8s Config] kubectl (${Date.now() - startTime}ms): ${command.substring(0, 40)}...`);
+    logger.info(`kubectl (${Date.now() - startTime}ms): ${command.substring(0, 40)}...`);
     return result;
   } catch (e) {
     // Only log kubectl failures in production/configured environments
     if (!isDevelopmentEnvironment()) {
-      console.info(`[K8s Config] kubectl failed (${Date.now() - startTime}ms): ${command}`);
+      logger.info(`kubectl failed (${Date.now() - startTime}ms): ${command}`);
     }
     throw e;
   }

@@ -37,6 +37,9 @@ export function generateMockLogs(mode: 'normal' | 'attack' = 'normal'): Record<s
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import { isDockerMode } from '@/lib/docker-config';
 import { getDockerContainerLogs } from '@/lib/docker-orchestrator';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('LogIngester');
 
 // Fetch logs from ALL components
 export async function getAllLiveLogs(namespace?: string): Promise<Record<string, string>> {
@@ -68,13 +71,13 @@ export async function getLiveLogs(namespace?: string, labelSelector?: string): P
         );
 
         if (!podName || podName.trim() === '') {
-            console.warn(`[LogIngester] No pods found for ${label}`);
+            logger.warn(`No pods found for ${label}`);
             return `WARN [System] No active pods found matching '${label}' in namespace '${ns}'.
             Verify your K8s context and pod labels.`;
         }
 
         const cleanPodName = podName.trim();
-        console.info(`[LogIngester] Tailing logs from: ${cleanPodName}`);
+        logger.info(`Tailing logs from: ${cleanPodName}`);
 
         // 2. Fetch Logs (Tail)
         const { stdout: logs, stderr: logsErr } = await runK8sCommand(
@@ -89,7 +92,7 @@ export async function getLiveLogs(namespace?: string, labelSelector?: string): P
 
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error("[LogIngester] kubectl Error:", errorMessage);
+        logger.error("kubectl Error: " + errorMessage);
 
         if (errorMessage.includes('command not found')) {
             return `ERROR [System] 'kubectl' command not found on server.

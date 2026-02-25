@@ -9,6 +9,9 @@ import { AISeverity } from '@/types/scaling';
 import { chatCompletion } from './ai-client';
 import { parseAIJSON } from './ai-response-parser';
 import { getChainPlugin } from '@/chains';
+import { createLogger } from '@/lib/logger';
+
+const logger = createLogger('AnomalyAIAnalyzer');
 
 // ============================================================================
 // Configuration
@@ -192,13 +195,13 @@ export async function analyzeAnomalies(
   if (analysisCache &&
       analysisCache.anomalyHash === anomalyHash &&
       now - analysisCache.timestamp < ANALYSIS_CACHE_TTL_MS) {
-    console.info('[AnomalyAIAnalyzer] Returning cached analysis');
+    logger.info('Returning cached analysis');
     return analysisCache.result;
   }
 
   // 2. Rate limiting: return cached result or default response if interval not met
   if (now - lastAICallTime < MIN_AI_CALL_INTERVAL_MS) {
-    console.info('[AnomalyAIAnalyzer] Rate limited, returning cached or default');
+    logger.info('Rate limited, returning cached or default');
     if (analysisCache) {
       return analysisCache.result;
     }
@@ -227,7 +230,7 @@ Analyze these anomalies and provide your assessment.`;
 
   // 4. Call AI Gateway
   try {
-    console.info(`[AnomalyAIAnalyzer] Calling AI provider with ${anomalies.length} anomalies...`);
+    logger.info(`Calling AI provider with ${anomalies.length} anomalies...`);
     lastAICallTime = now;
 
     const aiResult = await chatCompletion({
@@ -248,12 +251,12 @@ Analyze these anomalies and provide your assessment.`;
       timestamp: now,
     };
 
-    console.info(`[AnomalyAIAnalyzer] Analysis complete: severity=${result.severity}, type=${result.anomalyType}`);
+    logger.info(`Analysis complete: severity=${result.severity}, type=${result.anomalyType}`);
     return result;
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[AnomalyAIAnalyzer] AI provider error:', errorMessage);
+    logger.error('AI provider error: ' + errorMessage);
 
     // Default response on failure
     return {
