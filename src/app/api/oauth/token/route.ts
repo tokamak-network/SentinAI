@@ -1,15 +1,19 @@
 /**
- * OAuth 2.0 Token Endpoint
+ * OAuth 2.0 Token Endpoint — RFC 6749 + PKCE (RFC 7636)
  * Issues access tokens for ChatGPT MCP app authentication.
- * Supports: authorization_code, client_credentials grant types.
- * Client credentials accepted via Basic auth header or request body.
+ * Supports:
+ *   - authorization_code + PKCE (ChatGPT's required flow)
+ *   - client_credentials (legacy / direct API users)
+ * Client auth via Basic header or request body.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import {
   getOAuthClientId,
   getOAuthClientSecret,
+  validateDynamicClient,
   consumeAuthCode,
+  issueAccessToken,
   deriveAccessToken,
   ACCESS_TOKEN_TTL_SECONDS,
 } from '@/lib/oauth-token';
@@ -22,19 +26,36 @@ function extractClientCredentials(
 ): { clientId: string | null; clientSecret: string | null } {
   const authHeader = request.headers.get('authorization');
   if (authHeader?.startsWith('Basic ')) {
-    const decoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf-8');
-    const colonIndex = decoded.indexOf(':');
-    if (colonIndex !== -1) {
-      return {
-        clientId: decoded.slice(0, colonIndex) || null,
-        clientSecret: decoded.slice(colonIndex + 1) || null,
-      };
+    try {
+      const decoded = Buffer.from(authHeader.slice(6), 'base64').toString('utf-8');
+      const colonIndex = decoded.indexOf(':');
+      if (colonIndex !== -1) {
+        return {
+          clientId: decoded.slice(0, colonIndex) || null,
+          clientSecret: decoded.slice(colonIndex + 1) || null,
+        };
+      }
+    } catch {
+      // fall through to body
     }
   }
   return {
     clientId: body.get('client_id'),
     clientSecret: body.get('client_secret'),
   };
+}
+
+/** Validate client credentials: accepts both static and DCR clients. */
+function isValidClient(clientId: string | null, clientSecret: string | null): boolean {
+  if (!clientId || !clientSecret) return false;
+
+  // Static pre-configured client
+  const staticId = getOAuthClientId();
+  const staticSecret = getOAuthClientSecret();
+  if (clientId === staticId && staticSecret && clientSecret === staticSecret) return true;
+
+  // Dynamic DCR client
+  return validateDynamicClient(clientId, clientSecret);
 }
 
 export async function POST(request: NextRequest) {
@@ -46,38 +67,50 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'invalid_request' }, { status: 400 });
   }
 
-  const configuredSecret = getOAuthClientSecret();
-  if (!configuredSecret) {
-    return NextResponse.json(
-      { error: 'server_error', error_description: 'OAuth is not configured on this server.' },
-      { status: 500 }
-    );
-  }
-
   const { clientId, clientSecret } = extractClientCredentials(request, body);
-  const configuredClientId = getOAuthClientId();
 
-  if (clientId !== configuredClientId || clientSecret !== configuredSecret) {
+  if (!isValidClient(clientId, clientSecret)) {
     return NextResponse.json({ error: 'invalid_client' }, { status: 401 });
   }
 
   const grantType = body.get('grant_type');
 
-  if (grantType === 'client_credentials') {
+  if (grantType === 'authorization_code') {
+    const code = body.get('code');
+    const codeVerifier = body.get('code_verifier') || undefined;
+
+    if (!code || !clientId) {
+      return NextResponse.json(
+        { error: 'invalid_request', error_description: 'code is required.' },
+        { status: 400 }
+      );
+    }
+
+    if (!consumeAuthCode(code, clientId, codeVerifier)) {
+      return NextResponse.json(
+        { error: 'invalid_grant', error_description: 'Authorization code is invalid, expired, or PKCE verification failed.' },
+        { status: 400 }
+      );
+    }
+
     return NextResponse.json({
-      access_token: deriveAccessToken(configuredSecret),
+      access_token: issueAccessToken(),
       token_type: 'Bearer',
       expires_in: ACCESS_TOKEN_TTL_SECONDS,
     });
   }
 
-  if (grantType === 'authorization_code') {
-    const code = body.get('code');
-    if (!code || !consumeAuthCode(code, clientId)) {
+  if (grantType === 'client_credentials') {
+    const configuredSecret = getOAuthClientSecret();
+    if (!configuredSecret) {
       return NextResponse.json(
-        { error: 'invalid_grant', error_description: 'Authorization code is invalid or expired.' },
-        { status: 400 }
+        { error: 'server_error', error_description: 'OAuth is not configured.' },
+        { status: 500 }
       );
+    }
+    // Static client only for client_credentials
+    if (clientId !== getOAuthClientId()) {
+      return NextResponse.json({ error: 'invalid_client' }, { status: 401 });
     }
     return NextResponse.json({
       access_token: deriveAccessToken(configuredSecret),

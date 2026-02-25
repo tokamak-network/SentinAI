@@ -45,6 +45,7 @@ function handleWellKnown(request: NextRequest, pathname: string): NextResponse |
       issuer: base,
       authorization_endpoint: `${base}/api/oauth/authorize`,
       token_endpoint: `${base}/api/oauth/token`,
+      registration_endpoint: `${base}/api/oauth/register`,
       response_types_supported: ['code'],
       grant_types_supported: ['authorization_code', 'client_credentials'],
       token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
@@ -93,6 +94,7 @@ const AUTH_EXEMPT_ROUTES = new Set([
   '/api/health',
   '/api/agent-loop',
   '/api/oauth/token',    // OAuth token endpoint is the auth entry point
+  '/api/oauth/register', // DCR endpoint is unauthenticated by definition (RFC 7591)
   '/api/mcp',           // MCP server has its own auth layer (policy engine + Bearer token)
 ]);
 
