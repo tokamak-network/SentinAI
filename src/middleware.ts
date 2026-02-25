@@ -44,6 +44,8 @@ export const config = {
 const AUTH_EXEMPT_ROUTES = new Set([
   '/api/health',
   '/api/agent-loop',
+  '/api/oauth/token',    // OAuth token endpoint is the auth entry point
+  '/api/mcp',           // MCP server has its own auth layer (policy engine + Bearer token)
 ]);
 
 /**

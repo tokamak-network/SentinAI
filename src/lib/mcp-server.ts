@@ -4,6 +4,7 @@
  */
 
 import { getChainPlugin } from '@/chains';
+import { getWidgetResourceList, getWidgetHtml } from '@/lib/mcp-widgets';
 import { getRecentMetrics, getMetricsCount } from '@/lib/metrics-store';
 import { getEvents } from '@/lib/anomaly-event-store';
 import { detectAnomalies } from '@/lib/anomaly-detector';
@@ -871,9 +872,16 @@ async function executeTool(toolName: McpToolName, params: unknown): Promise<unkn
 
 const MCP_PROTOCOL_VERSION = '2025-03-26';
 
+const TOOL_WIDGET_MAP: Partial<Record<McpToolName, string>> = {
+  get_metrics: 'sentinai://metrics-widget',
+  get_anomalies: 'sentinai://anomalies-widget',
+  run_health_diagnostics: 'sentinai://health-widget',
+};
+
 function toStandardToolCallResult(
   payload: Record<string, unknown>,
-  isError: boolean
+  isError: boolean,
+  widgetUri?: string
 ): Record<string, unknown> {
   return {
     content: [
@@ -884,6 +892,7 @@ function toStandardToolCallResult(
     ],
     structuredContent: payload,
     isError,
+    ...(widgetUri && !isError ? { meta: { ui: { resource: widgetUri } } } : {}),
   };
 }
 
@@ -949,7 +958,7 @@ async function invokeToolWithGuards(
       return {
         jsonrpc: '2.0',
         id,
-        result: toStandardToolCallResult(payload, false),
+        result: toStandardToolCallResult(payload, false, TOOL_WIDGET_MAP[toolName]),
       };
     }
 
@@ -1023,6 +1032,9 @@ export async function handleMcpRequest(
           tools: {
             listChanged: false,
           },
+          resources: {
+            listChanged: false,
+          },
         },
       },
     };
@@ -1034,6 +1046,33 @@ export async function handleMcpRequest(
       id,
       result: {
         acknowledged: true,
+      },
+    };
+  }
+
+  if (request.method === 'resources/list') {
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: { resources: getWidgetResourceList() },
+    };
+  }
+
+  if (request.method === 'resources/read') {
+    const params = request.params as Record<string, unknown> | undefined;
+    const uri = typeof params?.uri === 'string' ? params.uri : null;
+    if (!uri) {
+      return buildError(id, MCP_ERROR.INVALID_PARAMS, 'resources/read requires a uri parameter.');
+    }
+    const html = getWidgetHtml(uri);
+    if (!html) {
+      return buildError(id, MCP_ERROR.METHOD_NOT_FOUND, `Unknown resource: ${uri}`);
+    }
+    return {
+      jsonrpc: '2.0',
+      id,
+      result: {
+        contents: [{ uri, mimeType: 'text/html', text: html }],
       },
     };
   }

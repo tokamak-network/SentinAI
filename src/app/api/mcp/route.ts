@@ -7,6 +7,7 @@
 import { randomUUID } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
 import { getMcpConfig, getMcpToolManifest, handleMcpRequest } from '@/lib/mcp-server';
+import { validateBearerToken } from '@/lib/oauth-token';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,9 +65,19 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Accept both x-api-key header and OAuth Bearer token
+  let apiKey = request.headers.get('x-api-key') || undefined;
+  if (!apiKey) {
+    const authHeader = request.headers.get('authorization');
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+    if (bearerToken && validateBearerToken(bearerToken)) {
+      apiKey = process.env.SENTINAI_API_KEY;
+    }
+  }
+
   const response = await handleMcpRequest(payload, {
     requestId: request.headers.get('x-request-id') || randomUUID(),
-    apiKey: request.headers.get('x-api-key') || undefined,
+    apiKey,
     approvalToken: request.headers.get('x-mcp-approval-token') || undefined,
     readOnlyMode: process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE === 'true',
     allowScalerWriteInReadOnly: process.env.SENTINAI_ALLOW_SCALER_WRITE_IN_READONLY === 'true',
