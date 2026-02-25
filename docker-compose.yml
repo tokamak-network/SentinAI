@@ -76,6 +76,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    environment:
+      # Required for /.well-known/ rewrite to basePath (OAuth discovery RFC 8414/9728)
+      - NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data

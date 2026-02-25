@@ -7,6 +7,15 @@
 # Default: localhost (for local testing without HTTPS)
 
 {$DOMAIN:localhost} {
+    # Rewrite OAuth well-known endpoints from domain root to basePath.
+    # RFC 8414 / RFC 9728 require these at the domain root, but Next.js
+    # serves them under NEXT_PUBLIC_BASE_PATH (e.g. /thanos-sepolia/).
+    # Caddy rewrites the path before forwarding to Next.js.
+    handle /.well-known/* {
+        rewrite * {$NEXT_PUBLIC_BASE_PATH:}{uri}
+        reverse_proxy sentinai:8080
+    }
+
     reverse_proxy sentinai:8080
 
     header {
