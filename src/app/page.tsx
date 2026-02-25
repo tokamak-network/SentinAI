@@ -1022,7 +1022,7 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // --- Agent Loop polling (every 30s) ---
+  // --- Agent Loop polling (every 60s) ---
   useEffect(() => {
     const fetchAgentLoop = async () => {
       try {
@@ -1841,7 +1841,7 @@ export default function Dashboard() {
                 <span className="text-xs font-semibold text-gray-400">Disabled</span>
               </div>
             )}
-            <span className="text-[10px] text-gray-400 font-mono">{agentLoop?.config.intervalSeconds || 30}s cycle</span>
+            <span className="text-[10px] text-gray-400 font-mono">{agentLoop?.config.intervalSeconds || 60}s cycle</span>
           </div>
         </div>
 
@@ -2024,7 +2024,7 @@ export default function Dashboard() {
                     {showFullHistory ? 'Recent' : 'Full History'}
                   </button>
                 )}
-                <span className="text-xs text-gray-500 font-mono">30s interval</span>
+                <span className="text-xs text-gray-500 font-mono">60s interval</span>
               </div>
             </div>
 
@@ -2226,7 +2226,7 @@ export default function Dashboard() {
                         <RefreshCw size={20} className="text-blue-400/40" />
                         <div>
                           <p className="text-blue-400/70 font-semibold text-sm font-sans">Waiting for first cycle...</p>
-                          <p className="text-gray-600 text-xs mt-0.5 font-sans">Agent loop runs every 30 seconds</p>
+                          <p className="text-gray-600 text-xs mt-0.5 font-sans">Agent loop runs every 60 seconds</p>
                         </div>
                       </>
                     ) : (
