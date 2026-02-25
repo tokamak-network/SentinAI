@@ -261,6 +261,8 @@ export async function verifyAutonomousOperation(input: {
 export async function rollbackAutonomousOperation(input: {
   operationId: string;
   dryRun?: boolean;
+  allowWrites?: boolean;
+  reason?: string;
 }): Promise<{ operationId: string; rollbackSteps: AutonomousExecutionResult['steps']; success: boolean }> {
   const stored = getStore().get(input.operationId);
   if (!stored?.execution) {
@@ -280,7 +282,11 @@ export async function rollbackAutonomousOperation(input: {
         ...(rollbackStep.params || {}),
         targetComponent: rollbackStep.targetComponent,
         dryRun: input.dryRun !== false,
-        allowWrites: false,
+        allowWrites: input.allowWrites === true,
+        metadata: {
+          operationId: input.operationId,
+          reason: input.reason || 'rollback',
+        },
       });
 
       rollbackSteps.push({

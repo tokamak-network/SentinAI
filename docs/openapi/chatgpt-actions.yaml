@@ -1,0 +1,493 @@
+openapi: 3.1.0
+info:
+  title: SentinAI ChatGPT Actions API
+  version: 0.1.0
+  description: >-
+    ChatGPT Actions용 SentinAI 운영 API (MVP). 기본 정책은 안전 우선이며,
+    execute/rollback은 confirmToken이 필요합니다.
+servers:
+  - url: https://api-staging.sentinai.example.com
+    description: Staging
+  - url: https://api.sentinai.example.com
+    description: Production
+security:
+  - bearerAuth: []
+tags:
+  - name: operations
+    description: 운영 계획/검증/실행/롤백
+  - name: system
+    description: 상태 및 작업 조회
+paths:
+  /v1/ops/plan:
+    post:
+      tags: [operations]
+      summary: 운영 변경 계획 생성
+      description: 영향 리소스, 위험도, 권장 액션을 포함한 실행 계획을 생성합니다.
+      operationId: createOpsPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PlanRequest'
+      responses:
+        '200':
+          description: 계획 생성 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/ops/verify:
+    post:
+      tags: [operations]
+      summary: 계획 사전 검증
+      description: 권한/정책/리소스 상태를 검증하고 실행 가능 여부를 반환합니다.
+      operationId: verifyOpsPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyRequest'
+      responses:
+        '202':
+          description: 검증 작업이 접수됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyQueuedResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/ops/execute:
+    post:
+      tags: [operations]
+      summary: 계획 실행
+      description: >-
+        운영 변경을 실행합니다. 기본은 dry-run 권장이며, 실제 실행 시 confirmToken이 필수입니다.
+      operationId: executeOpsPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteRequest'
+      responses:
+        '202':
+          description: 실행 작업이 접수됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/ops/rollback:
+    post:
+      tags: [operations]
+      summary: 변경 롤백
+      description: >-
+        최근 변경 또는 지정 릴리즈를 롤백합니다. 롤백 실행에는 confirmToken이 필수입니다.
+      operationId: rollbackOpsChange
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RollbackRequest'
+      responses:
+        '202':
+          description: 롤백 작업이 접수됨
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RollbackResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /v1/ops/jobs/{jobId}:
+    get:
+      tags: [system]
+      summary: 작업 상태 조회
+      description: jobId 기준으로 비동기 작업 진행 상태와 결과 요약을 조회합니다.
+      operationId: getOpsJob
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /v1/ops/status:
+    get:
+      tags: [system]
+      summary: 서비스 상태 조회
+      description: Adapter API 및 핵심 의존성(AWS/K8s/MCP) 상태를 반환합니다.
+      operationId: getOpsStatus
+      responses:
+        '200':
+          description: 상태 조회 성공
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ServiceStatusResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    TargetRef:
+      type: object
+      required: [environment, platform, service]
+      properties:
+        environment:
+          type: string
+          enum: [staging, prod]
+        platform:
+          type: string
+          enum: [k8s, aws]
+        cluster:
+          type: string
+          description: K8s cluster name (k8s인 경우 권장)
+        namespace:
+          type: string
+          description: K8s namespace
+        service:
+          type: string
+          description: workload/service identifier
+        region:
+          type: string
+          description: AWS region (aws인 경우)
+
+    PlanRequest:
+      type: object
+      required: [requestId, action, target]
+      properties:
+        requestId:
+          type: string
+        action:
+          type: string
+          example: scale_service
+        target:
+          $ref: '#/components/schemas/TargetRef'
+        intent:
+          type: string
+          description: 사용자 의도의 자연어 설명
+        parameters:
+          type: object
+          additionalProperties: true
+        dryRun:
+          type: boolean
+          default: true
+
+    PlanResponse:
+      type: object
+      required: [requestId, planId, status, riskLevel, summary, confirmToken]
+      properties:
+        requestId:
+          type: string
+        planId:
+          type: string
+        status:
+          type: string
+          enum: [planned]
+        riskLevel:
+          type: string
+          enum: [low, medium, high]
+        summary:
+          type: string
+        proposedChanges:
+          type: array
+          items:
+            type: string
+        dryRun:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        confirmToken:
+          type: string
+          description: Execute/Rollback 최종 확인 토큰 (Plan 단계에서 발급)
+
+    VerifyRequest:
+      type: object
+      required: [requestId, planId]
+      properties:
+        requestId:
+          type: string
+        planId:
+          type: string
+        target:
+          $ref: '#/components/schemas/TargetRef'
+
+    VerifyResponse:
+      type: object
+      required: [requestId, planId, verified, checks]
+      properties:
+        requestId:
+          type: string
+        planId:
+          type: string
+        verified:
+          type: boolean
+        checks:
+          type: array
+          items:
+            type: object
+            required: [name, result]
+            properties:
+              name:
+                type: string
+              result:
+                type: string
+                enum: [pass, fail, warn]
+              detail:
+                type: string
+        blockingIssues:
+          type: array
+          items:
+            type: string
+
+    VerifyQueuedResponse:
+      type: object
+      required: [requestId, planId, jobId, status, accepted]
+      properties:
+        requestId:
+          type: string
+        planId:
+          type: string
+        jobId:
+          type: string
+        accepted:
+          type: boolean
+        status:
+          type: string
+          enum: [queued, running]
+        summary:
+          type: string
+
+    ExecuteRequest:
+      type: object
+      required: [requestId, planId, target, confirmToken]
+      properties:
+        requestId:
+          type: string
+        planId:
+          type: string
+        target:
+          $ref: '#/components/schemas/TargetRef'
+        confirmToken:
+          type: string
+          description: 최종 실행 확인 토큰
+        dryRun:
+          type: boolean
+          default: true
+        reason:
+          type: string
+
+    ExecuteResponse:
+      type: object
+      required: [requestId, jobId, status, accepted]
+      properties:
+        requestId:
+          type: string
+        jobId:
+          type: string
+        accepted:
+          type: boolean
+        status:
+          type: string
+          enum: [queued, running]
+        dryRun:
+          type: boolean
+        summary:
+          type: string
+
+    RollbackRequest:
+      type: object
+      required: [requestId, confirmToken]
+      properties:
+        requestId:
+          type: string
+        confirmToken:
+          type: string
+          description: 최종 롤백 확인 토큰
+        operationId:
+          type: string
+          description: 롤백 대상 autonomous operationId
+        sourceJobId:
+          type: string
+          description: operationId를 추출할 이전 execute jobId (권장)
+        target:
+          $ref: '#/components/schemas/TargetRef'
+        dryRun:
+          type: boolean
+          default: true
+        reason:
+          type: string
+      description: operationId 또는 sourceJobId 중 하나는 필수입니다.
+
+    RollbackResponse:
+      type: object
+      required: [requestId, jobId, status, accepted]
+      properties:
+        requestId:
+          type: string
+        jobId:
+          type: string
+        accepted:
+          type: boolean
+        status:
+          type: string
+          enum: [queued, running]
+        dryRun:
+          type: boolean
+        operationId:
+          type: string
+        summary:
+          type: string
+
+    JobStatusResponse:
+      type: object
+      required: [jobId, type, status, startedAt]
+      properties:
+        jobId:
+          type: string
+        type:
+          type: string
+          enum: [execute, rollback, verify]
+        status:
+          type: string
+          enum: [queued, running, succeeded, failed, cancelled]
+        progress:
+          type: integer
+          minimum: 0
+          maximum: 100
+        summary:
+          type: string
+        logs:
+          type: array
+          items:
+            type: string
+        startedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        finishedAt:
+          type: string
+          format: date-time
+        requestId:
+          type: string
+        planId:
+          type: string
+        operationId:
+          type: string
+        dryRun:
+          type: boolean
+        result:
+          description: 작업 결과(타입별 상이)
+        error:
+          type: object
+          properties:
+            message:
+              type: string
+
+    ServiceStatusResponse:
+      type: object
+      required: [status, timestamp, dependencies]
+      properties:
+        status:
+          type: string
+          enum: [ok, degraded, down]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        dependencies:
+          type: array
+          items:
+            type: object
+            required: [name, status]
+            properties:
+              name:
+                type: string
+              status:
+                type: string
+                enum: [ok, degraded, down]
+              detail:
+                type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            requestId:
+              type: string
+
+  responses:
+    BadRequest:
+      description: 잘못된 요청
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: 인증 실패
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: 권한 없음
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: 리소스를 찾을 수 없음
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
