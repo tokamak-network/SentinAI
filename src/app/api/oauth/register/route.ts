@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   }
 
   const redirectUris: string[] = Array.isArray(body.redirect_uris) ? body.redirect_uris : [];
-  const { clientId, clientSecret } = registerDynamicClient(redirectUris);
+  const { clientId, clientSecret } = await registerDynamicClient(redirectUris);
 
   // RFC 7591 response
   return NextResponse.json(

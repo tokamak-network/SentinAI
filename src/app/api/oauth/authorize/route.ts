@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
 
   // Accept both static client and dynamic DCR clients
   const isStaticClient = clientId === getOAuthClientId();
-  const isDynamicClient = !isStaticClient && !!getDynamicClient(clientId);
+  const isDynamicClient = !isStaticClient && !!(await getDynamicClient(clientId));
 
   if (!isStaticClient && !isDynamicClient) {
     return NextResponse.json(
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
   }
 
   // Auto-approve: issue the authorization code
-  const code = issueAuthCode(clientId, codeChallenge, codeChallengeMethod);
+  const code = await issueAuthCode(clientId, codeChallenge, codeChallengeMethod);
 
   let redirectUrl: URL;
   try {

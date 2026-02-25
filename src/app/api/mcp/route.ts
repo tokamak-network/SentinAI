@@ -17,13 +17,13 @@ function buildWwwAuthenticate(request: NextRequest): string {
   return `Bearer realm="SentinAI", resource_metadata="${base}/.well-known/oauth-protected-resource"`;
 }
 
-function resolveApiKey(request: NextRequest): string | undefined {
+async function resolveApiKey(request: NextRequest): Promise<string | undefined> {
   const xApiKey = request.headers.get('x-api-key') || undefined;
   if (xApiKey) return xApiKey;
   const authHeader = request.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
-    if (validateBearerToken(token)) return process.env.SENTINAI_API_KEY;
+    if (await validateBearerToken(token)) return process.env.SENTINAI_API_KEY;
   }
   return undefined;
 }
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
 
   // Always return 401 when API key is configured and no auth provided.
   // This forces ChatGPT to discover and complete the OAuth flow.
-  if (process.env.SENTINAI_API_KEY && !resolveApiKey(request)) {
+  if (process.env.SENTINAI_API_KEY && !(await resolveApiKey(request))) {
     return unauthorized(request);
   }
 
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
   // Require auth for all requests when SENTINAI_API_KEY is configured.
   // Returning 401 on every unauthenticated request (including initialize)
   // is required for ChatGPT to detect and initiate the OAuth flow.
-  const apiKey = resolveApiKey(request);
+  const apiKey = await resolveApiKey(request);
   if (process.env.SENTINAI_API_KEY && !apiKey) {
     return unauthorized(request);
   }

@@ -2,13 +2,19 @@
  * OAuth 2.0 Token Utilities
  * Supports Authorization Code + PKCE (ChatGPT) and Client Credentials flows.
  * Also handles Dynamic Client Registration (DCR) required by ChatGPT Apps SDK.
+ *
+ * Storage: Redis (if REDIS_URL is set) or in-memory fallback.
+ * Redis persistence prevents token loss on server restart.
  */
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
+import Redis from 'ioredis';
 
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const AUTH_CODE_TTL_SECONDS = 300;
 const ACCESS_TOKEN_TTL_MS = 60 * 60 * 1000; // 1 hour
 const DYNAMIC_CLIENT_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const DYNAMIC_CLIENT_TTL_SECONDS = 86400;
 
 export const ACCESS_TOKEN_TTL_SECONDS = 3600;
 
@@ -32,9 +38,15 @@ export function deriveAccessToken(secret: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Dynamic Client Registration (DCR) — RFC 7591
-// ChatGPT registers a fresh client on each connection.
+// Internal data structures
 // ---------------------------------------------------------------------------
+
+interface AuthCodeEntry {
+  clientId: string;
+  codeChallenge?: string;
+  codeChallengeMethod?: string;
+  expiresAt: number;
+}
 
 interface DynamicClient {
   clientSecret: string;
@@ -42,29 +54,211 @@ interface DynamicClient {
   createdAt: number;
 }
 
-const dynamicClients = new Map<string, DynamicClient>();
+// ---------------------------------------------------------------------------
+// OAuthStore interface (internal)
+// ---------------------------------------------------------------------------
 
-export function registerDynamicClient(redirectUris: string[]): { clientId: string; clientSecret: string } {
+interface OAuthStore {
+  setAccessToken(token: string, expiresAt: number): Promise<void>;
+  getAccessToken(token: string): Promise<{ expiresAt: number } | null>;
+  setAuthCode(code: string, entry: AuthCodeEntry): Promise<void>;
+  getAndDeleteAuthCode(code: string): Promise<AuthCodeEntry | null>;
+  setDynamicClient(clientId: string, client: DynamicClient): Promise<void>;
+  getDynamicClientById(clientId: string): Promise<DynamicClient | null>;
+}
+
+// ---------------------------------------------------------------------------
+// InMemory implementation
+// ---------------------------------------------------------------------------
+
+class InMemoryOAuthStore implements OAuthStore {
+  private tokens = new Map<string, { expiresAt: number }>();
+  private codes = new Map<string, AuthCodeEntry>();
+  private clients = new Map<string, DynamicClient>();
+
+  async setAccessToken(token: string, expiresAt: number): Promise<void> {
+    this.tokens.set(token, { expiresAt });
+  }
+
+  async getAccessToken(token: string): Promise<{ expiresAt: number } | null> {
+    const entry = this.tokens.get(token);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.tokens.delete(token);
+      return null;
+    }
+    return entry;
+  }
+
+  async setAuthCode(code: string, entry: AuthCodeEntry): Promise<void> {
+    this.codes.set(code, entry);
+  }
+
+  async getAndDeleteAuthCode(code: string): Promise<AuthCodeEntry | null> {
+    const entry = this.codes.get(code) ?? null;
+    this.codes.delete(code); // one-time use
+    return entry;
+  }
+
+  async setDynamicClient(clientId: string, client: DynamicClient): Promise<void> {
+    this.clients.set(clientId, client);
+  }
+
+  async getDynamicClientById(clientId: string): Promise<DynamicClient | null> {
+    const client = this.clients.get(clientId);
+    if (!client) return null;
+    if (Date.now() - client.createdAt > DYNAMIC_CLIENT_TTL_MS) {
+      this.clients.delete(clientId);
+      return null;
+    }
+    return client;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Redis implementation
+// ---------------------------------------------------------------------------
+
+class RedisOAuthStore implements OAuthStore {
+  private client: Redis;
+  private readonly prefix = 'sentinai:oauth:';
+
+  constructor(redisUrl: string) {
+    this.client = new Redis(redisUrl, {
+      connectTimeout: 5000,
+      maxRetriesPerRequest: 3,
+      retryStrategy(times: number) {
+        if (times > 3) return null;
+        return Math.min(times * 200, 2000);
+      },
+      lazyConnect: true,
+    });
+
+    this.client.on('connect', () => {
+      console.info('[OAuth Store] Redis connected');
+    });
+    this.client.on('error', (err: Error) => {
+      console.error('[OAuth Store] Redis error:', err.message);
+    });
+
+    this.client.connect().catch((err: Error) => {
+      console.error('[OAuth Store] Initial connection failed:', err.message);
+    });
+  }
+
+  private key(type: string, id: string): string {
+    return `${this.prefix}${type}:${id}`;
+  }
+
+  async setAccessToken(token: string, expiresAt: number): Promise<void> {
+    const ttl = Math.max(1, Math.ceil((expiresAt - Date.now()) / 1000));
+    try {
+      await this.client.setex(this.key('token', token), ttl, JSON.stringify({ expiresAt }));
+    } catch (err) {
+      console.error('[OAuth Store] setAccessToken failed:', (err as Error).message);
+    }
+  }
+
+  async getAccessToken(token: string): Promise<{ expiresAt: number } | null> {
+    try {
+      const raw = await this.client.get(this.key('token', token));
+      if (!raw) return null;
+      return JSON.parse(raw) as { expiresAt: number };
+    } catch (err) {
+      console.error('[OAuth Store] getAccessToken failed:', (err as Error).message);
+      return null;
+    }
+  }
+
+  async setAuthCode(code: string, entry: AuthCodeEntry): Promise<void> {
+    const ttl = Math.max(1, Math.ceil((entry.expiresAt - Date.now()) / 1000));
+    try {
+      await this.client.setex(this.key('code', code), ttl, JSON.stringify(entry));
+    } catch (err) {
+      console.error('[OAuth Store] setAuthCode failed:', (err as Error).message);
+    }
+  }
+
+  async getAndDeleteAuthCode(code: string): Promise<AuthCodeEntry | null> {
+    const k = this.key('code', code);
+    try {
+      // Atomic get + delete to prevent replay attacks
+      const results = await this.client.multi().get(k).del(k).exec();
+      const raw = results?.[0]?.[1] as string | null;
+      if (!raw) return null;
+      return JSON.parse(raw) as AuthCodeEntry;
+    } catch (err) {
+      console.error('[OAuth Store] getAndDeleteAuthCode failed:', (err as Error).message);
+      return null;
+    }
+  }
+
+  async setDynamicClient(clientId: string, client: DynamicClient): Promise<void> {
+    try {
+      await this.client.setex(
+        this.key('client', clientId),
+        DYNAMIC_CLIENT_TTL_SECONDS,
+        JSON.stringify(client)
+      );
+    } catch (err) {
+      console.error('[OAuth Store] setDynamicClient failed:', (err as Error).message);
+    }
+  }
+
+  async getDynamicClientById(clientId: string): Promise<DynamicClient | null> {
+    try {
+      const raw = await this.client.get(this.key('client', clientId));
+      if (!raw) return null;
+      return JSON.parse(raw) as DynamicClient;
+    } catch (err) {
+      console.error('[OAuth Store] getDynamicClient failed:', (err as Error).message);
+      return null;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Singleton factory
+// ---------------------------------------------------------------------------
+
+const globalForOAuth = globalThis as unknown as { __sentinai_oauth_store?: OAuthStore };
+
+function getOAuthStore(): OAuthStore {
+  if (globalForOAuth.__sentinai_oauth_store) return globalForOAuth.__sentinai_oauth_store;
+
+  const redisUrl = process.env.REDIS_URL;
+  if (redisUrl) {
+    console.info('[OAuth Store] Using Redis for OAuth token persistence');
+    globalForOAuth.__sentinai_oauth_store = new RedisOAuthStore(redisUrl);
+  } else {
+    console.info('[OAuth Store] Using InMemory (tokens lost on restart; set REDIS_URL for persistence)');
+    globalForOAuth.__sentinai_oauth_store = new InMemoryOAuthStore();
+  }
+
+  return globalForOAuth.__sentinai_oauth_store;
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic Client Registration (DCR) — RFC 7591
+// ChatGPT registers a fresh client on each connection.
+// ---------------------------------------------------------------------------
+
+export async function registerDynamicClient(
+  redirectUris: string[]
+): Promise<{ clientId: string; clientSecret: string }> {
   const clientId = `dcr_${randomBytes(12).toString('hex')}`;
   const clientSecret = randomBytes(32).toString('hex');
-  dynamicClients.set(clientId, { clientSecret, redirectUris, createdAt: Date.now() });
+  await getOAuthStore().setDynamicClient(clientId, { clientSecret, redirectUris, createdAt: Date.now() });
   return { clientId, clientSecret };
 }
 
-export function getDynamicClient(clientId: string): DynamicClient | undefined {
-  const client = dynamicClients.get(clientId);
-  if (!client) return undefined;
-  // Expire stale clients
-  if (Date.now() - client.createdAt > DYNAMIC_CLIENT_TTL_MS) {
-    dynamicClients.delete(clientId);
-    return undefined;
-  }
-  return client;
+export async function getDynamicClient(clientId: string): Promise<DynamicClient | null> {
+  return getOAuthStore().getDynamicClientById(clientId);
 }
 
 /** Returns true if clientId is a valid DCR client with matching secret. */
-export function validateDynamicClient(clientId: string, clientSecret: string): boolean {
-  const client = getDynamicClient(clientId);
+export async function validateDynamicClient(clientId: string, clientSecret: string): Promise<boolean> {
+  const client = await getDynamicClient(clientId);
   if (!client) return false;
   try {
     const a = Buffer.from(client.clientSecret);
@@ -80,22 +274,13 @@ export function validateDynamicClient(clientId: string, clientSecret: string): b
 // Authorization Codes with PKCE — RFC 7636
 // ---------------------------------------------------------------------------
 
-interface AuthCodeEntry {
-  clientId: string;
-  codeChallenge?: string;
-  codeChallengeMethod?: string;
-  expiresAt: number;
-}
-
-const pendingCodes = new Map<string, AuthCodeEntry>();
-
-export function issueAuthCode(
+export async function issueAuthCode(
   clientId: string,
   codeChallenge?: string,
   codeChallengeMethod?: string
-): string {
+): Promise<string> {
   const code = randomBytes(24).toString('hex');
-  pendingCodes.set(code, {
+  await getOAuthStore().setAuthCode(code, {
     clientId,
     codeChallenge,
     codeChallengeMethod,
@@ -105,23 +290,19 @@ export function issueAuthCode(
 }
 
 /** Consumes the auth code and verifies the PKCE code_verifier (S256). */
-export function consumeAuthCode(
+export async function consumeAuthCode(
   code: string,
   clientId: string,
   codeVerifier?: string
-): boolean {
-  const entry = pendingCodes.get(code);
-  pendingCodes.delete(code); // one-time use
+): Promise<boolean> {
+  const entry = await getOAuthStore().getAndDeleteAuthCode(code);
   if (!entry) return false;
   if (Date.now() > entry.expiresAt) return false;
   if (entry.clientId !== clientId) return false;
 
   if (entry.codeChallenge) {
-    // PKCE was requested — verifier is required
     if (!codeVerifier) return false;
-    const computed = createHash('sha256')
-      .update(codeVerifier)
-      .digest('base64url'); // RFC 7636 S256 challenge
+    const computed = createHash('sha256').update(codeVerifier).digest('base64url');
     return computed === entry.codeChallenge;
   }
 
@@ -129,37 +310,28 @@ export function consumeAuthCode(
 }
 
 // ---------------------------------------------------------------------------
-// Access Tokens — random, stored in memory
+// Access Tokens — persisted in Redis or in-memory
 // ---------------------------------------------------------------------------
 
-interface AccessTokenEntry {
-  expiresAt: number;
-}
-
-const issuedTokens = new Map<string, AccessTokenEntry>();
-
-export function issueAccessToken(): string {
+export async function issueAccessToken(): Promise<string> {
   const token = `satv1_${randomBytes(32).toString('hex')}`;
-  issuedTokens.set(token, { expiresAt: Date.now() + ACCESS_TOKEN_TTL_MS });
+  await getOAuthStore().setAccessToken(token, Date.now() + ACCESS_TOKEN_TTL_MS);
   return token;
 }
 
 /**
  * Validate a Bearer token.
  * Checks (in order):
- *   1. Random token issued via issueAccessToken()
+ *   1. Random token issued via issueAccessToken() — stored in Redis or memory
  *   2. Legacy HMAC-derived token from the static secret
  */
-export function validateBearerToken(token: string): boolean {
+export async function validateBearerToken(token: string): Promise<boolean> {
   if (!token) return false;
 
-  // 1. Check randomly-issued tokens
-  const entry = issuedTokens.get(token);
+  // 1. Check store-backed tokens (Redis or InMemory)
+  const entry = await getOAuthStore().getAccessToken(token);
   if (entry) {
-    if (Date.now() > entry.expiresAt) {
-      issuedTokens.delete(token);
-      return false;
-    }
+    if (Date.now() > entry.expiresAt) return false;
     return true;
   }
 
@@ -176,3 +348,6 @@ export function validateBearerToken(token: string): boolean {
     return false;
   }
 }
+
+// suppress unused variable warnings for TTL constants used only in computation
+void AUTH_CODE_TTL_SECONDS;

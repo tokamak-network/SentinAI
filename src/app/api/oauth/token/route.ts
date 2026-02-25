@@ -46,7 +46,7 @@ function extractClientCredentials(
 }
 
 /** Validate client credentials: accepts both static and DCR clients. */
-function isValidClient(clientId: string | null, clientSecret: string | null): boolean {
+async function isValidClient(clientId: string | null, clientSecret: string | null): Promise<boolean> {
   if (!clientId || !clientSecret) return false;
 
   // Static pre-configured client
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
 
   const { clientId, clientSecret } = extractClientCredentials(request, body);
 
-  if (!isValidClient(clientId, clientSecret)) {
+  if (!(await isValidClient(clientId, clientSecret))) {
     return NextResponse.json({ error: 'invalid_client' }, { status: 401 });
   }
 
@@ -86,7 +86,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!consumeAuthCode(code, clientId, codeVerifier)) {
+    if (!(await consumeAuthCode(code, clientId, codeVerifier))) {
       return NextResponse.json(
         { error: 'invalid_grant', error_description: 'Authorization code is invalid, expired, or PKCE verification failed.' },
         { status: 400 }
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      access_token: issueAccessToken(),
+      access_token: await issueAccessToken(),
       token_type: 'Bearer',
       expires_in: ACCESS_TOKEN_TTL_SECONDS,
     });
