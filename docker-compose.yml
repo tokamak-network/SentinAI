@@ -77,6 +77,8 @@ services:
       - "80:80"
       - "443:443"
     environment:
+      # Domain for TLS certificate provisioning (matches Caddyfile {$DOMAIN:localhost})
+      - DOMAIN=${DOMAIN:-localhost}
       # Required for /.well-known/ rewrite to basePath (OAuth discovery RFC 8414/9728)
       - NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH:-}
     volumes:
