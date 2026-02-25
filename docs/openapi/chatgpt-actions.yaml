@@ -462,7 +462,13 @@ components:
           type: string
         action:
           type: string
-          example: scale_service
+          enum:
+            - stabilize_throughput
+            - recover_sequencer_path
+            - reduce_cost_idle_window
+            - restore_l1_connectivity
+            - protect_critical_eoa
+          description: "지원되는 5가지 운영 intent"
         target:
           $ref: '#/components/schemas/TargetRef'
         intent:
