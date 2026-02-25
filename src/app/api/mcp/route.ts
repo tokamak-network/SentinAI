@@ -11,7 +11,14 @@ import { validateBearerToken } from '@/lib/oauth-token';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+function buildWwwAuthenticate(request: NextRequest): string {
+  const origin = new URL(request.url).origin;
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+  const base = `${origin}${basePath}`;
+  return `Bearer realm="SentinAI", resource_metadata="${base}/.well-known/oauth-protected-resource"`;
+}
+
+export async function GET(request: NextRequest) {
   const config = getMcpConfig();
   if (!config.enabled) {
     return NextResponse.json(
@@ -23,13 +30,21 @@ export async function GET() {
     );
   }
 
-  return NextResponse.json({
-    enabled: true,
-    authMode: config.authMode,
-    approvalRequired: config.approvalRequired,
-    approvalTtlSeconds: config.approvalTtlSeconds,
-    tools: getMcpToolManifest(),
-  });
+  // Advertise OAuth support via WWW-Authenticate header (MCP 2025-03-26)
+  return NextResponse.json(
+    {
+      enabled: true,
+      authMode: config.authMode,
+      approvalRequired: config.approvalRequired,
+      approvalTtlSeconds: config.approvalTtlSeconds,
+      tools: getMcpToolManifest(),
+    },
+    {
+      headers: {
+        'WWW-Authenticate': buildWwwAuthenticate(request),
+      },
+    }
+  );
 }
 
 export async function POST(request: NextRequest) {
@@ -67,12 +82,32 @@ export async function POST(request: NextRequest) {
 
   // Accept both x-api-key header and OAuth Bearer token
   let apiKey = request.headers.get('x-api-key') || undefined;
-  if (!apiKey) {
-    const authHeader = request.headers.get('authorization');
-    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
-    if (bearerToken && validateBearerToken(bearerToken)) {
+  const authHeader = request.headers.get('authorization');
+  if (!apiKey && authHeader?.startsWith('Bearer ')) {
+    const bearerToken = authHeader.slice(7);
+    if (validateBearerToken(bearerToken)) {
       apiKey = process.env.SENTINAI_API_KEY;
     }
+  }
+
+  // Return HTTP 401 with WWW-Authenticate when no auth is provided at all.
+  // This enables ChatGPT OAuth discovery (MCP 2025-03-26 spec).
+  // initialize and tools/list are exempted — they don't require auth.
+  const configuredApiKey = process.env.SENTINAI_API_KEY;
+  const isDiscoveryMethod =
+    typeof payload === 'object' &&
+    payload !== null &&
+    'method' in payload &&
+    (payload.method === 'initialize' || payload.method === 'tools/list' || payload.method === 'resources/list');
+
+  if (configuredApiKey && !apiKey && !isDiscoveryMethod) {
+    return NextResponse.json(
+      { error: 'unauthorized', error_description: 'Bearer token required.' },
+      {
+        status: 401,
+        headers: { 'WWW-Authenticate': buildWwwAuthenticate(request) },
+      }
+    );
   }
 
   const response = await handleMcpRequest(payload, {
