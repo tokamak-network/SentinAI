@@ -17,19 +17,36 @@ function buildWwwAuthenticate(request: NextRequest): string {
   return `Bearer realm="SentinAI", resource_metadata="${base}/.well-known/oauth-protected-resource"`;
 }
 
+function resolveApiKey(request: NextRequest): string | undefined {
+  const xApiKey = request.headers.get('x-api-key') || undefined;
+  if (xApiKey) return xApiKey;
+  const authHeader = request.headers.get('authorization');
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    if (validateBearerToken(token)) return process.env.SENTINAI_API_KEY;
+  }
+  return undefined;
+}
+
+function unauthorized(request: NextRequest): NextResponse {
+  return NextResponse.json(
+    { error: 'unauthorized', error_description: 'Bearer token required.' },
+    { status: 401, headers: { 'WWW-Authenticate': buildWwwAuthenticate(request) } }
+  );
+}
+
 export async function GET(request: NextRequest) {
   const config = getMcpConfig();
   if (!config.enabled) {
-    return NextResponse.json(
-      {
-        enabled: false,
-        message: 'MCP server is disabled.',
-      },
-      { status: 503 }
-    );
+    return NextResponse.json({ enabled: false, message: 'MCP server is disabled.' }, { status: 503 });
   }
 
-  // Advertise OAuth support via WWW-Authenticate header (MCP 2025-03-26)
+  // Always return 401 when API key is configured and no auth provided.
+  // This forces ChatGPT to discover and complete the OAuth flow.
+  if (process.env.SENTINAI_API_KEY && !resolveApiKey(request)) {
+    return unauthorized(request);
+  }
+
   return NextResponse.json(
     {
       enabled: true,
@@ -38,11 +55,7 @@ export async function GET(request: NextRequest) {
       approvalTtlSeconds: config.approvalTtlSeconds,
       tools: getMcpToolManifest(),
     },
-    {
-      headers: {
-        'WWW-Authenticate': buildWwwAuthenticate(request),
-      },
-    }
+    { headers: { 'WWW-Authenticate': buildWwwAuthenticate(request) } }
   );
 }
 
@@ -79,34 +92,12 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Accept both x-api-key header and OAuth Bearer token
-  let apiKey = request.headers.get('x-api-key') || undefined;
-  const authHeader = request.headers.get('authorization');
-  if (!apiKey && authHeader?.startsWith('Bearer ')) {
-    const bearerToken = authHeader.slice(7);
-    if (validateBearerToken(bearerToken)) {
-      apiKey = process.env.SENTINAI_API_KEY;
-    }
-  }
-
-  // Return HTTP 401 with WWW-Authenticate when no auth is provided at all.
-  // This enables ChatGPT OAuth discovery (MCP 2025-03-26 spec).
-  // initialize and tools/list are exempted — they don't require auth.
-  const configuredApiKey = process.env.SENTINAI_API_KEY;
-  const isDiscoveryMethod =
-    typeof payload === 'object' &&
-    payload !== null &&
-    'method' in payload &&
-    (payload.method === 'initialize' || payload.method === 'tools/list' || payload.method === 'resources/list');
-
-  if (configuredApiKey && !apiKey && !isDiscoveryMethod) {
-    return NextResponse.json(
-      { error: 'unauthorized', error_description: 'Bearer token required.' },
-      {
-        status: 401,
-        headers: { 'WWW-Authenticate': buildWwwAuthenticate(request) },
-      }
-    );
+  // Require auth for all requests when SENTINAI_API_KEY is configured.
+  // Returning 401 on every unauthenticated request (including initialize)
+  // is required for ChatGPT to detect and initiate the OAuth flow.
+  const apiKey = resolveApiKey(request);
+  if (process.env.SENTINAI_API_KEY && !apiKey) {
+    return unauthorized(request);
   }
 
   const response = await handleMcpRequest(payload, {
