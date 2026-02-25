@@ -15,6 +15,10 @@ function isAuthorized(request: NextRequest): boolean {
   return !!provided && provided === configured;
 }
 
+function isReadOnlyMode(): boolean {
+  return process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE === 'true';
+}
+
 export async function POST(request: NextRequest) {
   try {
     if (!isAuthorized(request)) {
@@ -34,6 +38,15 @@ export async function POST(request: NextRequest) {
       if (typeof body?.now === 'number' && Number.isFinite(body.now)) now = body.now;
     } catch {
       // Optional body
+    }
+
+    const effectiveDryRun = dryRun !== false;
+    const effectiveAllowWrites = allowWrites === true;
+    if (isReadOnlyMode() && (!effectiveDryRun || effectiveAllowWrites)) {
+      return NextResponse.json(
+        { error: 'Write operations are disabled in read-only mode' },
+        { status: 403 }
+      );
     }
 
     const result = await dispatchTopGoal({

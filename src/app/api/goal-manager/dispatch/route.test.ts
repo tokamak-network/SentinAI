@@ -14,6 +14,7 @@ vi.mock('@/lib/goal-manager', () => ({
 
 describe('/api/goal-manager/dispatch', () => {
   const originalApiKey = process.env.SENTINAI_API_KEY;
+  const originalReadOnly = process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -34,6 +35,12 @@ describe('/api/goal-manager/dispatch', () => {
       delete process.env.SENTINAI_API_KEY;
     } else {
       process.env.SENTINAI_API_KEY = originalApiKey;
+    }
+
+    if (originalReadOnly === undefined) {
+      delete process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE;
+    } else {
+      process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE = originalReadOnly;
     }
   });
 
@@ -77,5 +84,28 @@ describe('/api/goal-manager/dispatch', () => {
       allowWrites: false,
       initiatedBy: 'api',
     });
+  });
+
+  it('should block non-dry-run dispatch in read-only mode', async () => {
+    process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE = 'true';
+
+    const request = new NextRequest('http://localhost/api/goal-manager/dispatch', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-api-key': 'test-admin-key',
+      },
+      body: JSON.stringify({
+        dryRun: false,
+        allowWrites: true,
+      }),
+    });
+
+    const response = await POST(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.error).toContain('read-only');
+    expect(hoisted.managerMock.dispatchTopGoal).not.toHaveBeenCalled();
   });
 });

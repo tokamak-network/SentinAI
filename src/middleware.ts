@@ -143,6 +143,8 @@ export function middleware(request: NextRequest) {
         '/api/rca',               // RCA analysis (read-only)
         '/api/nlops',             // NLOps chat (dangerous commands filtered in handler)
         '/api/goals',             // Goal planner (write safety enforced in route)
+        '/api/goal-manager/tick', // Goal queue refresh (no infra write)
+        '/api/goal-manager/dispatch', // Dry-run dispatch allowed; write blocked in route
         '/api/mcp',               // MCP invocation (write safety enforced in MCP handler)
         '/api/metrics/seed',      // Demo scenario injection (no real infra changes)
       ];
