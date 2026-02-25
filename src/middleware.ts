@@ -5,10 +5,56 @@
  *    require a valid x-api-key header. Internal routes (health, agent-loop) are exempt.
  * 2. Read-Only Mode: When SENTINAI_READ_ONLY_MODE is enabled, blocks write operations
  *    except for whitelisted safe endpoints.
+ * 3. OAuth Well-Known: Serves RFC 8414/9728 discovery docs at domain root (bypasses basePath).
  */
 
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+
+/**
+ * Resolve public base URL from forwarded headers (avoids internal 0.0.0.0:port).
+ * Inlined here because middleware runs on Edge Runtime — must avoid heavy module imports.
+ */
+function getPublicBaseFromRequest(request: NextRequest): string {
+  const proto = request.headers.get('x-forwarded-proto') ?? 'https';
+  const forwardedHost =
+    request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? 'localhost';
+  const host = forwardedHost.split(',')[0].trim();
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+  return `${proto}://${host}${basePath}`;
+}
+
+/**
+ * Handle OAuth discovery endpoints at domain root (/.well-known/).
+ * These must be served without basePath prefix per RFC 8414 / RFC 9728.
+ */
+function handleWellKnown(request: NextRequest, pathname: string): NextResponse | null {
+  const base = getPublicBaseFromRequest(request);
+
+  if (pathname === '/.well-known/oauth-protected-resource') {
+    return NextResponse.json({
+      resource: base,
+      authorization_servers: [base],
+      bearer_methods_supported: ['header'],
+      scopes_supported: ['mcp'],
+    });
+  }
+
+  if (pathname === '/.well-known/oauth-authorization-server') {
+    return NextResponse.json({
+      issuer: base,
+      authorization_endpoint: `${base}/api/oauth/authorize`,
+      token_endpoint: `${base}/api/oauth/token`,
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code', 'client_credentials'],
+      token_endpoint_auth_methods_supported: ['client_secret_basic', 'client_secret_post'],
+      scopes_supported: ['mcp'],
+      code_challenge_methods_supported: ['S256'],
+    });
+  }
+
+  return null;
+}
 
 /**
  * Check if read-only mode is enabled
@@ -32,10 +78,12 @@ function getApiKey(): string | undefined {
 }
 
 /**
- * Middleware configuration - applies to all /api/* routes
+ * Middleware configuration.
+ * - /api/*: API key guard + read-only mode
+ * - /.well-known/*: OAuth discovery (intercepted before basePath routing, served at domain root)
  */
 export const config = {
-  matcher: '/api/:path*',
+  matcher: ['/api/:path*', '/.well-known/:path*'],
 };
 
 /**
@@ -52,6 +100,13 @@ const AUTH_EXEMPT_ROUTES = new Set([
  * Main middleware function
  */
 export function middleware(request: NextRequest) {
+  // pathname from nextUrl strips basePath; use URL directly for root-level paths
+  const rawPathname = new URL(request.url).pathname;
+
+  // Serve OAuth discovery at domain root regardless of basePath
+  const wellKnownResponse = handleWellKnown(request, rawPathname);
+  if (wellKnownResponse) return wellKnownResponse;
+
   const { pathname } = request.nextUrl;
   const method = request.method;
 
