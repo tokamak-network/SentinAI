@@ -873,15 +873,16 @@ async function executeTool(toolName: McpToolName, params: unknown): Promise<unkn
 const MCP_PROTOCOL_VERSION = '2025-03-26';
 
 const TOOL_WIDGET_MAP: Partial<Record<McpToolName, string>> = {
-  get_metrics: 'sentinai://metrics-widget',
-  get_anomalies: 'sentinai://anomalies-widget',
-  run_health_diagnostics: 'sentinai://health-widget',
+  get_metrics: 'ui://widget/metrics.html',
+  get_anomalies: 'ui://widget/anomalies.html',
+  run_health_diagnostics: 'ui://widget/health.html',
 };
 
 function toStandardToolCallResult(
   payload: Record<string, unknown>,
   isError: boolean,
-  widgetUri?: string
+  widgetUri?: string,
+  widgetSessionId?: string
 ): Record<string, unknown> {
   return {
     content: [
@@ -892,7 +893,14 @@ function toStandardToolCallResult(
     ],
     structuredContent: payload,
     isError,
-    ...(widgetUri && !isError ? { meta: { ui: { resource: widgetUri } } } : {}),
+    ...(widgetUri && !isError
+      ? {
+          _meta: {
+            'openai/outputTemplate': widgetUri,
+            'openai/widgetSessionId': widgetSessionId,
+          },
+        }
+      : {}),
   };
 }
 
@@ -958,7 +966,7 @@ async function invokeToolWithGuards(
       return {
         jsonrpc: '2.0',
         id,
-        result: toStandardToolCallResult(payload, false, TOOL_WIDGET_MAP[toolName]),
+        result: toStandardToolCallResult(payload, false, TOOL_WIDGET_MAP[toolName], context.requestId),
       };
     }
 

@@ -5,17 +5,17 @@
  */
 
 const WIDGET_RESOURCES: Record<string, { name: string; description: string; mimeType: string }> = {
-  'sentinai://metrics-widget': {
+  'ui://widget/metrics.html': {
     name: 'SentinAI Metrics',
     description: 'Real-time L1/L2 network metrics and scaling status',
     mimeType: 'text/html',
   },
-  'sentinai://anomalies-widget': {
+  'ui://widget/anomalies.html': {
     name: 'SentinAI Anomalies',
     description: 'Anomaly event list with severity indicators',
     mimeType: 'text/html',
   },
-  'sentinai://health-widget': {
+  'ui://widget/health.html': {
     name: 'SentinAI Health',
     description: 'System health diagnostics dashboard',
     mimeType: 'text/html',
@@ -28,11 +28,11 @@ export function getWidgetResourceList() {
 
 export function getWidgetHtml(uri: string): string | null {
   switch (uri) {
-    case 'sentinai://metrics-widget':
+    case 'ui://widget/metrics.html':
       return buildMetricsWidget();
-    case 'sentinai://anomalies-widget':
+    case 'ui://widget/anomalies.html':
       return buildAnomaliesWidget();
-    case 'sentinai://health-widget':
+    case 'ui://widget/health.html':
       return buildHealthWidget();
     default:
       return null;
