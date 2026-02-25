@@ -21,6 +21,12 @@
 ## 2) Operate in Production
 - [Daily operations runbook](guide/agentic-q1-operations-runbook.md)
 - [Autonomy cockpit user guide](guide/autonomy-cockpit-user-guide.md)
+- [Agent Loop vs Goal Manager hands-on runbook](guide/agent-loop-vs-goal-manager-hands-on-runbook.md)
+- [Agent Loop vs Goal Manager 15-minute demo](guide/agent-loop-vs-goal-manager-demo-15min.md)
+- [Agent Loop vs Goal Manager speaker script](guide/agent-loop-vs-goal-manager-demo-speaker-script.md)
+- [Network stack dashboard/feature differences](guide/network-stack-dashboard-feature-differences.md)
+- [Stack × environment operations decision matrix](guide/stack-environment-operations-decision-matrix.md)
+- [Env-based operations profile quick decider](guide/env-based-operations-profile-quick-decider.md)
 
 ### Playbooks (by failure type)
 - [Minority client migration](guide/minority-client-migration-playbook.md)
@@ -43,7 +49,8 @@
 - [Agent loop vs goal manager](spec/agent-loop-vs-goal-manager.md)
 - [Tier comparison: General vs Premium](spec/tier-comparison.md)
 
-## 4) Verify & Improve
+## 4) Evaluate & Verify
+- [**Algorithm effectiveness evaluation (DevOps audit)**](guide/algorithm-effectiveness-evaluation.md)
 - [Testing guide](verification/testing-guide.md)
 - [Multi-stack autonomous ops validation](guide/multistack-autonomous-ops-validation.md)
 - [Integration test report](verification/integration-test-report.md)

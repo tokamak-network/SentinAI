@@ -12,6 +12,12 @@
 - Rule: Provide an env-first quick-decider that maps concrete env combinations to named operational profiles and immediate actions.
 - 운영 판정 규칙이 문서에만 있으면 온콜 중 실수(오독/누락)가 반복된다.
 - Rule: For every env-based decision guide, ship an executable checker script and expose both text/json outputs for automation and human review.
+- 아키텍처 차이 설명은 개념만으로는 설득력이 약하고, 운영자는 재현 가능한 비교 절차를 요구한다.
+- Rule: When explaining control-plane differences (e.g., Agent Loop vs Goal Manager), always attach a hands-on runbook with identical scenario A/B steps and pass/fail criteria.
+- 실습 문서가 길면 현장 데모에서 시간 초과가 빈번하다.
+- Rule: For customer/operator demos, provide a time-boxed short runbook (e.g., 15-minute version) derived from the full hands-on guide.
+- 데모 문서만 있으면 발표자가 핵심 멘트 순서를 놓쳐 메시지 일관성이 떨어진다.
+- Rule: For external demos, provide a separate speaker script with opening, transition lines, key observations, and FAQ answer templates.
 
 - 멀티스택 자율 운영을 기존 goal planner에 붙일 때 기존 step enum을 바로 확장하면 회귀 범위가 급격히 커진다.
 - Rule: Introduce chain-specific autonomous adapters first, then map adapter steps into existing planner actions to preserve backward compatibility.

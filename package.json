@@ -20,6 +20,8 @@
     "smoke:metrics:optimism": "bash scripts/smoke-optimism-metrics.sh",
     "monitor:agent-heartbeat": "node scripts/check-agent-heartbeat.mjs",
     "monitor:agent-heartbeat:alert": "node scripts/monitor-agent-heartbeat-alert.mjs",
+    "ops:profile": "bash scripts/check-ops-profile.sh",
+    "ops:profile:json": "bash scripts/check-ops-profile.sh --json",
     "mcp:bridge:stdio": "npx tsx scripts/mcp-stdio-bridge.ts",
     "autonomy:eval": "npx tsx scripts/autonomy-eval.ts --strict",
     "goal:train-policy": "npx tsx scripts/train-goal-policy.ts",

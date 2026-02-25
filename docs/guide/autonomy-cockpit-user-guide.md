@@ -223,6 +223,9 @@ curl -s http://localhost:3002/api/policy/autonomy-level | jq '.policy'
 ## 9. Related documents
 
 - `docs/guide/agentic-q1-operations-runbook.md`
+- `docs/guide/agent-loop-vs-goal-manager-hands-on-runbook.md`
 - `docs/guide/multistack-autonomous-ops-validation.md`
+- `docs/guide/network-stack-dashboard-feature-differences.md`
+- `docs/guide/stack-environment-operations-decision-matrix.md`
 - `docs/guide/sentinai-mcp-user-guide.md`
 - `docs/guide/demo-scenarios.md`

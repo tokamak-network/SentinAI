@@ -13,6 +13,8 @@
 - [x] `.env.local` 기반 즉시 판정표 문서 추가 (`docs/guide/env-based-operations-profile-quick-decider.md`)
 - [x] `.env.local` 자동 판정 스크립트 추가 (`scripts/check-ops-profile.sh`, `package.json` scripts)
 - [x] Agent Loop only vs Loop+Goal Manager 비교 실습 runbook 추가 (`docs/guide/agent-loop-vs-goal-manager-hands-on-runbook.md`)
+- [x] 발표/고객 데모용 15분 축약 runbook 추가 (`docs/guide/agent-loop-vs-goal-manager-demo-15min.md`)
+- [x] 발표자 멘트 스크립트 추가 (`docs/guide/agent-loop-vs-goal-manager-demo-speaker-script.md`)
 
 ### Done (2026-02-24 Multi-Stack Autonomous Ops Capability Layer)
 - [x] Autonomous operations domain types 추가 (`src/types/autonomous-ops.ts`)
