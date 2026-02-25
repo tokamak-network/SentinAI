@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server';
 import { getRoutingStatus } from '@/lib/ai-routing';
+import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +15,7 @@ export async function GET() {
     return NextResponse.json(status);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[API /ai-routing/status] Error:', message);
+    logger.error('[API /ai-routing/status] Error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

@@ -9,6 +9,7 @@
 
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import Redis from 'ioredis';
+import logger from '@/lib/logger';
 
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const AUTH_CODE_TTL_SECONDS = 300;
@@ -135,14 +136,14 @@ class RedisOAuthStore implements OAuthStore {
     });
 
     this.client.on('connect', () => {
-      console.info('[OAuth Store] Redis connected');
+      logger.info('[OAuth Store] Redis connected');
     });
     this.client.on('error', (err: Error) => {
-      console.error('[OAuth Store] Redis error:', err.message);
+      logger.error('[OAuth Store] Redis error:', err.message);
     });
 
     this.client.connect().catch((err: Error) => {
-      console.error('[OAuth Store] Initial connection failed:', err.message);
+      logger.error('[OAuth Store] Initial connection failed:', err.message);
     });
   }
 
@@ -155,7 +156,7 @@ class RedisOAuthStore implements OAuthStore {
     try {
       await this.client.setex(this.key('token', token), ttl, JSON.stringify({ expiresAt }));
     } catch (err) {
-      console.error('[OAuth Store] setAccessToken failed:', (err as Error).message);
+      logger.error('[OAuth Store] setAccessToken failed:', (err as Error).message);
     }
   }
 
@@ -165,7 +166,7 @@ class RedisOAuthStore implements OAuthStore {
       if (!raw) return null;
       return JSON.parse(raw) as { expiresAt: number };
     } catch (err) {
-      console.error('[OAuth Store] getAccessToken failed:', (err as Error).message);
+      logger.error('[OAuth Store] getAccessToken failed:', (err as Error).message);
       return null;
     }
   }
@@ -175,7 +176,7 @@ class RedisOAuthStore implements OAuthStore {
     try {
       await this.client.setex(this.key('code', code), ttl, JSON.stringify(entry));
     } catch (err) {
-      console.error('[OAuth Store] setAuthCode failed:', (err as Error).message);
+      logger.error('[OAuth Store] setAuthCode failed:', (err as Error).message);
     }
   }
 
@@ -188,7 +189,7 @@ class RedisOAuthStore implements OAuthStore {
       if (!raw) return null;
       return JSON.parse(raw) as AuthCodeEntry;
     } catch (err) {
-      console.error('[OAuth Store] getAndDeleteAuthCode failed:', (err as Error).message);
+      logger.error('[OAuth Store] getAndDeleteAuthCode failed:', (err as Error).message);
       return null;
     }
   }
@@ -201,7 +202,7 @@ class RedisOAuthStore implements OAuthStore {
         JSON.stringify(client)
       );
     } catch (err) {
-      console.error('[OAuth Store] setDynamicClient failed:', (err as Error).message);
+      logger.error('[OAuth Store] setDynamicClient failed:', (err as Error).message);
     }
   }
 
@@ -211,7 +212,7 @@ class RedisOAuthStore implements OAuthStore {
       if (!raw) return null;
       return JSON.parse(raw) as DynamicClient;
     } catch (err) {
-      console.error('[OAuth Store] getDynamicClient failed:', (err as Error).message);
+      logger.error('[OAuth Store] getDynamicClient failed:', (err as Error).message);
       return null;
     }
   }
@@ -228,10 +229,10 @@ function getOAuthStore(): OAuthStore {
 
   const redisUrl = process.env.REDIS_URL;
   if (redisUrl) {
-    console.info('[OAuth Store] Using Redis for OAuth token persistence');
+    logger.info('[OAuth Store] Using Redis for OAuth token persistence');
     globalForOAuth.__sentinai_oauth_store = new RedisOAuthStore(redisUrl);
   } else {
-    console.info('[OAuth Store] Using InMemory (tokens lost on restart; set REDIS_URL for persistence)');
+    logger.info('[OAuth Store] Using InMemory (tokens lost on restart; set REDIS_URL for persistence)');
     globalForOAuth.__sentinai_oauth_store = new InMemoryOAuthStore();
   }
 

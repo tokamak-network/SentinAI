@@ -28,8 +28,7 @@ if (typeof process.env.DEPLOYER_PRIVATE_KEY === 'undefined') {
 }
 
 if (typeof process.env.PARENT_CHAIN_RPC === 'undefined' || process.env.PARENT_CHAIN_RPC === '') {
-  console.warn(
-    `Warning: you may encounter timeout errors while running the script with the default rpc endpoint. Please provide the "PARENT_CHAIN_RPC" environment variable instead.`,
+  console.warn(new Date().toISOString(), `Warning: you may encounter timeout errors while running the script with the default rpc endpoint. Please provide the "PARENT_CHAIN_RPC" environment variable instead.`,
   );
 }
 
@@ -86,7 +85,7 @@ async function main() {
     await parentChainPublicClient.waitForTransactionReceipt({ hash: txHash }),
   );
 
-  console.log(`Deployed in ${getBlockExplorerUrl(parentChain)}/tx/${txReceipt.transactionHash}`);
+  console.log(new Date().toISOString(), `Deployed in ${getBlockExplorerUrl(parentChain)}/tx/${txReceipt.transactionHash}`);
 }
 
 main();

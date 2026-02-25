@@ -10,6 +10,7 @@ import { getChainPlugin } from '@/chains';
 import { getSentinaiL1RpcUrl } from '@/lib/l1-rpc-failover';
 import { getEOAAddressWithAutoDetect } from '@/lib/eoa-detector';
 import { getCachedEOABalance, invalidateEOABalanceCache } from '@/lib/l1-rpc-cache';
+import logger from '@/lib/logger';
 import type {
   EOABalanceConfig,
   EOARole,
@@ -196,15 +197,15 @@ export async function getAllBalanceStatus(
       if (detectedBatcher) {
         batcherAddr = detectedBatcher;
         roleAddresses.batcher = detectedBatcher;
-        console.info(`[EOA Monitor] Auto-detected batcher: ${batcherAddr}`);
+        logger.info(`[EOA Monitor] Auto-detected batcher: ${batcherAddr}`);
       }
       if (detectedProposer) {
         proposerAddr = detectedProposer;
         roleAddresses.proposer = detectedProposer;
-        console.info(`[EOA Monitor] Auto-detected proposer: ${proposerAddr}`);
+        logger.info(`[EOA Monitor] Auto-detected proposer: ${proposerAddr}`);
       }
     } catch (err) {
-      console.warn('[EOA Monitor] Auto-detection failed, continuing with available addresses:', err instanceof Error ? err.message : err);
+      logger.warn('[EOA Monitor] Auto-detection failed, continuing with available addresses:', err instanceof Error ? err.message : err);
     }
   }
 
@@ -247,7 +248,7 @@ export async function getAllBalanceStatus(
 
     await Promise.all(promises);
   } catch (error) {
-    console.error('[EOA Monitor] Failed to fetch balances:', error instanceof Error ? error.message : error);
+    logger.error('[EOA Monitor] Failed to fetch balances:', error instanceof Error ? error.message : error);
   }
 
   return {
@@ -396,7 +397,7 @@ export async function refillEOA(
       value: refillAmount,
     });
 
-    console.info(`[EOA Monitor] Refill tx sent: ${hash} (${role} ${targetAddress}, ${config.refillAmountEth} ETH)`);
+    logger.info(`[EOA Monitor] Refill tx sent: ${hash} (${role} ${targetAddress}, ${config.refillAmountEth} ETH)`);
 
     // 9. Wait for receipt
     const receipt = await client.waitForTransactionReceipt({
@@ -406,7 +407,7 @@ export async function refillEOA(
     });
 
     if (receipt.status === 'reverted') {
-      console.error(`[EOA Monitor] Refill tx reverted: ${hash}`);
+      logger.error(`[EOA Monitor] Refill tx reverted: ${hash}`);
       return { success: false, reason: 'tx-reverted', txHash: hash };
     }
 
@@ -439,7 +440,7 @@ export async function refillEOA(
       simulated: false,
     });
 
-    console.info(`[EOA Monitor] Refill confirmed: ${role} ${previousBalanceEth.toFixed(4)} → ${newBalanceEth.toFixed(4)} ETH (tx: ${hash})`);
+    logger.info(`[EOA Monitor] Refill confirmed: ${role} ${previousBalanceEth.toFixed(4)} → ${newBalanceEth.toFixed(4)} ETH (tx: ${hash})`);
 
     return {
       success: true,
@@ -451,7 +452,7 @@ export async function refillEOA(
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[EOA Monitor] Refill failed: ${message}`);
+    logger.error(`[EOA Monitor] Refill failed: ${message}`);
     return { success: false, reason: 'tx-timeout' };
   }
 }

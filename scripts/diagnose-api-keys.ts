@@ -6,6 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { tsConsole } from './console-with-timestamp';
 
 function loadEnvLocal(): Record<string, string> {
   const envPath = path.resolve(process.cwd(), '.env.local');
@@ -26,23 +27,23 @@ function loadEnvLocal(): Record<string, string> {
 }
 
 async function diagnoseAPIs(): Promise<void> {
-  console.log('╔════════════════════════════════════════════════════════════════╗');
-  console.log('║         SentinAI API Key Diagnostic Report                      ║');
-  console.log('╚════════════════════════════════════════════════════════════════╝\n');
+  tsConsole.log('╔════════════════════════════════════════════════════════════════╗');
+  tsConsole.log('║         SentinAI API Key Diagnostic Report                      ║');
+  tsConsole.log('╚════════════════════════════════════════════════════════════════╝\n');
 
   const env = loadEnvLocal();
 
   // Show environment
-  console.log('📋 Loaded Environment Variables:');
-  console.log(`  QWEN_API_KEY: ${env.QWEN_API_KEY ? `${env.QWEN_API_KEY.slice(0, 10)}...${env.QWEN_API_KEY.slice(-4)}` : '❌ NOT SET'}`);
-  console.log(`  OPENAI_API_KEY: ${env.OPENAI_API_KEY ? `${env.OPENAI_API_KEY.slice(0, 10)}...${env.OPENAI_API_KEY.slice(-4)}` : '❌ NOT SET'}`);
-  console.log(`  ANTHROPIC_API_KEY: ${env.ANTHROPIC_API_KEY ? `${env.ANTHROPIC_API_KEY.slice(0, 10)}...${env.ANTHROPIC_API_KEY.slice(-4)}` : '❌ NOT SET'}`);
-  console.log(`  AI_GATEWAY_URL: ${env.AI_GATEWAY_URL || '❌ NOT SET'}`);
-  console.log('');
+  tsConsole.log('📋 Loaded Environment Variables:');
+  tsConsole.log(`  QWEN_API_KEY: ${env.QWEN_API_KEY ? `${env.QWEN_API_KEY.slice(0, 10)}...${env.QWEN_API_KEY.slice(-4)}` : '❌ NOT SET'}`);
+  tsConsole.log(`  OPENAI_API_KEY: ${env.OPENAI_API_KEY ? `${env.OPENAI_API_KEY.slice(0, 10)}...${env.OPENAI_API_KEY.slice(-4)}` : '❌ NOT SET'}`);
+  tsConsole.log(`  ANTHROPIC_API_KEY: ${env.ANTHROPIC_API_KEY ? `${env.ANTHROPIC_API_KEY.slice(0, 10)}...${env.ANTHROPIC_API_KEY.slice(-4)}` : '❌ NOT SET'}`);
+  tsConsole.log(`  AI_GATEWAY_URL: ${env.AI_GATEWAY_URL || '❌ NOT SET'}`);
+  tsConsole.log('');
 
   // Test Gateway with Qwen
-  console.log('🧪 Testing API Connectivity:');
-  console.log('');
+  tsConsole.log('🧪 Testing API Connectivity:');
+  tsConsole.log('');
 
   const gatewayUrl = env.AI_GATEWAY_URL;
   const qwenKey = env.QWEN_API_KEY;
@@ -50,7 +51,7 @@ async function diagnoseAPIs(): Promise<void> {
 
   // Test Qwen through Gateway
   if (gatewayUrl && qwenKey) {
-    console.log(`1️⃣ Testing Qwen through LiteLLM Gateway...`);
+    tsConsole.log(`1️⃣ Testing Qwen through LiteLLM Gateway...`);
     try {
       const response = await fetch(`${gatewayUrl}/v1/chat/completions`, {
         method: 'POST',
@@ -66,24 +67,24 @@ async function diagnoseAPIs(): Promise<void> {
       });
 
       if (response.ok) {
-        console.log('   ✅ SUCCESS: Qwen through Gateway works!');
+        tsConsole.log('   ✅ SUCCESS: Qwen through Gateway works!');
       } else {
         const data = await response.json() as any;
-        console.log(`   ❌ FAILED (${response.status}): ${data.error?.message || JSON.stringify(data)}`);
+        tsConsole.log(`   ❌ FAILED (${response.status}): ${data.error?.message || JSON.stringify(data)}`);
       }
     } catch (err) {
-      console.log(`   ❌ ERROR: ${err instanceof Error ? err.message : String(err)}`);
+      tsConsole.log(`   ❌ ERROR: ${err instanceof Error ? err.message : String(err)}`);
     }
   } else {
-    console.log(`1️⃣ Testing Qwen through LiteLLM Gateway...`);
-    console.log(`   ❌ SKIPPED: Missing AI_GATEWAY_URL or QWEN_API_KEY`);
+    tsConsole.log(`1️⃣ Testing Qwen through LiteLLM Gateway...`);
+    tsConsole.log(`   ❌ SKIPPED: Missing AI_GATEWAY_URL or QWEN_API_KEY`);
   }
 
-  console.log('');
+  tsConsole.log('');
 
   // Test OpenAI Direct
   if (openaiKey) {
-    console.log(`2️⃣ Testing OpenAI Direct API...`);
+    tsConsole.log(`2️⃣ Testing OpenAI Direct API...`);
     try {
       const response = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
@@ -99,46 +100,46 @@ async function diagnoseAPIs(): Promise<void> {
       });
 
       if (response.ok) {
-        console.log('   ✅ SUCCESS: OpenAI API key is valid!');
+        tsConsole.log('   ✅ SUCCESS: OpenAI API key is valid!');
       } else {
         const data = await response.json() as any;
-        console.log(`   ❌ FAILED (${response.status}): ${data.error?.message || JSON.stringify(data)}`);
+        tsConsole.log(`   ❌ FAILED (${response.status}): ${data.error?.message || JSON.stringify(data)}`);
         if (response.status === 401) {
-          console.log('   💡 Suggestion: OpenAI API key is invalid or expired');
-          console.log('   💡 Get a new key from: https://platform.openai.com/account/api-keys');
+          tsConsole.log('   💡 Suggestion: OpenAI API key is invalid or expired');
+          tsConsole.log('   💡 Get a new key from: https://platform.openai.com/account/api-keys');
         }
       }
     } catch (err) {
-      console.log(`   ❌ ERROR: ${err instanceof Error ? err.message : String(err)}`);
+      tsConsole.log(`   ❌ ERROR: ${err instanceof Error ? err.message : String(err)}`);
     }
   } else {
-    console.log(`2️⃣ Testing OpenAI Direct API...`);
-    console.log(`   ⏭️  SKIPPED: OPENAI_API_KEY not set`);
+    tsConsole.log(`2️⃣ Testing OpenAI Direct API...`);
+    tsConsole.log(`   ⏭️  SKIPPED: OPENAI_API_KEY not set`);
   }
 
-  console.log('');
-  console.log('🔧 Recommendations:');
-  console.log('');
+  tsConsole.log('');
+  tsConsole.log('🔧 Recommendations:');
+  tsConsole.log('');
 
   if (gatewayUrl && qwenKey) {
-    console.log('✅ LiteLLM Gateway with Qwen is ready!');
-    console.log('   Use: npm run benchmark:quick');
-    console.log('');
+    tsConsole.log('✅ LiteLLM Gateway with Qwen is ready!');
+    tsConsole.log('   Use: npm run benchmark:quick');
+    tsConsole.log('');
   }
 
   if (!openaiKey || openaiKey.slice(0, 10) === 'sk-QcFOZdk') {
-    console.log('⚠️  OpenAI API key issue:');
-    console.log('   Current key: ' + (openaiKey ? 'INVALID' : 'NOT SET'));
-    console.log('   Action: Get a valid key from https://platform.openai.com/account/api-keys');
-    console.log('   Then: Update .env.local with the new key');
-    console.log('');
+    tsConsole.log('⚠️  OpenAI API key issue:');
+    tsConsole.log('   Current key: ' + (openaiKey ? 'INVALID' : 'NOT SET'));
+    tsConsole.log('   Action: Get a valid key from https://platform.openai.com/account/api-keys');
+    tsConsole.log('   Then: Update .env.local with the new key');
+    tsConsole.log('');
   }
 
-  console.log('📚 Documentation: docs/guide/MODEL_BENCHMARK_GUIDE.md');
-  console.log('');
+  tsConsole.log('📚 Documentation: docs/guide/MODEL_BENCHMARK_GUIDE.md');
+  tsConsole.log('');
 }
 
 diagnoseAPIs().catch(err => {
-  console.error('Error:', err);
+  tsConsole.error('Error:', err);
   process.exit(1);
 });

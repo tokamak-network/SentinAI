@@ -6,6 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { tsConsole } from './console-with-timestamp';
 
 function loadEnvLocal(): Record<string, string> {
   const envPath = path.resolve(process.cwd(), '.env.local');
@@ -30,19 +31,19 @@ async function testGemini(): Promise<void> {
   const gatewayUrl = env.AI_GATEWAY_URL;
   const geminiKey = env.GEMINI_API_KEY;
 
-  console.log('🔍 Testing Gemini Models through LiteLLM Gateway\n');
-  console.log(`Gateway URL: ${gatewayUrl || '❌ NOT SET'}`);
-  console.log(`Gemini API Key: ${geminiKey ? `${geminiKey.slice(0, 10)}...${geminiKey.slice(-4)}` : '❌ NOT SET'}\n`);
+  tsConsole.log('🔍 Testing Gemini Models through LiteLLM Gateway\n');
+  tsConsole.log(`Gateway URL: ${gatewayUrl || '❌ NOT SET'}`);
+  tsConsole.log(`Gemini API Key: ${geminiKey ? `${geminiKey.slice(0, 10)}...${geminiKey.slice(-4)}` : '❌ NOT SET'}\n`);
 
   if (!gatewayUrl || !geminiKey) {
-    console.error('❌ Missing AI_GATEWAY_URL or GEMINI_API_KEY');
+    tsConsole.error('❌ Missing AI_GATEWAY_URL or GEMINI_API_KEY');
     process.exit(1);
   }
 
   const models = ['gemini-3-flash', 'gemini-3-pro'];
 
   for (const model of models) {
-    console.log(`📤 Testing ${model}...`);
+    tsConsole.log(`📤 Testing ${model}...`);
     try {
       const response = await fetch(`${gatewayUrl}/v1/chat/completions`, {
         method: 'POST',
@@ -65,23 +66,23 @@ async function testGemini(): Promise<void> {
       const data = await response.json() as any;
 
       if (!response.ok) {
-        console.log(`   ❌ FAILED (${response.status}): ${data.error?.message || JSON.stringify(data.error || data)}`);
+        tsConsole.log(`   ❌ FAILED (${response.status}): ${data.error?.message || JSON.stringify(data.error || data)}`);
       } else {
-        console.log(`   ✅ SUCCESS`);
-        console.log(`      Response: ${data.choices?.[0]?.message?.content || 'No response'}`);
-        console.log(`      Tokens: ${data.usage?.prompt_tokens || 0} prompt, ${data.usage?.completion_tokens || 0} completion\n`);
+        tsConsole.log(`   ✅ SUCCESS`);
+        tsConsole.log(`      Response: ${data.choices?.[0]?.message?.content || 'No response'}`);
+        tsConsole.log(`      Tokens: ${data.usage?.prompt_tokens || 0} prompt, ${data.usage?.completion_tokens || 0} completion\n`);
       }
     } catch (err) {
-      console.log(`   ❌ ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
+      tsConsole.log(`   ❌ ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
     }
   }
 
   // Also test GPT models through gateway
-  console.log('📤 Testing GPT models through Gateway...\n');
+  tsConsole.log('📤 Testing GPT models through Gateway...\n');
   const gptModels = ['gpt-4o-mini', 'gpt-4o'];
 
   for (const model of gptModels) {
-    console.log(`Testing ${model}...`);
+    tsConsole.log(`Testing ${model}...`);
     try {
       const response = await fetch(`${gatewayUrl}/v1/chat/completions`, {
         method: 'POST',
@@ -104,19 +105,19 @@ async function testGemini(): Promise<void> {
       const data = await response.json() as any;
 
       if (!response.ok) {
-        console.log(`   ❌ FAILED (${response.status}): ${data.error?.message || JSON.stringify(data.error || data)}`);
+        tsConsole.log(`   ❌ FAILED (${response.status}): ${data.error?.message || JSON.stringify(data.error || data)}`);
       } else {
-        console.log(`   ✅ SUCCESS`);
-        console.log(`      Response: ${data.choices?.[0]?.message?.content || 'No response'}`);
-        console.log(`      Tokens: ${data.usage?.prompt_tokens || 0} prompt, ${data.usage?.completion_tokens || 0} completion\n`);
+        tsConsole.log(`   ✅ SUCCESS`);
+        tsConsole.log(`      Response: ${data.choices?.[0]?.message?.content || 'No response'}`);
+        tsConsole.log(`      Tokens: ${data.usage?.prompt_tokens || 0} prompt, ${data.usage?.completion_tokens || 0} completion\n`);
       }
     } catch (err) {
-      console.log(`   ❌ ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
+      tsConsole.log(`   ❌ ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
     }
   }
 }
 
 testGemini().catch(err => {
-  console.error('Error:', err);
+  tsConsole.error('Error:', err);
   process.exit(1);
 });

@@ -18,6 +18,7 @@ import { zeroDowntimeScale } from '@/lib/zero-downtime-scaler';
 import { getStore } from '@/lib/redis-store';
 import { isDockerMode } from '@/lib/docker-config';
 import { getChainPlugin } from '@/chains';
+import logger from '@/lib/logger';
 import {
   getDockerContainerMetrics,
   getAllDockerContainerMetrics,
@@ -285,7 +286,7 @@ export async function getCurrentVcpu(
     return parseFloat(cpuStr) || 1;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Failed to get current vCPU:', message);
+    logger.error('Failed to get current vCPU:', message);
     const state = await getStore().getScalingState();
     return state.currentVcpu || 1;
   }
@@ -442,7 +443,7 @@ export async function scaleOpGeth(
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error('[Zero-Downtime] Unexpected error:', errorMessage);
+      logger.error('[Zero-Downtime] Unexpected error:', errorMessage);
       return {
         success: false,
         previousVcpu: currentVcpu,
@@ -529,7 +530,7 @@ export async function scaleOpGeth(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Scaling failed:', errorMessage);
+    logger.error('Scaling failed:', errorMessage);
     return {
       success: false,
       previousVcpu: currentVcpu,

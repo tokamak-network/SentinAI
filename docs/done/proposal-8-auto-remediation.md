@@ -682,7 +682,7 @@ if (config.autoRemediation !== false) {
   const { executeRemediation } = await import('./remediation-engine');
 // Run asynchronously (does not block notification response)
   executeRemediation(event, analysis).catch(err =>
-    console.error('[Layer4] Remediation failed:', err)
+    console.error(new Date().toISOString(), '[Layer4] Remediation failed:', err)
   );
 }
 ```

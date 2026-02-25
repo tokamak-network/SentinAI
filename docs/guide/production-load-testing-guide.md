@@ -196,13 +196,13 @@ async function main() {
   let sent = 0;
   const startTime = Date.now();
 
-console.log(`Start sustained load: ${TPS} TPS for ${DURATION_SEC}s`);
+console.log(new Date().toISOString(), `Start sustained load: ${TPS} TPS for ${DURATION_SEC}s`);
 
   const interval = setInterval(async () => {
     const elapsed = (Date.now() - startTime) / 1000;
     if (elapsed >= DURATION_SEC) {
       clearInterval(interval);
-console.log(`\nCompleted: ${sent} transaction in ${elapsed.toFixed(0)}s`);
+console.log(new Date().toISOString(), `\nCompleted: ${sent} transaction in ${elapsed.toFixed(0)}s`);
       return;
     }
 

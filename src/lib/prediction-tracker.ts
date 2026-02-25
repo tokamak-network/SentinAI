@@ -6,6 +6,7 @@
 import { PredictionResult, PredictionRecord } from '@/types/prediction';
 import { TargetVcpu } from '@/types/scaling';
 import { getStore } from '@/lib/redis-store';
+import logger from '@/lib/logger';
 
 let idCounter = 0;
 
@@ -53,7 +54,7 @@ export async function recordActual(id: string, actualVcpu: TargetVcpu): Promise<
   const record = records.find((r) => r.id === id);
 
   if (!record) {
-    console.warn(`Prediction record not found: ${id}`);
+    logger.warn(`Prediction record not found: ${id}`);
     return false;
   }
 

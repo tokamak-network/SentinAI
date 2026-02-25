@@ -15,6 +15,7 @@ import {
   type AutonomyEvalScenarioResult,
 } from '../src/lib/autonomy-scorecard';
 import type { GoalSignalSnapshot } from '../src/types/goal-manager';
+import { tsConsole } from './console-with-timestamp';
 
 type PlanReplayScenario = {
   kind: 'plan';
@@ -377,18 +378,18 @@ async function main(): Promise<void> {
     writeFile(markdownPath, markdown, 'utf-8'),
   ]);
 
-  console.info(`[autonomy-eval] scenarios=${scorecard.scenarioCount} passed=${scorecard.passed}`);
-  console.info(`[autonomy-eval] report-json=${jsonPath}`);
-  console.info(`[autonomy-eval] report-md=${markdownPath}`);
+  tsConsole.info(`[autonomy-eval] scenarios=${scorecard.scenarioCount} passed=${scorecard.passed}`);
+  tsConsole.info(`[autonomy-eval] report-json=${jsonPath}`);
+  tsConsole.info(`[autonomy-eval] report-md=${markdownPath}`);
 
   if (strictMode && !scorecard.passed) {
-    console.error('[autonomy-eval] strict mode enabled and scorecard failed checks.');
+    tsConsole.error('[autonomy-eval] strict mode enabled and scorecard failed checks.');
     process.exitCode = 1;
   }
 }
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : 'Unknown fatal error';
-  console.error(`[autonomy-eval] fatal: ${message}`);
+  tsConsole.error(`[autonomy-eval] fatal: ${message}`);
   process.exitCode = 1;
 });

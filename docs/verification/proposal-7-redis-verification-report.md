@@ -76,7 +76,7 @@ export function getStore(): IStateStore {
     try {
       return redisStore || createRedisStore();
     } catch (error) {
-      console.warn('[State Store] Redis failed, using InMemory');
+      console.warn(new Date().toISOString(), '[State Store] Redis failed, using InMemory');
       return inMemoryStore;
     }
   }
@@ -182,7 +182,7 @@ try {
   await redis.ping();
   return new RedisStateStore(redis);
 } catch (error) {
-  console.warn('[Redis] Connection failed, using InMemory');
+  console.warn(new Date().toISOString(), '[Redis] Connection failed, using InMemory');
   return inMemoryStore;
 }
 ```

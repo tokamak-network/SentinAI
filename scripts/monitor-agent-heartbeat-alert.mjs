@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { tsConsole } from './console-with-timestamp.mjs';
 
 const EXIT_STALE = 2;
 const DEFAULT_WEBHOOK_TIMEOUT_MS = 5000;
@@ -105,7 +106,7 @@ async function main() {
 
   const webhookUrl = getWebhookUrl();
   if (!webhookUrl) {
-    console.error('[agent-heartbeat-alert] ALERT_WEBHOOK_URL is not configured; skipped notification.');
+    tsConsole.error('[agent-heartbeat-alert] ALERT_WEBHOOK_URL is not configured; skipped notification.');
     process.exit(status);
   }
 
@@ -119,10 +120,10 @@ async function main() {
 
   try {
     await sendWebhookAlert(webhookUrl, text);
-    console.log(`[agent-heartbeat-alert] Notification sent via ${maskWebhookUrl(webhookUrl)}.`);
+    tsConsole.log(`[agent-heartbeat-alert] Notification sent via ${maskWebhookUrl(webhookUrl)}.`);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`[agent-heartbeat-alert] Failed to send notification: ${message}`);
+    tsConsole.error(`[agent-heartbeat-alert] Failed to send notification: ${message}`);
   }
 
   process.exit(status);
@@ -130,6 +131,6 @@ async function main() {
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : String(error);
-  console.error(`[agent-heartbeat-alert] Unexpected failure: ${message}`);
+  tsConsole.error(`[agent-heartbeat-alert] Unexpected failure: ${message}`);
   process.exit(1);
 });

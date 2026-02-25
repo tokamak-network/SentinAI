@@ -5,6 +5,7 @@
 
 import { randomUUID } from 'crypto';
 import { loadEnvConfig } from '@next/env';
+import { tsConsole } from './console-with-timestamp';
 import {
   McpBridgeClient,
   McpBridgeHttpError,
@@ -29,7 +30,7 @@ loadEnvConfig(process.cwd());
 
 function trace(message: string): void {
   if (!TRACE_ENABLED) return;
-  console.error(`[MCP Bridge][trace] ${message}`);
+  tsConsole.error(`[MCP Bridge][trace] ${message}`);
 }
 
 function resolveEndpointUrl(baseUrl: string, apiPath: string): string {
@@ -106,7 +107,7 @@ async function invokeOne(payload: unknown): Promise<unknown | null> {
     return expectResponse ? response : null;
   } catch (error) {
     const { message, data } = toBridgeErrorMessage(error);
-    console.error(`[MCP Bridge] ${message}`);
+    tsConsole.error(`[MCP Bridge] ${message}`);
     return expectResponse ? buildJsonRpcErrorResponse(rpcId, -32000, message, data) : null;
   }
 }
@@ -173,7 +174,7 @@ async function drainIncomingBuffer(): Promise<void> {
       );
 
       for (const errorMessage of parsed.protocolErrors) {
-        console.error(`[MCP Bridge] ${errorMessage}`);
+        tsConsole.error(`[MCP Bridge] ${errorMessage}`);
       }
 
       let messages = parsed.messages;
@@ -234,21 +235,21 @@ process.stdin.on('end', () => {
 
 process.stdin.on('error', (error) => {
   const message = error instanceof Error ? error.message : 'Unknown stdin error';
-  console.error(`[MCP Bridge] stdin error: ${message}`);
+  tsConsole.error(`[MCP Bridge] stdin error: ${message}`);
   process.exit(1);
 });
 
 process.on('uncaughtException', (error) => {
   const message = error instanceof Error ? error.stack || error.message : 'Unknown exception';
-  console.error(`[MCP Bridge] uncaught exception: ${message}`);
+  tsConsole.error(`[MCP Bridge] uncaught exception: ${message}`);
   process.exit(1);
 });
 
 process.on('unhandledRejection', (reason) => {
   const message = reason instanceof Error ? reason.stack || reason.message : String(reason);
-  console.error(`[MCP Bridge] unhandled rejection: ${message}`);
+  tsConsole.error(`[MCP Bridge] unhandled rejection: ${message}`);
   process.exit(1);
 });
 
 process.stdin.resume();
-console.error(`[MCP Bridge] Ready: ${resolveEndpointUrl(baseUrl, apiPath)}`);
+tsConsole.error(`[MCP Bridge] Ready: ${resolveEndpointUrl(baseUrl, apiPath)}`);

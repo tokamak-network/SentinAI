@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server';
 import { triggerDailyReportDelivery } from '@/lib/daily-report-mailer';
+import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
     return NextResponse.json(responseData);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[/api/reports/daily/send] Error:', message);
+    logger.error('[/api/reports/daily/send] Error:', message);
 
     return NextResponse.json(
       {

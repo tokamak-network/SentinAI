@@ -530,7 +530,7 @@ function parseAIResponse(content: string): PredictionResult | null {
       parsed.confidence < 0 ||
       parsed.confidence > 1
     ) {
-      console.error('Invalid AI response structure:', parsed);
+      console.error(new Date().toISOString(), 'Invalid AI response structure:', parsed);
       return null;
     }
 
@@ -557,7 +557,7 @@ function parseAIResponse(content: string): PredictionResult | null {
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Failed to parse AI prediction response:', errorMessage);
+    console.error(new Date().toISOString(), 'Failed to parse AI prediction response:', errorMessage);
     return null;
   }
 }
@@ -630,7 +630,7 @@ export async function predictScaling(
   // Check minimum data points
   const dataPointCount = getMetricsCount();
   if (dataPointCount < config.minDataPoints) {
-    console.log(`Insufficient data for prediction: ${dataPointCount}/${config.minDataPoints} points`);
+    console.log(new Date().toISOString(), `Insufficient data for prediction: ${dataPointCount}/${config.minDataPoints} points`);
     return null;
   }
 
@@ -638,7 +638,7 @@ export async function predictScaling(
   const userPrompt = buildUserPrompt(currentVcpu);
 
   try {
-    console.log(`[Predictive Scaler] Requesting prediction from AI Gateway...`);
+    console.log(new Date().toISOString(), `[Predictive Scaler] Requesting prediction from AI Gateway...`);
 
     const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
       method: 'POST',
@@ -672,7 +672,7 @@ export async function predictScaling(
     }
 
     // Fall back to rule-based prediction
-    console.warn('AI returned invalid response, using fallback prediction');
+    console.warn(new Date().toISOString(), 'AI returned invalid response, using fallback prediction');
     const fallback = generateFallbackPrediction(currentVcpu);
     lastPredictionTime = now;
     lastPrediction = fallback;
@@ -680,7 +680,7 @@ export async function predictScaling(
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Prediction AI Gateway Error:', errorMessage);
+    console.error(new Date().toISOString(), 'Prediction AI Gateway Error:', errorMessage);
 
     // Fall back to rule-based prediction
     const fallback = generateFallbackPrediction(currentVcpu);
@@ -806,7 +806,7 @@ export function recordActual(id: string, actualVcpu: TargetVcpu): boolean {
   const record = predictionRecords.find(r => r.id === id);
 
   if (!record) {
-    console.warn(`Prediction record not found: ${id}`);
+    console.warn(new Date().toISOString(), `Prediction record not found: ${id}`);
     return false;
   }
 
@@ -1129,7 +1129,7 @@ export async function GET(_request: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('GET /api/scaler error:', error);
+    console.error(new Date().toISOString(), 'GET /api/scaler error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       { error: 'Failed to get scaling state', message },
@@ -1198,7 +1198,7 @@ Replace the existing auto-scaling section (near lines 146-175) with:
           breakdown: reactiveDecision.breakdown,
         };
         triggeredBy = 'auto';
-        console.log(`[Predictive Scaler] Preemptive scale-up: ${currentVcpu} -> ${prediction.predictedVcpu} vCPU`);
+        console.log(new Date().toISOString(), `[Predictive Scaler] Preemptive scale-up: ${currentVcpu} -> ${prediction.predictedVcpu} vCPU`);
       } else {
         // Use reactive decision
         decision = reactiveDecision;

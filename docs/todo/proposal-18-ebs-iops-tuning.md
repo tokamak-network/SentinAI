@@ -402,10 +402,10 @@ ebsOptTask = cron.schedule('30 * * * *', async () => {
   try {
     const result = await optimizeEbsIops();
     if (result?.success) {
-      console.log(`[Scheduler] EBS IOPS adjusted: ${result.previousIops} → ${result.newIops}`);
+      console.log(new Date().toISOString(), `[Scheduler] EBS IOPS adjusted: ${result.previousIops} → ${result.newIops}`);
     }
   } catch (error) {
-    console.error('[Scheduler] EBS IOPS optimization failed:', error instanceof Error ? error.message : error);
+    console.error(new Date().toISOString(), '[Scheduler] EBS IOPS optimization failed:', error instanceof Error ? error.message : error);
   } finally {
     ebsOptTaskRunning = false;
   }

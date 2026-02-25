@@ -6,6 +6,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { tsConsole } from './console-with-timestamp';
 
 // Load .env.local
 function loadEnvLocal(): void {
@@ -30,18 +31,18 @@ async function testOpenAIKey(): Promise<void> {
   const apiKey = process.env.OPENAI_API_KEY;
   const gatewayUrl = process.env.AI_GATEWAY_URL;
 
-  console.log('🔍 OpenAI API Key Test\n');
-  console.log(`API Key: ${apiKey ? `${apiKey.slice(0, 10)}...${apiKey.slice(-4)}` : 'NOT SET'}`);
-  console.log(`Gateway URL: ${gatewayUrl || 'NOT SET'}\n`);
+  tsConsole.log('🔍 OpenAI API Key Test\n');
+  tsConsole.log(`API Key: ${apiKey ? `${apiKey.slice(0, 10)}...${apiKey.slice(-4)}` : 'NOT SET'}`);
+  tsConsole.log(`Gateway URL: ${gatewayUrl || 'NOT SET'}\n`);
 
   if (!apiKey) {
-    console.error('❌ OPENAI_API_KEY is not set in .env.local');
+    tsConsole.error('❌ OPENAI_API_KEY is not set in .env.local');
     process.exit(1);
   }
 
   try {
     // Test with gpt-4-turbo
-    console.log('Testing gpt-4-turbo...');
+    tsConsole.log('Testing gpt-4-turbo...');
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -63,21 +64,21 @@ async function testOpenAIKey(): Promise<void> {
     const data = await response.json() as any;
 
     if (!response.ok) {
-      console.error(`❌ API Error (${response.status}):`, data.error?.message || data);
-      console.error('\nPossible reasons:');
-      console.error('1. Invalid or expired API key');
-      console.error('2. Account has no access to GPT-4 models');
-      console.error('3. Rate limit exceeded');
-      console.error('4. Model name is incorrect');
+      tsConsole.error(`❌ API Error (${response.status}):`, data.error?.message || data);
+      tsConsole.error('\nPossible reasons:');
+      tsConsole.error('1. Invalid or expired API key');
+      tsConsole.error('2. Account has no access to GPT-4 models');
+      tsConsole.error('3. Rate limit exceeded');
+      tsConsole.error('4. Model name is incorrect');
       process.exit(1);
     }
 
-    console.log('✅ gpt-4-turbo works!');
-    console.log(`Response: ${data.choices?.[0]?.message?.content || 'No response'}`);
-    console.log(`Tokens used: ${data.usage?.prompt_tokens || 0} prompt, ${data.usage?.completion_tokens || 0} completion\n`);
+    tsConsole.log('✅ gpt-4-turbo works!');
+    tsConsole.log(`Response: ${data.choices?.[0]?.message?.content || 'No response'}`);
+    tsConsole.log(`Tokens used: ${data.usage?.prompt_tokens || 0} prompt, ${data.usage?.completion_tokens || 0} completion\n`);
 
     // Test with gpt-4o
-    console.log('Testing gpt-4o...');
+    tsConsole.log('Testing gpt-4o...');
     const response2 = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -99,16 +100,16 @@ async function testOpenAIKey(): Promise<void> {
     const data2 = await response2.json() as any;
 
     if (!response2.ok) {
-      console.error(`❌ API Error (${response2.status}):`, data2.error?.message || data2);
+      tsConsole.error(`❌ API Error (${response2.status}):`, data2.error?.message || data2);
       process.exit(1);
     }
 
-    console.log('✅ gpt-4o works!');
-    console.log(`Response: ${data2.choices?.[0]?.message?.content || 'No response'}`);
-    console.log(`Tokens used: ${data2.usage?.prompt_tokens || 0} prompt, ${data2.usage?.completion_tokens || 0} completion\n`);
+    tsConsole.log('✅ gpt-4o works!');
+    tsConsole.log(`Response: ${data2.choices?.[0]?.message?.content || 'No response'}`);
+    tsConsole.log(`Tokens used: ${data2.usage?.prompt_tokens || 0} prompt, ${data2.usage?.completion_tokens || 0} completion\n`);
 
   } catch (err) {
-    console.error('❌ Error:', err instanceof Error ? err.message : String(err));
+    tsConsole.error('❌ Error:', err instanceof Error ? err.message : String(err));
     process.exit(1);
   }
 }

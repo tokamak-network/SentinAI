@@ -803,13 +803,13 @@ export async function analyzeAnomalies(
   if (analysisCache &&
       analysisCache.anomalyHash === anomalyHash &&
       now - analysisCache.timestamp < ANALYSIS_CACHE_TTL_MS) {
-    console.log('[AnomalyAIAnalyzer] Returning cached analysis');
+    console.log(new Date().toISOString(), '[AnomalyAIAnalyzer] Returning cached analysis');
     return analysisCache.result;
   }
 
 // 2. Rate limiting: Return cached results or default response when the minimum interval is not met.
   if (now - lastAICallTime < MIN_AI_CALL_INTERVAL_MS) {
-    console.log('[AnomalyAIAnalyzer] Rate limited, returning cached or default');
+    console.log(new Date().toISOString(), '[AnomalyAIAnalyzer] Rate limited, returning cached or default');
     if (analysisCache) {
       return analysisCache.result;
     }
@@ -838,7 +838,7 @@ Analyze these anomalies and provide your assessment.`;
 
 // 4. Call AI Gateway
   try {
-    console.log(`[AnomalyAIAnalyzer] Calling AI Gateway with ${anomalies.length} anomalies...`);
+    console.log(new Date().toISOString(), `[AnomalyAIAnalyzer] Calling AI Gateway with ${anomalies.length} anomalies...`);
     lastAICallTime = now;
 
     const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
@@ -873,12 +873,12 @@ Analyze these anomalies and provide your assessment.`;
       timestamp: now,
     };
 
-    console.log(`[AnomalyAIAnalyzer] Analysis complete: severity=${result.severity}, type=${result.anomalyType}`);
+    console.log(new Date().toISOString(), `[AnomalyAIAnalyzer] Analysis complete: severity=${result.severity}, type=${result.anomalyType}`);
     return result;
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[AnomalyAIAnalyzer] AI Gateway Error:', errorMessage);
+    console.error(new Date().toISOString(), '[AnomalyAIAnalyzer] AI Gateway Error:', errorMessage);
 
 // default response in case of failure
     return {
@@ -1144,19 +1144,19 @@ export async function dispatchAlert(
 
 // 1. Check activation
   if (!currentConfig.enabled) {
-    console.log('[AlertDispatcher] Alerts disabled, skipping');
+    console.log(new Date().toISOString(), '[AlertDispatcher] Alerts disabled, skipping');
     return null;
   }
 
 // 2. Check severity
   if (!shouldNotifyForSeverity(analysis.severity)) {
-    console.log(`[AlertDispatcher] Severity ${analysis.severity} not in notify list, skipping`);
+    console.log(new Date().toISOString(), `[AlertDispatcher] Severity ${analysis.severity} not in notify list, skipping`);
     return null;
   }
 
 // 3. Cooldown check
   if (isInCooldown(analysis.anomalyType)) {
-    console.log(`[AlertDispatcher] Anomaly type ${analysis.anomalyType} in cooldown, skipping`);
+    console.log(new Date().toISOString(), `[AlertDispatcher] Anomaly type ${analysis.anomalyType} in cooldown, skipping`);
     return null;
   }
 
@@ -1186,16 +1186,16 @@ anomaly: anomalies[0], // more than representative
       }
 
       record.success = true;
-      console.log(`[AlertDispatcher] Alert sent to Slack: ${analysis.severity} ${analysis.anomalyType}`);
+      console.log(new Date().toISOString(), `[AlertDispatcher] Alert sent to Slack: ${analysis.severity} ${analysis.anomalyType}`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       record.error = errorMessage;
-      console.error('[AlertDispatcher] Webhook error:', errorMessage);
+      console.error(new Date().toISOString(), '[AlertDispatcher] Webhook error:', errorMessage);
     }
   } else {
 // Dashboard-only notifications
     record.success = true;
-    console.log(`[AlertDispatcher] Dashboard alert recorded: ${analysis.severity} ${analysis.anomalyType}`);
+    console.log(new Date().toISOString(), `[AlertDispatcher] Dashboard alert recorded: ${analysis.severity} ${analysis.anomalyType}`);
   }
 
 // 6. Status update
@@ -1692,7 +1692,7 @@ const history = getRecent(30); // Last 30 minutes
             detectedAnomalies = detectAnomalies(dataPoint, history);
 
             if (detectedAnomalies.length > 0) {
-              console.log(`[Anomaly] Detected ${detectedAnomalies.length} anomalies`);
+              console.log(new Date().toISOString(), `[Anomaly] Detected ${detectedAnomalies.length} anomalies`);
 
 // 3. Record to event store
               const event = createOrUpdateEvent(detectedAnomalies);
@@ -1713,7 +1713,7 @@ const history = getRecent(30); // Last 30 minutes
                       addAlertRecord(event.id, alertRecord);
                     }
                   } catch (aiError) {
-                    console.error('[Anomaly] AI analysis failed:', aiError);
+                    console.error(new Date().toISOString(), '[Anomaly] AI analysis failed:', aiError);
                   }
                 })();
               }
@@ -1723,7 +1723,7 @@ const history = getRecent(30); // Last 30 minutes
               activeAnomalyEventId = getActiveEventId() || undefined;
             }
           } catch (anomalyError) {
-            console.error('[Anomaly] Detection pipeline error:', anomalyError);
+            console.error(new Date().toISOString(), '[Anomaly] Detection pipeline error:', anomalyError);
           }
         }
 ```

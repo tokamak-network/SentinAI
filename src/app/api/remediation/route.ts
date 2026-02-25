@@ -6,6 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import logger from '@/lib/logger';
 import {
   getRemediationConfig,
   updateRemediationConfig,
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Remediation API] GET error:', message);
+    logger.error('[Remediation API] GET error:', message);
     
     return NextResponse.json(
       { error: 'Failed to fetch remediation state', details: message },
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Remediation API] POST error:', message);
+    logger.error('[Remediation API] POST error:', message);
     
     return NextResponse.json(
       { error: 'Failed to execute playbook', details: message },
@@ -103,7 +104,7 @@ export async function PATCH(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Remediation API] PATCH error:', message);
+    logger.error('[Remediation API] PATCH error:', message);
     
     return NextResponse.json(
       { error: 'Failed to update configuration', details: message },

@@ -17,6 +17,7 @@ import {
   INITIAL_SWAP_STATE,
 } from '@/types/zero-downtime';
 import { ScalingConfig, DEFAULT_SCALING_CONFIG } from '@/types/scaling';
+import logger from '@/lib/logger';
 
 // ============================================================
 // Singleton State
@@ -140,12 +141,12 @@ export async function zeroDowntimeScale(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('[ZeroDowntime] Orchestration failed:', errorMessage);
+    logger.error('[ZeroDowntime] Orchestration failed:', errorMessage);
 
     try {
       await rollback(config);
     } catch (rollbackError) {
-      console.error('[ZeroDowntime] Rollback also failed:', rollbackError);
+      logger.error('[ZeroDowntime] Rollback also failed:', rollbackError);
     }
 
     swapState.phase = 'failed';
@@ -441,7 +442,7 @@ async function rollback(config: ScalingConfig): Promise<void> {
         { timeout: 30000 }
       );
     } catch (error) {
-      console.warn('[ZeroDowntime] Failed to delete standby pod during rollback:', error);
+      logger.warn('[ZeroDowntime] Failed to delete standby pod during rollback:', error);
     }
   }
 
@@ -452,7 +453,7 @@ async function rollback(config: ScalingConfig): Promise<void> {
       { timeout: 10000 }
     );
   } catch (error) {
-    console.warn('[ZeroDowntime] Failed to restore label during rollback:', error);
+    logger.warn('[ZeroDowntime] Failed to restore label during rollback:', error);
   }
 
   swapState.phase = 'failed';

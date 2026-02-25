@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRoutingPolicy, setRoutingPolicy } from '@/lib/ai-routing';
 import type { RoutingPolicy } from '@/types/ai-routing';
+import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, policy });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[API /ai-routing/policy] Error:', message);
+    logger.error('[API /ai-routing/policy] Error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

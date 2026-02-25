@@ -11,6 +11,7 @@
 
 import { createWalletClient, createPublicClient, http, type Address, type Chain, parseEther } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import logger from '@/lib/logger';
 
 // ============================================================
 // Types
@@ -99,12 +100,12 @@ export class BondManager {
    */
   async claimWonGames(): Promise<{ success: boolean; claimed: string[]; errors: string[] }> {
     if (!this.walletClient || !this.challengerAddress) {
-      console.warn('[BondManager] No wallet configured for bond claims');
+      logger.warn('[BondManager] No wallet configured for bond claims');
       return { success: false, claimed: [], errors: ['No wallet configured'] };
     }
 
     if (!this.gameFactoryAddress) {
-      console.warn('[BondManager] DISPUTE_GAME_FACTORY_ADDRESS not set');
+      logger.warn('[BondManager] DISPUTE_GAME_FACTORY_ADDRESS not set');
       return { success: false, claimed: [], errors: ['Factory address missing'] };
     }
 
@@ -119,11 +120,11 @@ export class BondManager {
         // - Send transaction
         // - Wait for confirmation
         
-        console.info(`[BondManager] Would claim bond for game ${claim.gameId}: ${claim.amount} ETH`);
+        logger.info(`[BondManager] Would claim bond for game ${claim.gameId}: ${claim.amount} ETH`);
         claimed.push(claim.gameId);
       } catch (error) {
         const err = error as Error;
-        console.error(`[BondManager] Failed to claim bond for game ${claim.gameId}:`, err.message);
+        logger.error(`[BondManager] Failed to claim bond for game ${claim.gameId}:`, err.message);
         errors.push(`${claim.gameId}: ${err.message}`);
       }
     }

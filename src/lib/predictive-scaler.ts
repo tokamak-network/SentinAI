@@ -17,6 +17,7 @@ import { getStore } from '@/lib/redis-store';
 import { chatCompletion } from './ai-client';
 import { parseAIJSON } from './ai-response-parser';
 import { getChainPlugin } from '@/chains';
+import logger from '@/lib/logger';
 
 // ============================================================================
 // Helper Functions for TargetVcpu
@@ -124,7 +125,7 @@ function parseAIResponse(content: string): PredictionResult | null {
       confidence < 0 ||
       confidence > 1
     ) {
-      console.error('Invalid AI response structure:', parsed);
+      logger.error('Invalid AI response structure:', parsed);
       return null;
     }
 
@@ -156,7 +157,7 @@ function parseAIResponse(content: string): PredictionResult | null {
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Failed to parse AI prediction response:', errorMessage);
+    logger.error('Failed to parse AI prediction response:', errorMessage);
     return null;
   }
 }
@@ -227,7 +228,7 @@ export async function predictScaling(
   // Check minimum data points
   const dataPointCount = await getMetricsCount();
   if (dataPointCount < config.minDataPoints) {
-    console.info(`Insufficient data for prediction: ${dataPointCount}/${config.minDataPoints} points`);
+    logger.info(`Insufficient data for prediction: ${dataPointCount}/${config.minDataPoints} points`);
     return null;
   }
 
@@ -235,7 +236,7 @@ export async function predictScaling(
   const userPrompt = await buildUserPrompt(currentVcpu);
 
   try {
-    console.info('[Predictive Scaler] Requesting prediction from AI provider...');
+    logger.info('[Predictive Scaler] Requesting prediction from AI provider...');
 
     const aiResult = await chatCompletion({
       systemPrompt,
@@ -255,7 +256,7 @@ export async function predictScaling(
     }
 
     // Fall back to rule-based prediction
-    console.warn('AI returned invalid response, using fallback prediction');
+    logger.warn('AI returned invalid response, using fallback prediction');
     const fallback = await generateFallbackPrediction(currentVcpu);
     await store.setLastPredictionTime(now);
     await store.setLastPrediction(fallback);
@@ -263,7 +264,7 @@ export async function predictScaling(
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Prediction AI provider error:', errorMessage);
+    logger.error('Prediction AI provider error:', errorMessage);
 
     // Fall back to rule-based prediction
     const fallback = await generateFallbackPrediction(currentVcpu);

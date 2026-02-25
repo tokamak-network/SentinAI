@@ -12,6 +12,7 @@
 import { getAddress, isAddress } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import type { EOARole } from '@/types/eoa-balance';
+import logger from '@/lib/logger';
 
 // ============================================================
 // Type Definitions
@@ -40,7 +41,7 @@ function deriveEOAFromPrivateKey(privateKey: string): `0x${string}` | null {
     const account = privateKeyToAccount(normalizedKey as `0x${string}`);
     return account.address;
   } catch (error) {
-    console.error('[EOA Detector] Failed to derive EOA from private key:', error instanceof Error ? error.message : error);
+    logger.error('[EOA Detector] Failed to derive EOA from private key:', error instanceof Error ? error.message : error);
     return null;
   }
 }
@@ -99,7 +100,7 @@ export async function getEOAAddressWithAutoDetect(
   // Priority 1: Manual EOA address
   const manualEOA = getEOAFromEnv(role);
   if (manualEOA) {
-    console.info(`[EOA Detector] Using manual ${role} EOA: ${manualEOA}`);
+    logger.info(`[EOA Detector] Using manual ${role} EOA: ${manualEOA}`);
     return manualEOA;
   }
 
@@ -108,15 +109,15 @@ export async function getEOAAddressWithAutoDetect(
   if (privateKey) {
     const derivedEOA = deriveEOAFromPrivateKey(privateKey);
     if (derivedEOA) {
-      console.info(`[EOA Detector] Derived ${role} EOA from private key: ${derivedEOA}`);
+      logger.info(`[EOA Detector] Derived ${role} EOA from private key: ${derivedEOA}`);
       return derivedEOA;
     } else {
-      console.error(`[EOA Detector] Failed to derive ${role} EOA from private key`);
+      logger.error(`[EOA Detector] Failed to derive ${role} EOA from private key`);
     }
   }
 
   // Not available
-  console.warn(`[EOA Detector] No ${role} EOA available. Set ${role === 'batcher' ? 'BATCHER_EOA_ADDRESS or BATCHER_PRIVATE_KEY' : 'PROPOSER_EOA_ADDRESS or PROPOSER_PRIVATE_KEY'}`);
+  logger.warn(`[EOA Detector] No ${role} EOA available. Set ${role === 'batcher' ? 'BATCHER_EOA_ADDRESS or BATCHER_PRIVATE_KEY' : 'PROPOSER_EOA_ADDRESS or PROPOSER_PRIVATE_KEY'}`);
   return null;
 }
 

@@ -301,10 +301,10 @@ scheduledScalingTask = cron.schedule('0 * * * *', async () => {
   try {
     const result = await applyScheduledScaling();
     if (result?.executed) {
-      console.log(`[Scheduler] Scheduled scaling: ${result.previousVcpu} → ${result.targetVcpu} vCPU`);
+      console.log(new Date().toISOString(), `[Scheduler] Scheduled scaling: ${result.previousVcpu} → ${result.targetVcpu} vCPU`);
     }
   } catch (error) {
-    console.error('[Scheduler] Scheduled scaling failed:', error instanceof Error ? error.message : error);
+    console.error(new Date().toISOString(), '[Scheduler] Scheduled scaling failed:', error instanceof Error ? error.message : error);
   } finally {
     scheduledScalingTaskRunning = false;
   }

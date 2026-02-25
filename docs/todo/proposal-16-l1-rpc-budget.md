@@ -370,10 +370,10 @@ import { checkRpcBudgets } from '@/lib/rpc-budget-manager';
 try {
   const budgetResult = await checkRpcBudgets();
   if (budgetResult && budgetResult.backendsRemoved.length > 0) {
-    console.log(`[AgentLoop] RPC budget: removed backends: ${budgetResult.backendsRemoved.join(', ')}`);
+    console.log(new Date().toISOString(), `[AgentLoop] RPC budget: removed backends: ${budgetResult.backendsRemoved.join(', ')}`);
   }
   if (budgetResult && budgetResult.backendsRestored.length > 0) {
-    console.log(`[AgentLoop] RPC budget: restored backends: ${budgetResult.backendsRestored.join(', ')}`);
+    console.log(new Date().toISOString(), `[AgentLoop] RPC budget: restored backends: ${budgetResult.backendsRestored.join(', ')}`);
   }
 } catch {
   // Non-blocking — continue cycle

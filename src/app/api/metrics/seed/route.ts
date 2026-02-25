@@ -10,6 +10,7 @@ import { resetPredictionState } from '@/lib/predictive-scaler';
 import { initVcpuProfile, clearVcpuProfile, getVcpuValuesForScenario } from '@/lib/seed-vcpu-manager';
 import { getStore } from '@/lib/redis-store';
 import { MetricDataPoint } from '@/types/prediction';
+import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -197,15 +198,15 @@ export async function POST(request: NextRequest) {
 
   // Store active seed scenario in state store (works across worker threads)
   await getStore().setSeedScenario(scenario);
-  console.info(`[Seed API] Set active seed scenario in store: ${scenario}`);
+  logger.info(`[Seed API] Set active seed scenario in store: ${scenario}`);
 
   const dataPoints = generateScenarioData(scenario);
   for (const point of dataPoints) {
     await pushMetric(point);
   }
 
-  console.info(`[Seed API] Injected ${dataPoints.length} data points for scenario: ${scenario}`);
-  console.info(`[Seed API] Seed scenario persisted to state store`);
+  logger.info(`[Seed API] Injected ${dataPoints.length} data points for scenario: ${scenario}`);
+  logger.info(`[Seed API] Seed scenario persisted to state store`);
 
   // Schedule automatic cleanup after TTL expires
   if (seedTimeoutHandle) {
@@ -218,13 +219,13 @@ export async function POST(request: NextRequest) {
       await resetPredictionState();
       await getStore().setSeedScenario(null);
       clearVcpuProfile();
-      console.info(`[Seed API] TTL expired (${SEED_TTL_SECONDS}s): Cleared seed data, switched to live metrics`);
+      logger.info(`[Seed API] TTL expired (${SEED_TTL_SECONDS}s): Cleared seed data, switched to live metrics`);
     } catch (error) {
-      console.error('[Seed API] Error clearing seed data on TTL:', error);
+      logger.error('[Seed API] Error clearing seed data on TTL:', error);
     }
   }, SEED_TTL_SECONDS * 1000);
 
-  console.info(`[Seed API] Scheduled automatic cleanup in ${SEED_TTL_SECONDS}s`);
+  logger.info(`[Seed API] Scheduled automatic cleanup in ${SEED_TTL_SECONDS}s`);
 
   return NextResponse.json({
     success: true,

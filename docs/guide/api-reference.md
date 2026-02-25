@@ -482,7 +482,7 @@ const ws = new WebSocket('wss://sentinai.example.com/api/stream');
 
 ws.onmessage = (event) => {
   const data = JSON.parse(event.data);
-  console.log('Metric update:', data);
+  console.log(new Date().toISOString(), 'Metric update:', data);
 };
 
 // Expected payload:

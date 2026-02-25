@@ -37,6 +37,7 @@ import { PredictionResult, DEFAULT_PREDICTION_CONFIG } from '@/types/prediction'
 import { analyzeLogChunk } from '@/lib/ai-analyzer';
 import { getAllLiveLogs } from '@/lib/log-ingester';
 import { addScalingEvent, addLogAnalysisResult } from '@/lib/daily-accumulator';
+import logger from '@/lib/logger';
 
 /**
  * Get current metrics directly from store (no HTTP overhead)
@@ -58,7 +59,7 @@ async function fetchCurrentMetrics(): Promise<{
       gasUsedRatio: latest.gasUsedRatio, // Use actual value instead of approximation
     };
   } catch (error) {
-    console.error('Failed to fetch metrics:', error);
+    logger.error('Failed to fetch metrics:', error);
     return null;
   }
 }
@@ -85,7 +86,7 @@ async function fetchAIAnalysis(): Promise<{
 
     return { severity: result.severity };
   } catch (error) {
-    console.error('Failed to fetch AI analysis:', error);
+    logger.error('Failed to fetch AI analysis:', error);
     return null;
   }
 }
@@ -151,7 +152,7 @@ export async function GET() {
       },
     });
   } catch (error) {
-    console.error('GET /api/scaler error:', error);
+    logger.error('GET /api/scaler error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       { error: 'Failed to get scaling state', message },
@@ -242,7 +243,7 @@ export async function POST(request: NextRequest) {
           breakdown: reactiveDecision.breakdown,
         };
         triggeredBy = 'auto';
-        console.info(`[Predictive Scaler] Preemptive scale-up: ${currentVcpu} -> ${prediction.predictedVcpu} vCPU`);
+        logger.info(`[Predictive Scaler] Preemptive scale-up: ${currentVcpu} -> ${prediction.predictedVcpu} vCPU`);
       } else {
         // Use reactive decision
         decision = reactiveDecision;
@@ -290,7 +291,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('POST /api/scaler error:', error);
+    logger.error('POST /api/scaler error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       { error: 'Scaling failed', message },
@@ -326,7 +327,7 @@ export async function PATCH(request: NextRequest) {
       zeroDowntimeEnabled: await isZeroDowntimeEnabled(),
     });
   } catch (error) {
-    console.error('PATCH /api/scaler error:', error);
+    logger.error('PATCH /api/scaler error:', error);
     const message = error instanceof Error ? error.message : 'Unknown error';
     return NextResponse.json(
       { error: 'Failed to update settings', message },

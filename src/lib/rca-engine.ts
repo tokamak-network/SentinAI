@@ -21,6 +21,7 @@ import type {
 import type { AISeverity } from '@/types/scaling';
 import { chatCompletion } from './ai-client';
 import { getChainPlugin } from '@/chains';
+import logger from '@/lib/logger';
 
 // ============================================================================
 // Constants (delegated to chain plugin)
@@ -369,7 +370,7 @@ async function callAIForRCA(
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      console.info(`[RCA Engine] Calling AI provider... (attempt ${attempt + 1}/${maxRetries + 1})`);
+      logger.info(`[RCA Engine] Calling AI provider... (attempt ${attempt + 1}/${maxRetries + 1})`);
 
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 30000);
@@ -410,16 +411,16 @@ async function callAIForRCA(
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.error(`[RCA Engine] AI analysis failed (attempt ${attempt + 1}/${maxRetries + 1}):`, errorMessage);
+      logger.error(`[RCA Engine] AI analysis failed (attempt ${attempt + 1}/${maxRetries + 1}):`, errorMessage);
 
       if (attempt < maxRetries) {
         const delay = 1000 * (attempt + 1);
-        console.info(`[RCA Engine] Retrying in ${delay}ms...`);
+        logger.info(`[RCA Engine] Retrying in ${delay}ms...`);
         await new Promise(resolve => setTimeout(resolve, delay));
         continue;
       }
 
-      console.error(`[RCA Engine] All ${maxRetries + 1} attempts failed. Last error: ${errorMessage}`);
+      logger.error(`[RCA Engine] All ${maxRetries + 1} attempts failed. Last error: ${errorMessage}`);
       return generateFallbackAnalysis(timeline, anomalies, errorMessage);
     }
   }
@@ -492,11 +493,11 @@ export async function performRCA(
   metrics: MetricDataPoint[]
 ): Promise<RCAResult> {
   const startTime = Date.now();
-  console.info('[RCA Engine] Starting root cause analysis...');
+  logger.info('[RCA Engine] Starting root cause analysis...');
 
   // 1. Build event timeline
   const timeline = buildTimeline(anomalies, logs, 5);
-  console.info(`[RCA Engine] Built timeline with ${timeline.length} events`);
+  logger.info(`[RCA Engine] Built timeline with ${timeline.length} events`);
 
   // 2. Causal analysis via AI
   const aiResult = await callAIForRCA(timeline, anomalies, metrics, logs);
@@ -514,8 +515,8 @@ export async function performRCA(
     generatedAt: new Date().toISOString(),
   };
 
-  console.info(`[RCA Engine] Analysis complete in ${Date.now() - startTime}ms`);
-  console.info(`[RCA Engine] Root cause: ${result.rootCause.component} (confidence: ${result.rootCause.confidence})`);
+  logger.info(`[RCA Engine] Analysis complete in ${Date.now() - startTime}ms`);
+  logger.info(`[RCA Engine] Root cause: ${result.rootCause.component} (confidence: ${result.rootCause.confidence})`);
 
   return result;
 }

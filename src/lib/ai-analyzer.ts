@@ -1,4 +1,5 @@
 import { chatCompletion } from './ai-client';
+import logger from '@/lib/logger';
 
 
 export interface LogAnalysisResult {
@@ -51,7 +52,7 @@ export async function analyzeLogChunk(logs: Record<string, string> | string): Pr
     }
 
     try {
-        console.info('[AI Analyzer] Sending request to AI provider...');
+        logger.info('[AI Analyzer] Sending request to AI provider...');
 
         const result = await chatCompletion({
             systemPrompt,
@@ -84,7 +85,7 @@ export async function analyzeLogChunk(logs: Record<string, string> | string): Pr
 
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        console.error("AI Gateway Error:", errorMessage);
+        logger.error("AI Gateway Error:", errorMessage);
         // Fallback or "Simulation" output if Gateway is unreachable
         return {
             severity: "critical",

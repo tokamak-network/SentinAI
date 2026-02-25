@@ -18,6 +18,7 @@ import type {
 import type { MetricDataPoint } from '@/types/prediction';
 import type { ScalingState } from '@/types/scaling';
 import type { AgentMemoryEntry } from '@/types/agent-memory';
+import logger from '@/lib/logger';
 
 interface GoalSignalCollectorOptions {
   now?: number;
@@ -119,7 +120,7 @@ async function safeCollect<T>(collector: () => Promise<T>, fallback: T, sourceNa
     return await collector();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.warn(`[GoalSignalCollector] ${sourceName} fallback: ${message}`);
+    logger.warn(`[GoalSignalCollector] ${sourceName} fallback: ${message}`);
     return fallback;
   }
 }

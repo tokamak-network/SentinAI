@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDecisionTraceEntry, listDecisionTraceEntries } from '@/lib/agent-memory';
 import type { AISeverity } from '@/types/scaling';
+import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -46,7 +47,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[API /agent-decisions] Error:', message);
+    logger.error('[API /agent-decisions] Error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

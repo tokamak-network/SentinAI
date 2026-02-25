@@ -654,12 +654,12 @@ export class LLMStressTestOrchestrator {
   }
   
   async runAll(): Promise<void> {
-    console.log('Starting LLM stress tests...\n');
+    console.log(new Date().toISOString(), 'Starting LLM stress tests...\n');
     
     const allResults: ScenarioResult[] = [];
     
     for (const scenario of this.scenarios) {
-      console.log(`Running: ${scenario.name}`);
+      console.log(new Date().toISOString(), `Running: ${scenario.name}`);
       const results = await scenario.run(Array.from(this.clients.values()));
       allResults.push(...results);
     }
@@ -683,7 +683,7 @@ export class LLMStressTestOrchestrator {
       formatter.formatJSON(this.aggregator.aggregate())
     );
     
-    console.log('\nReport saved to test-results/');
+    console.log(new Date().toISOString(), '\nReport saved to test-results/');
   }
 }
 ```

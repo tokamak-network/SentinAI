@@ -18,6 +18,7 @@ import { chatCompletion } from '@/lib/ai-client';
 import { analyzeLogChunk } from '@/lib/ai-analyzer';
 import { getAllLiveLogs, generateMockLogs } from '@/lib/log-ingester';
 import { getChainPlugin } from '@/chains';
+import logger from '@/lib/logger';
 
 // ============================================================
 // Constants
@@ -344,7 +345,7 @@ Respond ONLY with valid JSON (no markdown).`;
       directResponse: parsed.directResponse || null,
     };
   } catch (error) {
-    console.error('[NLOps v2] Plan failed:', error);
+    logger.error('[NLOps v2] Plan failed:', error);
     return { toolCalls: [], directResponse: null };
   }
 }
@@ -457,7 +458,7 @@ async function fetchCurrentState(baseUrl: string): Promise<CurrentSystemState> {
       cooldownRemaining: scalerData.cooldownRemaining || 0,
     };
   } catch (error) {
-    console.error('[NLOps v2] Failed to fetch state:', error);
+    logger.error('[NLOps v2] Failed to fetch state:', error);
     return {
       vcpu: 1, memoryGiB: 2, autoScalingEnabled: true,
       simulationMode: true, cpuUsage: 0, txPoolCount: 0, cooldownRemaining: 0,

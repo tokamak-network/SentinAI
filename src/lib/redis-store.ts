@@ -40,6 +40,7 @@ import {
   GoalLeaseRecord,
 } from '@/types/goal-orchestrator';
 import { GoalLearningEpisode } from '@/types/goal-learning';
+import logger from '@/lib/logger';
 
 // ============================================================
 // Constants
@@ -210,12 +211,12 @@ export class RedisStateStore implements IStateStore {
 
     this.client.on('connect', () => {
       this.connected = true;
-      console.info('[Redis Store] Connected');
+      logger.info('[Redis Store] Connected');
     });
 
     this.client.on('error', (err) => {
       this.connected = false;
-      console.error('[Redis Store] Error:', err.message);
+      logger.error('[Redis Store] Error:', err.message);
     });
 
     this.client.on('close', () => {
@@ -224,7 +225,7 @@ export class RedisStateStore implements IStateStore {
 
     // Initiate connection
     this.client.connect().catch((err) => {
-      console.error('[Redis Store] Initial connection failed:', err.message);
+      logger.error('[Redis Store] Initial connection failed:', err.message);
     });
   }
 
@@ -2007,13 +2008,13 @@ export function getStore(): IStateStore {
   const redisUrl = process.env.REDIS_URL;
 
   if (redisUrl) {
-    console.info('[State Store] Using Redis:', redisUrl.replace(/\/\/.*@/, '//<credentials>@'));
+    logger.info('[State Store] Using Redis:', redisUrl.replace(/\/\/.*@/, '//<credentials>@'));
     globalForStore.__sentinai_store = new RedisStateStore({
       url: redisUrl,
       ...DEFAULT_REDIS_CONFIG,
     });
   } else {
-    console.info('[State Store] Using InMemory (set REDIS_URL for persistence)');
+    logger.info('[State Store] Using InMemory (set REDIS_URL for persistence)');
     globalForStore.__sentinai_store = new InMemoryStateStore();
   }
 

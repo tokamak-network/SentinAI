@@ -72,7 +72,7 @@ export default function DocSearch({ className = '' }: DocSearchProps) {
         setResults(mockResults);
         setIsOpen(mockResults.length > 0);
       } catch (error) {
-        console.error('Search failed:', error);
+        console.error(new Date().toISOString(), 'Search failed:', error);
         setResults([]);
       } finally {
         setIsLoading(false);

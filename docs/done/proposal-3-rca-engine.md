@@ -831,7 +831,7 @@ async function callAIForRCA(
   const userPrompt = buildUserPrompt(timeline, anomalies, metrics, logs);
 
   try {
-    console.log(`[RCA Engine] Calling AI Gateway at ${AI_GATEWAY_URL}...`);
+    console.log(new Date().toISOString(), `[RCA Engine] Calling AI Gateway at ${AI_GATEWAY_URL}...`);
 
     const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
       method: 'POST',
@@ -881,7 +881,7 @@ async function callAIForRCA(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[RCA Engine] AI analysis failed:', errorMessage);
+    console.error(new Date().toISOString(), '[RCA Engine] AI analysis failed:', errorMessage);
 
 // Fallback: Timeline-based heuristic analysis
     return generateFallbackAnalysis(timeline, anomalies);
@@ -955,11 +955,11 @@ export async function performRCA(
   metrics: MetricDataPoint[]
 ): Promise<RCAResult> {
   const startTime = Date.now();
-  console.log('[RCA Engine] Starting root cause analysis...');
+  console.log(new Date().toISOString(), '[RCA Engine] Starting root cause analysis...');
 
 // 1. Event timeline configuration
   const timeline = buildTimeline(anomalies, logs, 5);
-  console.log(`[RCA Engine] Built timeline with ${timeline.length} events`);
+  console.log(new Date().toISOString(), `[RCA Engine] Built timeline with ${timeline.length} events`);
 
 // 2. Causal analysis through AI
   const aiResult = await callAIForRCA(timeline, anomalies, metrics, logs);
@@ -977,8 +977,8 @@ export async function performRCA(
     generatedAt: new Date().toISOString(),
   };
 
-  console.log(`[RCA Engine] Analysis complete in ${Date.now() - startTime}ms`);
-  console.log(`[RCA Engine] Root cause: ${result.rootCause.component} (confidence: ${result.rootCause.confidence})`);
+  console.log(new Date().toISOString(), `[RCA Engine] Analysis complete in ${Date.now() - startTime}ms`);
+  console.log(new Date().toISOString(), `[RCA Engine] Root cause: ${result.rootCause.component} (confidence: ${result.rootCause.confidence})`);
 
   return result;
 }
@@ -1078,7 +1078,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest): Promise<NextResponse<RCAResponse>> {
   const startTime = Date.now();
-  console.log('[API /rca] POST request received');
+  console.log(new Date().toISOString(), '[API /rca] POST request received');
 
   try {
     // Parse request body
@@ -1090,11 +1090,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
     }
 
     const triggeredBy = body.autoTriggered ? 'auto' : 'manual';
-    console.log(`[API /rca] Triggered by: ${triggeredBy}`);
+    console.log(new Date().toISOString(), `[API /rca] Triggered by: ${triggeredBy}`);
 
     // 1. Collect recent metrics from MetricsStore (last 5 minutes)
     const metrics: MetricDataPoint[] = getRecent(5);
-    console.log(`[API /rca] Collected ${metrics.length} metric data points`);
+    console.log(new Date().toISOString(), `[API /rca] Collected ${metrics.length} metric data points`);
 
     // 2. Detect anomalies using the latest metrics
     let anomalies = [];
@@ -1102,17 +1102,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
       const currentMetric = metrics[metrics.length - 1];
       const historyMetrics = metrics.slice(0, -1);
       anomalies = detectAnomalies(currentMetric, historyMetrics);
-      console.log(`[API /rca] Detected ${anomalies.filter(a => a.isAnomaly).length} anomalies`);
+      console.log(new Date().toISOString(), `[API /rca] Detected ${anomalies.filter(a => a.isAnomaly).length} anomalies`);
     }
 
     // 3. Collect logs from all components
     let logs: Record<string, string>;
     try {
       logs = await getAllLiveLogs();
-      console.log(`[API /rca] Collected logs from ${Object.keys(logs).length} components`);
+      console.log(new Date().toISOString(), `[API /rca] Collected logs from ${Object.keys(logs).length} components`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.warn(`[API /rca] Failed to get live logs, using mock: ${errorMessage}`);
+      console.warn(new Date().toISOString(), `[API /rca] Failed to get live logs, using mock: ${errorMessage}`);
       // Fallback to mock logs if K8s is unavailable
       logs = generateMockLogs('normal');
     }
@@ -1123,7 +1123,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
     // 5. Add to history
     addRCAHistory(result, triggeredBy);
 
-    console.log(`[API /rca] Analysis complete in ${Date.now() - startTime}ms`);
+    console.log(new Date().toISOString(), `[API /rca] Analysis complete in ${Date.now() - startTime}ms`);
 
     return NextResponse.json({
       success: true,
@@ -1131,7 +1131,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[API /rca] Error:', errorMessage);
+    console.error(new Date().toISOString(), '[API /rca] Error:', errorMessage);
 
     return NextResponse.json(
       {
@@ -1157,7 +1157,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
  * }
  */
 export async function GET(request: NextRequest): Promise<NextResponse<RCAHistoryResponse>> {
-  console.log('[API /rca] GET request received');
+  console.log(new Date().toISOString(), '[API /rca] GET request received');
 
   try {
     const { searchParams } = new URL(request.url);
@@ -1173,7 +1173,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<RCAHistory
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[API /rca] Error:', errorMessage);
+    console.error(new Date().toISOString(), '[API /rca] Error:', errorMessage);
 
     return NextResponse.json(
       {
@@ -1395,7 +1395,7 @@ const runRCA = async () => {
       setRcaError(data.error || 'RCA analysis failed');
     }
   } catch (e) {
-    console.error(e);
+    console.error(new Date().toISOString(), e);
     setRcaError('Failed to connect to RCA API');
   } finally {
     setIsRunningRCA(false);
@@ -1722,15 +1722,15 @@ import { performRCA, addRCAHistory } from '@/lib/rca-engine';
 
 // Automatic RCA trigger if deep analysis result is critical
 if (deepAnalysisResult.severity === 'critical') {
-  console.log('[Anomaly AI] Critical severity detected, triggering auto-RCA...');
+  console.log(new Date().toISOString(), '[Anomaly AI] Critical severity detected, triggering auto-RCA...');
 
   try {
     const rcaResult = await performRCA(anomalies, logs, metrics);
     addRCAHistory(rcaResult, 'auto');
-    console.log(`[Anomaly AI] Auto-RCA complete: ${rcaResult.rootCause.component}`);
+    console.log(new Date().toISOString(), `[Anomaly AI] Auto-RCA complete: ${rcaResult.rootCause.component}`);
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Anomaly AI] Auto-RCA failed:', msg);
+    console.error(new Date().toISOString(), '[Anomaly AI] Auto-RCA failed:', msg);
   }
 }
 ```

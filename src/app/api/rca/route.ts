@@ -15,6 +15,7 @@ import { getRecentMetrics } from '@/lib/metrics-store';
 import { detectAnomalies } from '@/lib/anomaly-detector';
 import { getAllLiveLogs, generateMockLogs } from '@/lib/log-ingester';
 import type { RCARequest, RCAResponse, RCAHistoryResponse } from '@/types/rca';
+import logger from '@/lib/logger';
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -24,7 +25,7 @@ export const dynamic = 'force-dynamic';
  */
 export async function POST(request: NextRequest): Promise<NextResponse<RCAResponse>> {
   const startTime = Date.now();
-  console.info('[API /rca] POST request received');
+  logger.info('[API /rca] POST request received');
 
   try {
     // Parse request body
@@ -36,11 +37,11 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
     }
 
     const triggeredBy = body.autoTriggered ? 'auto' : 'manual';
-    console.info(`[API /rca] Triggered by: ${triggeredBy}`);
+    logger.info(`[API /rca] Triggered by: ${triggeredBy}`);
 
     // 1. Collect recent metrics from MetricsStore
     const metrics = await getRecentMetrics();
-    console.info(`[API /rca] Collected ${metrics.length} metric data points`);
+    logger.info(`[API /rca] Collected ${metrics.length} metric data points`);
 
     // 2. Detect anomalies using the latest metrics
     let anomalies: ReturnType<typeof detectAnomalies> = [];
@@ -48,17 +49,17 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
       const currentMetric = metrics[metrics.length - 1];
       const historyMetrics = metrics.slice(0, -1);
       anomalies = detectAnomalies(currentMetric, historyMetrics);
-      console.info(`[API /rca] Detected ${anomalies.filter(a => a.isAnomaly).length} anomalies`);
+      logger.info(`[API /rca] Detected ${anomalies.filter(a => a.isAnomaly).length} anomalies`);
     }
 
     // 3. Collect logs from all components
     let logs: Record<string, string>;
     try {
       logs = await getAllLiveLogs();
-      console.info(`[API /rca] Collected logs from ${Object.keys(logs).length} components`);
+      logger.info(`[API /rca] Collected logs from ${Object.keys(logs).length} components`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      console.warn(`[API /rca] Failed to get live logs, using mock: ${errorMessage}`);
+      logger.warn(`[API /rca] Failed to get live logs, using mock: ${errorMessage}`);
       logs = generateMockLogs('normal');
     }
 
@@ -68,7 +69,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
     // 5. Add to history
     addRCAHistory(result, triggeredBy);
 
-    console.info(`[API /rca] Analysis complete in ${Date.now() - startTime}ms`);
+    logger.info(`[API /rca] Analysis complete in ${Date.now() - startTime}ms`);
 
     return NextResponse.json({
       success: true,
@@ -76,7 +77,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[API /rca] Error:', errorMessage);
+    logger.error('[API /rca] Error:', errorMessage);
 
     return NextResponse.json(
       {
@@ -93,7 +94,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
  * GET: Get RCA history
  */
 export async function GET(request: NextRequest): Promise<NextResponse<RCAHistoryResponse>> {
-  console.info('[API /rca] GET request received');
+  logger.info('[API /rca] GET request received');
 
   try {
     const { searchParams } = new URL(request.url);
@@ -109,7 +110,7 @@ export async function GET(request: NextRequest): Promise<NextResponse<RCAHistory
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[API /rca] Error:', errorMessage);
+    logger.error('[API /rca] Error:', errorMessage);
 
     return NextResponse.json(
       {

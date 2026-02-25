@@ -6,6 +6,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { readExistingReport } from '@/lib/daily-report-generator';
+import logger from '@/lib/logger';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -332,7 +333,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('GET /api/reports/daily/view error:', message);
+    logger.error('GET /api/reports/daily/view error:', message);
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import http from 'node:http';
+import { tsConsole } from './console-with-timestamp.mjs';
 
 const PORT = Number.parseInt(process.env.PORT || '8081', 10);
 const L2_RPC_URL = process.env.L2_RPC_URL || 'http://localhost:3050';
@@ -142,7 +143,7 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`[zk-settlement-probe] running: http://localhost:${PORT}/status/settlement`);
+  tsConsole.log(`[zk-settlement-probe] running: http://localhost:${PORT}/status/settlement`);
 });
 
 process.on('SIGINT', () => {

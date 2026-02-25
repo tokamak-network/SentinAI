@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getLastCycleResult } from '@/lib/agent-loop';
 import { getStore } from '@/lib/redis-store';
 import { getSchedulerStatus } from '@/lib/scheduler';
+import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,7 +61,7 @@ export async function GET() {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[API /health] Error:', message);
+    logger.error('[API /health] Error:', message);
 
     return NextResponse.json({
       status: 'degraded',

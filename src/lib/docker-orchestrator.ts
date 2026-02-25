@@ -16,6 +16,7 @@ import {
 import type { ContainerResourceUsage } from './k8s-scaler';
 import { getChainPlugin } from '@/chains';
 import fs from 'fs/promises';
+import logger from '@/lib/logger';
 
 // ============================================================
 // Metrics
@@ -136,7 +137,7 @@ export async function getDockerComponentDetails(
     };
   } catch (error) {
     if (process.env.DEBUG_K8S === 'true') {
-      console.error(`[Docker] Failed to inspect ${service}:`, error);
+      logger.error(`[Docker] Failed to inspect ${service}:`, error);
     }
     return {
       name: displayName,

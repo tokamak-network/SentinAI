@@ -382,7 +382,7 @@ try {
     const results = await evaluateAndApplyRightSizing();
     const applied = results.filter(r => r.executed);
     if (applied.length > 0) {
-      console.log(`[AgentLoop] Right-sizing applied: ${applied.map(r => `${r.component} → ${r.newResources.cpuMillicores}m`).join(', ')}`);
+      console.log(new Date().toISOString(), `[AgentLoop] Right-sizing applied: ${applied.map(r => `${r.component} → ${r.newResources.cpuMillicores}m`).join(', ')}`);
     }
   }
 } catch {

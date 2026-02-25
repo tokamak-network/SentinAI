@@ -446,7 +446,7 @@ class ProtocolRegistry {
       try {
         results[id] = await adapter.getMetrics();
       } catch (error) {
-        console.error(`Failed to get metrics for ${id}:`, error);
+        console.error(new Date().toISOString(), `Failed to get metrics for ${id}:`, error);
       }
     }
     return results;

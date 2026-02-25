@@ -6,6 +6,7 @@
 
 import { getMetricsStats, getRecentMetrics } from '@/lib/metrics-store';
 import { getStore } from '@/lib/redis-store';
+import logger from '@/lib/logger';
 import type {
   MetricSnapshot,
   HourlySummary,
@@ -87,7 +88,7 @@ export async function initializeAccumulator(): Promise<void> {
   };
 
   await store.setDailyAccumulatorState(today, newState);
-  console.info(`[Daily Accumulator] Initialized for ${today}`);
+  logger.info(`[Daily Accumulator] Initialized for ${today}`);
 }
 
 /**
@@ -122,7 +123,7 @@ export async function takeSnapshot(): Promise<MetricSnapshot | null> {
 
   // No data in ring buffer
   if (stats.count === 0) {
-    console.info('[Daily Accumulator] Ring buffer empty, skipping snapshot');
+    logger.info('[Daily Accumulator] Ring buffer empty, skipping snapshot');
     return null;
   }
 
@@ -190,7 +191,7 @@ export async function takeSnapshot(): Promise<MetricSnapshot | null> {
   // Persist state to store
   await store.setDailyAccumulatorState(today, state);
 
-  console.info(`[Daily Accumulator] Snapshot #${state.data.snapshots.length} taken (${stats.count} data points)`);
+  logger.info(`[Daily Accumulator] Snapshot #${state.data.snapshots.length} taken (${stats.count} data points)`);
 
   return snapshot;
 }

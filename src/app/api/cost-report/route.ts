@@ -5,6 +5,7 @@
 
 import { NextResponse } from 'next/server';
 import { generateCostReport } from '@/lib/cost-optimizer';
+import logger from '@/lib/logger';
 
 // Set as dynamic route (disable caching)
 export const dynamic = 'force-dynamic';
@@ -23,12 +24,12 @@ export async function GET(request: Request) {
       }
     }
 
-    console.info(`[Cost Report API] Generating report for ${days} days`);
+    logger.info(`[Cost Report API] Generating report for ${days} days`);
     const startTime = Date.now();
 
     const report = await generateCostReport(days);
 
-    console.info(`[Cost Report API] Report generated in ${Date.now() - startTime}ms`);
+    logger.info(`[Cost Report API] Report generated in ${Date.now() - startTime}ms`);
 
     return NextResponse.json(report, {
       headers: {
@@ -37,7 +38,7 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Cost Report API] Error:', errorMessage);
+    logger.error('[Cost Report API] Error:', errorMessage);
 
     return NextResponse.json(
       {

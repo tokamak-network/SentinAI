@@ -9,6 +9,7 @@ import { ThanosPlugin } from './thanos';
 import { OptimismPlugin } from './optimism';
 import { ZkstackPlugin } from './zkstack';
 import { ArbitrumPlugin } from './arbitrum';
+import logger from '@/lib/logger';
 
 let activePlugin: ChainPlugin | null = null;
 
@@ -33,7 +34,7 @@ function resolvePluginFromEnv(): ChainPlugin {
     case 'nitro':
       return new ArbitrumPlugin();
     default:
-      console.warn(`[ChainRegistry] Unknown CHAIN_TYPE "${chainType}", falling back to thanos`);
+      logger.warn(`[ChainRegistry] Unknown CHAIN_TYPE "${chainType}", falling back to thanos`);
       return new ThanosPlugin();
   }
 }
@@ -45,7 +46,7 @@ function resolvePluginFromEnv(): ChainPlugin {
 export function getChainPlugin(): ChainPlugin {
   if (!activePlugin) {
     activePlugin = resolvePluginFromEnv();
-    console.info(`[ChainRegistry] Auto-loaded default: ${activePlugin.displayName}`);
+    logger.info(`[ChainRegistry] Auto-loaded default: ${activePlugin.displayName}`);
   }
   return activePlugin;
 }
@@ -56,7 +57,7 @@ export function getChainPlugin(): ChainPlugin {
  */
 export function registerChainPlugin(plugin: ChainPlugin): void {
   activePlugin = plugin;
-  console.info(`[ChainRegistry] Registered: ${plugin.displayName} (${plugin.chainType})`);
+  logger.info(`[ChainRegistry] Registered: ${plugin.displayName} (${plugin.chainType})`);
 }
 
 /**

@@ -10,6 +10,7 @@
  */
 
 import { createPublicClient, http, type Address, type Chain } from 'viem';
+import logger from '@/lib/logger';
 
 // ============================================================
 // Types
@@ -66,7 +67,7 @@ export class DisputeGameMonitor {
    */
   async fetchActiveGames(): Promise<DisputeGame[]> {
     if (!this.gameFactoryAddress) {
-      console.warn('[DisputeGameMonitor] DISPUTE_GAME_FACTORY_ADDRESS not configured');
+      logger.warn('[DisputeGameMonitor] DISPUTE_GAME_FACTORY_ADDRESS not configured');
       return [];
     }
 

@@ -1,6 +1,7 @@
 import { mkdir, appendFile } from 'fs/promises';
 import path from 'path';
 import type { OpsAuthContext } from '@/lib/ops-adapter/types';
+import logger from '@/lib/logger';
 
 function auditPath(): string {
   const dir = process.env.SENTINAI_AUDIT_DIR?.trim() || path.join(process.cwd(), 'data', 'audit');
@@ -24,6 +25,6 @@ export async function writeAuditLog(entry: {
     // Graceful degradation: log to console if filesystem write fails
     // This ensures audit failures don't break critical operations
     const message = error instanceof Error ? error.message : String(error);
-    console.warn('[audit] Failed to write audit log:', message);
+    logger.warn('[audit] Failed to write audit log:', message);
   }
 }

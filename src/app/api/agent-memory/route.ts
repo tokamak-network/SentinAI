@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { queryAgentMemory } from '@/lib/agent-memory';
 import type { AgentMemoryCategory } from '@/types/agent-memory';
 import type { AISeverity } from '@/types/scaling';
+import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[API /agent-memory] Error:', message);
+    logger.error('[API /agent-memory] Error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

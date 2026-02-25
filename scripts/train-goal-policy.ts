@@ -7,6 +7,7 @@
 import { mkdir, writeFile } from 'fs/promises';
 import path from 'path';
 import { suggestAutonomyPolicyFromEpisodes } from '../src/lib/goal-learning';
+import { tsConsole } from './console-with-timestamp';
 
 async function main(): Promise<void> {
   const outputDir = path.resolve(process.cwd(), 'docs/verification');
@@ -44,13 +45,13 @@ async function main(): Promise<void> {
     writeFile(mdPath, markdown, 'utf-8'),
   ]);
 
-  console.info(`[goal-learning] sample=${suggestion.sampleSize} confidence=${suggestion.confidence}`);
-  console.info(`[goal-learning] json=${jsonPath}`);
-  console.info(`[goal-learning] md=${mdPath}`);
+  tsConsole.info(`[goal-learning] sample=${suggestion.sampleSize} confidence=${suggestion.confidence}`);
+  tsConsole.info(`[goal-learning] json=${jsonPath}`);
+  tsConsole.info(`[goal-learning] md=${mdPath}`);
 }
 
 main().catch((error) => {
   const message = error instanceof Error ? error.message : 'Unknown error';
-  console.error(`[goal-learning] fatal: ${message}`);
+  tsConsole.error(`[goal-learning] fatal: ${message}`);
   process.exitCode = 1;
 });

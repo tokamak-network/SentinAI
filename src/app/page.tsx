@@ -992,9 +992,9 @@ export default function Dashboard() {
         setIsLoading(false);
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
-          console.info('Fetch aborted');
+          console.info(new Date().toISOString(), 'Fetch aborted');
         } else {
-          console.error(err);
+          console.error(new Date().toISOString(), err);
         }
       }
     };
@@ -1476,7 +1476,7 @@ export default function Dashboard() {
                       setCostAnalysisLoading(false);
                     })
                     .catch(e => {
-                      console.error('Cost analysis error:', e);
+                      console.error(new Date().toISOString(), 'Cost analysis error:', e);
                       setCostAnalysisLoading(false);
                     });
                 }

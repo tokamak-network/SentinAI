@@ -454,7 +454,7 @@ export async function classifyIntent(
       clarification: parsed.clarification,
     };
   } catch (error) {
-    console.error('[NLOps] Intent classification failed:', error);
+    console.error(new Date().toISOString(), '[NLOps] Intent classification failed:', error);
     return {
       intent: { type: 'unknown', originalInput: userInput },
       requireConfirmation: false,
@@ -551,7 +551,7 @@ export async function executeAction(
     }
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[NLOps] Action execution failed:', errorMessage);
+    console.error(new Date().toISOString(), '[NLOps] Action execution failed:', errorMessage);
     return { executed: false, result: null, error: errorMessage };
   }
 }
@@ -772,7 +772,7 @@ async function fetchCurrentState(baseUrl: string): Promise<CurrentSystemState> {
       cooldownRemaining: scalerData.cooldownRemaining || 0,
     };
   } catch (error) {
-    console.error('[NLOps] Failed to fetch current state:', error);
+    console.error(new Date().toISOString(), '[NLOps] Failed to fetch current state:', error);
     return {
       vcpu: 1, memoryGiB: 2, autoScalingEnabled: true,
       simulationMode: true, cpuUsage: 0, txPoolCount: 0, cooldownRemaining: 0,
@@ -1084,7 +1084,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<NLOpsResp
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('[NLOps API] Error:', error);
+    console.error(new Date().toISOString(), '[NLOps API] Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     return NextResponse.json(

@@ -15,6 +15,7 @@ import type {
 import { chatCompletion } from './ai-client';
 import { formatAWSCostForReport } from './aws-cost-tracker';
 import { getChainPlugin } from '@/chains';
+import logger from '@/lib/logger';
 
 const REPORTS_DIR = process.env.REPORTS_DIR || 'data/reports';
 
@@ -382,14 +383,14 @@ export async function generateDailyReport(
 
   // Warn if insufficient data
   if (data.snapshots.length < 10) {
-    console.warn(`[Daily Report] Low data: only ${data.snapshots.length} snapshots available`);
+    logger.warn(`[Daily Report] Low data: only ${data.snapshots.length} snapshots available`);
   }
 
   const systemPrompt = buildDailyReportSystemPrompt();
   const userPrompt = buildUserPrompt(data);
 
   try {
-    console.info('[Daily Report] Requesting report from AI provider...');
+    logger.info('[Daily Report] Requesting report from AI provider...');
 
     const aiResult = await chatCompletion({
       systemPrompt,
@@ -425,10 +426,10 @@ ${content}
       const filePath = path.join(dir, `${data.date}.md`);
       await fs.writeFile(filePath, reportMarkdown, 'utf-8');
       reportPath = filePath;
-      console.info(`[Daily Report] Saved to ${filePath}`);
+      logger.info(`[Daily Report] Saved to ${filePath}`);
     } catch (fsError) {
       const msg = fsError instanceof Error ? fsError.message : 'Unknown FS error';
-      console.error(`[Daily Report] Failed to save file: ${msg}`);
+      logger.error(`[Daily Report] Failed to save file: ${msg}`);
       // Continue — report content is still available in the response
     }
 
@@ -458,8 +459,8 @@ ${content}
     return reportResponse;
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Daily Report] AI provider error:', errorMessage);
-    console.info('[Daily Report] Generating fallback report with collected data...');
+    logger.error('[Daily Report] AI provider error:', errorMessage);
+    logger.info('[Daily Report] Generating fallback report with collected data...');
 
     // Generate fallback report using collected data
     const fallbackContent = generateFallbackReport(data);
@@ -482,10 +483,10 @@ ${fallbackContent}
       const filePath = path.join(dir, `${data.date}.md`);
       await fs.writeFile(filePath, reportMarkdown, 'utf-8');
       reportPath = filePath;
-      console.info(`[Daily Report] Fallback report saved to ${filePath}`);
+      logger.info(`[Daily Report] Fallback report saved to ${filePath}`);
     } catch (fsError) {
       const msg = fsError instanceof Error ? fsError.message : 'Unknown FS error';
-      console.error(`[Daily Report] Failed to save fallback report: ${msg}`);
+      logger.error(`[Daily Report] Failed to save fallback report: ${msg}`);
     }
 
     return {

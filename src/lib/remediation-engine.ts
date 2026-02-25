@@ -15,6 +15,7 @@ import { matchPlaybook, getPlaybookByName } from '@/lib/playbook-matcher';
 import { executeAction } from '@/lib/action-executor';
 import * as store from '@/lib/remediation-store';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
+import logger from '@/lib/logger';
 
 // ============================================================
 // UUID Generator
@@ -118,7 +119,7 @@ async function executeActions(
       const result = await executeAction(action, DEFAULT_SCALING_CONFIG);
       Object.assign(actionResult, result);
       
-      console.info(`[Remediation] Action ${action.type}: ${result.status}`);
+      logger.info(`[Remediation] Action ${action.type}: ${result.status}`);
 
       // Wait after execution if specified
       if (action.waitAfterMs && result.status === 'success') {
@@ -132,7 +133,7 @@ async function executeActions(
       
       // Stop on first critical failure (guarded actions)
       if (action.safetyLevel === 'guarded') {
-        console.error(`[Remediation] Critical action failed: ${action.type}`);
+        logger.error(`[Remediation] Critical action failed: ${action.type}`);
         break;
       }
     }
@@ -178,13 +179,13 @@ export async function executeRemediation(
   const config = store.getConfig();
   const startTime = new Date().toISOString();
 
-  console.info(`[Remediation] Triggered for event ${event.id}`);
+  logger.info(`[Remediation] Triggered for event ${event.id}`);
 
   // 1. Match playbook
   const playbook = matchPlaybook(event, analysis);
 
   if (!playbook) {
-    console.info('[Remediation] No matching playbook found');
+    logger.info('[Remediation] No matching playbook found');
     
     // Create a no-op execution record
     const execution: RemediationExecution = {
@@ -203,13 +204,13 @@ export async function executeRemediation(
     return execution;
   }
 
-  console.info(`[Remediation] Matched playbook: ${playbook.name}`);
+  logger.info(`[Remediation] Matched playbook: ${playbook.name}`);
 
   // 2. Safety gate checks
   const safetyCheck = await checkSafetyGates(playbook.name, config);
 
   if (!safetyCheck.allowed) {
-    console.info(`[Remediation] Blocked: ${safetyCheck.reason}`);
+    logger.info(`[Remediation] Blocked: ${safetyCheck.reason}`);
     
     const execution: RemediationExecution = {
       id: generateUUID(),
@@ -255,14 +256,14 @@ export async function executeRemediation(
 
   if (execution.status === 'success') {
     store.recordSuccess(playbook.name);
-    console.info(`[Remediation] ✅ Success: ${playbook.name}`);
+    logger.info(`[Remediation] ✅ Success: ${playbook.name}`);
   } else if (execution.status === 'failed') {
     store.recordFailure(playbook.name);
-    console.info(`[Remediation] ❌ Failed: ${playbook.name}`);
+    logger.info(`[Remediation] ❌ Failed: ${playbook.name}`);
 
     // Try fallback actions if available
     if (playbook.fallback && playbook.fallback.length > 0) {
-      console.info('[Remediation] Attempting fallback actions...');
+      logger.info('[Remediation] Attempting fallback actions...');
       
       const fallbackResults: ActionResult[] = playbook.fallback.map(action => ({
         action,
@@ -278,10 +279,10 @@ export async function executeRemediation(
 
       if (execution.status === 'success') {
         store.recordSuccess(playbook.name);
-        console.info('[Remediation] ✅ Fallback succeeded');
+        logger.info('[Remediation] ✅ Fallback succeeded');
       } else {
         execution.escalationLevel = 1;
-        console.info('[Remediation] ⚠️ Fallback also failed, escalating...');
+        logger.info('[Remediation] ⚠️ Fallback also failed, escalating...');
       }
     } else {
       execution.escalationLevel = 1;
@@ -308,7 +309,7 @@ export async function executePlaybook(
   }
 
   // Manual execution: Skip safety gates (operator override)
-  console.info(`[Remediation] Manual execution: ${playbookName}`);
+  logger.info(`[Remediation] Manual execution: ${playbookName}`);
 
   const execution: RemediationExecution = {
     id: generateUUID(),

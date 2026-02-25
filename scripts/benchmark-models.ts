@@ -51,6 +51,7 @@ import { printResults } from './benchmark/runner';
 import { generateMarkdownReport } from './benchmark/reporter';
 import { BENCHMARK_PROMPTS } from './benchmark/prompts';
 import { TEST_MODELS_QWEN_VS_GPT, BENCHMARK_PRESETS, getModel, getPresetModels } from './benchmark/models-config';
+import { tsConsole } from './console-with-timestamp';
 
 /**
  * Parse command-line arguments
@@ -93,7 +94,7 @@ function parseArgs(): {
       if (presetName in BENCHMARK_PRESETS) {
         result.preset = presetName;
       } else {
-        console.error(`❌ Unknown preset: ${presetName}`);
+        tsConsole.error(`❌ Unknown preset: ${presetName}`);
         process.exit(1);
       }
       i++;
@@ -171,7 +172,7 @@ function listModels(): void {
     },
   };
 
-  console.log(`
+  tsConsole.log(`
 ╔════════════════════════════════════════════════════════════════╗
 ║       SentinAI Model Benchmark - Supported Models             ║
 ╚════════════════════════════════════════════════════════════════╝
@@ -219,7 +220,7 @@ function showHelp(): void {
     .map(([name, config]) => `  ${name}: ${config.description}`)
     .join('\n');
 
-  console.log(`
+  tsConsole.log(`
 SentinAI Model Benchmark Script
 
 Compare performance of multiple AI models using real production prompts.
@@ -290,7 +291,7 @@ async function main(): Promise<void> {
     .map(([name]) => name.slice(3).toLowerCase()) as AIProvider[];
 
   if (availableProviders.length === 0) {
-    console.error(
+    tsConsole.error(
       '❌ No AI API keys found. Please set at least one of:\n' +
       '  QWEN_API_KEY\n' +
       '  ANTHROPIC_API_KEY\n' +
@@ -306,11 +307,11 @@ async function main(): Promise<void> {
   if (options.preset) {
     // Use preset configuration
     modelsToTest = getPresetModels(options.preset);
-    console.log(`📋 Using preset: ${options.preset}`);
-    console.log(`📊 Models: ${modelsToTest.map(m => m.id).join(', ')}`);
+    tsConsole.log(`📋 Using preset: ${options.preset}`);
+    tsConsole.log(`📊 Models: ${modelsToTest.map(m => m.id).join(', ')}`);
     const iterations = BENCHMARK_PRESETS[options.preset].iterations;
     options.iterations = iterations;
-    console.log(`🔁 Iterations (from preset): ${iterations}`);
+    tsConsole.log(`🔁 Iterations (from preset): ${iterations}`);
   } else if (options.modelIds && options.modelIds.length > 0) {
     // Use manually specified models
     const modelsMap = new Map<string, any>();
@@ -320,27 +321,27 @@ async function main(): Promise<void> {
       .map(id => {
         const model = getModel(id);
         if (!model) {
-          console.error(`❌ Unknown model: ${id}`);
+          tsConsole.error(`❌ Unknown model: ${id}`);
           process.exit(1);
         }
         return model;
       });
 
-    console.log(`🎯 Testing specified models: ${options.modelIds.join(', ')}`);
+    tsConsole.log(`🎯 Testing specified models: ${options.modelIds.join(', ')}`);
   } else {
     // Default: use standard preset
     modelsToTest = getPresetModels('standard');
-    console.log(`📋 No preset/models specified, using standard preset`);
-    console.log(`📊 Models: ${modelsToTest.map(m => m.id).join(', ')}`);
+    tsConsole.log(`📋 No preset/models specified, using standard preset`);
+    tsConsole.log(`📊 Models: ${modelsToTest.map(m => m.id).join(', ')}`);
   }
 
   if (modelsToTest.length === 0) {
-    console.error('❌ No models to test');
+    tsConsole.error('❌ No models to test');
     process.exit(1);
   }
 
-  console.log(`📄 Prompts: ${BENCHMARK_PROMPTS.map(p => p.id).join(', ')}`);
-  console.log(`🔁 Iterations: ${options.iterations}\n`);
+  tsConsole.log(`📄 Prompts: ${BENCHMARK_PROMPTS.map(p => p.id).join(', ')}`);
+  tsConsole.log(`🔁 Iterations: ${options.iterations}\n`);
 
   // Run benchmarks
   const results = await runAllBenchmarks({
@@ -357,21 +358,21 @@ async function main(): Promise<void> {
   printResults(results, aggregated);
 
   // Generate report (Markdown only)
-  console.log(`📝 Generating report...`);
+  tsConsole.log(`📝 Generating report...`);
   const mdPath = await generateMarkdownReport(
     results,
     aggregated,
     options.outputDir
   );
 
-  console.log(`✅ Report generated:`);
-  console.log(`   Markdown: ${path.relative(process.cwd(), mdPath)}\n`);
+  tsConsole.log(`✅ Report generated:`);
+  tsConsole.log(`   Markdown: ${path.relative(process.cwd(), mdPath)}\n`);
 
   process.exit(0);
 }
 
 // Run
 main().catch(err => {
-  console.error('❌ Benchmark error:', err);
+  tsConsole.error('❌ Benchmark error:', err);
   process.exit(1);
 });

@@ -9,6 +9,7 @@ import { NextResponse } from 'next/server';
 import { getSchedulerStatus } from '@/lib/scheduler';
 import { getAgentCycleHistory, getAgentCycleCount, getLastCycleResult } from '@/lib/agent-loop';
 import { isAutoScalingEnabled, isSimulationMode, checkCooldown } from '@/lib/k8s-scaler';
+import logger from '@/lib/logger';
 
 export async function GET(request: Request) {
   try {
@@ -49,7 +50,7 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[API] Agent loop status error:', message);
+    logger.error('[API] Agent loop status error:', message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

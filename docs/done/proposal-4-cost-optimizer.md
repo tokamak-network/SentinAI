@@ -333,7 +333,7 @@ export function clearUsageData(): void {
  * const patterns = analyzePatterns(7);
 * // Monday 10:00 AM pattern
  * const mondayMorning = patterns.find(p => p.dayOfWeek === 1 && p.hourOfDay === 10);
-* console.log(`평그 vCPU: ${mondayMorning?.avgVcpu}`);
+* console.log(new Date().toISOString(), `평그 vCPU: ${mondayMorning?.avgVcpu}`);
  * ```
  */
 export function analyzePatterns(days: number = 7): UsagePattern[] {
@@ -750,7 +750,7 @@ const insight = String(parsed.insight || 'Data analysis completed.');
     return { recommendations, insight };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Cost Optimizer] AI Gateway Error:', errorMessage);
+    console.error(new Date().toISOString(), '[Cost Optimizer] AI Gateway Error:', errorMessage);
 
 // Fallback: Generate default recommendation
     return generateFallbackRecommendations(summary, days);
@@ -844,7 +844,7 @@ const insight = Analyzed ${summary.dataPointCount} data for `${days} days. ` +
  * @example
  * ```typescript
  * const report = await generateCostReport(7);
-* console.log(`Total savings possible: ${report.totalSavingsPercent}%`);
+* console.log(new Date().toISOString(), `Total savings possible: ${report.totalSavingsPercent}%`);
  * ```
  */
 export async function generateCostReport(days: number = 7): Promise<CostReport> {
@@ -926,12 +926,12 @@ export async function GET(request: Request) {
       }
     }
 
-    console.log(`[Cost Report API] Generating report for ${days} days`);
+    console.log(new Date().toISOString(), `[Cost Report API] Generating report for ${days} days`);
     const startTime = Date.now();
 
     const report = await generateCostReport(days);
 
-    console.log(`[Cost Report API] Report generated in ${Date.now() - startTime}ms`);
+    console.log(new Date().toISOString(), `[Cost Report API] Report generated in ${Date.now() - startTime}ms`);
 
     return NextResponse.json(report, {
       headers: {
@@ -940,7 +940,7 @@ export async function GET(request: Request) {
     });
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Cost Report API] Error:', errorMessage);
+    console.error(new Date().toISOString(), '[Cost Report API] Error:', errorMessage);
 
     return NextResponse.json(
       {
@@ -1086,7 +1086,7 @@ export default function Dashboard() {
       setCostReport(data);
       setShowCostAnalysis(true);
     } catch (e) {
-      console.error('Cost report error:', e);
+      console.error(new Date().toISOString(), 'Cost report error:', e);
     } finally {
       setIsLoadingCostReport(false);
     }

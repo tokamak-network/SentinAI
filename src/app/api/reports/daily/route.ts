@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAccumulatedData, getAccumulatorStatus, initializeAccumulator, takeSnapshot } from '@/lib/daily-accumulator';
 import { generateDailyReport, readExistingReport, listReports } from '@/lib/daily-report-generator';
 import type { DailyReportRequest } from '@/types/daily-report';
+import logger from '@/lib/logger';
 
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -84,7 +85,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('GET /api/reports/daily error:', message);
+    logger.error('GET /api/reports/daily error:', message);
     return NextResponse.json(
       { success: false, error: message },
       { status: 500 }
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result, { status: statusCode });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('POST /api/reports/daily error:', message);
+    logger.error('POST /api/reports/daily error:', message);
     return NextResponse.json(
       {
         success: false,

@@ -204,12 +204,12 @@ export class RedisStateStore implements IStateStore {
 
     this.client.on('connect', () => {
       this.connected = true;
-      console.log('[Redis Store] Connected');
+      console.log(new Date().toISOString(), '[Redis Store] Connected');
     });
 
     this.client.on('error', (err) => {
       this.connected = false;
-      console.error('[Redis Store] Error:', err.message);
+      console.error(new Date().toISOString(), '[Redis Store] Error:', err.message);
     });
 
     this.client.on('close', () => {
@@ -218,7 +218,7 @@ export class RedisStateStore implements IStateStore {
 
     // Initiate connection
     this.client.connect().catch((err) => {
-      console.error('[Redis Store] Initial connection failed:', err.message);
+      console.error(new Date().toISOString(), '[Redis Store] Initial connection failed:', err.message);
     });
   }
 
@@ -518,13 +518,13 @@ export function getStore(): IStateStore {
   const redisUrl = process.env.REDIS_URL;
 
   if (redisUrl) {
-    console.log('[State Store] Using Redis:', redisUrl.replace(/\/\/.*@/, '//<credentials>@'));
+    console.log(new Date().toISOString(), '[State Store] Using Redis:', redisUrl.replace(/\/\/.*@/, '//<credentials>@'));
     storeInstance = new RedisStateStore({
       url: redisUrl,
       ...DEFAULT_REDIS_CONFIG,
     });
   } else {
-    console.log('[State Store] Using InMemory (set REDIS_URL for persistence)');
+    console.log(new Date().toISOString(), '[State Store] Using InMemory (set REDIS_URL for persistence)');
     storeInstance = new InMemoryStateStore();
   }
 
@@ -801,7 +801,7 @@ export async function getCurrentVcpu(
     return parseFloat(cpuStr) || 1;
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Failed to get current vCPU:', message);
+    console.error(new Date().toISOString(), 'Failed to get current vCPU:', message);
     const state = await getStore().getScalingState();
     return state.currentVcpu || 1;
   }
@@ -974,7 +974,7 @@ export async function scaleOpGeth(
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Scaling failed:', errorMessage);
+    console.error(new Date().toISOString(), 'Scaling failed:', errorMessage);
     return {
       success: false,
       previousVcpu: currentVcpu,
@@ -1093,7 +1093,7 @@ export async function predictScaling(
   // Check minimum data points
   const dataPointCount = await getMetricsCount();
   if (dataPointCount < config.minDataPoints) {
-    console.log(`Insufficient data for prediction: ${dataPointCount}/${config.minDataPoints} points`);
+    console.log(new Date().toISOString(), `Insufficient data for prediction: ${dataPointCount}/${config.minDataPoints} points`);
     return null;
   }
 
@@ -1101,7 +1101,7 @@ export async function predictScaling(
   const userPrompt = await buildUserPrompt(currentVcpu);
 
   try {
-    console.log(`[Predictive Scaler] Requesting prediction from AI Gateway...`);
+    console.log(new Date().toISOString(), `[Predictive Scaler] Requesting prediction from AI Gateway...`);
 
     const response = await fetch(`${AI_GATEWAY_URL}/v1/chat/completions`, {
       method: 'POST',
@@ -1134,7 +1134,7 @@ export async function predictScaling(
       return prediction;
     }
 
-    console.warn('AI returned invalid response, using fallback prediction');
+    console.warn(new Date().toISOString(), 'AI returned invalid response, using fallback prediction');
     const fallback = await generateFallbackPrediction(currentVcpu);
     await store.setLastPredictionTime(now);
     await store.setLastPrediction(fallback);
@@ -1142,7 +1142,7 @@ export async function predictScaling(
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Prediction AI Gateway Error:', errorMessage);
+    console.error(new Date().toISOString(), 'Prediction AI Gateway Error:', errorMessage);
 
     const fallback = await generateFallbackPrediction(currentVcpu);
     await store.setLastPredictionTime(now);

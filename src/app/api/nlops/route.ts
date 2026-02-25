@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processCommand, isNLOpsEnabled } from '@/lib/nlops-engine';
 import type { NLOpsRequest, NLOpsResponse } from '@/types/nlops';
+import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -37,7 +38,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<NLOpsResp
 
     return NextResponse.json(response);
   } catch (error) {
-    console.error('[NLOps API] Error:', error);
+    logger.error('[NLOps API] Error:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
     return NextResponse.json(

@@ -22,6 +22,7 @@ import { getDisputeGameMonitor } from '@/lib/dispute-game-monitor';
 import { checkDerivationLag, isL1Healthy } from '@/lib/derivation-lag-monitor';
 import { resolveBlockInterval } from '@/lib/block-interval';
 import type { AnomalyResult } from '@/types/anomaly';
+import logger from '@/lib/logger';
 
 // Whether anomaly detection is enabled (default: enabled)
 const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'false';
@@ -141,7 +142,7 @@ async function getDisputeGameStatus(l1RpcUrl: string) {
             lastCheckedAt: new Date().toISOString(),
         };
     } catch (error) {
-        console.warn('[Metrics API] Failed to fetch dispute game status:', error instanceof Error ? error.message : error);
+        logger.warn('[Metrics API] Failed to fetch dispute game status:', error instanceof Error ? error.message : error);
         return {
             enabled: true,
             activeGames: 0,
@@ -296,7 +297,7 @@ async function getComponentDetails(component: string, labelSelector: string, dis
     } catch (e) {
         // Only log detailed errors if DEBUG_K8S is enabled
         if (process.env.DEBUG_K8S === 'true') {
-            console.error(`Failed to fetch ${displayName}:`, e);
+            logger.error(`Failed to fetch ${displayName}:`, e);
         }
         return {
             component,
@@ -464,7 +465,7 @@ export async function GET(request: Request) {
         });
     }
     // Debug: Log incoming request URL
-    console.info('[API] Request URL:', request.url);
+    logger.info('[API] Request URL:', request.url);
     const startTotal = performance.now();
 
     try {
@@ -496,7 +497,7 @@ export async function GET(request: Request) {
             getContainerCpuUsage(),
             getAllContainerUsage(),
         ]);
-        console.info(`[Timer] K8s Fetch: ${(performance.now() - startK8s).toFixed(2)}ms`);
+        logger.info(`[Timer] K8s Fetch: ${(performance.now() - startK8s).toFixed(2)}ms`);
 
         const components = fetchedComponents.filter((component): component is ComponentDetail => Boolean(component));
 
@@ -577,7 +578,7 @@ export async function GET(request: Request) {
                 clearTimeout(txPoolTimeoutId);
             }
         }
-        console.info(`[Timer] RPC Fetch: ${(performance.now() - startRpc).toFixed(2)}ms`);
+        logger.info(`[Timer] RPC Fetch: ${(performance.now() - startRpc).toFixed(2)}ms`);
 
         // 3. Check if seed scenario is active - use stored metrics if so
         // Get seed scenario from state store (cross-worker persistence)
@@ -587,14 +588,14 @@ export async function GET(request: Request) {
 
         // Only enter seed path when an active seed scenario exists (not 'live')
         if (activeScenario && activeScenario !== 'live') {
-            console.info(`[Metrics API] activeScenario from state store: ${activeScenario}`);
+            logger.info(`[Metrics API] activeScenario from state store: ${activeScenario}`);
             const recentMetrics = await getRecentMetrics();
             if (recentMetrics && recentMetrics.length > 0) {
                 const latestMetric = recentMetrics[recentMetrics.length - 1];
                 if (latestMetric && latestMetric.cpuUsage !== undefined) {
                     seedMetricData = latestMetric;
                     usingSeedMetrics = true;
-                    console.info(`[Metrics API] Using seed metrics from store (scenario: ${activeScenario})`);
+                    logger.info(`[Metrics API] Using seed metrics from store (scenario: ${activeScenario})`);
                 }
             }
         }
@@ -613,7 +614,7 @@ export async function GET(request: Request) {
             gasUsedRatio = seedMetricData.gasUsedRatio;
             blockInterval = seedMetricData.blockInterval;
             cpuSource = 'seed';
-            console.info(`[Metrics API] Using seed CPU=${realCpu.toFixed(1)}%, txPool=${effectiveTx}`);
+            logger.info(`[Metrics API] Using seed CPU=${realCpu.toFixed(1)}%, txPool=${effectiveTx}`);
         } else {
             // Use real K8s metrics
             const gasUsed = Number(block.gasUsed);
@@ -642,15 +643,15 @@ export async function GET(request: Request) {
         // Apply seed scenario vCPU progression if active (before stress mode)
         // Use seed data's vCPU directly (works across worker threads)
         if (usingSeedMetrics && seedMetricData && seedMetricData.currentVcpu) {
-            console.info(`[Metrics API] Using seed data vCPU = ${seedMetricData.currentVcpu}`);
+            logger.info(`[Metrics API] Using seed data vCPU = ${seedMetricData.currentVcpu}`);
             currentVcpu = seedMetricData.currentVcpu;
         } else if (activeScenario && activeScenario !== 'live') {
             // Fallback: try to get vCPU from in-memory profile if seed data unavailable
             const seedVcpu = getCurrentVcpu();
-            console.info(`[Metrics API] Seed scenario active (${activeScenario}): using vCPU = ${seedVcpu}`);
+            logger.info(`[Metrics API] Seed scenario active (${activeScenario}): using vCPU = ${seedVcpu}`);
             currentVcpu = seedVcpu;
         } else if (!activeScenario || activeScenario === 'live') {
-            console.info(`[Metrics API] No active seed scenario, using K8s vCPU = ${currentVcpu}`);
+            logger.info(`[Metrics API] No active seed scenario, using K8s vCPU = ${currentVcpu}`);
         }
 
         if (isStressTest) {
@@ -745,7 +746,7 @@ export async function GET(request: Request) {
             detectedAnomalies = detection.anomalies;
             activeAnomalyEventId = detection.activeEventId;
           } catch (anomalyError) {
-            console.error('[Anomaly] Detection pipeline error:', anomalyError);
+            logger.error('[Anomaly] Detection pipeline error:', anomalyError);
           }
         }
 
@@ -894,11 +895,11 @@ export async function GET(request: Request) {
 
         // Disable caching
         response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
-        console.info(`[Timer] Total GET: ${(performance.now() - startTotal).toFixed(2)}ms`);
+        logger.info(`[Timer] Total GET: ${(performance.now() - startTotal).toFixed(2)}ms`);
         return response;
 
     } catch (error) {
-        console.error("Metric Fetch Error:", error);
+        logger.error("Metric Fetch Error:", error);
         return NextResponse.json(
             { error: "Failed to fetch L2 metrics" },
             { status: 500 }

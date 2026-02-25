@@ -2,6 +2,7 @@
  * Seed vCPU Manager
  * Manages simulated vCPU/Memory changes during seed scenario injection
  */
+import logger from '@/lib/logger';
 
 type Scenario = 'stable' | 'rising' | 'spike' | 'falling' | 'live' | null;
 
@@ -53,7 +54,7 @@ export function initVcpuProfile(scenario: Scenario): void {
     currentIndex: 0,
     startTime: Date.now(),
   };
-  console.info(`[Seed vCPU Manager] Initialized for scenario: ${scenario}, values:`, profile.vcpuValues);
+  logger.info(`[Seed vCPU Manager] Initialized for scenario: ${scenario}, values:`, profile.vcpuValues);
 }
 
 /**
@@ -86,7 +87,7 @@ export function getCurrentVcpu(): number {
   if (calculatedIndex !== profile.currentIndex) {
     const prevIndex = profile.currentIndex;
     profile.currentIndex = newIndex;
-    console.info(`[Seed vCPU] ${profile.scenario} scenario: elapsed ${(elapsedMs / 1000).toFixed(1)}s, index ${prevIndex} → ${newIndex}, vCPU = ${interpolated.toFixed(2)}`);
+    logger.info(`[Seed vCPU] ${profile.scenario} scenario: elapsed ${(elapsedMs / 1000).toFixed(1)}s, index ${prevIndex} → ${newIndex}, vCPU = ${interpolated.toFixed(2)}`);
   }
 
   return interpolated;

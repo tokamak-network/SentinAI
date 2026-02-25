@@ -17,6 +17,7 @@ import { chatCompletion } from './ai-client';
 import { parseAIJSON } from './ai-response-parser';
 import { getChainPlugin } from '@/chains';
 import { generateSavingsAdvice } from './savings-advisor';
+import logger from '@/lib/logger';
 
 // ============================================================
 // Cost Calculation Utilities
@@ -217,7 +218,7 @@ async function getAIRecommendations(
     return { recommendations, insight };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Cost Optimizer] AI provider error:', errorMessage);
+    logger.error('[Cost Optimizer] AI provider error:', errorMessage);
 
     // Fallback: generate default recommendations
     return generateFallbackRecommendations(summary, days);

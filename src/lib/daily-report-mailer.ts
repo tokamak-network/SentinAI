@@ -4,6 +4,7 @@
  */
 
 import { readExistingReport } from './daily-report-generator';
+import logger from '@/lib/logger';
 
 // ============================================================================
 // Types
@@ -229,7 +230,7 @@ export async function deliverDailyReport(date: Date): Promise<DeliveryResult> {
     const dateStr = formatDate(date);
 
     // 1. Read the existing report file
-    console.info(`[DailyReportMailer] Fetching report for ${dateStr}...`);
+    logger.info(`[DailyReportMailer] Fetching report for ${dateStr}...`);
     const reportContent = await readExistingReport(dateStr);
 
     if (!reportContent) {
@@ -247,7 +248,7 @@ export async function deliverDailyReport(date: Date): Promise<DeliveryResult> {
     // 3. Get webhook URL from environment
     const webhookUrl = process.env.ALERT_WEBHOOK_URL;
     if (!webhookUrl) {
-      console.warn('[DailyReportMailer] ALERT_WEBHOOK_URL not configured');
+      logger.warn('[DailyReportMailer] ALERT_WEBHOOK_URL not configured');
       return {
         success: false,
         method: 'slack',
@@ -257,7 +258,7 @@ export async function deliverDailyReport(date: Date): Promise<DeliveryResult> {
     }
 
     // 4. Send webhook request
-    console.info(`[DailyReportMailer] Sending report to Slack...`);
+    logger.info(`[DailyReportMailer] Sending report to Slack...`);
     const response = await fetch(webhookUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -267,7 +268,7 @@ export async function deliverDailyReport(date: Date): Promise<DeliveryResult> {
 
     if (!response.ok) {
       const errorText = await response.text().catch(() => 'Unknown error');
-      console.error(`[DailyReportMailer] Webhook failed with status ${response.status}: ${errorText}`);
+      logger.error(`[DailyReportMailer] Webhook failed with status ${response.status}: ${errorText}`);
       return {
         success: false,
         method: 'slack',
@@ -277,7 +278,7 @@ export async function deliverDailyReport(date: Date): Promise<DeliveryResult> {
     }
 
     // 5. Success
-    console.info(`[DailyReportMailer] Report delivered successfully to Slack`);
+    logger.info(`[DailyReportMailer] Report delivered successfully to Slack`);
     return {
       success: true,
       method: 'slack',
@@ -286,7 +287,7 @@ export async function deliverDailyReport(date: Date): Promise<DeliveryResult> {
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error(`[DailyReportMailer] Delivery failed: ${message}`);
+    logger.error(`[DailyReportMailer] Delivery failed: ${message}`);
     return {
       success: false,
       method: 'slack',

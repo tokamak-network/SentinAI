@@ -37,6 +37,7 @@ import { DEFAULT_PREDICTION_CONFIG } from '@/types/prediction';
 import type { MetricDataPoint } from '@/types/prediction';
 import type { ScalingMetrics } from '@/types/scaling';
 import type { AgentMemoryEntry, AgentPhaseTraceEntry, DecisionTrace, DecisionVerification } from '@/types/agent-memory';
+import logger from '@/lib/logger';
 
 // ============================================================
 // Constants
@@ -144,7 +145,7 @@ async function getRecentSafeMetrics(): Promise<CollectedMetrics | null> {
 async function collectMetrics(): Promise<CollectedMetrics | null> {
   const rpcUrl = process.env.L2_RPC_URL;
   if (!rpcUrl) {
-    console.warn('[AgentLoop] L2_RPC_URL not set, skipping metrics collection');
+    logger.warn('[AgentLoop] L2_RPC_URL not set, skipping metrics collection');
     return null;
   }
 
@@ -156,7 +157,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     const recentMetrics = await getRecentMetrics(1);
     if (recentMetrics && recentMetrics.length > 0) {
       const seedMetric = recentMetrics[0];
-      console.info(`[AgentLoop] Using seed metrics (${activeSeedScenario}): CPU=${seedMetric.cpuUsage.toFixed(1)}%, TxPool=${seedMetric.txPoolPending}, vCPU=${seedMetric.currentVcpu}`);
+      logger.info(`[AgentLoop] Using seed metrics (${activeSeedScenario}): CPU=${seedMetric.cpuUsage.toFixed(1)}%, TxPool=${seedMetric.txPoolPending}, vCPU=${seedMetric.currentVcpu}`);
       return {
         dataPoint: seedMetric,
         l1BlockHeight: 0, // Seed metrics don't include L1
@@ -181,7 +182,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     l1BlockNumber = await l1Client.getBlockNumber();
     reportL1Success();
   } catch (l1Error) {
-    console.warn('[AgentLoop] L1 RPC failed, attempting failover...');
+    logger.warn('[AgentLoop] L1 RPC failed, attempting failover...');
 
     const newUrl = await reportL1Failure(
       l1Error instanceof Error ? l1Error : new Error(String(l1Error))
@@ -202,10 +203,10 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
           toUrl: newUrl,
           k8sUpdated: true,
         };
-        console.info(`[AgentLoop] L1 RPC failover success: ${newUrl}`);
+        logger.info(`[AgentLoop] L1 RPC failover success: ${newUrl}`);
       } catch {
         // Retry also failed — continue without L1
-        console.error('[AgentLoop] L1 RPC retry after failover also failed');
+        logger.error('[AgentLoop] L1 RPC retry after failover also failed');
         l1BlockNumber = BigInt(0);
         failoverInfo = {
           triggered: true,
@@ -216,7 +217,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
       }
     } else {
       // No failover available — continue without L1
-      console.warn('[AgentLoop] No failover available, continuing without L1');
+      logger.warn('[AgentLoop] No failover available, continuing without L1');
       l1BlockNumber = BigInt(0);
     }
   }
@@ -248,7 +249,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
       if (challengerBal !== null) challengerBalanceEth = parseFloat(formatEther(challengerBal));
     } catch {
       // Non-blocking: balance fetch failure doesn't kill the cycle
-      console.warn('[AgentLoop] EOA balance fetch failed, continuing');
+      logger.warn('[AgentLoop] EOA balance fetch failed, continuing');
     }
   }
 
@@ -398,7 +399,7 @@ async function buildScalingPlan(
         targetVcpu = clampToValidVcpu(prediction.predictedVcpu);
         reason = `[Predictive] ${prediction.reasoning} (Confidence: ${(prediction.confidence * 100).toFixed(0)}%)`;
         confidence = prediction.confidence;
-        console.info(`[AgentLoop] Predictive override: ${currentVcpu} → ${targetVcpu} vCPU`);
+        logger.info(`[AgentLoop] Predictive override: ${currentVcpu} → ${targetVcpu} vCPU`);
       }
     } catch {
       // Prediction failure is non-fatal
@@ -466,7 +467,7 @@ async function executeScalingPlan(plan: ScalingPlan): Promise<AgentCycleResult['
       reason: plan.reason,
     });
 
-    console.info(`[AgentLoop] Scaling executed: ${scaleResult.previousVcpu} → ${scaleResult.currentVcpu} vCPU`);
+    logger.info(`[AgentLoop] Scaling executed: ${scaleResult.previousVcpu} → ${scaleResult.currentVcpu} vCPU`);
   }
 
   return result;
@@ -560,7 +561,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
   const phaseTrace: AgentPhaseTraceEntry[] = [];
   const degradedReasons: string[] = [];
 
-  console.info('[Agent Loop] Starting cycle...');
+  logger.info('[Agent Loop] Starting cycle...');
 
   const beginPhase = (
     phase: AgentPhaseTraceEntry['phase']
@@ -640,7 +641,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
     try {
       const replacement = await checkProxydBackends();
       if (replacement) {
-        console.info(`[AgentLoop] Proxyd backend replaced: ${replacement.backendName} → ${replacement.newUrl}`);
+        logger.info(`[AgentLoop] Proxyd backend replaced: ${replacement.backendName} → ${replacement.newUrl}`);
         proxydReplacement = {
           triggered: true,
           backendName: replacement.backendName,
@@ -734,7 +735,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      console.warn('[AgentLoop] Memory retrieval failed during planning:', message);
+      logger.warn('[AgentLoop] Memory retrieval failed during planning:', message);
       degradedReasons.push('plan-memory-retrieval-failed');
     }
 
@@ -782,11 +783,11 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
     };
     await pushCycleResult(result);
     await persistDecisionArtifacts(result);
-    console.info(`[Agent Loop] Cycle complete: score=${scaling?.score}, L2=${dataPoint.blockHeight}`);
+    logger.info(`[Agent Loop] Cycle complete: score=${scaling?.score}, L2=${dataPoint.blockHeight}`);
     return result;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[AgentLoop] Cycle failed:', errorMsg);
+    logger.error('[AgentLoop] Cycle failed:', errorMsg);
     const result: AgentCycleResult = {
       timestamp,
       phase: 'error',
@@ -949,7 +950,7 @@ async function persistDecisionArtifacts(result: AgentCycleResult): Promise<void>
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.warn('[AgentLoop] Failed to persist decision artifacts:', message);
+    logger.warn('[AgentLoop] Failed to persist decision artifacts:', message);
   }
 }
 

@@ -71,25 +71,25 @@ export class LLMStressTestOrchestrator {
       'src/lib/__tests__/llm-stress-test/output'
     );
 
-    console.info(`✅ Initialized ${this.clients.length} clients`);
-    console.info(`   Providers: ${providers.join(', ')}`);
-    console.info(`   Tiers: ${tiers.join(', ')}`);
-    console.info(`   Output directory: ${this.outputDir}`);
+    console.info(new Date().toISOString(), `✅ Initialized ${this.clients.length} clients`);
+    console.info(new Date().toISOString(), `   Providers: ${providers.join(', ')}`);
+    console.info(new Date().toISOString(), `   Tiers: ${tiers.join(', ')}`);
+    console.info(new Date().toISOString(), `   Output directory: ${this.outputDir}`);
   }
 
   /**
    * Run all scenarios and save results
    */
   async runAll(): Promise<void> {
-    console.info('\n🚀 Starting LLM Stress Tests...\n');
-    console.info(`Clients: ${this.clients.length}`);
-    console.info(`Scenarios: ${this.scenarios.length}\n`);
+    console.info(new Date().toISOString(), '\n🚀 Starting LLM Stress Tests...\n');
+    console.info(new Date().toISOString(), `Clients: ${this.clients.length}`);
+    console.info(new Date().toISOString(), `Scenarios: ${this.scenarios.length}\n`);
 
     const allResults: any[] = [];
     const startTime = Date.now();
 
     for (const scenario of this.scenarios) {
-      console.info(`▶️  Running: ${scenario.name}`);
+      console.info(new Date().toISOString(), `▶️  Running: ${scenario.name}`);
       const scenarioStartTime = Date.now();
 
       try {
@@ -97,15 +97,15 @@ export class LLMStressTestOrchestrator {
         allResults.push(...results);
 
         const scenarioDuration = ((Date.now() - scenarioStartTime) / 1000).toFixed(1);
-        console.info(`✅ Completed: ${results.length} results in ${scenarioDuration}s\n`);
+        console.info(new Date().toISOString(), `✅ Completed: ${results.length} results in ${scenarioDuration}s\n`);
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : String(error);
-        console.error(`❌ Failed: ${errorMsg}\n`);
+        console.error(new Date().toISOString(), `❌ Failed: ${errorMsg}\n`);
       }
     }
 
     const totalDuration = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.info(`\n📊 All tests completed in ${totalDuration}s\n`);
+    console.info(new Date().toISOString(), `\n📊 All tests completed in ${totalDuration}s\n`);
 
     // Save results
     await this.saveResults(allResults);
@@ -131,22 +131,22 @@ export class LLMStressTestOrchestrator {
     // Write Markdown report
     const reportPath = path.join(this.outputDir, `report-${timestamp}.md`);
     await fs.writeFile(reportPath, markdownReport, 'utf8');
-    console.info(`  📄 ${path.relative(process.cwd(), reportPath)}`);
+    console.info(new Date().toISOString(), `  📄 ${path.relative(process.cwd(), reportPath)}`);
 
     // Write JSON results
     const jsonPath = path.join(this.outputDir, `results-${timestamp}.json`);
     await fs.writeFile(jsonPath, jsonReport, 'utf8');
-    console.info(`  📄 ${path.relative(process.cwd(), jsonPath)}`);
+    console.info(new Date().toISOString(), `  📄 ${path.relative(process.cwd(), jsonPath)}`);
 
     // Summary
     const totalRequests = results.reduce((s: number, r: any) => s + r.totalRequests, 0);
     const totalCost = results.reduce((s: number, r: any) => s + r.totalCostUsd, 0);
     const avgAccuracy = results.reduce((s: number, r: any) => s + r.accuracy, 0) / results.length;
 
-    console.info(`\n📈 Summary:`);
-    console.info(`  Total requests: ${totalRequests.toLocaleString()}`);
-    console.info(`  Total cost: $${totalCost.toFixed(2)}`);
-    console.info(`  Average accuracy: ${avgAccuracy.toFixed(1)}%`);
+    console.info(new Date().toISOString(), `\n📈 Summary:`);
+    console.info(new Date().toISOString(), `  Total requests: ${totalRequests.toLocaleString()}`);
+    console.info(new Date().toISOString(), `  Total cost: $${totalCost.toFixed(2)}`);
+    console.info(new Date().toISOString(), `  Average accuracy: ${avgAccuracy.toFixed(1)}%`);
   }
 }
 
@@ -160,7 +160,7 @@ if (require.main === module) {
   });
 
   orchestrator.runAll().catch(error => {
-    console.error('❌ Test failed:', error);
+    console.error(new Date().toISOString(), '❌ Test failed:', error);
     process.exit(1);
   });
 }

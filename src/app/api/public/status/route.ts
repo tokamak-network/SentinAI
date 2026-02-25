@@ -12,6 +12,7 @@ import { getRecentMetrics } from '@/lib/metrics-store';
 import { getEvents } from '@/lib/anomaly-event-store';
 import { getAgentCycleCount, getLastCycleResult } from '@/lib/agent-loop';
 import type { AnomalyEvent } from '@/types/anomaly';
+import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
@@ -231,7 +232,7 @@ export async function GET(): Promise<NextResponse<PublicStatusResponse | { error
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Internal error';
-    console.error('[Public Status API] Error:', message);
+    logger.error('[Public Status API] Error:', message);
     return NextResponse.json(
       { error: 'Status information is temporarily unavailable' },
       { status: 500 },

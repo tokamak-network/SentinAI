@@ -23,6 +23,7 @@ import {
   getEventById,
 } from '@/lib/anomaly-event-store';
 import { getAllLiveLogs } from '@/lib/log-ingester';
+import logger from '@/lib/logger';
 
 // ============================================================
 // Types
@@ -51,7 +52,7 @@ export async function runDetectionPipeline(
   const anomalies = detectAnomalies(dataPoint, history, balances);
 
   if (anomalies.length > 0) {
-    console.info(`[Detection] ${anomalies.length} anomalies detected`);
+    logger.info(`[Detection] ${anomalies.length} anomalies detected`);
 
     const event = await createOrUpdateEvent(anomalies);
 
@@ -60,7 +61,7 @@ export async function runDetectionPipeline(
     if (!event.deepAnalysis) {
       deepAnalysisTriggered = true;
       runDeepAnalysis(event.id, anomalies, dataPoint).catch((err) => {
-        console.error('[Detection] Unexpected deep analysis error:', err);
+        logger.error('[Detection] Unexpected deep analysis error:', err);
       });
     }
 
@@ -111,12 +112,12 @@ async function runDeepAnalysis(
           await executeRemediation(event, analysis);
         }
       } catch (err) {
-        console.error('[Layer4] Remediation failed:', err);
+        logger.error('[Layer4] Remediation failed:', err);
       }
     }
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[Detection] AI analysis failed:', errorMsg);
+    logger.error('[Detection] AI analysis failed:', errorMsg);
     await addDeepAnalysis(eventId, {
       severity: 'medium',
       anomalyType: 'performance',

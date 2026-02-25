@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import Redis from 'ioredis';
+import { tsConsole } from './console-with-timestamp.mjs';
 
 const DEFAULT_STALE_SECONDS = 120;
 const DEFAULT_KEY_PREFIX = 'sentinai:';
@@ -42,12 +43,12 @@ function loadEnvLocalIfPresent() {
 }
 
 function fail(message, code = EXIT_STALE) {
-  console.error(`[agent-heartbeat] CRITICAL: ${message}`);
+  tsConsole.error(`[agent-heartbeat] CRITICAL: ${message}`);
   process.exit(code);
 }
 
 function ok(message) {
-  console.log(`[agent-heartbeat] OK: ${message}`);
+  tsConsole.log(`[agent-heartbeat] OK: ${message}`);
   process.exit(EXIT_OK);
 }
 

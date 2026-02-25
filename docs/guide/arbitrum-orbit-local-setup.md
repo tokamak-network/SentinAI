@@ -268,7 +268,7 @@ npm run dev:low-level
 ```bash
 node -e "
 const { privateKeyToAccount } = require('viem/accounts');
-console.log(privateKeyToAccount(process.env.BATCH_POSTER_PRIVATE_KEY).address);
+console.log(new Date().toISOString(), privateKeyToAccount(process.env.BATCH_POSTER_PRIVATE_KEY).address);
 "
 ```
 

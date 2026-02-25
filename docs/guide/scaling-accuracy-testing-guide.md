@@ -370,10 +370,10 @@ describe('Scenario: my_scenario', () => {
   const result = backtestScenario(MY_SCENARIO);
 
   it('should report accuracy against operator expectations', () => {
-    console.log(`  my_scenario accuracy: ${result.accuracy.toFixed(1)}%`);
+    console.log(new Date().toISOString(), `  my_scenario accuracy: ${result.accuracy.toFixed(1)}%`);
     for (const s of result.stepDecisions) {
       const mark = s.correct ? 'OK' : s.vcpuDelta > 0 ? 'OVER' : 'UNDER';
-      console.log(`    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu} (score=${s.decision.score})`);
+      console.log(new Date().toISOString(), `    [${mark}] ${s.step.label}: expected=${s.step.expectedVcpu} got=${s.decision.targetVcpu} (score=${s.decision.score})`);
     }
     expect(result.accuracy).toBeGreaterThanOrEqual(50);
   });
@@ -432,9 +432,9 @@ describe('Predictive: my_scenario', () => {
   const result = backtestPredictiveScenario(MY_PREDICTIVE_SCENARIO);
 
   it('should report reactive vs combined accuracy', () => {
-    console.log(`  Reactive: ${result.reactiveAccuracy.toFixed(1)}%`);
-    console.log(`  Combined: ${result.combinedAccuracy.toFixed(1)}%`);
-    console.log(`  Overrides: ${result.overrideCount} (helpful=${result.helpfulOverrides})`);
+    console.log(new Date().toISOString(), `  Reactive: ${result.reactiveAccuracy.toFixed(1)}%`);
+    console.log(new Date().toISOString(), `  Combined: ${result.combinedAccuracy.toFixed(1)}%`);
+    console.log(new Date().toISOString(), `  Overrides: ${result.overrideCount} (helpful=${result.helpfulOverrides})`);
     expect(result.combinedAccuracy).toBeGreaterThanOrEqual(50);
   });
 });

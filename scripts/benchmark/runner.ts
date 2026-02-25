@@ -9,6 +9,7 @@ import type { AIProvider } from '@/lib/ai-client';
 import type { BenchmarkResult, AggregatedResult } from './types';
 import type { ModelDef } from './models-config';
 import { BENCHMARK_PROMPTS } from './prompts';
+import { tsConsole } from '../console-with-timestamp';
 
 /**
  * Run single benchmark test for a specific model
@@ -72,7 +73,7 @@ async function runSingleTest(
     const errorMsg = err instanceof Error ? err.message : String(err);
     // Log detailed error for debugging
     if (process.env.DEBUG_BENCHMARK) {
-      console.error(`  [DEBUG] ${model.id}/${promptId} error:`, errorMsg);
+      tsConsole.error(`  [DEBUG] ${model.id}/${promptId} error:`, errorMsg);
     }
     return {
       promptId,
@@ -116,19 +117,19 @@ export async function runAllBenchmarks(config: {
 
   const totalTests = BENCHMARK_PROMPTS.length * modelsToTest.length * config.iterations;
 
-  console.log(
+  tsConsole.log(
     chalk.cyan(`\n🚀 Starting benchmarks (${totalTests} total tests)\n`)
   );
 
   let completed = 0;
 
   for (const prompt of BENCHMARK_PROMPTS) {
-    console.log(
+    tsConsole.log(
       chalk.yellow(`\n▶ Prompt: ${prompt.id} (${prompt.tier} tier)`)
     );
 
     for (const model of modelsToTest) {
-      console.log(chalk.gray(`  Model: ${model.id} (${model.description})`));
+      tsConsole.log(chalk.gray(`  Model: ${model.id} (${model.description})`));
 
       const timeout = model.tier === 'fast' ? config.timeoutFast : config.timeoutBest;
 
@@ -163,7 +164,7 @@ export async function runAllBenchmarks(config: {
     }
   }
 
-  console.log(chalk.green(`\n✅ All benchmarks completed!\n`));
+  tsConsole.log(chalk.green(`\n✅ All benchmarks completed!\n`));
   return results;
 }
 
@@ -226,23 +227,23 @@ export function printResults(
   const totalCost = results.reduce((a, r) => a + r.costUsd, 0);
   const avgAccuracy = results.filter(r => r.accuracy === 1).length / results.length;
 
-  console.log(chalk.bold('\n📊 Benchmark Summary\n'));
-  console.log(`Total Tests: ${results.length}`);
-  console.log(`Success: ${successful.length} | Failed: ${results.length - successful.length}`);
-  console.log(`Total Cost: $${totalCost.toFixed(4)}`);
-  console.log(`Average Accuracy: ${(avgAccuracy * 100).toFixed(1)}%\n`);
+  tsConsole.log(chalk.bold('\n📊 Benchmark Summary\n'));
+  tsConsole.log(`Total Tests: ${results.length}`);
+  tsConsole.log(`Success: ${successful.length} | Failed: ${results.length - successful.length}`);
+  tsConsole.log(`Total Cost: $${totalCost.toFixed(4)}`);
+  tsConsole.log(`Average Accuracy: ${(avgAccuracy * 100).toFixed(1)}%\n`);
 
   // Detailed breakdown
-  console.log(chalk.bold('Per-Prompt Breakdown\n'));
+  tsConsole.log(chalk.bold('Per-Prompt Breakdown\n'));
 
   for (const prompt of BENCHMARK_PROMPTS) {
     const promptResults = aggregated.filter(r => r.promptId === prompt.id);
     if (promptResults.length === 0) continue;
 
-    console.log(chalk.cyan(`${prompt.id} (${prompt.tier} tier)`));
-    console.log('┌───────────────────┬─────────┬─────────┬──────────┬─────────────┐');
-    console.log('│ Model             │ Avg(ms) │ P95(ms) │ Cost($)  │ Accuracy(%) │');
-    console.log('├───────────────────┼─────────┼─────────┼──────────┼─────────────┤');
+    tsConsole.log(chalk.cyan(`${prompt.id} (${prompt.tier} tier)`));
+    tsConsole.log('┌───────────────────┬─────────┬─────────┬──────────┬─────────────┐');
+    tsConsole.log('│ Model             │ Avg(ms) │ P95(ms) │ Cost($)  │ Accuracy(%) │');
+    tsConsole.log('├───────────────────┼─────────┼─────────┼──────────┼─────────────┤');
 
     for (const result of promptResults) {
       const modelLabel = result.modelId.padEnd(17);
@@ -251,16 +252,16 @@ export function printResults(
       const cost = result.avgCostUsd.toFixed(5).padStart(8);
       const accuracy = (result.accuracy * 100).toFixed(0).padStart(11);
 
-      console.log(
+      tsConsole.log(
         `│ ${modelLabel} │ ${avg} │ ${p95} │ ${cost} │ ${accuracy} │`
       );
     }
 
-    console.log('└───────────────────┴─────────┴─────────┴──────────┴─────────────┘\n');
+    tsConsole.log('└───────────────────┴─────────┴─────────┴──────────┴─────────────┘\n');
   }
 
   // Top performers
-  console.log(chalk.bold('🏆 Top Performers\n'));
+  tsConsole.log(chalk.bold('🏆 Top Performers\n'));
 
   const byLatency = [...aggregated].sort(
     (a, b) => a.avgLatencyMs - b.avgLatencyMs
@@ -272,22 +273,22 @@ export function printResults(
     (a, b) => b.accuracy - a.accuracy
   ).slice(0, 3);
 
-  console.log('Fastest:');
+  tsConsole.log('Fastest:');
   for (const r of byLatency) {
-    console.log(`  ${r.modelId} (${r.avgLatencyMs.toFixed(0)}ms)`);
+    tsConsole.log(`  ${r.modelId} (${r.avgLatencyMs.toFixed(0)}ms)`);
   }
 
-  console.log('\nCheapest:');
+  tsConsole.log('\nCheapest:');
   for (const r of byCost) {
-    console.log(
+    tsConsole.log(
       `  ${r.modelId} ($${r.avgCostUsd.toFixed(5)}/req)`
     );
   }
 
-  console.log('\nMost Accurate:');
+  tsConsole.log('\nMost Accurate:');
   for (const r of byAccuracy) {
-    console.log(`  ${r.modelId} (${(r.accuracy * 100).toFixed(1)}%)`);
+    tsConsole.log(`  ${r.modelId} (${(r.accuracy * 100).toFixed(1)}%)`);
   }
 
-  console.log();
+  tsConsole.log();
 }

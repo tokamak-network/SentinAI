@@ -7,6 +7,7 @@ import { getL1FailoverState, getConfigMapToml, resolveProxydConfigMapName } from
 import { maskUrl } from '@/lib/l1-rpc-failover';
 import { getNamespace } from '@/lib/k8s-config';
 import TOML from '@iarna/toml';
+import logger from '@/lib/logger';
 
 export async function GET() {
   try {
@@ -54,7 +55,7 @@ export async function GET() {
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
-    console.error('[L1 Failover API] Error:', message);
+    logger.error('[L1 Failover API] Error:', message);
     return Response.json({ error: message }, { status: 500 });
   }
 }

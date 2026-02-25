@@ -742,7 +742,7 @@ volumes:
 | AI response abnormal | `choices[0]?.message?.content \|\| ''` Fallback |
 | File system write failure | returns error, `reportContent` included in API response |
 | Existing report exists | Error if `force=false`, overwrite if `force=true` |
-| Data < 10 snapshots | `console.warn()` warning, report generation in progress |
+| Data < 10 snapshots | `console.warn(new Date().toISOString())` warning, report generation in progress |
 | 서버 재시작 | Reset accumulator (lose previous data), write to `metadata.dataGaps` |
 | Date change (midnight) | Automatic creation of new date data structures. 23:55 Report retains previous data. |
 | `getAccumulatedData()` Request past date | returns null (in-memory, available today only) |

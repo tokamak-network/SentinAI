@@ -581,13 +581,13 @@ export async function zeroDowntimeScale(
 
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('[ZeroDowntime] Orchestration failed:', errorMessage);
+    console.error(new Date().toISOString(), '[ZeroDowntime] Orchestration failed:', errorMessage);
 
     // Attempt rollback
     try {
       await rollback(config);
     } catch (rollbackError) {
-      console.error('[ZeroDowntime] Rollback also failed:', rollbackError);
+      console.error(new Date().toISOString(), '[ZeroDowntime] Rollback also failed:', rollbackError);
     }
 
     swapState.phase = 'failed';
@@ -1104,7 +1104,7 @@ Phase 4: Verification
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Scaling failed:', errorMessage);
+    console.error(new Date().toISOString(), 'Scaling failed:', errorMessage);
     return {
       success: false,
       previousVcpu: currentVcpu,

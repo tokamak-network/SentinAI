@@ -30,7 +30,7 @@ function logK8sWarning(message: string): void {
   if (!isDevelopmentEnvironment()) {
     logger.warn(message);
   } else if (process.env.DEBUG_K8S === 'true') {
-    console.debug(`[K8s Config] ${message}`);
+    logger.debug(`[K8s Config] ${message}`);
   }
 }
 

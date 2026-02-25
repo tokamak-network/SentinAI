@@ -248,14 +248,14 @@ export async function getAllBalanceStatus(
 
       if (detectedBatcher) {
         batcherAddr = detectedBatcher;
-        console.log(`[EOA Monitor] Auto-detected batcher: ${batcherAddr}`);
+        console.log(new Date().toISOString(), `[EOA Monitor] Auto-detected batcher: ${batcherAddr}`);
       }
       if (detectedProposer) {
         proposerAddr = detectedProposer;
-        console.log(`[EOA Monitor] Auto-detected proposer: ${proposerAddr}`);
+        console.log(new Date().toISOString(), `[EOA Monitor] Auto-detected proposer: ${proposerAddr}`);
       }
     } catch (err) {
-      console.warn('[EOA Monitor] Auto-detection failed, continuing with available addresses');
+      console.warn(new Date().toISOString(), '[EOA Monitor] Auto-detection failed, continuing with available addresses');
     }
   }
 

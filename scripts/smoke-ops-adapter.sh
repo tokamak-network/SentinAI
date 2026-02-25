@@ -16,8 +16,8 @@ PLAN_JSON=$(curl -sS "$BASE/v1/ops/plan" \
 
 echo "$PLAN_JSON" | head -c 400; echo
 
-PLAN_ID=$(node -e "const x=JSON.parse(process.argv[1]);console.log(x.planId)" "$PLAN_JSON")
-CONFIRM=$(node -e "const x=JSON.parse(process.argv[1]);console.log(x.confirmToken)" "$PLAN_JSON")
+PLAN_ID=$(node -e "const x=JSON.parse(process.argv[1]);process.stdout.write(String(x.planId))" "$PLAN_JSON")
+CONFIRM=$(node -e "const x=JSON.parse(process.argv[1]);process.stdout.write(String(x.confirmToken))" "$PLAN_JSON")
 
 echo "[3] verify"
 curl -sS "$BASE/v1/ops/verify" \
