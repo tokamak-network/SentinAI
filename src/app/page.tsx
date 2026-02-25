@@ -421,6 +421,13 @@ const METRICS_REFRESH_INTERVAL_MS = 60_000;
 const AGENT_LOOP_REFRESH_INTERVAL_MS = 30_000;
 
 const AUTONOMY_LEVEL_OPTIONS: RuntimeAutonomyPolicyData['level'][] = ['A0', 'A1', 'A2', 'A3', 'A4', 'A5'];
+/** Auto-select intent when a seed scenario is injected */
+const SEED_INTENT_MAP: Record<string, AutonomousIntentData> = {
+  spike:   'stabilize_throughput',
+  rising:  'reduce_cost_idle_window',
+  stable:  'protect_critical_eoa',
+  falling: 'recover_sequencer_path',
+};
 const AUTONOMOUS_INTENT_OPTIONS: Array<{ value: AutonomousIntentData; label: string }> = [
   { value: 'stabilize_throughput', label: 'Stabilize Throughput' },
   { value: 'recover_sequencer_path', label: 'Recover Sequencer Path' },
@@ -497,6 +504,7 @@ export default function Dashboard() {
   const [autonomousIntent, setAutonomousIntent] = useState<AutonomousIntentData>('recover_sequencer_path');
   const [autonomousPlanId, setAutonomousPlanId] = useState<string | null>(null);
   const [autonomousOperationId, setAutonomousOperationId] = useState<string | null>(null);
+  const [autonomousPlanSteps, setAutonomousPlanSteps] = useState<Array<{ title: string; risk: string }> | null>(null);
   const [autonomyActionFeedback, setAutonomyActionFeedback] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -711,6 +719,13 @@ export default function Dashboard() {
         const injectedCount = typeof body.injectedCount === 'number' ? body.injectedCount : null;
         const goalsQueued = typeof body.goalsQueued === 'number' ? body.goalsQueued : 0;
         const goalsSuffix = goalsQueued > 0 ? ` · ${goalsQueued} goals queued` : '';
+        // Auto-select the most relevant intent for this scenario
+        const suggestedIntent = SEED_INTENT_MAP[scenario];
+        if (suggestedIntent) setAutonomousIntent(suggestedIntent);
+        // Reset previous plan so the new scenario starts fresh
+        setAutonomousPlanId(null);
+        setAutonomousOperationId(null);
+        setAutonomousPlanSteps(null);
         setAutonomyActionFeedback({
           type: 'success',
           message: injectedCount !== null
@@ -779,10 +794,16 @@ export default function Dashboard() {
         if (plan?.planId) {
           setAutonomousPlanId(plan.planId);
         }
-        const stepCount = Array.isArray(plan?.steps) ? plan.steps.length : 0;
+        const rawSteps = Array.isArray(plan?.steps) ? plan.steps : [];
+        setAutonomousPlanSteps(
+          rawSteps.map((s) => {
+            const step = s as { title?: string; risk?: string };
+            return { title: step.title ?? '', risk: step.risk ?? 'low' };
+          })
+        );
         setAutonomyActionFeedback({
           type: 'success',
-          message: `Autonomous plan created (${stepCount} steps) for ${autonomousIntent}.`,
+          message: `Autonomous plan created (${rawSteps.length} steps) for ${autonomousIntent}.`,
         });
       } else if (action === 'autonomous-execute') {
         const res = await fetch(`${BASE_PATH}/api/autonomous/execute`, {
@@ -1799,6 +1820,22 @@ export default function Dashboard() {
               <p className="mt-2 text-[10px] text-gray-500">
                 planId: <span className="font-mono text-gray-700">{shortId(autonomousPlanId, 14)}</span> · operationId: <span className="font-mono text-gray-700">{shortId(autonomousOperationId, 14)}</span>
               </p>
+              {autonomousPlanSteps && autonomousPlanSteps.length > 0 && (
+                <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden">
+                  {autonomousPlanSteps.map((step, i) => (
+                    <div key={i} className="flex items-center gap-1.5 px-2.5 py-1.5 border-b border-gray-100 last:border-b-0 bg-white">
+                      <span className="text-[10px] text-gray-400 w-3 shrink-0">{i + 1}</span>
+                      <span className="text-[11px] text-gray-700 flex-1">{step.title}</span>
+                      <span className={`text-[9px] font-semibold px-1.5 py-0.5 rounded ${
+                        step.risk === 'critical' ? 'bg-red-100 text-red-600' :
+                        step.risk === 'high'     ? 'bg-orange-100 text-orange-600' :
+                        step.risk === 'medium'   ? 'bg-amber-100 text-amber-600' :
+                                                   'bg-emerald-100 text-emerald-600'
+                      }`}>{step.risk}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {autonomyActionFeedback && (
