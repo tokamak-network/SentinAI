@@ -44,6 +44,7 @@ function generateScenarioData(scenario: Scenario, forceAnomaly: boolean): Metric
   const points: MetricDataPoint[] = [];
   const count = 20;
   const now = Date.now();
+  const pointIntervalMs = scenario === 'spike' && forceAnomaly ? 30_000 : 60_000;
 
   // Calculate TTL expiry: now + 40 seconds
   const ttlExpiry = new Date(now + SEED_TTL_SECONDS * 1000).toISOString();
@@ -53,7 +54,7 @@ function generateScenarioData(scenario: Scenario, forceAnomaly: boolean): Metric
 
   for (let i = 0; i < count; i++) {
     const t = i / (count - 1); // 0 to 1
-    const timestamp = new Date(now - (count - 1 - i) * 60_000).toISOString();
+    const timestamp = new Date(now - (count - 1 - i) * pointIntervalMs).toISOString();
 
     let cpuUsage: number;
     let txPoolPending: number;
@@ -76,7 +77,10 @@ function generateScenarioData(scenario: Scenario, forceAnomaly: boolean): Metric
         break;
 
       case 'spike':
-        if (i < count - 5) {
+        // Keep a longer deterministic tail for forceAnomaly mode so the
+        // 5-minute monotonic window always lands on increasing data points.
+        const spikeTailLength = forceAnomaly ? 12 : 5;
+        if (i < count - spikeTailLength) {
           cpuUsage = jitter(30, 3);
           txPoolPending = Math.round(jitter(50, 15));
           gasUsedRatio = jitter(0.25, 0.05);
@@ -84,7 +88,7 @@ function generateScenarioData(scenario: Scenario, forceAnomaly: boolean): Metric
         } else {
           // Keep the tail deterministic and strictly increasing so monotonic rule
           // consistently triggers in demo/repro environments.
-          const tailIndex = i - (count - 5); // 0..4
+          const tailIndex = i - (count - spikeTailLength);
           const baseTx = forceAnomaly ? 5000 : 2400;
           const stepTx = forceAnomaly ? 1200 : 500;
 

@@ -729,6 +729,9 @@ export async function GET(request: Request) {
             blockHeight: Number(blockNumber),
             blockInterval,
             currentVcpu,
+            ...(usingSeedMetrics && seedMetricData?.seedTtlExpiry
+              ? { seedTtlExpiry: seedMetricData.seedTtlExpiry }
+              : {}),
           };
           await pushMetric(dataPoint);
         }
