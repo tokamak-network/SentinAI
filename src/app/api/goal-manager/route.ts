@@ -35,6 +35,7 @@ export async function GET(request: NextRequest) {
       dlq: state.dlq,
       candidates: state.candidates,
       suppression: state.suppression,
+      lastTickSuppressedCount: state.lastTickSuppressedCount,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

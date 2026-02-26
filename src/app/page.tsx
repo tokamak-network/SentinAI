@@ -274,6 +274,7 @@ interface GoalManagerStatusData {
     reasonCode: string;
     timestamp: string;
   }>;
+  lastTickSuppressedCount?: number;
 }
 
 interface RuntimeAutonomyPolicyData {
@@ -1700,7 +1701,7 @@ export default function Dashboard() {
                 </p>
                 <div className="flex items-center gap-2 text-[10px]">
                   <span className="bg-amber-100 text-amber-700 px-1.5 py-0.5 rounded font-bold">
-                    suppression {goalManager?.suppression?.length || 0}
+                    suppression {goalManager?.lastTickSuppressedCount ?? 0}
                   </span>
                   <span className="bg-red-100 text-red-700 px-1.5 py-0.5 rounded font-bold">
                     dlq {goalManager?.dlq?.length || 0}
@@ -1882,8 +1883,8 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <p className="mt-2 text-[10px] text-gray-500">
-                planId: <span className="font-mono text-gray-700">{shortId(autonomousPlanId, 14)}</span> · operationId: <span className="font-mono text-gray-700">{shortId(autonomousOperationId, 14)}</span>
+              <p className="mt-2 text-[10px] text-gray-500 break-all">
+                planId: <span className="font-mono text-gray-700">{autonomousPlanId || '-'}</span> · operationId: <span className="font-mono text-gray-700">{autonomousOperationId || '-'}</span>
               </p>
               {autonomousPlanSteps && autonomousPlanSteps.length > 0 && (
                 <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden">

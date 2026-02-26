@@ -24,6 +24,9 @@ import type { GoalDlqItem } from '@/types/goal-orchestrator';
 const DEFAULT_CANDIDATE_LIMIT = 6;
 const DEFAULT_QUEUE_LIMIT = 100;
 
+/** Suppressed candidate count from the most recent tick (resets on process restart) */
+let _lastTickSuppressedCount = 0;
+
 export interface GoalManagerConfig {
   enabled: boolean;
   dispatchEnabled: boolean;
@@ -179,6 +182,7 @@ export async function tickGoalManager(now: number = Date.now()): Promise<GoalMan
     });
   }
 
+  _lastTickSuppressedCount = prioritized.suppressed.length;
   await Promise.all(prioritized.queued.map((item) => store.upsertAutonomousGoalQueueItem(item)));
   await persistSuppressionRecords(prioritized.suppressed);
 
@@ -204,6 +208,7 @@ export async function listGoalManagerState(limit: number = 50): Promise<{
   candidates: AutonomousGoalCandidate[];
   suppression: GoalSuppressionRecord[];
   dlq: GoalDlqItem[];
+  lastTickSuppressedCount: number;
 }> {
   const safeLimit = Math.min(Math.max(limit, 1), 500);
   const store = getStore();
@@ -221,6 +226,7 @@ export async function listGoalManagerState(limit: number = 50): Promise<{
     candidates,
     suppression,
     dlq,
+    lastTickSuppressedCount: _lastTickSuppressedCount,
   };
 }
 
