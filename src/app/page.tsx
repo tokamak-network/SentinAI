@@ -518,6 +518,11 @@ export default function Dashboard() {
   const [costAnalysisData, setCostAnalysisData] = useState<CostReport | null>(null);
   const [costAnalysisLoading, setCostAnalysisLoading] = useState(false);
 
+  // --- Session Savings Counter ---
+  const sessionSavingsRef = useRef<number>(0);
+  const [sessionSavingsDisplay, setSessionSavingsDisplay] = useState<number>(0);
+  const currentCostRef = useRef<{ monthlyCost: number; fixedCost: number }>({ monthlyCost: 42, fixedCost: 166 });
+
   // --- Public Status / Showcase Banner State ---
   const [publicStatus, setPublicStatus] = useState<PublicStatus | null>(null);
   const [toastDismissed, setToastDismissed] = useState(true);
@@ -978,6 +983,11 @@ export default function Dashboard() {
         const data = await res.json();
 
         setCurrent(data);
+        // Keep cost ref in sync so the 1s savings counter uses the latest rate
+        currentCostRef.current = {
+          monthlyCost: data.cost?.opGethMonthlyCost ?? data.cost?.monthlyEstimated ?? 42,
+          fixedCost: data.cost?.fixedCost ?? 166,
+        };
 
         const point = {
           name: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -1115,6 +1125,18 @@ export default function Dashboard() {
     fetchAnomalies();
     const interval = setInterval(fetchAnomalies, AGENT_LOOP_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
+  }, []);
+
+  // --- Session Savings Counter: tick every 1s ---
+  useEffect(() => {
+    const ticker = setInterval(() => {
+      const { monthlyCost, fixedCost } = currentCostRef.current;
+      // hourly savings = (fixedCost - monthlyCost) / 730; per second = / 3600
+      const savingsPerSecond = (fixedCost - monthlyCost) / 730 / 3600;
+      sessionSavingsRef.current += savingsPerSecond;
+      setSessionSavingsDisplay(sessionSavingsRef.current);
+    }, 1000);
+    return () => clearInterval(ticker);
   }, []);
 
   if (isLoading) return (
@@ -1462,35 +1484,72 @@ export default function Dashboard() {
 
         {/* Card 1: Monthly Cost */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
-          <div data-testid="monthly-cost">
-            <span className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider">Monthly Cost</span>
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-4xl font-black text-gray-900">
-                ${(current?.cost.opGethMonthlyCost || current?.cost.monthlyEstimated || 42).toFixed(0)}
-              </span>
-              <span className="text-base font-bold text-gray-400">/mo</span>
-            </div>
-            <p className="text-gray-400 text-[10px] mt-1">
-              {current?.metrics.gethVcpu || 1} vCPU · {current?.metrics.gethMemGiB || 2} GiB
-            </p>
-          </div>
-          <div className="mt-3 pt-3 border-t border-gray-100">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] text-gray-400">vs Fixed 4 vCPU (${current?.cost.fixedCost?.toFixed(0) || '166'}/mo)</span>
-              <span className={`text-xs font-bold ${current?.cost.isPeakMode ? 'text-red-500' : 'text-green-600'}`}>
-                {current?.cost.isPeakMode ? '+' : ''}{((current?.cost.monthlySaving || 0) / (current?.cost.fixedCost || 166) * -100).toFixed(0)}%
-              </span>
-            </div>
-            <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${current?.cost.isPeakMode ? 'bg-red-400' : 'bg-green-400'}`}
-                style={{ width: `${Math.min(Math.max(((current?.cost.opGethMonthlyCost || 42) / (current?.cost.fixedCost || 166)) * 100, 5), 100)}%` }}
-              />
-            </div>
-            <div className="flex justify-between mt-1">
-              <span className="text-[9px] text-gray-400">$0</span>
-              <span className="text-[9px] text-gray-400">${current?.cost.fixedCost?.toFixed(0) || '166'}</span>
-            </div>
+          {(() => {
+            const monthlyCost = current?.cost.opGethMonthlyCost ?? current?.cost.monthlyEstimated ?? 42;
+            const fixedCost = current?.cost.fixedCost ?? 166;
+            const vcpu = current?.metrics.gethVcpu ?? 1;
+            const memGiB = current?.metrics.gethMemGiB ?? 2;
+            const isPeak = current?.cost.isPeakMode ?? false;
+            const hourlyRate = monthlyCost / 730;
+            const baselineHourly = fixedCost / 730;
+            const savingsPct = ((fixedCost - monthlyCost) / fixedCost * 100);
+            const barPct = Math.min(Math.max((monthlyCost / fixedCost) * 100, 5), 100);
+            const scenarioLabel = vcpu >= 8 ? { text: 'Emergency', color: 'text-red-500 bg-red-50' }
+              : vcpu >= 4 ? { text: 'High Load',  color: 'text-orange-500 bg-orange-50' }
+              : vcpu >= 2 ? { text: 'Moderate',   color: 'text-amber-500 bg-amber-50' }
+              :             { text: 'Optimized',  color: 'text-emerald-600 bg-emerald-50' };
+            const sessionAbs = Math.abs(sessionSavingsDisplay);
+            const sessionIsOverspend = sessionSavingsDisplay < -0.001;
+            return (
+              <>
+                <div data-testid="monthly-cost">
+                  <div className="flex items-start justify-between">
+                    <span className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider">Monthly Cost</span>
+                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${scenarioLabel.color}`}>
+                      {scenarioLabel.text}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-1">
+                    <span className="text-4xl font-black text-gray-900">
+                      ${monthlyCost.toFixed(0)}
+                    </span>
+                    <span className="text-base font-bold text-gray-400">/mo</span>
+                    <span className={`ml-auto text-[11px] font-semibold ${isPeak ? 'text-red-500' : 'text-gray-500'}`}>
+                      ${hourlyRate.toFixed(3)}/hr
+                    </span>
+                  </div>
+                  <p className="text-gray-400 text-[10px] mt-0.5">
+                    {vcpu} vCPU · {memGiB} GiB · baseline ${baselineHourly.toFixed(3)}/hr
+                  </p>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] text-gray-400">vs Fixed 4 vCPU (${fixedCost.toFixed(0)}/mo)</span>
+                    <span className={`text-xs font-bold ${isPeak ? 'text-red-500' : 'text-green-600'}`}>
+                      {isPeak ? '+' : '-'}{Math.abs(savingsPct).toFixed(0)}%
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${isPeak ? 'bg-red-400' : 'bg-emerald-400'}`}
+                      style={{ width: `${barPct}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-[9px] text-gray-400">$0</span>
+                    <span className="text-[9px] text-gray-400">${fixedCost.toFixed(0)}</span>
+                  </div>
+                  {/* Session Savings Counter */}
+                  <div className={`mt-2.5 flex items-center justify-between px-2.5 py-1.5 rounded-lg ${sessionIsOverspend ? 'bg-red-50' : 'bg-emerald-50'}`}>
+                    <span className="text-[10px] text-gray-500">Session {sessionIsOverspend ? 'overspend' : 'savings'}</span>
+                    <span className={`text-[11px] font-bold tabular-nums ${sessionIsOverspend ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {sessionIsOverspend ? '+' : '-'}${sessionAbs.toFixed(4)}
+                    </span>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
             <button
               onClick={() => {
                 if (costAnalysisExpanded) {
@@ -1571,7 +1630,6 @@ export default function Dashboard() {
                 )}
               </div>
             )}
-          </div>
         </div>
       </div>
 
