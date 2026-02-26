@@ -664,18 +664,18 @@ export default function Dashboard() {
 
   const refreshAutonomyPanels = async () => {
     try {
-      const [goalManagerRes, policyRes] = await Promise.all([
+      const [goalManagerResult, policyResult] = await Promise.allSettled([
         fetch(`${BASE_PATH}/api/goal-manager?limit=20`, { cache: 'no-store' }),
         fetch(`${BASE_PATH}/api/policy/autonomy-level`, { cache: 'no-store' }),
       ]);
 
-      if (goalManagerRes.ok) {
-        const goalManagerData = await goalManagerRes.json() as GoalManagerStatusData;
+      if (goalManagerResult.status === 'fulfilled' && goalManagerResult.value.ok) {
+        const goalManagerData = await goalManagerResult.value.json() as GoalManagerStatusData;
         setGoalManager(goalManagerData);
       }
 
-      if (policyRes.ok) {
-        const policyData = await policyRes.json() as { policy?: RuntimeAutonomyPolicyData };
+      if (policyResult.status === 'fulfilled' && policyResult.value.ok) {
+        const policyData = await policyResult.value.json() as { policy?: RuntimeAutonomyPolicyData };
         if (policyData.policy) {
           setAutonomyPolicy(policyData.policy);
         }
@@ -1076,18 +1076,18 @@ export default function Dashboard() {
   useEffect(() => {
     const fetchAutonomyPanelsData = async () => {
       try {
-        const [goalManagerRes, policyRes] = await Promise.all([
+        const [goalManagerResult, policyResult] = await Promise.allSettled([
           fetch(`${BASE_PATH}/api/goal-manager?limit=20`, { cache: 'no-store' }),
           fetch(`${BASE_PATH}/api/policy/autonomy-level`, { cache: 'no-store' }),
         ]);
 
-        if (goalManagerRes.ok) {
-          const goalManagerData = await goalManagerRes.json() as GoalManagerStatusData;
+        if (goalManagerResult.status === 'fulfilled' && goalManagerResult.value.ok) {
+          const goalManagerData = await goalManagerResult.value.json() as GoalManagerStatusData;
           setGoalManager(goalManagerData);
         }
 
-        if (policyRes.ok) {
-          const policyData = await policyRes.json() as { policy?: RuntimeAutonomyPolicyData };
+        if (policyResult.status === 'fulfilled' && policyResult.value.ok) {
+          const policyData = await policyResult.value.json() as { policy?: RuntimeAutonomyPolicyData };
           if (policyData.policy) {
             setAutonomyPolicy(policyData.policy);
           }
