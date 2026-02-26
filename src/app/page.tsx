@@ -1150,7 +1150,7 @@ export default function Dashboard() {
 
   const isReadOnlyMode = process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE === 'true';
   const isGoalManagerEnabled = goalManager?.config.enabled === true;
-  const networkName = current?.chain?.displayName || process.env.NEXT_PUBLIC_NETWORK_NAME;
+  const networkName = process.env.NEXT_PUBLIC_NETWORK_NAME || current?.chain?.displayName;
   const eoaRoleEntries = Object.entries(current?.eoaBalances?.roles || {}).filter(([, value]) => value !== null);
   const showL1Failover = Boolean(l1Failover && current?.chain?.capabilities?.l1Failover !== false);
   const showFaultProof = Boolean(current?.chain?.capabilities?.disputeGameMonitoring && current?.disputeGames?.enabled);
