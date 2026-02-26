@@ -1516,12 +1516,12 @@ export default function Dashboard() {
                     <span className="text-base font-bold text-gray-400">/mo</span>
                   </div>
                   <p className="text-gray-400 text-[10px] mt-0.5">
-                    {vcpu} vCPU · {memGiB} GiB · ${hourlyRate.toFixed(3)}/hr now
+                    {vcpu} vCPU · {memGiB} GiB · ${hourlyRate.toFixed(3)}/hr est.
                   </p>
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-100">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-gray-400">vs Fixed 4 vCPU (${fixedCost.toFixed(0)}/mo)</span>
+                    <span className="text-[10px] text-gray-400">vs 4 vCPU Fargate baseline (${fixedCost.toFixed(0)}/mo)</span>
                     <span className={`text-xs font-bold ${isPeak ? 'text-red-500' : 'text-green-600'}`}>
                       {isPeak ? '+' : '-'}{Math.abs(savingsPct).toFixed(0)}%
                     </span>
