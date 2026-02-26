@@ -1,4 +1,5 @@
 import {
+  Activity,
   Eye,
   Brain,
   Zap,
