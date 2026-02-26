@@ -518,10 +518,6 @@ export default function Dashboard() {
   const [costAnalysisData, setCostAnalysisData] = useState<CostReport | null>(null);
   const [costAnalysisLoading, setCostAnalysisLoading] = useState(false);
 
-  // --- Session Savings Counter ---
-  const sessionSavingsRef = useRef<number>(0);
-  const [sessionSavingsDisplay, setSessionSavingsDisplay] = useState<number>(0);
-  const currentCostRef = useRef<{ monthlyCost: number; fixedCost: number }>({ monthlyCost: 42, fixedCost: 166 });
 
   // --- Public Status / Showcase Banner State ---
   const [publicStatus, setPublicStatus] = useState<PublicStatus | null>(null);
@@ -983,11 +979,6 @@ export default function Dashboard() {
         const data = await res.json();
 
         setCurrent(data);
-        // Keep cost ref in sync so the 1s savings counter uses the latest rate
-        currentCostRef.current = {
-          monthlyCost: data.cost?.opGethMonthlyCost ?? data.cost?.monthlyEstimated ?? 42,
-          fixedCost: data.cost?.fixedCost ?? 166,
-        };
 
         const point = {
           name: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -1127,17 +1118,6 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // --- Session Savings Counter: tick every 1s ---
-  useEffect(() => {
-    const ticker = setInterval(() => {
-      const { monthlyCost, fixedCost } = currentCostRef.current;
-      // hourly savings = (fixedCost - monthlyCost) / 730; per second = / 3600
-      const savingsPerSecond = (fixedCost - monthlyCost) / 730 / 3600;
-      sessionSavingsRef.current += savingsPerSecond;
-      setSessionSavingsDisplay(sessionSavingsRef.current);
-    }, 1000);
-    return () => clearInterval(ticker);
-  }, []);
 
   if (isLoading) return (
     <div className="flex h-screen w-full items-center justify-center bg-gray-50 text-blue-600">
@@ -1498,8 +1478,8 @@ export default function Dashboard() {
               : vcpu >= 4 ? { text: 'High Load',  color: 'text-orange-500 bg-orange-50' }
               : vcpu >= 2 ? { text: 'Moderate',   color: 'text-amber-500 bg-amber-50' }
               :             { text: 'Optimized',  color: 'text-emerald-600 bg-emerald-50' };
-            const sessionAbs = Math.abs(sessionSavingsDisplay);
-            const sessionIsOverspend = sessionSavingsDisplay < -0.001;
+            const estMonthlySavings = fixedCost - monthlyCost;
+            const isOverspend = estMonthlySavings < 0;
             return (
               <>
                 <div data-testid="monthly-cost">
@@ -1536,11 +1516,11 @@ export default function Dashboard() {
                     <span className="text-[9px] text-gray-400">$0</span>
                     <span className="text-[9px] text-gray-400">${fixedCost.toFixed(0)}</span>
                   </div>
-                  {/* Session Savings Counter */}
-                  <div className={`mt-2.5 flex items-center justify-between px-2.5 py-1.5 rounded-lg ${sessionIsOverspend ? 'bg-red-50' : 'bg-emerald-50'}`}>
-                    <span className="text-[10px] text-gray-500">Session {sessionIsOverspend ? 'overspend' : 'savings'}</span>
-                    <span className={`text-[11px] font-bold tabular-nums ${sessionIsOverspend ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {sessionIsOverspend ? '+' : '-'}${sessionAbs.toFixed(4)}
+                  {/* Est. Monthly Savings */}
+                  <div className={`mt-2.5 flex items-center justify-between px-2.5 py-1.5 rounded-lg ${isOverspend ? 'bg-red-50' : 'bg-emerald-50'}`}>
+                    <span className="text-[10px] text-gray-500">Est. monthly savings</span>
+                    <span className={`text-[11px] font-bold tabular-nums ${isOverspend ? 'text-red-600' : 'text-emerald-600'}`}>
+                      {isOverspend ? '-' : '+'}${Math.abs(estMonthlySavings).toFixed(0)}/mo
                     </span>
                   </div>
                 </div>
