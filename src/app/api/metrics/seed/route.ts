@@ -9,7 +9,7 @@ import { pushMetric, clearMetrics, getRecentMetrics, getMetricsCount } from '@/l
 import { resetPredictionState } from '@/lib/predictive-scaler';
 import { initVcpuProfile, clearVcpuProfile, getVcpuValuesForScenario } from '@/lib/seed-vcpu-manager';
 import { getStore } from '@/lib/redis-store';
-import { tickGoalManager } from '@/lib/goal-manager';
+import { resetGoalManagerRuntimeState, tickGoalManager } from '@/lib/goal-manager';
 import { MetricDataPoint } from '@/types/prediction';
 import logger from '@/lib/logger';
 
@@ -227,6 +227,15 @@ export async function POST(request: NextRequest) {
   }, SEED_TTL_SECONDS * 1000);
 
   logger.info(`[Seed API] Scheduled automatic cleanup in ${SEED_TTL_SECONDS}s`);
+
+  // Reset goal-manager runtime state to make repeated demo injections deterministic.
+  // Without this, repeated identical scenarios are often suppressed by dedup policy.
+  try {
+    await resetGoalManagerRuntimeState();
+    logger.info('[Seed API] Goal Manager runtime state reset before tick');
+  } catch (error) {
+    logger.warn('[Seed API] Failed to reset Goal Manager state before tick:', error);
+  }
 
   // Trigger Goal Manager tick so the queue reflects the injected scenario immediately
   let goalsQueued = 0;

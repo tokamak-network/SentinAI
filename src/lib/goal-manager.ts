@@ -258,3 +258,23 @@ export async function dispatchTopGoal(options?: {
 export async function replayGoalManagerDlq(goalId: string, now?: number): Promise<ReplayDlqGoalResult> {
   return replayGoalFromDlq(goalId, now);
 }
+
+/**
+ * Clears runtime goal-manager state for deterministic demo replay.
+ * Intended for scenario injection paths only.
+ */
+export async function resetGoalManagerRuntimeState(options?: {
+  clearDlq?: boolean;
+}): Promise<void> {
+  const store = getStore();
+  await Promise.all([
+    store.clearAutonomousGoalQueue(),
+    store.clearAutonomousGoalCandidates(),
+    store.clearGoalSuppressionRecords(),
+    store.setActiveAutonomousGoalId(null),
+  ]);
+
+  if (options?.clearDlq) {
+    await store.clearGoalDlqItems();
+  }
+}

@@ -282,6 +282,11 @@ interface RuntimeAutonomyPolicyData {
   minConfidenceWrite: number;
 }
 
+interface AuthConfigData {
+  authRequired: boolean;
+  readOnly: boolean;
+}
+
 type AutonomousIntentData =
   | 'stabilize_throughput'
   | 'recover_sequencer_path'
@@ -505,6 +510,7 @@ export default function Dashboard() {
   const [autonomousPlanId, setAutonomousPlanId] = useState<string | null>(null);
   const [autonomousOperationId, setAutonomousOperationId] = useState<string | null>(null);
   const [autonomousPlanSteps, setAutonomousPlanSteps] = useState<Array<{ title: string; risk: string }> | null>(null);
+  const [authConfig, setAuthConfig] = useState<AuthConfigData | null>(null);
   const [autonomyActionFeedback, setAutonomyActionFeedback] = useState<{
     type: 'success' | 'error';
     message: string;
@@ -691,6 +697,18 @@ export default function Dashboard() {
       if (res.ok) setPublicStatus(await res.json() as PublicStatus);
     } catch {
       // ignore
+    }
+  };
+
+  const refreshAuthConfig = async () => {
+    try {
+      const res = await fetch(`${BASE_PATH}/api/auth/config`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json() as AuthConfigData;
+        setAuthConfig(data);
+      }
+    } catch {
+      // Ignore auth config refresh failures
     }
   };
 
@@ -893,7 +911,10 @@ export default function Dashboard() {
         refreshAutonomyPanels(),
       ]);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'An error occurred while running the autonomy demo action.';
+      const rawMessage = error instanceof Error ? error.message : 'An error occurred while running the autonomy demo action.';
+      const message = rawMessage.includes('invalid or missing x-api-key')
+        ? 'Unauthorized: this server requires x-api-key for POST actions. Set NEXT_PUBLIC_SENTINAI_API_KEY to the same value as SENTINAI_API_KEY and restart.'
+        : rawMessage;
       setAutonomyActionFeedback({
         type: 'error',
         message,
@@ -1050,6 +1071,7 @@ export default function Dashboard() {
       setToastDismissed(false);
     }
     refreshPublicStatus();
+    refreshAuthConfig();
     const interval = setInterval(refreshPublicStatus, 30_000);
     return () => clearInterval(interval);
   }, []);
@@ -1129,6 +1151,9 @@ export default function Dashboard() {
   );
 
   const isReadOnlyMode = process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE === 'true';
+  const hasClientApiKey = API_KEY.trim().length > 0;
+  const requiresPostApiKey = authConfig?.authRequired === true;
+  const postActionsBlockedByAuth = requiresPostApiKey && !hasClientApiKey;
   const isGoalManagerEnabled = goalManager?.config.enabled === true;
   const networkName = process.env.NEXT_PUBLIC_NETWORK_NAME || current?.chain?.displayName;
   const eoaRoleEntries = Object.entries(current?.eoaBalances?.roles || {}).filter(([, value]) => value !== null);
@@ -1770,21 +1795,21 @@ export default function Dashboard() {
             <div className="grid grid-cols-3 gap-2 mt-3">
               <button
                 onClick={() => runAutonomyDemoAction('seed-stable')}
-                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || postActionsBlockedByAuth}
                 className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 disabled:opacity-50"
               >
                 {autonomyActionRunning === 'seed-stable' ? 'Running' : 'Stable'}
               </button>
               <button
                 onClick={() => runAutonomyDemoAction('seed-rising')}
-                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || postActionsBlockedByAuth}
                 className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-amber-50 text-amber-700 hover:bg-amber-100 disabled:opacity-50"
               >
                 {autonomyActionRunning === 'seed-rising' ? 'Running' : 'Rising'}
               </button>
               <button
                 onClick={() => runAutonomyDemoAction('seed-spike')}
-                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || postActionsBlockedByAuth}
                 className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-red-50 text-red-700 hover:bg-red-100 disabled:opacity-50"
               >
                 {autonomyActionRunning === 'seed-spike' ? 'Running' : 'Spike'}
@@ -1794,14 +1819,14 @@ export default function Dashboard() {
             <div className="grid grid-cols-2 gap-2 mt-2">
               <button
                 onClick={() => runAutonomyDemoAction('goal-tick')}
-                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || !isGoalManagerEnabled}
+                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || !isGoalManagerEnabled || postActionsBlockedByAuth}
                 className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-slate-100 text-slate-700 hover:bg-slate-200 disabled:opacity-50"
               >
                 {autonomyActionRunning === 'goal-tick' ? 'Running Tick' : 'Goal Tick'}
               </button>
               <button
                 onClick={() => runAutonomyDemoAction('goal-dispatch-dry-run')}
-                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || !isGoalManagerEnabled}
+                disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || !isGoalManagerEnabled || postActionsBlockedByAuth}
                 className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-indigo-100 text-indigo-700 hover:bg-indigo-200 disabled:opacity-50"
               >
                 {autonomyActionRunning === 'goal-dispatch-dry-run' ? 'Running Dispatch' : 'Dispatch Dry-run'}
@@ -1829,28 +1854,28 @@ export default function Dashboard() {
               <div className="grid grid-cols-2 gap-2 mt-2">
                 <button
                   onClick={() => runAutonomyDemoAction('autonomous-plan')}
-                  disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                  disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || postActionsBlockedByAuth}
                   className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-emerald-100 text-emerald-700 hover:bg-emerald-200 disabled:opacity-50"
                 >
                   {autonomyActionRunning === 'autonomous-plan' ? 'Planning' : 'Plan'}
                 </button>
                 <button
                   onClick={() => runAutonomyDemoAction('autonomous-execute')}
-                  disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null}
+                  disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || postActionsBlockedByAuth}
                   className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-cyan-100 text-cyan-700 hover:bg-cyan-200 disabled:opacity-50"
                 >
                   {autonomyActionRunning === 'autonomous-execute' ? 'Executing' : 'Execute'}
                 </button>
                 <button
                   onClick={() => runAutonomyDemoAction('autonomous-verify')}
-                  disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || !autonomousOperationId}
+                  disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || !autonomousOperationId || postActionsBlockedByAuth}
                   className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-violet-100 text-violet-700 hover:bg-violet-200 disabled:opacity-50"
                 >
                   {autonomyActionRunning === 'autonomous-verify' ? 'Verifying' : 'Verify'}
                 </button>
                 <button
                   onClick={() => runAutonomyDemoAction('autonomous-rollback')}
-                  disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || !autonomousOperationId}
+                  disabled={autonomyActionRunning !== null || autonomyPolicyUpdating !== null || !autonomousOperationId || postActionsBlockedByAuth}
                   className="px-2 py-2 text-[11px] font-semibold rounded-lg bg-rose-100 text-rose-700 hover:bg-rose-200 disabled:opacity-50"
                 >
                   {autonomyActionRunning === 'autonomous-rollback' ? 'Rolling Back' : 'Rollback'}
@@ -1891,9 +1916,9 @@ export default function Dashboard() {
               </div>
             )}
 
-            {(!API_KEY || API_KEY.trim().length === 0) && (
+            {postActionsBlockedByAuth && (
               <p className="mt-2 text-[10px] text-amber-600">
-                Note: changing policy level, dispatch demo, and rollback write endpoints require `NEXT_PUBLIC_SENTINAI_API_KEY`.
+                This server enforces x-api-key on POST actions. Set `NEXT_PUBLIC_SENTINAI_API_KEY` to match `SENTINAI_API_KEY`.
               </p>
             )}
           </div>
