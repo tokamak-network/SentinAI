@@ -138,6 +138,11 @@
 - Approval token logic (hashing, expiry, consume-once) is easy to fork incorrectly when implemented inline in handlers.
 - Rule: Keep approval ticket issue/validate/consume in a dedicated engine and call it from handlers instead of re-implementing.
 
+## 2026-02-26
+
+- 배포 문서와 설치 스크립트의 실제 동작이 어긋나면(예: 인증 헤더 필요 여부, health 응답 스키마, setup 책임 분리) 신규 사용자 실패율이 급격히 올라간다.
+- Rule: Every deployment-facing doc change must be validated against real script/runtime behavior with a `docs-vs-runtime` checklist before release.
+
 ## 2026-02-21
 
 - A quarterly roadmap request becomes implementable only when each epic is split into file-level interface, env, and test contracts.

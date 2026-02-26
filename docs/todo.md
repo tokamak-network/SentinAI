@@ -1,8 +1,24 @@
 # TODO: SentinAI Implementation
 
-> **Last Updated:** 2026-02-25
+> **Last Updated:** 2026-02-26
 
 ## Current Status
+
+### Planned (2026-02-26 Verifiable Accountability Framework)
+- [ ] 검증 가능한 책임 체계 통합 계획 문서화 (`docs/todo/proposal-29-verifiable-accountability-framework.md`)
+- [ ] WS-A: SLO gate 표준화 (`operation-verifier` + verify API 확장)
+- [ ] WS-B: reason provenance 정형 저장 (`agent-loop`/`goal-planner`/`memory`)
+- [ ] WS-C: 실패 책임 분류 + 정책 학습 루프(`policy_defect` vs `execution_defect`)
+- [ ] WS-D: Autonomy Cockpit 책임 추적 뷰(24h/7d PASS-FAIL, rollback, liability)
+- [ ] WS-E: tamper-evident audit ledger
+
+### Planned (2026-02-26 Deployment Readiness and Hardening)
+- [ ] 사용자 배포 경로 점검/개선안 문서화 (`docs/todo/proposal-30-deployment-readiness-and-hardening.md`)
+- [ ] P0: quickstart/setup 문서 정합성 패치
+- [ ] P0: install 후 smoke 검증 확장 (`health + agent-loop + goal-manager`)
+- [ ] P1: 버전 고정 배포 옵션(`SENTINAI_REF`) 추가
+- [ ] P1: preflight-check 스크립트 추가
+- [ ] P2: update + rollback 자동화 스크립트 추가
 
 ### Done (2026-02-24 Network Stack Dashboard/Feature Differences Guide)
 - [x] 스택별 차이 기준(ChainPlugin capability + adapter action) 정리

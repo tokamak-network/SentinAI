@@ -1,5 +1,4 @@
 import {
-  Activity,
   Eye,
   Brain,
   Zap,
@@ -497,7 +496,7 @@ function Footer() {
         <div className="flex flex-col items-center gap-3 sm:items-start">
           <div className="flex items-center gap-2">
             <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-cyan-500 to-blue-600">
-              <Activity className="h-3.5 w-3.5 text-white" />
+              <ShieldCheck className="h-3.5 w-3.5 text-white" />
             </div>
             <span className="font-semibold text-slate-400">SentinAI</span>
           </div>
