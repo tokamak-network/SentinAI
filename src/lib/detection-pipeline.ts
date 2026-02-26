@@ -49,7 +49,14 @@ export async function runDetectionPipeline(
   balances?: { batcherBalanceEth?: number; proposerBalanceEth?: number; challengerBalanceEth?: number }
 ): Promise<DetectionResult> {
   const history = await getRecentMetrics();
-  const anomalies = detectAnomalies(dataPoint, history, balances);
+
+  // When the current dataPoint is a live metric (no seedTtlExpiry), exclude seed data
+  // from history to prevent stale spike scenario data from triggering false anomalies.
+  const filteredHistory = dataPoint.seedTtlExpiry
+    ? history
+    : history.filter(p => !p.seedTtlExpiry);
+
+  const anomalies = detectAnomalies(dataPoint, filteredHistory, balances);
 
   if (anomalies.length > 0) {
     logger.info(`[Detection] ${anomalies.length} anomalies detected`);
