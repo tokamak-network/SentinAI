@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 
 const GITHUB_URL = "https://github.com/tokamak-network/SentinAI";
+const EXAMPLE_DASHBOARD_URL = "https://sentinai.tokamak.network/thanos-sepolia";
 
 // ============================================================================
 // Navbar
@@ -110,10 +111,19 @@ function Hero() {
           {/* CTAs */}
           <div className="mb-16 flex flex-wrap items-center justify-center gap-4">
             <a
-              href={`${GITHUB_URL}#quick-start`}
+              href={EXAMPLE_DASHBOARD_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-opacity hover:opacity-90"
+            >
+              <ExternalLink className="h-4 w-4" />
+              View Example Dashboard
+            </a>
+            <a
+              href={`${GITHUB_URL}#quick-start`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/50 px-6 py-3 text-sm font-semibold text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100"
             >
               <Terminal className="h-4 w-4" />
               Run Local Demo
