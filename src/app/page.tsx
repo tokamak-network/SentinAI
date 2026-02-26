@@ -1814,11 +1814,11 @@ export default function Dashboard() {
                     {goalManager?.queueDepth ?? 0}
                   </span>
                 </div>
-                <div className="flex items-center justify-between">
+                <div>
                   <span className="text-[11px] text-gray-500">Active Goal</span>
-                  <span className="text-xs font-bold text-gray-700 font-mono">
-                    {shortId(goalManager?.activeGoalId)}
-                  </span>
+                  <p className="text-[10px] font-bold text-gray-700 font-mono break-all mt-0.5">
+                    {goalManager?.activeGoalId || '-'}
+                  </p>
                 </div>
                 <p className="text-[11px] text-gray-500 break-words">
                   top: {activeQueueItem?.goal || 'No queued goal'}
