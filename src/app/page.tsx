@@ -1514,12 +1514,9 @@ export default function Dashboard() {
                       ${monthlyCost.toFixed(0)}
                     </span>
                     <span className="text-base font-bold text-gray-400">/mo</span>
-                    <span className={`ml-auto text-[11px] font-semibold ${isPeak ? 'text-red-500' : 'text-gray-500'}`}>
-                      ${hourlyRate.toFixed(3)}/hr
-                    </span>
                   </div>
                   <p className="text-gray-400 text-[10px] mt-0.5">
-                    {vcpu} vCPU · {memGiB} GiB · baseline ${baselineHourly.toFixed(3)}/hr
+                    {vcpu} vCPU · {memGiB} GiB · ${hourlyRate.toFixed(3)}/hr now
                   </p>
                 </div>
                 <div className="mt-3 pt-3 border-t border-gray-100">
