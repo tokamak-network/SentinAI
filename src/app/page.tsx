@@ -288,6 +288,41 @@ interface AuthConfigData {
   readOnly: boolean;
 }
 
+interface AutonomousVerifySummaryData {
+  operationId: string;
+  passed: boolean;
+  resultCount: number;
+  totalChecks: number;
+  failedChecks: number;
+  verifiedAt: string | null;
+}
+
+interface AutonomousPlanSummaryData {
+  planId: string;
+  intent: AutonomousIntentData;
+  stepCount: number;
+  generatedAt: string | null;
+}
+
+interface AutonomousExecuteSummaryData {
+  operationId: string;
+  success: boolean;
+  totalSteps: number;
+  completedSteps: number;
+  failedSteps: number;
+  skippedSteps: number;
+  completedAt: string | null;
+}
+
+interface AutonomousRollbackSummaryData {
+  operationId: string;
+  success: boolean;
+  totalSteps: number;
+  completedSteps: number;
+  failedSteps: number;
+  executedAt: string;
+}
+
 type AutonomousIntentData =
   | 'stabilize_throughput'
   | 'recover_sequencer_path'
@@ -511,6 +546,10 @@ export default function Dashboard() {
   const [autonomousPlanId, setAutonomousPlanId] = useState<string | null>(null);
   const [autonomousOperationId, setAutonomousOperationId] = useState<string | null>(null);
   const [autonomousPlanSteps, setAutonomousPlanSteps] = useState<Array<{ title: string; risk: string }> | null>(null);
+  const [autonomousVerifySummary, setAutonomousVerifySummary] = useState<AutonomousVerifySummaryData | null>(null);
+  const [autonomousPlanSummary, setAutonomousPlanSummary] = useState<AutonomousPlanSummaryData | null>(null);
+  const [autonomousExecuteSummary, setAutonomousExecuteSummary] = useState<AutonomousExecuteSummaryData | null>(null);
+  const [autonomousRollbackSummary, setAutonomousRollbackSummary] = useState<AutonomousRollbackSummaryData | null>(null);
   const [authConfig, setAuthConfig] = useState<AuthConfigData | null>(null);
   const [autonomyActionFeedback, setAutonomyActionFeedback] = useState<{
     type: 'success' | 'error';
@@ -747,6 +786,10 @@ export default function Dashboard() {
         setAutonomousPlanId(null);
         setAutonomousOperationId(null);
         setAutonomousPlanSteps(null);
+        setAutonomousVerifySummary(null);
+        setAutonomousPlanSummary(null);
+        setAutonomousExecuteSummary(null);
+        setAutonomousRollbackSummary(null);
         setAutonomyActionFeedback({
           type: 'success',
           message: goalManagerEnabled
@@ -818,11 +861,23 @@ export default function Dashboard() {
           const message = typeof body.error === 'string' ? body.error : 'Failed to create autonomous plan.';
           throw new Error(message);
         }
-        const plan = (body as { plan?: { planId?: string; steps?: unknown[] } }).plan;
+        const plan = (body as { plan?: { planId?: string; steps?: unknown[]; generatedAt?: string } }).plan;
         if (plan?.planId) {
           setAutonomousPlanId(plan.planId);
         }
+        setAutonomousOperationId(null);
+        setAutonomousVerifySummary(null);
+        setAutonomousExecuteSummary(null);
+        setAutonomousRollbackSummary(null);
         const rawSteps = Array.isArray(plan?.steps) ? plan.steps : [];
+        if (plan?.planId) {
+          setAutonomousPlanSummary({
+            planId: plan.planId,
+            intent: autonomousIntent,
+            stepCount: rawSteps.length,
+            generatedAt: typeof plan.generatedAt === 'string' ? plan.generatedAt : null,
+          });
+        }
         setAutonomousPlanSteps(
           rawSteps.map((s) => {
             const step = s as { title?: string; risk?: string };
@@ -849,11 +904,35 @@ export default function Dashboard() {
           const message = typeof body.error === 'string' ? body.error : 'Failed to execute autonomous operation.';
           throw new Error(message);
         }
-        const result = (body as { result?: { operationId?: string; steps?: unknown[]; success?: boolean } }).result;
+        const result = (body as {
+          result?: {
+            operationId?: string;
+            steps?: Array<{ status?: 'completed' | 'failed' | 'skipped' }>;
+            success?: boolean;
+            completedAt?: string;
+          };
+        }).result;
         if (result?.operationId) {
           setAutonomousOperationId(result.operationId);
         }
-        const stepCount = Array.isArray(result?.steps) ? result.steps.length : 0;
+        setAutonomousVerifySummary(null);
+        const steps = Array.isArray(result?.steps) ? result.steps : [];
+        const stepCount = steps.length;
+        const completedSteps = steps.filter((step) => step.status === 'completed').length;
+        const failedSteps = steps.filter((step) => step.status === 'failed').length;
+        const skippedSteps = steps.filter((step) => step.status === 'skipped').length;
+        if (result?.operationId) {
+          setAutonomousExecuteSummary({
+            operationId: result.operationId,
+            success: result.success === true,
+            totalSteps: stepCount,
+            completedSteps,
+            failedSteps,
+            skippedSteps,
+            completedAt: typeof result.completedAt === 'string' ? result.completedAt : new Date().toISOString(),
+          });
+          setAutonomousRollbackSummary(null);
+        }
         setAutonomyActionFeedback({
           type: 'success',
           message: `Autonomous execute completed (${stepCount} steps, success=${result?.success === true ? 'true' : 'false'}).`,
@@ -876,8 +955,37 @@ export default function Dashboard() {
           const message = typeof body.error === 'string' ? body.error : 'Failed to verify autonomous operation.';
           throw new Error(message);
         }
-        const result = (body as { result?: { passed?: boolean; results?: unknown[] } }).result;
-        const checks = Array.isArray(result?.results) ? result.results.length : 0;
+        const result = (body as {
+          result?: {
+            operationId?: string;
+            passed?: boolean;
+            results?: Array<{
+              checks?: Array<{ passed?: boolean }>;
+              verifiedAt?: string;
+            }>;
+          };
+        }).result;
+        const verifications = Array.isArray(result?.results) ? result.results : [];
+        const checks = verifications.length;
+        const totalChecks = verifications.reduce((sum, item) => {
+          return sum + (Array.isArray(item.checks) ? item.checks.length : 0);
+        }, 0);
+        const failedChecks = verifications.reduce((sum, item) => {
+          if (!Array.isArray(item.checks)) return sum;
+          return sum + item.checks.filter((check) => check?.passed === false).length;
+        }, 0);
+        const latestVerifiedAtMs = verifications.reduce((max, item) => {
+          const ms = item.verifiedAt ? new Date(item.verifiedAt).getTime() : 0;
+          return Number.isFinite(ms) ? Math.max(max, ms) : max;
+        }, 0);
+        setAutonomousVerifySummary({
+          operationId: result?.operationId || autonomousOperationId,
+          passed: result?.passed === true,
+          resultCount: checks,
+          totalChecks,
+          failedChecks,
+          verifiedAt: latestVerifiedAtMs > 0 ? new Date(latestVerifiedAtMs).toISOString() : null,
+        });
         setAutonomyActionFeedback({
           type: 'success',
           message: `Autonomous verify completed (passed=${result?.passed === true ? 'true' : 'false'}, checks=${checks}).`,
@@ -899,8 +1007,24 @@ export default function Dashboard() {
           const message = typeof body.error === 'string' ? body.error : 'Failed to execute autonomous rollback.';
           throw new Error(message);
         }
-        const result = (body as { result?: { success?: boolean; rollbackSteps?: unknown[] } }).result;
-        const rollbackCount = Array.isArray(result?.rollbackSteps) ? result.rollbackSteps.length : 0;
+        const result = (body as {
+          result?: {
+            success?: boolean;
+            rollbackSteps?: Array<{ status?: 'completed' | 'failed' | 'skipped' }>;
+          };
+        }).result;
+        const rollbackSteps = Array.isArray(result?.rollbackSteps) ? result.rollbackSteps : [];
+        const rollbackCount = rollbackSteps.length;
+        const rollbackCompleted = rollbackSteps.filter((step) => step.status === 'completed').length;
+        const rollbackFailed = rollbackSteps.filter((step) => step.status === 'failed').length;
+        setAutonomousRollbackSummary({
+          operationId: autonomousOperationId,
+          success: result?.success === true,
+          totalSteps: rollbackCount,
+          completedSteps: rollbackCompleted,
+          failedSteps: rollbackFailed,
+          executedAt: new Date().toISOString(),
+        });
         setAutonomyActionFeedback({
           type: 'success',
           message: `Autonomous rollback completed (success=${result?.success === true ? 'true' : 'false'}, steps=${rollbackCount}).`,
@@ -1883,9 +2007,52 @@ export default function Dashboard() {
                 </button>
               </div>
 
-              <p className="mt-2 text-[10px] text-gray-500 break-all">
-                planId: <span className="font-mono text-gray-700">{autonomousPlanId || '-'}</span> · operationId: <span className="font-mono text-gray-700">{autonomousOperationId || '-'}</span>
-              </p>
+              <div className="mt-2 space-y-0.5">
+                <p className="text-[10px] text-gray-500">planId: <span className="font-mono text-gray-700 break-all">{autonomousPlanId || '-'}</span></p>
+                <p className="text-[10px] text-gray-500">operationId: <span className="font-mono text-gray-700 break-all">{autonomousOperationId || '-'}</span></p>
+              </div>
+              {(autonomousPlanSummary || autonomousExecuteSummary || autonomousRollbackSummary) && (
+                <div className="mt-2 border border-gray-200 rounded-lg bg-white px-2.5 py-2 space-y-1.5">
+                  <p className="text-[10px] text-gray-500 font-semibold uppercase">Latest Autonomous Ops</p>
+                  {autonomousPlanSummary && (
+                    <p className="text-[11px] text-gray-600 break-all">
+                      plan <span className="font-mono text-gray-700">{autonomousPlanSummary.planId}</span> · steps {autonomousPlanSummary.stepCount}
+                      {autonomousPlanSummary.generatedAt ? ` · ${new Date(autonomousPlanSummary.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}` : ''}
+                    </p>
+                  )}
+                  {autonomousExecuteSummary && (
+                    <p className="text-[11px] text-gray-600 break-all">
+                      execute <span className="font-mono text-gray-700">{autonomousExecuteSummary.operationId}</span> · {autonomousExecuteSummary.success ? 'success' : 'failed'} · total {autonomousExecuteSummary.totalSteps} / done {autonomousExecuteSummary.completedSteps} / fail {autonomousExecuteSummary.failedSteps} / skip {autonomousExecuteSummary.skippedSteps}
+                    </p>
+                  )}
+                  {autonomousRollbackSummary && (
+                    <p className="text-[11px] text-gray-600 break-all">
+                      rollback <span className="font-mono text-gray-700">{autonomousRollbackSummary.operationId}</span> · {autonomousRollbackSummary.success ? 'success' : 'failed'} · total {autonomousRollbackSummary.totalSteps} / done {autonomousRollbackSummary.completedSteps} / fail {autonomousRollbackSummary.failedSteps}
+                    </p>
+                  )}
+                </div>
+              )}
+              {autonomousVerifySummary && (
+                <div className="mt-2 border border-gray-200 rounded-lg bg-white px-2.5 py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[10px] text-gray-500 font-semibold uppercase">Latest Verify Result</p>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                      autonomousVerifySummary.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                    }`}>
+                      {autonomousVerifySummary.passed ? 'PASS' : 'FAIL'}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-gray-600">
+                    operation: <span className="font-mono text-gray-700 break-all">{autonomousVerifySummary.operationId}</span>
+                  </p>
+                  <p className="text-[11px] text-gray-600">
+                    results {autonomousVerifySummary.resultCount} · checks {autonomousVerifySummary.totalChecks} · failed {autonomousVerifySummary.failedChecks}
+                  </p>
+                  <p className="text-[10px] text-gray-500">
+                    verified at {autonomousVerifySummary.verifiedAt ? new Date(autonomousVerifySummary.verifiedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'N/A'}
+                  </p>
+                </div>
+              )}
               {autonomousPlanSteps && autonomousPlanSteps.length > 0 && (
                 <div className="mt-2 border border-gray-200 rounded-lg overflow-hidden">
                   {autonomousPlanSteps.map((step, i) => (
@@ -2190,7 +2357,7 @@ export default function Dashboard() {
                           direction = '↓';
                         } else {
                           // Fallback: use the cleaned reason as-is
-                          reasonSummary = cleanReason.length > 20 ? cleanReason.substring(0, 17) + '...' : cleanReason;
+                          reasonSummary = cleanReason;
                           direction = scaling.targetVcpu > scaling.currentVcpu ? '↑' : scaling.targetVcpu < scaling.currentVcpu ? '↓' : '→';
                         }
 
