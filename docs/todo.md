@@ -20,6 +20,13 @@
 - [ ] P1: preflight-check 스크립트 추가
 - [ ] P2: update + rollback 자동화 스크립트 추가
 
+### Done (2026-02-26 Anomaly Immediate Activity Repro Stabilization)
+- [x] `spike` seed 데이터 tail을 단조 증가/고부하로 안정화해 anomaly 검출 재현성을 개선 (`src/app/api/metrics/seed/route.ts`)
+- [x] seed API에 `forceAnomaly=true` 옵션 추가 및 응답에 flag 노출 (`src/app/api/metrics/seed/route.ts`)
+- [x] 재현 스크립트에 `FORCE_ANOMALY` 옵션(기본 true) 및 seed 호출 파라미터 연결 (`scripts/repro-anomaly-immediate-activity.sh`)
+- [x] 즉시 트리거 scheduler 로직 반영 상태에서 관련 테스트 mock 보정 (`src/lib/scheduler.ts`, `src/lib/__tests__/scheduler.test.ts`)
+- [x] 검증 실행 (`npm run lint`, `npm run test:run -- src/lib/__tests__/anomaly-detector.test.ts src/lib/__tests__/scheduler.test.ts`, `npm run build`)
+
 ### Done (2026-02-24 Network Stack Dashboard/Feature Differences Guide)
 - [x] 스택별 차이 기준(ChainPlugin capability + adapter action) 정리
 - [x] 신규 운영 가이드 작성 (`docs/guide/network-stack-dashboard-feature-differences.md`)

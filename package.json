@@ -25,7 +25,8 @@
     "mcp:bridge:stdio": "npx tsx scripts/mcp-stdio-bridge.ts",
     "autonomy:eval": "npx tsx scripts/autonomy-eval.ts --strict",
     "goal:train-policy": "npx tsx scripts/train-goal-policy.ts",
-    "l2:arbitrum": "bash scripts/start-arbitrum-orbit.sh"
+    "l2:arbitrum": "bash scripts/start-arbitrum-orbit.sh",
+    "demo:anomaly:immediate": "bash scripts/repro-anomaly-immediate-activity.sh"
   },
   "dependencies": {
     "@iarna/toml": "^3.0.0",

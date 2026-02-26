@@ -25,8 +25,9 @@ const DEFAULT_AGENT_HEARTBEAT_STALE_SECONDS = 120;
 const DEFAULT_WATCHDOG_ALERT_COOLDOWN_SECONDS = 300;
 const DEFAULT_WATCHDOG_RECOVERY_COOLDOWN_SECONDS = 120;
 const WATCHDOG_SCHEDULE = '*/30 * * * * *';
+const ANOMALY_TRIGGER_SCHEDULE = '*/5 * * * * *';
 
-type AgentCycleSource = 'schedule' | 'watchdog-recovery';
+type AgentCycleSource = 'schedule' | 'watchdog-recovery' | 'anomaly-event';
 type WatchdogRecoveryStatus = 'idle' | 'success' | 'failed';
 
 interface AgentCycleExecutionResult {
@@ -54,11 +55,13 @@ let snapshotTask: ScheduledTask | null = null;
 let reportTask: ScheduledTask | null = null;
 let scheduledScalingTask: ScheduledTask | null = null;
 let watchdogTask: ScheduledTask | null = null;
+let anomalyTriggerTask: ScheduledTask | null = null;
 let agentTaskRunning = false;
 let snapshotTaskRunning = false;
 let reportTaskRunning = false;
 let scheduledScalingTaskRunning = false;
 let watchdogTaskRunning = false;
+let anomalyTriggerTaskRunning = false;
 let watchdogRecoveryRunning = false;
 let watchdogFailureStreak = 0;
 let watchdogLastError: string | null = null;
@@ -68,6 +71,7 @@ let watchdogLastRecoveryAt: string | null = null;
 let watchdogLastRecoveryStatus: WatchdogRecoveryStatus = 'idle';
 let lastWatchdogAlertAtMs = 0;
 let lastWatchdogRecoveryAtMs = 0;
+let lastTriggeredAnomalyEventId: string | null = null;
 
 function parsePositiveInt(raw: string | undefined, fallback: number): number {
   const parsed = Number.parseInt(raw || `${fallback}`, 10);
@@ -101,6 +105,14 @@ function isHeartbeatWatchdogEnabled(): boolean {
     return false;
   }
 
+  return true;
+}
+
+function isAnomalyImmediateTriggerEnabled(): boolean {
+  if (!isAgentLoopEnabled()) return false;
+  const value = (process.env.AGENT_LOOP_IMMEDIATE_ON_ANOMALY || '').trim().toLowerCase();
+  if (!value) return true;
+  if (value === 'false' || value === '0' || value === 'off' || value === 'no') return false;
   return true;
 }
 
@@ -415,6 +427,35 @@ async function runHeartbeatWatchdog(): Promise<void> {
   });
 }
 
+async function runAnomalyImmediateTrigger(): Promise<void> {
+  if (!isAnomalyImmediateTriggerEnabled()) return;
+  if (anomalyTriggerTaskRunning) return;
+
+  anomalyTriggerTaskRunning = true;
+  try {
+    const activeEventId = await getStore().getActiveAnomalyEventId();
+
+    if (!activeEventId) {
+      return;
+    }
+
+    if (lastTriggeredAnomalyEventId === activeEventId) {
+      return;
+    }
+
+    const cycle = await executeAgentCycle('anomaly-event');
+    if (cycle.outcome !== 'skipped') {
+      lastTriggeredAnomalyEventId = activeEventId;
+      logger.info(`anomaly-event cycle triggered for event=${activeEventId.slice(0, 8)} (${cycle.detail})`);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logger.error('Anomaly immediate trigger failed: ' + message);
+  } finally {
+    anomalyTriggerTaskRunning = false;
+  }
+}
+
 /**
  * Initialize cron jobs. Idempotent — safe to call multiple times.
  */
@@ -472,6 +513,15 @@ export async function initializeScheduler(): Promise<void> {
       logger.info('Agent heartbeat watchdog enabled (every 30s)');
     } else {
       logger.info('Agent heartbeat watchdog disabled');
+    }
+
+    if (isAnomalyImmediateTriggerEnabled()) {
+      anomalyTriggerTask = cron.schedule(ANOMALY_TRIGGER_SCHEDULE, async () => {
+        await runAnomalyImmediateTrigger();
+      });
+      logger.info('Anomaly immediate trigger enabled (every 5s)');
+    } else {
+      logger.info('Anomaly immediate trigger disabled');
     }
   } else {
     logger.info('Agent loop disabled (set AGENT_LOOP_ENABLED=true or L2_RPC_URL to enable)');
@@ -582,11 +632,16 @@ export function stopScheduler(): void {
     watchdogTask.stop();
     watchdogTask = null;
   }
+  if (anomalyTriggerTask) {
+    anomalyTriggerTask.stop();
+    anomalyTriggerTask = null;
+  }
   agentTaskRunning = false;
   snapshotTaskRunning = false;
   reportTaskRunning = false;
   scheduledScalingTaskRunning = false;
   watchdogTaskRunning = false;
+  anomalyTriggerTaskRunning = false;
   watchdogRecoveryRunning = false;
   watchdogFailureStreak = 0;
   watchdogLastError = null;
@@ -596,6 +651,7 @@ export function stopScheduler(): void {
   watchdogLastRecoveryStatus = 'idle';
   lastWatchdogAlertAtMs = 0;
   lastWatchdogRecoveryAtMs = 0;
+  lastTriggeredAnomalyEventId = null;
   initialized = false;
   logger.info('Stopped');
 }

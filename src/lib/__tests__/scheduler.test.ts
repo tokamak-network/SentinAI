@@ -18,6 +18,19 @@ vi.mock('@/lib/daily-report-generator', () => ({
 }));
 
 vi.mock('@/lib/logger', () => ({
+  default: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    child: vi.fn(() => ({
+      debug: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      child: vi.fn(),
+    })),
+  },
   createLogger: vi.fn(() => ({
     info: vi.fn(),
     warn: vi.fn(),

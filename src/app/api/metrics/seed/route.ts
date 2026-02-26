@@ -40,7 +40,7 @@ function jitter(value: number, range: number): number {
 /**
  * Generate scenario-specific data points with TTL metadata
  */
-function generateScenarioData(scenario: Scenario): MetricDataPoint[] {
+function generateScenarioData(scenario: Scenario, forceAnomaly: boolean): MetricDataPoint[] {
   const points: MetricDataPoint[] = [];
   const count = 20;
   const now = Date.now();
@@ -82,10 +82,16 @@ function generateScenarioData(scenario: Scenario): MetricDataPoint[] {
           gasUsedRatio = jitter(0.25, 0.05);
           blockInterval = jitter(2.0, 0.2);
         } else {
-          cpuUsage = jitter(95, 2);
-          txPoolPending = Math.round(jitter(5000, 500));
-          gasUsedRatio = jitter(0.95, 0.03);
-          blockInterval = jitter(6.0, 1.0);
+          // Keep the tail deterministic and strictly increasing so monotonic rule
+          // consistently triggers in demo/repro environments.
+          const tailIndex = i - (count - 5); // 0..4
+          const baseTx = forceAnomaly ? 5000 : 2400;
+          const stepTx = forceAnomaly ? 1200 : 500;
+
+          cpuUsage = forceAnomaly ? 99 : (90 + tailIndex * 2);
+          txPoolPending = baseTx + tailIndex * stepTx;
+          gasUsedRatio = forceAnomaly ? 0.99 : (0.88 + tailIndex * 0.02);
+          blockInterval = forceAnomaly ? 8.0 : (4.8 + tailIndex * 0.4);
         }
         break;
 
@@ -144,6 +150,7 @@ export async function POST(request: NextRequest) {
 
   const url = new URL(request.url);
   const scenario = url.searchParams.get('scenario') as Scenario | null;
+  const forceAnomaly = url.searchParams.get('forceAnomaly') === 'true';
 
   if (!scenario || !VALID_SCENARIOS.includes(scenario)) {
     return NextResponse.json(
@@ -201,7 +208,7 @@ export async function POST(request: NextRequest) {
   await getStore().setSeedScenario(scenario);
   logger.info(`[Seed API] Set active seed scenario in store: ${scenario}`);
 
-  const dataPoints = generateScenarioData(scenario);
+  const dataPoints = generateScenarioData(scenario, forceAnomaly);
   for (const point of dataPoints) {
     await pushMetric(point);
   }
@@ -254,6 +261,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({
     success: true,
     scenario,
+    forceAnomaly,
     injectedCount: dataPoints.length,
     goalManagerEnabled,
     goalsQueued,

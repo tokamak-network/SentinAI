@@ -142,6 +142,10 @@
 
 - 배포 문서와 설치 스크립트의 실제 동작이 어긋나면(예: 인증 헤더 필요 여부, health 응답 스키마, setup 책임 분리) 신규 사용자 실패율이 급격히 올라간다.
 - Rule: Every deployment-facing doc change must be validated against real script/runtime behavior with a `docs-vs-runtime` checklist before release.
+- seed 기반 anomaly 데모에서 랜덤 지터를 과도하게 쓰면 threshold/monotonic 규칙이 비결정적으로 깨져 재현 신뢰도가 낮아진다.
+- Rule: Demo seed scenarios that are used for acceptance scripts must use deterministic tails (or explicit force flags) for anomaly-trigger segments.
+- 진단 스크립트가 운영 환경 인증 가드를 통과하지 못하면 원인 분리가 지연된다.
+- Rule: Repro scripts for protected APIs should support `x-api-key` and print status-specific remediation hints (401/403/405) by default.
 
 ## 2026-02-21
 
