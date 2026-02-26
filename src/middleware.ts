@@ -147,6 +147,10 @@ export function middleware(request: NextRequest) {
         '/api/goal-manager/dispatch', // Dry-run dispatch allowed; write blocked in route
         '/api/mcp',               // MCP invocation (write safety enforced in MCP handler)
         '/api/metrics/seed',      // Demo scenario injection (no real infra changes)
+        '/api/autonomous/plan',   // Autonomous plan (dry-run, no infra write)
+        '/api/autonomous/execute', // Autonomous execute (write safety enforced in handler)
+        '/api/autonomous/verify', // Autonomous verify (read-only)
+        '/api/autonomous/rollback', // Autonomous rollback (write safety enforced in handler)
       ];
 
       if (allowScalerWriteInReadOnlyMode()) {
