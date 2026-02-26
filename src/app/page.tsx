@@ -1478,8 +1478,6 @@ export default function Dashboard() {
               : vcpu >= 4 ? { text: 'High Load',  color: 'text-orange-500 bg-orange-50' }
               : vcpu >= 2 ? { text: 'Moderate',   color: 'text-amber-500 bg-amber-50' }
               :             { text: 'Optimized',  color: 'text-emerald-600 bg-emerald-50' };
-            const estMonthlySavings = fixedCost - monthlyCost;
-            const isOverspend = estMonthlySavings < 0;
             return (
               <>
                 <div data-testid="monthly-cost">
@@ -1515,13 +1513,6 @@ export default function Dashboard() {
                   <div className="flex justify-between mt-1">
                     <span className="text-[9px] text-gray-400">$0</span>
                     <span className="text-[9px] text-gray-400">${fixedCost.toFixed(0)}</span>
-                  </div>
-                  {/* Est. Monthly Savings */}
-                  <div className={`mt-2.5 flex items-center justify-between px-2.5 py-1.5 rounded-lg ${isOverspend ? 'bg-red-50' : 'bg-emerald-50'}`}>
-                    <span className="text-[10px] text-gray-500">Est. monthly savings</span>
-                    <span className={`text-[11px] font-bold tabular-nums ${isOverspend ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {isOverspend ? '-' : '+'}${Math.abs(estMonthlySavings).toFixed(0)}/mo
-                    </span>
                   </div>
                 </div>
               </>
