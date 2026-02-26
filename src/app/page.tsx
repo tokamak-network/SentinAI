@@ -1726,8 +1726,8 @@ export default function Dashboard() {
                     {/* Top Recommendations */}
                     {costAnalysisData.recommendations && costAnalysisData.recommendations.length > 0 && (
                       <div className="space-y-2">
-                        <p className="text-xs text-gray-600 font-semibold">Top Recommendations</p>
-                        {costAnalysisData.recommendations.slice(0, 2).map((rec, idx) => (
+                        <p className="text-xs text-gray-600 font-semibold">Recommendations</p>
+                        {costAnalysisData.recommendations.map((rec, idx) => (
                           <div key={idx} className="bg-amber-50 rounded-lg p-2.5 border border-amber-100">
                             <div className="flex items-start justify-between gap-2">
                               <div className="flex-1">
