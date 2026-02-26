@@ -1695,7 +1695,7 @@ export default function Dashboard() {
                     {shortId(goalManager?.activeGoalId)}
                   </span>
                 </div>
-                <p className="text-[11px] text-gray-500 truncate" title={activeQueueItem?.goal || ''}>
+                <p className="text-[11px] text-gray-500 break-words">
                   top: {activeQueueItem?.goal || 'No queued goal'}
                 </p>
                 <div className="flex items-center gap-2 text-[10px]">
@@ -1734,10 +1734,10 @@ export default function Dashboard() {
                   <span className="text-[11px] text-gray-500">Approval (Write)</span>
                   <span className="text-xs font-bold text-indigo-600">Required</span>
                 </div>
-                <p className={`text-[11px] truncate ${
+                <p className={`text-[11px] break-words ${
                   latestDegradedReasons.length > 0 ? 'text-amber-600' : 'text-gray-400'
-                }`} title={latestDegradedReasons.join(' | ')}>
-                  degraded: {latestDegradedReasons[0] || 'none'}
+                }`}>
+                  degraded: {latestDegradedReasons.length > 0 ? latestDegradedReasons.join(' · ') : 'none'}
                 </p>
               </div>
             </div>
@@ -1978,7 +1978,7 @@ export default function Dashboard() {
                     </span>
                   </div>
                   {agentLoop.lastCycle.error && (
-                    <p className="text-[10px] text-red-400 truncate" title={agentLoop.lastCycle.error}>
+                    <p className="text-[10px] text-red-400 break-words">
                       {agentLoop.lastCycle.error}
                     </p>
                   )}
