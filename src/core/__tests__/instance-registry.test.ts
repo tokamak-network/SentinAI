@@ -100,8 +100,8 @@ describe('InstanceRegistry (in-memory mode)', () => {
     const created = await createInstance(makeDto());
     const originalUpdatedAt = created.updatedAt;
 
-    // Wait 1ms to ensure updatedAt changes
-    await new Promise(r => setTimeout(r, 1));
+    // Wait 5ms to ensure updatedAt changes
+    await new Promise(r => setTimeout(r, 5));
 
     const updated = await updateInstance(created.instanceId, {
       displayName: 'Updated Name',
