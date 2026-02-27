@@ -1,353 +1,328 @@
-# Proposal 25: Claude Code Natural-Language L2 Operations (Priority Roadmap)
+# 제안 25: Claude Code 자연어 기반 L2 운영 (우선순위 로드맵)
 
-> Created: 2026-02-22  
-> Status: Implemented (Priority 1-6 complete)  
-> Quarter: Q2 (2026-03 ~ 2026-05)
-
----
-
-## 0. Implementation Status
-
-- [x] Priority 1: Claude Code MCP stdio bridge
-- [x] Priority 3: Central policy and approval engine
-- [x] Priority 2: LLM+validator goal planner with re-planning fallback
-- [x] Priority 5: Closed-loop verification and rollback automation
-- [x] Priority 4: Expanded operational MCP toolset
-- [x] Priority 6: Evaluation environment and autonomy scorecard
+> 작성일: 2026-02-22  
+> 상태: 구현 완료 (우선순위 1-6 완료)  
+> 분기: Q2 (2026-03 ~ 2026-05)
 
 ---
 
-## 1. Goal
+## 0. 구현 상태
 
-Enable practical natural-language L2 operations from Claude Code while preserving production safety:
+- [x] 우선순위 1: Claude Code MCP stdio 브리지
+- [x] 우선순위 3: 중앙 정책/승인 엔진
+- [x] 우선순위 2: LLM+검증기 기반 목표 플래너(재계획 포함)
+- [x] 우선순위 5: 폐쇄 루프 검증 및 롤백 자동화
+- [x] 우선순위 4: 운영 액션 MCP 툴셋 확장
+- [x] 우선순위 6: 평가 환경 및 자율성 스코어카드
 
-1. Claude Code can discover and call SentinAI tools through MCP without custom manual RPC wrappers.
-2. Goal execution can reason, validate, and re-plan with policy constraints.
-3. Autonomous loops can verify outcomes and rollback failed actions automatically.
+---
 
-### Success Metrics (Q2)
+## 1. 목표
 
-| KPI | Current | Target |
+운영 안전성을 유지하면서 Claude Code에서 실용적인 자연어 L2 운영을 가능하게 한다.
+
+1. Claude Code가 커스텀 RPC 래퍼 없이 MCP로 SentinAI 도구를 탐색/호출
+2. 목표 실행 시 정책 제약 하에서 추론/검증/재계획 수행
+3. 자율 루프가 결과를 검증하고 실패 시 자동 롤백
+
+### 성공 지표 (Q2)
+
+| KPI | 기존 | 목표 |
 |---|---:|---:|
-| Claude Code MCP direct compatibility | Partial (HTTP JSON-RPC only) | Full (`initialize`, `tools/list`, `tools/call`, stdio bridge) |
-| Goal completion rate (bounded tasks) | N/A | >= 85% |
-| Unsafe write attempts blocked by policy | N/A | 100% |
-| Auto-verification coverage for write actions | Partial | 100% |
-| Production incidents caused by autonomous action | N/A | 0 (during staged rollout) |
+| Claude Code MCP 직접 호환성 | 부분 | 완전 호환(`initialize`, `tools/list`, `tools/call`, stdio bridge) |
+| 목표 완료율(제한된 과업) | N/A | 85% 이상 |
+| 정책으로 차단된 위험 write 시도 | N/A | 100% |
+| write 액션 자동 검증 커버리지 | 부분 | 100% |
+| 자율 액션으로 인한 운영 사고 | N/A | 단계 배포 중 0건 |
 
 ---
 
-## 2. Priority Order
+## 2. 우선순위 순서
 
-Execution order is fixed and must not be reshuffled:
+실행 순서는 고정한다.
 
-1. Priority 1: Claude Code MCP transport adapter (`stdio`/SSE bridge)
-2. Priority 3: Central policy and approval engine
-3. Priority 2: LLM+validator goal planner with re-planning
-4. Priority 5: Closed-loop verification and rollback automation
-5. Priority 4: Expanded operational action toolset
-6. Priority 6: Evaluation environment and autonomy scorecard
-
----
-
-## 3. Current Baseline
-
-Implemented baseline before this proposal:
-
-1. MCP HTTP endpoint and tool routing exist (`src/app/api/mcp/route.ts`, `src/lib/mcp-server.ts`).
-2. Goal planning and execution exist but are mainly rule-based (`src/lib/goal-planner.ts`).
-3. Agent loop has phase trace and verification, focused on scaling path (`src/lib/agent-loop.ts`).
-4. Write tools already require approval/read-only guards in MCP server.
-
-Main gaps:
-
-1. Claude Code native MCP transport path is not packaged.
-2. Policy logic is embedded mostly inside MCP server, not reusable across APIs/agent.
-3. Goal planning is keyword/rule-driven and lacks model-driven decomposition + re-planning.
-4. Verification/rollback is not a first-class action framework across all write tools.
+1. 우선순위 1: Claude Code MCP 전송 어댑터(`stdio`/SSE bridge)
+2. 우선순위 3: 중앙 정책/승인 엔진
+3. 우선순위 2: LLM+검증기 목표 플래너(재계획)
+4. 우선순위 5: 폐쇄 루프 검증/롤백 자동화
+5. 우선순위 4: 운영 액션 툴셋 확장
+6. 우선순위 6: 평가 환경 및 자율성 스코어카드
 
 ---
 
-## 4. Implementation Plan by Priority
+## 3. 현재 베이스라인
 
-## 4.1 Priority 1 — Claude Code MCP Transport Adapter
+사전 구현 상태:
 
-### Objective
+1. MCP HTTP 엔드포인트 및 라우팅 존재
+2. 목표 계획/실행 기능 존재(규칙 기반 중심)
+3. Agent Loop phase trace/검증 존재(스케일링 경로 중심)
+4. MCP write 도구에 승인/읽기 전용 가드 존재
 
-Provide a runnable MCP bridge process for Claude Code that translates stdio MCP calls into SentinAI `/api/mcp` calls with secure context propagation.
+주요 갭:
 
-### Deliverables
-
-1. `src/lib/mcp-bridge-client.ts` (bridge client for HTTP transport)
-2. `scripts/mcp-stdio-bridge.ts` (stdio MCP server adapter process)
-3. `package.json` script: `mcp:bridge:stdio`
-4. Setup guide: `docs/guide/claude-code-mcp-setup.md`
-
-### API/Contract
-
-1. Supports `initialize`, `tools/list`, `tools/call`, `notifications/initialized`
-2. Preserves `x-api-key`, `x-request-id`, optional approval token path
-3. Normalizes MCP error codes from SentinAI into stdio response format
-
-### Verification
-
-1. Unit: stdio frame parsing/serialization and error mapping
-2. Integration: local bridge -> `/api/mcp` roundtrip tool calls
-3. Smoke: Claude Code config can list tools and run `get_metrics`
-
-### Exit Criteria
-
-1. No manual curl wrapper required for Claude Code usage
-2. Tool discovery/call success rate >= 99% in local test runs
+1. Claude Code 네이티브 MCP transport 패키징 부재
+2. 정책 로직이 서버 내부에 분산되어 재사용성이 낮음
+3. 목표 계획이 키워드/규칙 중심
+4. write 도구 전반의 검증/롤백 프레임워크 일관성 부족
 
 ---
 
-## 4.2 Priority 3 — Central Policy and Approval Engine
+## 4. 우선순위별 구현 계획
 
-### Objective
+## 4.1 우선순위 1 — Claude Code MCP Transport Adapter
 
-Move authorization and safety decisions to a reusable policy module so MCP/API/agent all enforce the same write constraints.
+### 목적
 
-### Deliverables
+stdio MCP 호출을 SentinAI `/api/mcp`로 안전하게 변환하는 브리지 프로세스를 제공한다.
+
+### 산출물
+
+1. `src/lib/mcp-bridge-client.ts`
+2. `scripts/mcp-stdio-bridge.ts`
+3. `package.json` 스크립트: `mcp:bridge:stdio`
+4. 설정 가이드: `docs/guide/claude-code-mcp-setup.md`
+
+### API/계약
+
+1. `initialize`, `tools/list`, `tools/call`, `notifications/initialized` 지원
+2. `x-api-key`, `x-request-id`, 승인 토큰 컨텍스트 전달
+3. SentinAI 오류 코드를 stdio MCP 응답 형태로 정규화
+
+### 검증
+
+1. stdio 프레임 파싱/직렬화 단위 테스트
+2. 브리지→`/api/mcp` 라운드트립 통합 테스트
+3. Claude Code에서 `get_metrics` 스모크 테스트
+
+### 종료 기준
+
+1. curl 수동 래퍼 없이 Claude Code 사용 가능
+2. 툴 탐색/호출 성공률 99% 이상
+
+---
+
+## 4.2 우선순위 3 — 중앙 정책/승인 엔진
+
+### 목적
+
+MCP/API/agent가 동일한 write 제약을 적용하도록 정책 판단을 중앙 모듈로 통합한다.
+
+### 산출물
 
 1. `src/types/policy.ts`
 2. `src/lib/policy-engine.ts`
-3. `src/lib/approval-engine.ts` (ticket lifecycle and multi-step approval)
-4. Refactor callers:
-   - `src/lib/mcp-server.ts`
-   - `src/app/api/goals/route.ts`
-   - `src/lib/agent-loop.ts` (for future write actions beyond scaling)
+3. `src/lib/approval-engine.ts`
+4. 호출부 리팩터링(`mcp-server`, `goals route`, `agent-loop`)
 
-### Policy Model
+### 정책 모델
 
-1. Inputs: actor, tool/action, risk level, read-only mode, env flags, chain context
-2. Outputs: `allow | deny | require_approval | require_multi_approval`
-3. Deterministic reason code for every decision (audit-safe)
+입력:
 
-### Verification
+- actor, tool/action, risk level, read-only mode, env flags, chain context
 
-1. Unit: matrix tests by action/risk/mode
-2. Regression: existing MCP tests must pass with policy engine enabled
-3. Security: token replay/expiry/tampered-params rejection tests
+출력:
 
-### Exit Criteria
+- `allow | deny | require_approval | require_multi_approval`
+- 결정 사유 코드(감사 가능)
 
-1. No direct guard duplication outside policy module
-2. Every denied/approved write has machine-readable policy reason code
+### 검증
 
----
+1. 액션/리스크/모드 매트릭스 단위 테스트
+2. 기존 MCP 회귀 테스트
+3. 토큰 재사용/만료/파라미터 변조 보안 테스트
 
-## 4.3 Priority 2 — LLM+Validator Goal Planner with Re-Planning
+### 종료 기준
 
-### Objective
-
-Upgrade goal planning from keyword rules to constrained model planning with deterministic validation and bounded re-planning loops.
-
-### Deliverables
-
-1. `src/lib/goal-planner-llm.ts` (LLM planning adapter)
-2. `src/lib/goal-plan-validator.ts` (schema + policy + precondition checks)
-3. `src/types/goal-planner.ts` extension:
-   - `planVersion`
-   - `replanCount`
-   - `failureReasonCode`
-4. Integrate into `src/lib/goal-planner.ts`
-
-### Planning Pipeline
-
-1. Intent extraction -> candidate step graph generation
-2. Validation:
-   - schema validity
-   - policy compatibility
-   - runtime preconditions (metrics/anomalies/cooldown)
-3. If invalid: bounded re-plan (`maxReplans=2`)
-4. Fallback: current rule-based planner if model path fails
-
-### Verification
-
-1. Unit: malformed plan rejection and repair
-2. Integration: `execute_goal_plan` with re-plan success/failure paths
-3. Cost/latency budget tests for `fast` and `best` tiers
-
-### Exit Criteria
-
-1. At least 4 standard goal classes produce valid executable plans
-2. Re-plan loop prevents invalid write plans from execution
+1. 정책 모듈 외부 가드 중복 제거
+2. 모든 write 승인/거부 결정에 기계 해석 가능한 reason code 제공
 
 ---
 
-## 4.4 Priority 5 — Closed-Loop Verification and Rollback
+## 4.3 우선순위 2 — LLM+검증기 목표 플래너(재계획)
 
-### Objective
+### 목적
 
-Make every write action verifiable with post-condition checks and automatic rollback playbooks when verification fails.
+키워드 기반 계획을 제약 기반 모델 계획으로 고도화하고, 유효성 검증과 제한된 재계획 루프를 제공한다.
 
-### Deliverables
+### 산출물
+
+1. `src/lib/goal-planner-llm.ts`
+2. `src/lib/goal-plan-validator.ts`
+3. `src/types/goal-planner.ts` 확장(`planVersion`, `replanCount`, `failureReasonCode`)
+4. `src/lib/goal-planner.ts` 통합
+
+### 플래닝 파이프라인
+
+1. 의도 추출 → 후보 step graph 생성
+2. 검증(스키마/정책/런타임 전제조건)
+3. 실패 시 제한된 재계획(`maxReplans=2`)
+4. 모델 경로 실패 시 규칙 기반 플래너 fallback
+
+### 검증
+
+1. malformed plan 거부 및 복구 테스트
+2. `execute_goal_plan` 재계획 성공/실패 경로 테스트
+3. `fast`/`best` 모델 비용·지연 예산 테스트
+
+### 종료 기준
+
+1. 표준 목표 클래스 4종 이상에서 실행 가능한 유효 계획 생성
+2. 재계획 루프가 잘못된 write 계획 실행을 차단
+
+---
+
+## 4.4 우선순위 5 — 폐쇄 루프 검증 및 롤백
+
+### 목적
+
+모든 write 액션에 사후조건 검증을 부여하고, 실패 시 자동 롤백 플레이북을 실행한다.
+
+### 산출물
 
 1. `src/types/operation-control.ts`
 2. `src/lib/operation-verifier.ts`
 3. `src/lib/rollback-runner.ts`
-4. Integrations:
-   - `src/lib/mcp-server.ts` write tools
-   - `src/lib/goal-planner.ts` write steps
-   - `src/lib/agent-loop.ts` verify/rollback trace
+4. MCP/goal-planner/agent-loop 연동
 
-### Control Flow
+### 제어 흐름
 
-1. Execute action (or dry-run)
-2. Run action-specific verifier
-3. If failed and rollback available:
-   - run rollback playbook
-   - verify rollback outcome
-4. Persist control result to decision trace/activity logs
+1. 액션 실행(또는 dry-run)
+2. 액션별 verifier 실행
+3. 실패 + 롤백 가능 시 롤백 실행 및 검증
+4. 결과를 decision trace/activity log에 기록
 
-### Verification
+### 검증
 
-1. Unit: verifier rules per action type
-2. Integration: forced-failure scenarios trigger rollback
-3. Reliability: rollback success ratio metric and alerting thresholds
+1. 액션 타입별 verifier 규칙 단위 테스트
+2. 강제 실패 시 롤백 트리거 통합 테스트
+3. 롤백 성공률 메트릭/알림 임계값 검증
 
-### Exit Criteria
+### 종료 기준
 
-1. 100% of write actions have verifier definitions
-2. Failed verification never silently returns success
+1. write 액션 100% verifier 정의
+2. 검증 실패가 성공으로 침묵 반환되지 않음
 
 ---
 
-## 4.5 Priority 4 — Expanded Operational Action Toolset
+## 4.5 우선순위 4 — 운영 액션 툴셋 확장
 
-### Objective
+### 목적
 
-Expand actionable tool surface for real L2 operations while keeping every action guarded, dry-runnable, and rollback-aware.
+실제 L2 운영에 필요한 액션 표면을 확장하되, 모든 액션에 가드/드라이런/롤백 인지를 강제한다.
 
-### Deliverables
+### 산출물
 
-1. MCP tool additions in `src/types/mcp.ts`, `src/lib/mcp-server.ts`:
+1. MCP 도구 추가:
    - `restart_batcher`
    - `restart_proposer`
    - `switch_l1_rpc`
    - `update_proxyd_backend`
    - `run_health_diagnostics`
-2. Operational executor modules:
+2. 실행 모듈:
    - `src/lib/l1-rpc-operator.ts`
    - `src/lib/component-operator.ts`
 
-### Rules
+### 규칙
 
-1. Every new write tool requires:
-   - policy check
-   - approval path
-   - verifier + rollback hint
-2. Read-only mode behavior must be explicit per tool
+1. 신규 write 도구는 정책 체크/승인 경로/verifier+rollback 힌트 필수
+2. read-only 모드 동작을 도구별로 명시
 
-### Verification
+### 검증
 
-1. Unit: tool parameter validation and policy mapping
-2. Integration: tool call -> action -> verification -> audit trace
-3. Regression: legacy tools unchanged behavior
+1. 파라미터 검증/정책 매핑 단위 테스트
+2. 도구 호출→실행→검증→감사 로그 통합 테스트
+3. 기존 도구 회귀 테스트
 
-### Exit Criteria
+### 종료 기준
 
-1. At least 5 new operational tools available through MCP
-2. All new write tools pass guarded execution tests
+1. MCP에서 운영 도구 5종 이상 제공
+2. 신규 write 도구 guarded 실행 테스트 통과
 
 ---
 
-## 4.6 Priority 6 — Evaluation Environment and Autonomy Scorecard
+## 4.6 우선순위 6 — 평가 환경 및 자율성 스코어카드
 
-### Objective
+### 목적
 
-Establish repeatable evaluation before production rollout so autonomy quality is measured, not assumed.
+운영 배포 전에 자율성 품질을 반복 가능하게 측정한다.
 
-### Deliverables
+### 산출물
 
-1. `scripts/autonomy-eval.ts` (scenario replay runner)
-2. `src/lib/autonomy-scorecard.ts`
-3. `docs/verification/proposal-25-autonomy-eval-report-template.md`
-4. CI workflow for scheduled eval (`.github/workflows/autonomy-eval.yml`)
+1. 평가 시나리오 세트(정상/오탐/실패/롤백)
+2. `autonomy-scorecard` 계산/리포트
+3. staged rollout gate 기준
 
-### Metrics
+### 메트릭
 
-1. Goal completion rate
-2. False-action rate
-3. Policy violation count
-4. Rollback success rate
-5. Median time-to-stability
+1. goal completion rate
+2. unsafe action blocked rate
+3. verifier coverage
+4. rollback success rate
+5. mean intervention time
 
-### Verification
+### 검증
 
-1. Replay at least 10 deterministic incident scenarios
-2. Compare dry-run vs write-run outcomes
-3. Gate production rollout on minimum score thresholds
+1. 재현 가능한 시나리오 실행
+2. 스코어 산출 일관성 확인
+3. 배포 게이트 임계값 검증
 
-### Exit Criteria
+### 종료 기준
 
-1. Scorecard generated automatically for each release candidate
-2. Release blocked when critical safety thresholds are unmet
-
----
-
-## 5. Milestone Timeline (10 Weeks)
-
-1. Week 1-2: Priority 1 complete
-2. Week 3-4: Priority 3 complete
-3. Week 5-6: Priority 2 complete
-4. Week 7: Priority 5 complete
-5. Week 8: Priority 4 complete
-6. Week 9-10: Priority 6 complete + staged rollout prep
+1. 운영 승격 전에 점수 기반 판정 가능
+2. 자율성 개선 추세를 주간 단위로 관측 가능
 
 ---
 
-## 6. Test Strategy
+## 5. 마일스톤 타임라인 (10주)
+
+1. W1-W2: Priority 1
+2. W2-W3: Priority 3
+3. W3-W5: Priority 2
+4. W5-W7: Priority 5
+5. W7-W8: Priority 4
+6. W8-W10: Priority 6
+
+---
+
+## 6. 테스트 전략
 
 ### Unit
 
-1. Bridge protocol compatibility
-2. Policy decision matrix
-3. Plan validation/re-planning
-4. Verifier/rollback contracts
+- transport/policy/planner/verifier/tool validation
 
 ### Integration
 
-1. Claude Code bridge end-to-end call flow
-2. Goal execution with policy + approval + verification
-3. Agent loop interaction with policy and rollback modules
+- bridge↔mcp, plan↔execute, verify↔rollback
 
 ### Acceptance
 
-1. Natural-language operation from Claude Code works without manual RPC handling
-2. No unsafe write action bypasses policy or approval
-3. Failed actions are verified and rolled back or escalated
+1. 안전 정책 위반 없이 자연어 운영 가능
+2. 실패 액션 자동 롤백 및 기록
+3. 단계 배포 중 운영 사고 0건
 
 ---
 
-## 7. Rollout and Rollback
+## 7. 배포 및 롤백
 
 ### Rollout
 
-1. Stage A: Bridge + read tools only
-2. Stage B: Guarded write tools in dry-run default
-3. Stage C: Limited write rollout with approval and rollback enabled
-4. Stage D: Autonomous mode expansion by scored confidence gates
+1. 개발/스테이징에서 shadow mode
+2. 제한된 write 범위로 canary
+3. 정책 게이트 기준 통과 시 확대
 
 ### Rollback
 
-1. Disable bridge entrypoint (`mcp:bridge:stdio`)
-2. Force `dryRun=true` for all write-capable tools
-3. Disable autonomous act path while preserving observe/detect/analyze
+1. 브리지/자율 실행 플래그 비활성화
+2. 기존 수동/반자동 경로 즉시 복귀
+3. 실패 케이스 감사 로그 보존
 
 ---
 
-## 8. Risks and Mitigations
+## 8. 리스크 및 대응
 
-1. Risk: transport incompatibility with Claude Code MCP updates  
-   Mitigation: protocol compatibility tests + version pinning + fallback HTTP adapter
+1. 정책 누락으로 인한 위험 실행 → 중앙 정책 엔진 단일화
+2. LLM 계획 품질 변동 → validator + bounded replan + fallback
+3. 검증/롤백 커버리지 공백 → write 액션 100% verifier 계약 강제
+4. 운영 복잡도 증가 → scorecard 기반 단계 승격
 
-2. Risk: over-aggressive autonomous actions  
-   Mitigation: central policy engine, approval requirements, verification+rollback mandatory
-
-3. Risk: planner hallucination or invalid action graph  
-   Mitigation: strict schema validation, bounded re-planning, rule-based fallback
-
-4. Risk: low reproducibility of safety claims  
-   Mitigation: deterministic replay eval and release score gating

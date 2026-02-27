@@ -1,81 +1,81 @@
-# Proposal 26: Autonomous Goal Generation Engine (Phase 2)
+# 제안 26: 자율 목표 생성 엔진 (Phase 2)
 
-> Created: 2026-02-22  
-> Status: Planned  
-> Quarter: Q2-Q3 (2026-03 ~ 2026-08)
-
----
-
-## 1. Background
-
-SentinAI now supports:
-
-1. Claude Code MCP bridge and guarded tool execution.
-2. LLM-assisted goal planning with validator/replan fallback.
-3. Verification and rollback for major write actions.
-4. Deterministic autonomy evaluation and scorecard.
-
-Current gap to full autonomy:
-
-1. Goals are still mostly user-triggered or fixed-loop-triggered.
-2. Agent does not continuously create and rank operational goals on its own.
-3. Long-horizon objective management is not yet first-class.
+> 작성일: 2026-02-22  
+> 상태: 계획  
+> 분기: Q2-Q3 (2026-03 ~ 2026-08)
 
 ---
 
-## 2. Remaining Work for Full Autonomy
+## 1. 배경
 
-Priority backlog to reach full autonomous agent behavior:
+현재 SentinAI는 아래 기반을 갖추고 있다.
 
-1. Goal Generation Engine (this proposal)
-2. Durable execution orchestrator (queue, checkpoint, retry, timeout)
-3. Full tool coverage for verifier/rollback contracts
-4. Risk-tiered autonomy policy (A0-A5) and adaptive approvals
-5. Unified state graph and confidence-aware causal reasoning
-6. Learning loop from replay/incidents into planning policy
-7. Production-grade shadow/canary autonomy gate
-8. Security/governance hardening (least privilege, immutable audit, kill-switch)
+1. Claude Code MCP 브리지 + 가드된 도구 실행
+2. LLM 보조 목표 계획 + validator/replan fallback
+3. 주요 write 액션 검증/롤백
+4. 결정론적 자율성 평가 및 스코어카드
 
----
+완전 자율까지 남은 갭:
 
-## 3. Objective
-
-Build an autonomous Goal Generation Engine that continuously:
-
-1. Ingests multi-source signals (metrics, anomalies, failover events, cost, decision memory).
-2. Generates candidate operational goals.
-3. Scores and prioritizes goals with policy/risk constraints.
-4. Publishes executable goals into a managed queue for planner/executor consumption.
-
-Success criteria:
-
-1. Agent can create goals without explicit user prompt.
-2. Goal ranking is deterministic under same input state.
-3. Unsafe/low-confidence goals are filtered before execution.
+1. 목표 생성이 사용자 트리거/고정 루프 중심
+2. 에이전트가 스스로 목표를 지속 생성/우선순위화하지 못함
+3. 장기 시계열 목표 관리가 1급 기능이 아님
 
 ---
 
-## 4. Scope and Non-Goals
+## 2. 완전 자율까지 남은 작업
+
+우선순위 백로그:
+
+1. Goal Generation Engine (본 제안)
+2. 내구성 실행 오케스트레이터(큐/체크포인트/재시도/타임아웃)
+3. verifier/rollback 계약의 전 도구 커버리지
+4. 위험 등급 기반 자율 정책(A0-A5) 및 적응형 승인
+5. 통합 상태 그래프와 신뢰도 기반 인과 추론
+6. 리플레이/사고 데이터 기반 학습 루프
+7. 운영 등급 shadow/canary 자율 게이트
+8. 보안/거버넌스 강화(최소권한, 불변 감사, 킬스위치)
+
+---
+
+## 3. 목표
+
+다음을 지속 수행하는 자율 Goal Generation Engine을 구축한다.
+
+1. 다중 신호(메트릭/이상/페일오버/비용/결정 메모리) 수집
+2. 운영 목표 후보 생성
+3. 정책/위험 제약을 반영한 점수화·우선순위화
+4. 실행 가능한 목표를 관리 큐에 게시
+
+성공 기준:
+
+1. 사용자 프롬프트 없이 목표를 생성
+2. 동일 입력에서 결정론적 목표 정렬
+3. 위험/저신뢰 목표를 실행 전에 필터링
+
+---
+
+## 4. 범위 및 비목표
 
 In scope:
 
-1. Goal candidate generation and queue lifecycle.
-2. Priority scoring and suppression/dedup rules.
-3. Integration point to existing `goal-planner` and `agent-loop`.
+1. 목표 후보 생성 및 큐 수명주기
+2. 우선순위 점수화 및 suppression/dedup 규칙
+3. 기존 `goal-planner`/`agent-loop`와 연동
 
-Out of scope (for this phase):
+Out of scope:
 
-1. Multi-agent negotiation/consensus protocol.
-2. Fully self-tuning policy via online learning.
-3. Cross-cluster distributed scheduler.
+1. 멀티에이전트 협상/합의 프로토콜
+2. 온라인 학습 기반 완전 자가 정책 튜닝
+3. 크로스 클러스터 분산 스케줄러
 
 ---
 
-## 5. Architecture Plan
+## 5. 아키텍처 계획
 
-## 5.1 New Types
+## 5.1 신규 타입
 
-Add `src/types/goal-manager.ts`:
+`src/types/goal-manager.ts` 추가:
 
 1. `AutonomousGoalSource` (`metrics`, `anomaly`, `policy`, `cost`, `failover`, `memory`)
 2. `AutonomousGoalStatus` (`candidate`, `queued`, `scheduled`, `running`, `completed`, `failed`, `suppressed`, `expired`)
@@ -83,119 +83,117 @@ Add `src/types/goal-manager.ts`:
 4. `AutonomousGoalCandidate`, `AutonomousGoalQueueItem`, `GoalPriorityScore`
 5. `GoalSuppressionReasonCode` (`duplicate_goal`, `low_confidence`, `policy_blocked`, `cooldown_active`, `stale_signal`)
 
-## 5.2 New Modules
+## 5.2 신규 모듈
 
 1. `src/lib/goal-signal-collector.ts`
 2. `src/lib/goal-candidate-generator.ts`
 3. `src/lib/goal-priority-engine.ts`
 4. `src/lib/goal-manager.ts`
 
-Responsibilities:
+책임 분리:
 
-1. `goal-signal-collector`: collect normalized runtime signals.
-2. `goal-candidate-generator`: hybrid rule + LLM goal candidate generation.
-3. `goal-priority-engine`: score goals (impact, urgency, confidence, risk, policy fit).
-4. `goal-manager`: dedup/suppress/queue lifecycle and dispatch.
+1. signal-collector: 런타임 신호 정규화 수집
+2. candidate-generator: 규칙+LLM 하이브리드 후보 생성
+3. priority-engine: 영향도/긴급도/신뢰도/위험도/정책 적합 점수화
+4. goal-manager: dedup/suppress/queue 수명주기 및 dispatch
 
-## 5.3 Data and Queue
+## 5.3 데이터 및 큐
 
-Use existing store abstraction (`redis-store`) for:
+기존 `redis-store` 추상화 활용:
 
-1. Candidate ring buffer (`goal:candidate:*`)
-2. Priority queue (`goal:queue`)
-3. Active goal pointer (`goal:active`)
-4. Suppression history (`goal:suppression:*`)
+1. 후보 링버퍼(`goal:candidate:*`)
+2. 우선순위 큐(`goal:queue`)
+3. 활성 목표 포인터(`goal:active`)
+4. suppression 이력(`goal:suppression:*`)
 
-Queue invariants:
+큐 불변식:
 
-1. No duplicate goal signature in active window (default 30 min).
-2. High/critical risk goals require explicit policy path.
-3. Expired goals are auto-pruned.
+1. 활성 창(기본 30분) 내 중복 시그니처 금지
+2. high/critical 위험 목표는 명시 정책 경로 필요
+3. 만료 목표 자동 정리
 
-## 5.4 Integration Points
+## 5.4 연동 지점
 
-1. `agent-loop`: after detect/analyze phase, call `goal-manager.tick()`.
-2. `goal-planner`: consume queued goal text and produce executable plan.
-3. `policy-engine`: evaluate goal risk and write eligibility before scheduling.
+1. `agent-loop`: detect/analyze 이후 `goal-manager.tick()` 호출
+2. `goal-planner`: 큐의 목표 텍스트를 실행 계획으로 변환
+3. `policy-engine`: 스케줄 전 목표 위험/쓰기 자격 판정
 
 ---
 
-## 6. Implementation Plan (Goal Generation Engine)
+## 6. 구현 계획 (Goal Generation Engine)
 
-Execution order for implementation:
+## Phase A: Foundation (1주차)
 
-## Phase A: Foundation (Week 1)
+1. goal-manager 타입/스토어 계약 추가
+2. 결정론적 스냅샷 스키마 기반 signal collector 구현
+3. 신호 정규화/스키마 가드 단위 테스트 추가
 
-1. Add `goal-manager` types and store contracts.
-2. Implement signal collector with deterministic snapshot schema.
-3. Add unit tests for signal normalization and schema guards.
-
-Deliverables:
+산출물:
 
 1. `src/types/goal-manager.ts`
 2. `src/lib/goal-signal-collector.ts`
 3. `src/lib/__tests__/goal-signal-collector.test.ts`
 
-## Phase B: Candidate Generation (Week 2)
+## Phase B: Candidate Generation (2주차)
 
-1. Implement rule-based candidate generator baseline.
-2. Add optional LLM enhancer for goal phrasing and decomposition hints.
-3. Add fallback path when LLM unavailable.
+1. 규칙 기반 후보 생성기 베이스라인 구현
+2. 목표 문구/분해 힌트용 LLM enhancer 추가(옵션)
+3. LLM 불가 시 fallback 경로 구현
 
-Deliverables:
+산출물:
 
 1. `src/lib/goal-candidate-generator.ts`
 2. `src/lib/__tests__/goal-candidate-generator.test.ts`
 
-## Phase C: Priority and Suppression (Week 3)
+## Phase C: Priority and Suppression (3주차)
 
-1. Implement priority engine scoring formula:
-   - `score = impact(0-40) + urgency(0-25) + confidence(0-20) + policyFit(0-15)`
-2. Implement dedup/suppression rules:
-   - same signature suppression window
-   - cooldown-aware suppression
-   - low-confidence cutoff
-3. Persist suppression reasons to audit trail.
+1. 우선순위 점수식 구현
+- `score = impact(0-40) + urgency(0-25) + confidence(0-20) + policyFit(0-15)`
+2. dedup/suppression 규칙 구현
+- 동일 시그니처 suppression window
+- cooldown 인지 suppression
+- 저신뢰도 컷오프
+3. suppression 사유를 감사 로그에 기록
 
-Deliverables:
+산출물:
 
 1. `src/lib/goal-priority-engine.ts`
 2. `src/lib/__tests__/goal-priority-engine.test.ts`
 
-## Phase D: Goal Manager Runtime (Week 4)
+## Phase D: Goal Manager Runtime (4주차)
 
-1. Implement queue lifecycle manager (`enqueue`, `dequeue`, `ack`, `fail`, `expire`).
-2. Integrate with `agent-loop` tick and `goal-planner` dispatch.
-3. Add read API for dashboard/operator visibility.
+1. 큐 수명주기(`enqueue`, `dequeue`, `ack`, `fail`, `expire`) 구현
+2. `agent-loop` tick + `goal-planner` dispatch 연동
+3. 운영자 가시성을 위한 read API 추가
 
-Deliverables:
+산출물:
 
 1. `src/lib/goal-manager.ts`
 2. `src/app/api/goal-manager/route.ts`
 3. `src/lib/__tests__/goal-manager.test.ts`
 
-## Phase E: Safety and Verification (Week 5)
+## Phase E: Safety and Verification (5주차)
 
-1. Add policy gate on queued goals.
-2. Add end-to-end test: signal -> candidate -> queue -> plan dispatch.
-3. Add replay scenarios for false-goal and stale-goal suppression.
+1. 큐잉 목표에 정책 게이트 적용
+2. E2E 테스트: signal → candidate → queue → plan dispatch
+3. false/stale goal suppression replay 시나리오 추가
 
-Deliverables:
+산출물:
 
 1. `src/lib/__tests__/goal-manager-e2e.test.ts`
-2. `scripts/autonomy-eval.ts` scenario extension (goal generation coverage)
+2. `scripts/autonomy-eval.ts` 시나리오 확장
 
 ---
 
-## 7. API and Observability Plan
+## 7. API 및 관측성 계획
 
-API additions:
+API 추가:
 
-1. `GET /api/goal-manager` (queue/candidate/suppression summary)
-2. `POST /api/goal-manager/tick` (manual trigger in staging)
-3. `POST /api/goal-manager/dispatch` (force dispatch top goal, admin only)
+1. `GET /api/goal-manager` (queue/candidate/suppression 요약)
+2. `POST /api/goal-manager/tick` (스테이징 수동 트리거)
+3. `POST /api/goal-manager/dispatch` (관리자 강제 dispatch)
 
-Metrics:
+메트릭:
 
 1. `goal_candidates_total`
 2. `goal_suppressed_total{reason}`
@@ -203,64 +201,66 @@ Metrics:
 4. `goal_dispatch_latency_ms`
 5. `goal_execution_success_rate`
 
-Logs:
+로그:
 
-1. candidate creation trace
-2. suppression reason trace
-3. dispatch/ack/fail trace
+1. 후보 생성 추적
+2. suppression 사유 추적
+3. dispatch/ack/fail 추적
 
 ---
 
-## 8. Verification Strategy
+## 8. 검증 전략
 
 Unit:
 
-1. signal normalization stability
-2. scoring determinism
-3. suppression dedup/cooldown rules
+1. 신호 정규화 안정성
+2. 점수화 결정론
+3. suppression dedup/cooldown 규칙
 
 Integration:
 
-1. agent-loop tick to queue insertion
-2. queue to goal planner dispatch
-3. policy block and suppression path
+1. agent-loop tick → queue 삽입
+2. queue → goal planner dispatch
+3. policy block 및 suppression 경로
 
 Acceptance:
 
-1. Autonomous goal creation works without user prompt.
-2. Duplicate/noisy goals are suppressed deterministically.
-3. Unsafe goals are blocked before execution.
+1. 사용자 프롬프트 없이 자율 목표 생성
+2. 중복/노이즈 목표 결정론적 억제
+3. 위험 목표 실행 전 차단
 
 ---
 
-## 9. Rollout Plan
+## 9. 롤아웃 계획
 
 Stage A:
 
-1. observe-only mode (`GOAL_MANAGER_ENABLED=true`, dispatch disabled)
+1. observe-only (`GOAL_MANAGER_ENABLED=true`, dispatch 비활성)
 
 Stage B:
 
-1. dispatch dry-run mode (goal queue active, execution dry-run only)
+1. dispatch dry-run (큐 활성, 실행은 dry-run)
 
 Stage C:
 
-1. bounded write mode with approval requirement
+1. 승인 필수 bounded write 모드
 
 Stage D:
 
-1. autonomous dispatch expansion by score gate
+1. 점수 게이트 기반 자율 dispatch 확대
 
 Rollback:
 
-1. disable `GOAL_MANAGER_ENABLED`
-2. clear dispatch path while retaining candidate telemetry
+1. `GOAL_MANAGER_ENABLED` 비활성화
+2. dispatch 경로 차단(후보 텔레메트리는 유지)
 
 ---
 
-## 10. Exit Criteria
+## 10. 종료 기준
 
-1. Goal manager generates and ranks goals continuously in staging.
-2. At least 80% of generated goals are actionable after validation.
-3. False-goal suppression rate is stable under replay scenarios.
-4. Production rollout gate includes goal-generation score metrics.
+1. 프롬프트 없이 목표를 안정적으로 생성/큐잉한다.
+2. 동일 입력에서 목표 우선순위 결과가 결정론적으로 재현된다.
+3. 저신뢰/위험 목표는 정책 단계에서 실행 전 차단된다.
+4. 운영 대시보드/API에서 큐/억제/디스패치 상태를 추적할 수 있다.
+5. E2E 시나리오에서 신호→목표→계획→실행 경로가 검증된다.
+

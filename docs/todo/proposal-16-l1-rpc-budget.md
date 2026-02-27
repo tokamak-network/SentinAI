@@ -1,103 +1,103 @@
-# Proposal 16: L1 RPC Call Budget Manager
+# Proposal 16: L1 RPC 호출 예산 관리자
 
-## 1. Overview
+## 1. 개요
 
-### Problem Statement
+### 문제 정의
 
-L2 network components (op-node, op-batcher, op-proposer) access L1 via Proxyd, which distributes requests across multiple backends (e.g., `infura_theo1`, `infura_theo2`, `infura_theo3`). Each backend has a quota:
+L2 네트워크 컴포넌트(op-node, op-batcher, op-proposer)는 Proxyd를 통해 L1에 접근하며, Proxyd는 요청을 여러 백엔드(`infura_theo1`, `infura_theo2`, `infura_theo3` 등)에 분산한다. 각 백엔드는 사용 한도가 있다:
 
-| Provider | Free Tier Limit | Overage Cost |
-|----------|----------------|--------------|
-| Infura | 100K req/day | $50/mo (Growth Plan) |
-| Alchemy | 300M CU/month | $49/mo (Growth Plan) |
+| 제공자 | 무료 한도 | 초과 비용 |
+|--------|-----------|-----------|
+| Infura | 100K 요청/일 | $50/월 (Growth Plan) |
+| Alchemy | 300M CU/월 | $49/월 (Growth Plan) |
 
-Currently, SentinAI only reacts **after** 429 errors occur (Proposal: Proxyd Backend 429 Auto-Replacement, implemented in `l1-rpc-failover.ts`). There is no **proactive** quota tracking, so backends hit their limits unexpectedly, causing:
+현재 SentinAI는 429 에러가 **발생한 후에야** 반응한다 (Proposal: Proxyd Backend 429 자동 교체, `l1-rpc-failover.ts` 구현). **사전** 할당량 추적이 없어 백엔드가 예상치 못하게 한도에 도달하면:
 
-- Temporary L1 connectivity loss until failover completes
-- Wasted spare URLs on preventable quota exhaustion
-- No visibility into per-backend usage rates
+- Failover 완료 전까지 일시적인 L1 연결 끊김 발생
+- 예방 가능한 할당량 소진으로 인한 예비 URL 낭비
+- 백엔드별 사용량 가시성 없음
 
-### Solution Summary
+### 해결책 요약
 
-Implement an **L1 RPC Budget Manager** that:
-1. Tracks per-backend call volume by counting probes and estimating actual usage
-2. Sets daily/monthly budgets per backend with configurable limits
-3. Proactively removes backends from the Proxyd `backend_groups` at 90% quota usage
-4. Automatically restores backends when quotas reset (monthly/daily)
-5. Sends alerts at 80% usage threshold
+다음을 수행하는 **L1 RPC 예산 관리자**를 구현한다:
+1. 프로브 횟수 집계와 실사용량 추정으로 백엔드별 호출량 추적
+2. 설정 가능한 한도로 백엔드별 일간/월간 예산 설정
+3. 할당량 90% 도달 시 Proxyd `backend_groups`에서 해당 백엔드 선제 제거
+4. 할당량 초기화(일간/월간) 시 백엔드 자동 복구
+5. 80% 사용 시 알림 발송
 
-### Goals
+### 목표
 
-- Prevent quota overage charges (~$50-99/month savings)
-- Eliminate unnecessary 429→spare URL consumption cycles
-- Provide visibility into per-backend RPC usage rates
-- Zero-touch operation after initial budget configuration
+- 할당량 초과 요금 방지 (월 $50~99 절감)
+- 불필요한 429 → 예비 URL 소비 사이클 제거
+- 백엔드별 RPC 사용량 가시성 확보
+- 초기 예산 설정 후 무인 운영
 
-### Non-Goals
+### 비목표
 
-- Exact per-request tracking (estimation via probe rate is sufficient)
-- Modifying Proxyd's internal routing logic
-- Supporting non-Infura/Alchemy providers (generic budget model)
+- 요청별 정확한 추적 (프로브 속도 기반 추정으로 충분)
+- Proxyd 내부 라우팅 로직 수정
+- Infura/Alchemy 이외 제공자 지원 (범용 예산 모델)
 
-### Monthly Savings Estimate
+### 월간 절감 추산
 
-| Item | Cost |
+| 항목 | 비용 |
 |------|------|
-| Infura overage prevention (Growth Plan) | **$50/mo** |
-| Alchemy overage prevention (Growth Plan) | **$49/mo** |
-| Reduced spare URL consumption | Operational stability |
+| Infura 초과 방지 (Growth Plan) | **$50/월** |
+| Alchemy 초과 방지 (Growth Plan) | **$49/월** |
+| 예비 URL 소비 감소 | 운영 안정성 향상 |
 
 ---
 
-## 2. Architecture
+## 2. 아키텍처
 
-### Data Flow
+### 데이터 흐름
 
 ```
-┌─ Agent Loop (30s cycle, existing) ───────────────────────┐
-│                                                           │
-│  Phase 1.5: checkProxydBackends() (existing)              │
-│       └─> probeBackend(url) — counts 429s                 │
-│                                                           │
-│  Phase 1.6: checkRpcBudgets() (NEW)                       │
-│       ├─> estimateBackendUsage(probeResults)               │
-│       ├─> [80% threshold] → sendBudgetAlert()              │
-│       ├─> [90% threshold] → removeFromBackendGroup()       │
-│       └─> [quota reset] → restoreToBackendGroup()          │
-└───────────────────────────────────────────────────────────┘
+┌─ Agent Loop (30초 사이클, 기존) ───────────────────────────┐
+│                                                            │
+│  Phase 1.5: checkProxydBackends() (기존)                   │
+│       └─> probeBackend(url) — 429 횟수 집계                │
+│                                                            │
+│  Phase 1.6: checkRpcBudgets() (신규)                       │
+│       ├─> estimateBackendUsage(probeResults)                │
+│       ├─> [80% 도달] → sendBudgetAlert()                   │
+│       ├─> [90% 도달] → removeFromBackendGroup()            │
+│       └─> [할당량 초기화] → restoreToBackendGroup()         │
+└────────────────────────────────────────────────────────────┘
 
 Budget State (IStateStore):
-┌──────────────────────────────────────────────────────────┐
-│  infura_theo1: { daily: 85000/100000, monthly: 2.1M/3M } │
-│  infura_theo2: { daily: 42000/100000, monthly: 1.0M/3M } │
-│  infura_theo3: { daily: 98000/100000, monthly: 2.9M/3M } │ ← CRITICAL
+┌───────────────────────────────────────────────────────────┐
+│  infura_theo1: { daily: 85000/100000, monthly: 2.1M/3M }  │
+│  infura_theo2: { daily: 42000/100000, monthly: 1.0M/3M }  │
+│  infura_theo3: { daily: 98000/100000, monthly: 2.9M/3M }  │ ← 위험
 │  alchemy:      { daily: 12000/∞,      monthly: 50M/300M } │
-└──────────────────────────────────────────────────────────┘
+└───────────────────────────────────────────────────────────┘
 ```
 
-### Integration Points
+### 연동 지점
 
-| Module | File | Usage |
-|--------|------|-------|
-| L1 RPC Failover | `src/lib/l1-rpc-failover.ts` | `checkProxydBackends()` probe data, `replaceBackendInToml()`, ConfigMap access |
-| Agent Loop | `src/lib/agent-loop.ts` | Phase 1.6 integration (after existing Phase 1.5) |
-| Alert Dispatcher | `src/lib/alert-dispatcher.ts` | Webhook alert pattern (reuse format) |
-| State Store | `src/lib/redis-store.ts` | Budget counter persistence |
-| Scheduler | `src/lib/scheduler.ts` | Monthly/daily reset cron |
+| 모듈 | 파일 | 사용 방식 |
+|------|------|-----------|
+| L1 RPC Failover | `src/lib/l1-rpc-failover.ts` | `checkProxydBackends()` 프로브 데이터, `replaceBackendInToml()`, ConfigMap 접근 |
+| Agent Loop | `src/lib/agent-loop.ts` | Phase 1.6 통합 (기존 Phase 1.5 이후) |
+| Alert Dispatcher | `src/lib/alert-dispatcher.ts` | Webhook 알림 패턴 재사용 |
+| State Store | `src/lib/redis-store.ts` | 예산 카운터 영속화 |
+| Scheduler | `src/lib/scheduler.ts` | 월간/일간 초기화 cron |
 
-### State Management
+### 상태 관리
 
-Extends `IStateStore`:
+`IStateStore` 확장:
 - `getRpcBudgetState(): Promise<RpcBudgetState | null>`
 - `setRpcBudgetState(state: RpcBudgetState): Promise<void>`
 
 ---
 
-## 3. Detailed Design
+## 3. 상세 설계
 
-### 3.1 New Types
+### 3.1 신규 타입
 
-**File: `src/types/rpc-budget.ts`** (NEW)
+**파일: `src/types/rpc-budget.ts`** (신규)
 
 ```typescript
 /**
@@ -178,9 +178,9 @@ export const DEFAULT_RPC_BUDGET_CONFIG: RpcBudgetConfig = {
 };
 ```
 
-### 3.2 Core Module
+### 3.2 핵심 모듈
 
-**File: `src/lib/rpc-budget-manager.ts`** (NEW, ~250 lines)
+**파일: `src/lib/rpc-budget-manager.ts`** (신규, ~250줄)
 
 ```typescript
 /**
@@ -210,7 +210,7 @@ import type {
 const MAX_ALERT_EVENTS = 50;
 const DEFAULT_WARNING_PCT = 80;
 const DEFAULT_CRITICAL_PCT = 90;
-const ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 1 hour between alerts per backend
+const ALERT_COOLDOWN_MS = 60 * 60 * 1000; // 백엔드별 알림 간격: 1시간
 
 // ============================================================
 // Configuration
@@ -241,13 +241,13 @@ export async function initBudgetState(config: RpcBudgetConfig): Promise<RpcBudge
 export async function checkAndResetCounters(state: RpcBudgetState): Promise<string[]>
 ```
 
-**Logic for `checkAndResetCounters()`:**
-1. Get current date `YYYY-MM-DD` and month `YYYY-MM`
-2. For each counter:
-   - If `lastResetDaily !== today` → reset `dailyCount = 0`, update `lastResetDaily`
-   - If `lastResetMonthly !== thisMonth` → reset `monthlyCount = 0`, update `lastResetMonthly`
-   - If counter was `removedFromGroup` and daily was reset → restore to group (only if monthly hasn't exceeded)
-3. Return names of restored backends
+**`checkAndResetCounters()` 로직:**
+1. 현재 날짜 `YYYY-MM-DD`와 월 `YYYY-MM` 취득
+2. 각 카운터에 대해:
+   - `lastResetDaily !== today` → `dailyCount = 0` 초기화, `lastResetDaily` 업데이트
+   - `lastResetMonthly !== thisMonth` → `monthlyCount = 0` 초기화, `lastResetMonthly` 업데이트
+   - `removedFromGroup` 상태이고 일간 초기화 발생 → 그룹 복구 (월간 한도 초과 아닌 경우만)
+3. 복구된 백엔드 이름 목록 반환
 
 ```typescript
 /**
@@ -263,9 +263,9 @@ export function incrementUsage(
 ): void
 ```
 
-**Logic for `incrementUsage()`:**
-1. For each active backend name in the current group:
-   - Find its counter
+**`incrementUsage()` 로직:**
+1. 현재 그룹의 활성 백엔드 이름별로:
+   - 해당 카운터 탐색
    - `counter.dailyCount += multiplier`
    - `counter.monthlyCount += multiplier`
    - `counter.estimatedDailyRate = counter.dailyCount / hoursSinceLastDailyReset`
@@ -278,24 +278,24 @@ export function incrementUsage(
 export async function checkRpcBudgets(): Promise<BudgetCheckResult | null>
 ```
 
-**Logic for `checkRpcBudgets()`:**
-1. Parse config → if not enabled, return null
-2. Load state from store (or init)
-3. Call `checkAndResetCounters()` → restore backends if quota reset
-4. Call `incrementUsage()` with active backend names
-5. For each backend with a budget:
-   - Calculate `dailyPct = dailyCount / dailyLimit * 100`
-   - Calculate `monthlyPct = monthlyCount / monthlyLimit * 100`
+**`checkRpcBudgets()` 로직:**
+1. 설정 파싱 → 비활성화 시 null 반환
+2. 스토어에서 상태 로드 (없으면 초기화)
+3. `checkAndResetCounters()` 호출 → 할당량 초기화 시 백엔드 복구
+4. 활성 백엔드 이름으로 `incrementUsage()` 호출
+5. 예산이 있는 각 백엔드:
+   - `dailyPct = dailyCount / dailyLimit * 100` 계산
+   - `monthlyPct = monthlyCount / monthlyLimit * 100` 계산
    - `usagePct = max(dailyPct, monthlyPct)`
-   - If `usagePct >= criticalPct (90%)` AND not already removed:
-     - Remove from `backend_groups` in ConfigMap TOML
-     - `kubectl patch configmap` + restart Proxyd pod
-     - Record alert event
-   - Else if `usagePct >= warningPct (80%)`:
-     - Send webhook alert (if cooldown expired)
-     - Record alert event
-6. Save state to store
-7. Return `BudgetCheckResult`
+   - `usagePct >= criticalPct (90%)` 이고 아직 미제거 시:
+     - ConfigMap TOML의 `backend_groups`에서 제거
+     - `kubectl patch configmap` + Proxyd 파드 재시작
+     - 알림 이벤트 기록
+   - `usagePct >= warningPct (80%)` 시:
+     - Webhook 알림 발송 (쿨다운 만료 시)
+     - 알림 이벤트 기록
+6. 스토어에 상태 저장
+7. `BudgetCheckResult` 반환
 
 ```typescript
 /**
@@ -310,12 +310,12 @@ async function removeFromBackendGroup(
 ): Promise<boolean>
 ```
 
-**Logic for `removeFromBackendGroup()`:**
-1. Read ConfigMap TOML via kubectl
-2. Parse TOML → find `backend_groups[targetGroup].backends`
-3. Filter out `backendName` from the backends array
-4. Stringify and patch ConfigMap
-5. Restart Proxyd pod: `kubectl rollout restart deployment proxyd -n {namespace}`
+**`removeFromBackendGroup()` 로직:**
+1. kubectl로 ConfigMap TOML 읽기
+2. TOML 파싱 → `backend_groups[targetGroup].backends` 탐색
+3. 백엔드 배열에서 `backendName` 필터링
+4. 문자열화 후 ConfigMap 패치
+5. Proxyd 파드 재시작: `kubectl rollout restart deployment proxyd -n {namespace}`
 
 ```typescript
 /**
@@ -329,10 +329,10 @@ async function restoreToBackendGroup(
 ): Promise<boolean>
 ```
 
-**Logic for `restoreToBackendGroup()`:**
-1. Read ConfigMap TOML
-2. Parse → add `backendName` back to `backend_groups[targetGroup].backends`
-3. Patch ConfigMap + restart Proxyd pod
+**`restoreToBackendGroup()` 로직:**
+1. ConfigMap TOML 읽기
+2. 파싱 → `backend_groups[targetGroup].backends`에 `backendName` 재추가
+3. ConfigMap 패치 + Proxyd 파드 재시작
 
 ```typescript
 /**
@@ -341,11 +341,11 @@ async function restoreToBackendGroup(
 async function sendBudgetAlert(event: BudgetAlertEvent): Promise<boolean>
 ```
 
-**Logic for `sendBudgetAlert()`:**
-1. Get `ALERT_WEBHOOK_URL` from env
-2. Format Slack Block Kit message with budget details
-3. POST to webhook URL
-4. Return success/failure
+**`sendBudgetAlert()` 로직:**
+1. 환경변수에서 `ALERT_WEBHOOK_URL` 취득
+2. 예산 상세 정보를 Slack Block Kit 메시지로 포맷
+3. Webhook URL에 POST
+4. 성공/실패 반환
 
 ```typescript
 /**
@@ -354,17 +354,17 @@ async function sendBudgetAlert(event: BudgetAlertEvent): Promise<boolean>
 export async function getBudgetState(): Promise<RpcBudgetState | null>
 ```
 
-### 3.3 Agent Loop Integration
+### 3.3 Agent Loop 통합
 
-**File: `src/lib/agent-loop.ts`** (MODIFY)
+**파일: `src/lib/agent-loop.ts`** (수정)
 
-Add after the existing Phase 1.5 (Proxyd backend health check):
+기존 Phase 1.5(Proxyd 백엔드 헬스 체크) 이후에 추가:
 
 ```typescript
-// === EXISTING IMPORT — add: ===
+// === 기존 IMPORT에 추가: ===
 import { checkRpcBudgets } from '@/lib/rpc-budget-manager';
 
-// === INSIDE runAgentCycle(), after Phase 1.5 Proxyd health check: ===
+// === runAgentCycle() 내부, Phase 1.5 Proxyd 헬스 체크 이후: ===
 
 // Phase 1.6: RPC Budget check (non-blocking)
 try {
@@ -380,15 +380,15 @@ try {
 }
 ```
 
-### 3.4 API Endpoint
+### 3.4 API 엔드포인트
 
-**File: `src/app/api/rpc-budget/route.ts`** (NEW)
+**파일: `src/app/api/rpc-budget/route.ts`** (신규)
 
 ```typescript
 import { NextResponse } from 'next/server';
 import { getBudgetState, parseBudgetConfig } from '@/lib/rpc-budget-manager';
 
-// GET /api/rpc-budget — Get current budget state
+// GET /api/rpc-budget — 현재 예산 상태 조회
 export async function GET() {
   const config = parseBudgetConfig();
   if (!config.enabled) {
@@ -402,81 +402,81 @@ export async function GET() {
 }
 ```
 
-### 3.5 Dashboard UI
+### 3.5 대시보드 UI
 
-No dashboard changes. Budget data available via `/api/rpc-budget`.
+대시보드 변경 없음. 예산 데이터는 `/api/rpc-budget`으로 조회 가능.
 
-### 3.6 Environment Variables
+### 3.6 환경변수
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `L1_RPC_BUDGET_ENABLED` | `false` | Enable per-backend RPC quota tracking |
-| `L1_RPC_BUDGET_CONFIG` | `[]` | JSON array of `BackendBudget` objects |
-| `L1_RPC_BUDGET_MULTIPLIER` | `100` | Estimation multiplier (probes → actual requests) |
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `L1_RPC_BUDGET_ENABLED` | `false` | 백엔드별 RPC 할당량 추적 활성화 |
+| `L1_RPC_BUDGET_CONFIG` | `[]` | `BackendBudget` 객체 JSON 배열 |
+| `L1_RPC_BUDGET_MULTIPLIER` | `100` | 추정 배수 (프로브 → 실제 요청) |
 
-Add to `.env.local.sample`:
+`.env.local.sample`에 추가:
 ```bash
-# === L1 RPC Budget Manager (Optional) ===
-# Track per-backend RPC quota usage and proactively manage limits.
+# === L1 RPC Budget Manager (선택 사항) ===
+# 백엔드별 RPC 할당량 사용량 추적 및 선제 관리.
 # L1_RPC_BUDGET_ENABLED=true
 # L1_RPC_BUDGET_CONFIG=[{"name":"infura_theo1","dailyLimit":100000,"monthlyLimit":3000000},{"name":"infura_theo2","dailyLimit":100000,"monthlyLimit":3000000}]
-# L1_RPC_BUDGET_MULTIPLIER=100  # 1 probe ≈ 100 actual L2 component requests
+# L1_RPC_BUDGET_MULTIPLIER=100  # 프로브 1회 ≈ L2 컴포넌트 실제 요청 100회
 ```
 
 ---
 
-## 4. Implementation Guide
+## 4. 구현 가이드
 
-### File Changes
+### 파일 변경 목록
 
-| # | File | Action | Changes |
-|---|------|--------|---------|
-| 1 | `src/types/rpc-budget.ts` | CREATE | Type definitions (~80 lines) |
-| 2 | `src/lib/rpc-budget-manager.ts` | CREATE | Core module (~250 lines) |
-| 3 | `src/lib/agent-loop.ts` | MODIFY | Phase 1.6 integration (+12 lines) |
-| 4 | `src/types/redis.ts` | MODIFY | IStateStore extension (+2 lines) |
-| 5 | `src/lib/state-store.ts` | MODIFY | InMemoryStateStore (+10 lines) |
-| 6 | `src/lib/redis-state-store.ts` | MODIFY | RedisStateStore (+15 lines) |
-| 7 | `src/app/api/rpc-budget/route.ts` | CREATE | API endpoint (~25 lines) |
-| 8 | `src/lib/__tests__/rpc-budget-manager.test.ts` | CREATE | Tests (~200 lines) |
-| 9 | `.env.local.sample` | MODIFY | Add env vars (+5 lines) |
-| 10 | `CLAUDE.md` | MODIFY | Add env vars + API route (+4 lines) |
+| # | 파일 | 작업 | 변경 내용 |
+|---|------|------|-----------|
+| 1 | `src/types/rpc-budget.ts` | 신규 생성 | 타입 정의 (~80줄) |
+| 2 | `src/lib/rpc-budget-manager.ts` | 신규 생성 | 핵심 모듈 (~250줄) |
+| 3 | `src/lib/agent-loop.ts` | 수정 | Phase 1.6 통합 (+12줄) |
+| 4 | `src/types/redis.ts` | 수정 | IStateStore 확장 (+2줄) |
+| 5 | `src/lib/state-store.ts` | 수정 | InMemoryStateStore (+10줄) |
+| 6 | `src/lib/redis-state-store.ts` | 수정 | RedisStateStore (+15줄) |
+| 7 | `src/app/api/rpc-budget/route.ts` | 신규 생성 | API 엔드포인트 (~25줄) |
+| 8 | `src/lib/__tests__/rpc-budget-manager.test.ts` | 신규 생성 | 테스트 (~200줄) |
+| 9 | `.env.local.sample` | 수정 | 환경변수 추가 (+5줄) |
+| 10 | `CLAUDE.md` | 수정 | 환경변수 + API 라우트 추가 (+4줄) |
 
-### Reusable Functions
+### 재사용 가능한 함수
 
 ```typescript
-// From l1-rpc-failover.ts
+// l1-rpc-failover.ts에서
 import { getL1FailoverState, replaceBackendInToml } from '@/lib/l1-rpc-failover';
-// getL1FailoverState() → L1FailoverState (includes proxydHealth[])
+// getL1FailoverState() → L1FailoverState (proxydHealth[] 포함)
 // replaceBackendInToml(toml, backendName, newUrl) → { updatedToml, previousUrl }
 
-// From k8s-config.ts
+// k8s-config.ts에서
 import { runK8sCommand, getNamespace } from '@/lib/k8s-config';
 // runK8sCommand(command, options?) → { stdout, stderr }
 
-// From redis-store.ts
+// redis-store.ts에서
 import { getStore } from '@/lib/redis-store';
 ```
 
-### IStateStore Extension
+### IStateStore 확장
 
-Add to `src/types/redis.ts`:
+`src/types/redis.ts`에 추가:
 ```typescript
 getRpcBudgetState(): Promise<RpcBudgetState | null>;
 setRpcBudgetState(state: RpcBudgetState): Promise<void>;
 ```
 
-### Implementation Order
+### 구현 순서
 
-1. Types → 2. IStateStore extension → 3. Store implementations → 4. Core module → 5. Agent loop → 6. API → 7. Tests → 8. Config
+1. 타입 → 2. IStateStore 확장 → 3. 스토어 구현체 → 4. 핵심 모듈 → 5. Agent Loop → 6. API → 7. 테스트 → 8. 설정
 
 ---
 
-## 5. Test Specification
+## 5. 테스트 명세
 
-**File: `src/lib/__tests__/rpc-budget-manager.test.ts`** (NEW)
+**파일: `src/lib/__tests__/rpc-budget-manager.test.ts`** (신규)
 
-### Mock Strategy
+### Mock 전략
 
 ```typescript
 vi.mock('@/lib/l1-rpc-failover', () => ({
@@ -503,78 +503,78 @@ vi.mock('@/lib/redis-store', () => ({
 }));
 ```
 
-### Test Cases
+### 테스트 케이스
 
 ```
 describe('rpc-budget-manager')
   describe('parseBudgetConfig')
-    it('should return disabled config when env var not set')
-    it('should parse valid JSON budget config')
-    it('should handle malformed JSON gracefully')
-    it('should apply default warning/critical thresholds')
+    it('환경변수 미설정 시 비활성화 설정 반환')
+    it('유효한 JSON 예산 설정 파싱')
+    it('잘못된 JSON 안전하게 처리')
+    it('기본 warning/critical 임계값 적용')
 
   describe('checkAndResetCounters')
-    it('should reset daily counter when date changes')
-    it('should reset monthly counter when month changes')
-    it('should restore removed backends on daily reset')
-    it('should NOT restore if monthly limit still exceeded')
+    it('날짜 변경 시 일간 카운터 초기화')
+    it('월 변경 시 월간 카운터 초기화')
+    it('일간 초기화 시 제거된 백엔드 복구')
+    it('월간 한도 초과 시 복구하지 않음')
 
   describe('incrementUsage')
-    it('should increment daily and monthly counters')
-    it('should calculate estimated daily rate')
-    it('should only increment active backends')
+    it('일간/월간 카운터 증가')
+    it('예상 일간 속도 계산')
+    it('활성 백엔드만 증가')
 
   describe('checkRpcBudgets')
-    it('should return null when disabled')
-    it('should send warning alert at 80% usage')
-    it('should remove backend from group at 90% usage')
-    it('should not re-remove already removed backend')
-    it('should restore backend when quota resets')
-    it('should respect alert cooldown (1 hour)')
+    it('비활성화 시 null 반환')
+    it('80% 사용 시 경고 알림 발송')
+    it('90% 사용 시 백엔드 그룹에서 제거')
+    it('이미 제거된 백엔드 중복 제거 방지')
+    it('할당량 초기화 시 백엔드 복구')
+    it('알림 쿨다운 준수 (1시간)')
 
   describe('removeFromBackendGroup')
-    it('should update ConfigMap TOML correctly')
-    it('should handle backend not in group gracefully')
+    it('ConfigMap TOML 정상 업데이트')
+    it('그룹에 없는 백엔드 안전하게 처리')
 
   describe('restoreToBackendGroup')
-    it('should re-add backend to group in TOML')
-    it('should not duplicate if already in group')
+    it('TOML의 그룹에 백엔드 재추가')
+    it('이미 있는 경우 중복 추가 방지')
 ```
 
-### Minimum Coverage Target
+### 최소 커버리지 목표
 
-- Statement coverage: ≥ 80%
-- Branch coverage: ≥ 75%
+- 구문 커버리지: ≥ 80%
+- 분기 커버리지: ≥ 75%
 
 ---
 
-## 6. Verification
+## 6. 검증
 
-### Step 1: Build
+### Step 1: 빌드
 
 ```bash
 npm run build
 ```
 
-### Step 2: Unit Tests
+### Step 2: 단위 테스트
 
 ```bash
 npx vitest run src/lib/__tests__/rpc-budget-manager.test.ts
 ```
 
-### Step 3: Integration Test
+### Step 3: 통합 테스트
 
 ```bash
-# Set budget config and enable
+# 예산 설정 및 활성화
 export L1_RPC_BUDGET_ENABLED=true
 export L1_RPC_BUDGET_CONFIG='[{"name":"infura_theo1","dailyLimit":100000,"monthlyLimit":3000000}]'
 npm run dev
 
-# Check budget state
+# 예산 상태 확인
 curl http://localhost:3002/api/rpc-budget | jq .
 ```
 
-### Step 4: Full Test Suite
+### Step 4: 전체 테스트 스위트
 
 ```bash
 npm run test:run

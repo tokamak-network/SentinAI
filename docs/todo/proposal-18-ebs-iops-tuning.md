@@ -1,593 +1,225 @@
-# Proposal 18: EBS GP3 Dynamic IOPS Tuning
+# 제안 18: EBS GP3 동적 IOPS 튜닝
 
-## 1. Overview
+## 1. 개요
 
-### Problem Statement
+### 문제 정의
 
-op-geth stores L2 chain data on Amazon EBS volumes. These volumes have different IOPS demands across operating phases:
+op-geth는 L2 체인 데이터를 Amazon EBS에 저장한다. 운영 단계에 따라 IOPS 수요가 크게 달라진다.
 
-| Phase | Actual IOPS | Duration | Frequency |
-|-------|------------|----------|-----------|
-| Initial chain sync | 6,000-10,000 | Hours-Days | Once |
-| Normal operation | 200-800 | Continuous | Always |
-| Block reorganization | 3,000-5,000 | Minutes | Rare |
-| State pruning | 4,000-8,000 | Hours | Periodic |
+| 단계 | 실제 IOPS | 지속 시간 | 발생 빈도 |
+|---|---|---|---|
+| 초기 동기화 | 6,000-10,000 | 수시간~수일 | 1회성 |
+| 일반 운영 | 200-800 | 상시 | 항상 |
+| 리오그 | 3,000-5,000 | 수분 | 드묾 |
+| 프루닝 | 4,000-8,000 | 수시간 | 주기적 |
 
-GP3 volumes provide 3,000 baseline IOPS for free. Additional provisioned IOPS cost $0.0065/IOPS-month. Many operators provision 6,000+ IOPS permanently "just in case", paying ~$19.50/month for IOPS that are used <5% of the time.
+GP3 기본 제공은 3,000 IOPS다. 추가 IOPS는 월 과금이 발생한다.
+실무에서 “안전하게” 6,000+ IOPS를 상시 고정해 두는 경우가 많아, 실제 사용 대비 과금 낭비가 발생한다.
 
-### Solution Summary
+### 해결 요약
 
-Implement an **EBS IOPS Optimizer** that:
-1. Monitors actual IOPS usage via CloudWatch metrics (`VolumeReadOps`, `VolumeWriteOps`)
-2. Dynamically adjusts GP3 provisioned IOPS based on actual demand
-3. Respects AWS constraints (6-hour cooldown between modifications, max 16,000 IOPS)
-4. Proactively scales up IOPS when high I/O patterns are detected
+**EBS IOPS Optimizer**를 구현해 아래를 자동화한다.
 
-### Goals
+1. CloudWatch(`VolumeReadOps`, `VolumeWriteOps`)로 실제 IOPS 모니터링
+2. 부하 패턴에 따라 GP3 IOPS/Throughput 동적 조정
+3. AWS 제약 준수(볼륨 수정 간 최소 6시간 간격, 최대 IOPS 제한)
+4. 고 I/O 패턴 감지 시 선제적 scale-up
 
-- Reduce EBS costs by ~$21/month (eliminating unnecessary provisioned IOPS)
-- Automatically scale IOPS up during sync/reorg events
-- Zero manual intervention after configuration
-- Never cause I/O throttling during critical operations
+### 목표
 
-### Non-Goals
+- 과할당 IOPS 제거로 월 비용 절감
+- sync/reorg 시점 자동 확장
+- 설정 후 수동 개입 최소화
+- 중요한 작업 중 I/O 스로틀링 방지
 
-- Volume type migration (GP2 → GP3 conversion)
-- EBS snapshot lifecycle management
-- Cross-AZ volume replication
-- Throughput tuning (kept at 125 MB/s baseline unless IOPS > 3,000)
+### 비목표
 
-### Monthly Savings Estimate
+- 볼륨 타입 마이그레이션(GP2 → GP3)
+- 스냅샷 수명주기 관리
+- AZ 간 복제
+- Throughput 고급 최적화(기본 정책 유지)
 
-| Item | Before (6,000 IOPS fixed) | After (dynamic) | Savings |
-|------|--------------------------|------------------|---------|
-| Additional IOPS | $19.50/mo (3,000 extra) | $3.30/mo (avg 500 extra) | **$16/mo** |
-| Additional Throughput | $4.80/mo | $0/mo (baseline) | **$5/mo** |
-| **Total** | | | **~$21/mo** |
+### 월 절감 추정
 
----
-
-## 2. Architecture
-
-### Data Flow
-
-```
-┌─ Scheduler (NEW cron: every 60 min) ─────────────────────┐
-│                                                           │
-│  EBS IOPS Optimizer                                       │
-│       │                                                   │
-│       ├─> getEbsVolumeId()                                │
-│       │   └─> aws ec2 describe-volumes                    │
-│       │       --filters Name=tag:kubernetes.io/created-for │
-│       │                                                   │
-│       ├─> getIopsMetrics()                                │
-│       │   └─> aws cloudwatch get-metric-statistics        │
-│       │       --metric-name VolumeReadOps,VolumeWriteOps  │
-│       │       --period 300 --statistics Sum                │
-│       │                                                   │
-│       ├─> analyzeIopsDemand()                             │
-│       │   ├─> Current avg IOPS (last 1h)                  │
-│       │   ├─> Trend detection (rising/falling/stable)     │
-│       │   └─> Target IOPS calculation                     │
-│       │                                                   │
-│       └─> [target ≠ current] adjustIops()                 │
-│           └─> aws ec2 modify-volume --iops {target}       │
-│               --throughput {calculated}                    │
-└───────────────────────────────────────────────────────────┘
-```
-
-### Integration Points
-
-| Module | File | Usage |
-|--------|------|-------|
-| K8s Config | `src/lib/k8s-config.ts` | AWS CLI auth, region detection |
-| Scheduler | `src/lib/scheduler.ts` | Hourly cron task |
-| State Store | `src/lib/redis-store.ts` | Last modification time, IOPS history |
-
-### State Management
-
-Extends `IStateStore`:
-- `getEbsOptimizerState(): Promise<EbsOptimizerState | null>`
-- `setEbsOptimizerState(state: EbsOptimizerState): Promise<void>`
+| 항목 | 기존(고정 6,000 IOPS) | 동적 적용 후 | 절감 |
+|---|---|---|---|
+| 추가 IOPS | 고정 과금 | 평균 사용량 기반 과금 | 절감 |
+| 추가 Throughput | 상시 과금 가능 | 필요 시만 증액 | 절감 |
+| 합계 |  |  | **약 $21/월** |
 
 ---
 
-## 3. Detailed Design
+## 2. 아키텍처
 
-### 3.1 New Types
+### 데이터 흐름
 
-**File: `src/types/ebs-optimizer.ts`** (NEW)
+1. Scheduler에서 60분 주기로 Optimizer 실행
+2. 대상 EBS Volume 식별(`describe-volumes`)
+3. CloudWatch에서 IOPS 지표 수집
+4. 1시간/24시간 패턴 분석 및 추세 판별
+5. 목표 IOPS/Throughput 계산
+6. 필요 시 `modify-volume` 실행
 
-```typescript
-/**
- * EBS GP3 Dynamic IOPS Tuning Types
- */
+### 통합 지점
 
-/** EBS volume info */
-export interface EbsVolumeInfo {
-  volumeId: string;               // e.g., 'vol-0abc123def456'
-  volumeType: string;             // 'gp3' | 'gp2' | 'io1' | etc.
-  sizeGiB: number;
-  currentIops: number;
-  currentThroughput: number;      // MB/s
-  availabilityZone: string;
-  attachedTo: string;             // Instance/Pod ID
-  tags: Record<string, string>;
-}
+| 모듈 | 파일 | 용도 |
+|---|---|---|
+| K8s Config | `src/lib/k8s-config.ts` | AWS CLI 인증/리전 컨텍스트 |
+| Scheduler | `src/lib/scheduler.ts` | 시간 기반 실행 |
+| State Store | `src/lib/redis-store.ts` | 마지막 수정 시각/이력 저장 |
 
-/** IOPS metrics from CloudWatch */
-export interface IopsMetrics {
-  timestamp: string;
-  period: number;                 // seconds (300 = 5 min)
-  readOps: number;                // Total read operations in period
-  writeOps: number;               // Total write operations in period
-  totalIops: number;              // (readOps + writeOps) / period
-  queueLength: number;            // VolumeQueueLength (average)
-}
+### 상태 관리
 
-/** IOPS analysis result */
-export interface IopsAnalysis {
-  avgIops1h: number;              // Average IOPS over last 1 hour
-  peakIops1h: number;             // Peak IOPS over last 1 hour
-  avgIops24h: number;             // Average IOPS over last 24 hours
-  trend: 'rising' | 'falling' | 'stable';
-  currentProvisioned: number;     // Currently provisioned IOPS
-  recommendedIops: number;        // Recommended IOPS
-  recommendedThroughput: number;  // Recommended throughput (MB/s)
-  reason: string;                 // Human-readable reason
-}
+`IStateStore` 확장:
 
-/** Volume modification result */
-export interface VolumeModificationResult {
-  success: boolean;
-  volumeId: string;
-  previousIops: number;
-  newIops: number;
-  previousThroughput: number;
-  newThroughput: number;
-  timestamp: string;
-  error?: string;
-}
-
-/** Optimizer state */
-export interface EbsOptimizerState {
-  volumeId: string | null;
-  lastModificationTime: number | null;   // Unix timestamp
-  lastCheckTime: number;                 // Unix timestamp
-  modificationHistory: VolumeModificationResult[];  // Ring buffer, max 20
-  currentIops: number;
-  currentThroughput: number;
-}
-
-/** Configuration */
-export interface EbsOptimizerConfig {
-  enabled: boolean;
-  volumeTag: string;                     // Tag to identify the EBS volume (default: see below)
-  baselineIops: number;                  // GP3 free tier (default: 3000)
-  maxIops: number;                       // Maximum IOPS to provision (default: 10000)
-  baselineThroughput: number;            // GP3 free tier MB/s (default: 125)
-  scaleUpThresholdPct: number;           // Scale up when avg > this % of current (default: 80)
-  scaleDownThresholdPct: number;         // Scale down when avg < this % of current (default: 30)
-  cooldownHours: number;                 // AWS limit: 6 hours between modifications
-  checkIntervalMinutes: number;          // How often to check (default: 60)
-}
-
-export const DEFAULT_EBS_OPTIMIZER_CONFIG: EbsOptimizerConfig = {
-  enabled: false,
-  volumeTag: 'kubernetes.io/created-for/pvc/name',
-  baselineIops: 3000,
-  maxIops: 10000,
-  baselineThroughput: 125,
-  scaleUpThresholdPct: 80,
-  scaleDownThresholdPct: 30,
-  cooldownHours: 6,
-  checkIntervalMinutes: 60,
-};
-
-/** IOPS pricing */
-export const EBS_PRICING = {
-  gp3IopsPerMonth: 0.0065,              // USD per provisioned IOPS above 3,000
-  gp3ThroughputPerMonth: 0.04,          // USD per MB/s above 125
-  freeBaselineIops: 3000,
-  freeBaselineThroughputMBps: 125,
-};
-```
-
-### 3.2 Core Module
-
-**File: `src/lib/ebs-optimizer.ts`** (NEW, ~300 lines)
-
-```typescript
-/**
- * EBS GP3 Dynamic IOPS Tuning
- * Monitors CloudWatch metrics and adjusts provisioned IOPS dynamically.
- */
-
-import { getStore } from '@/lib/redis-store';
-import type {
-  EbsVolumeInfo,
-  IopsMetrics,
-  IopsAnalysis,
-  VolumeModificationResult,
-  EbsOptimizerState,
-  EbsOptimizerConfig,
-} from '@/types/ebs-optimizer';
-
-// ============================================================
-// AWS CLI Helpers
-// ============================================================
-
-/**
- * Execute AWS CLI command with proper auth.
- * Uses AWS_PROFILE and AWS_REGION from environment.
- */
-async function runAwsCommand(command: string): Promise<string>
-```
-
-**Logic for `runAwsCommand()`:**
-1. Build command: `aws ${command} --output json`
-2. Add `--profile ${AWS_PROFILE}` if set
-3. Add `--region ${AWS_REGION || 'ap-northeast-2'}` (default Seoul)
-4. Execute via `child_process.execSync()` with 30s timeout
-5. Return stdout
-
-```typescript
-// ============================================================
-// Volume Discovery
-// ============================================================
-
-/**
- * Find the EBS volume attached to op-geth PVC.
- *
- * AWS CLI: aws ec2 describe-volumes
- *   --filters "Name=tag:kubernetes.io/created-for/pvc/name,Values=data-{statefulset}-0"
- *   --query "Volumes[0]"
- */
-export async function discoverEbsVolume(): Promise<EbsVolumeInfo | null>
-```
-
-**Logic for `discoverEbsVolume()`:**
-1. PVC name pattern: `data-${K8S_STATEFULSET_PREFIX || 'sepolia-thanos-stack'}-op-geth-0`
-2. Or use `EBS_VOLUME_ID` env if explicitly set
-3. Call `aws ec2 describe-volumes` with tag filter
-4. Parse JSON response → `EbsVolumeInfo`
-5. Verify `volumeType === 'gp3'` (skip if not GP3)
-
-```typescript
-// ============================================================
-// CloudWatch Metrics
-// ============================================================
-
-/**
- * Fetch IOPS metrics from CloudWatch for the last N hours.
- *
- * AWS CLI: aws cloudwatch get-metric-statistics
- *   --namespace AWS/EBS
- *   --metric-name VolumeReadOps
- *   --dimensions Name=VolumeId,Value={volumeId}
- *   --start-time {startTime}
- *   --end-time {endTime}
- *   --period 300
- *   --statistics Sum
- */
-export async function getIopsMetrics(
-  volumeId: string,
-  hours: number = 1
-): Promise<IopsMetrics[]>
-```
-
-**Logic for `getIopsMetrics()`:**
-1. Fetch `VolumeReadOps` (Sum, 5-min periods)
-2. Fetch `VolumeWriteOps` (Sum, 5-min periods)
-3. Optionally fetch `VolumeQueueLength` (Average, 5-min periods)
-4. Merge by timestamp
-5. Calculate `totalIops = (readOps + writeOps) / periodSeconds`
-6. Return sorted by timestamp
-
-```typescript
-// ============================================================
-// Analysis
-// ============================================================
-
-/**
- * Analyze IOPS demand and recommend target IOPS.
- */
-export function analyzeIopsDemand(
-  metrics1h: IopsMetrics[],
-  metrics24h: IopsMetrics[],
-  currentIops: number,
-  config: EbsOptimizerConfig
-): IopsAnalysis
-```
-
-**Logic for `analyzeIopsDemand()`:**
-1. Calculate `avgIops1h`, `peakIops1h` from 1h metrics
-2. Calculate `avgIops24h` from 24h metrics
-3. Determine trend:
-   - Compare first half avg vs second half avg of 1h window
-   - Rising if second > first × 1.2
-   - Falling if second < first × 0.8
-   - Stable otherwise
-4. Calculate recommended IOPS:
-   - If `avgIops1h > currentIops × scaleUpThresholdPct / 100` → scale up to `peakIops1h × 1.3` (30% headroom)
-   - If `avgIops1h < currentIops × scaleDownThresholdPct / 100` AND stable/falling → scale down to `max(avgIops24h × 1.5, baselineIops)`
-   - Otherwise → maintain current
-5. Clamp to `[baselineIops, maxIops]`
-6. Calculate throughput: `baseline` if IOPS ≤ 3000, else `min(IOPS / 4, 1000)` (rough heuristic)
-
-```typescript
-// ============================================================
-// Volume Modification
-// ============================================================
-
-/**
- * Modify EBS volume IOPS and throughput.
- *
- * AWS CLI: aws ec2 modify-volume
- *   --volume-id {volumeId}
- *   --iops {iops}
- *   --throughput {throughput}
- */
-export async function modifyVolumeIops(
-  volumeId: string,
-  targetIops: number,
-  targetThroughput: number
-): Promise<VolumeModificationResult>
-```
-
-**Logic for `modifyVolumeIops()`:**
-1. Check cooldown: if `lastModificationTime + cooldownHours * 3600000 > now` → skip
-2. Call `aws ec2 modify-volume --volume-id ${volumeId} --iops ${targetIops} --throughput ${targetThroughput}`
-3. Parse response
-4. Record in modification history
-5. Return result
-
-```typescript
-// ============================================================
-// Main Optimization Loop
-// ============================================================
-
-/**
- * Run one optimization cycle.
- * Called from scheduler every 60 minutes.
- */
-export async function optimizeEbsIops(): Promise<VolumeModificationResult | null>
-```
-
-**Logic for `optimizeEbsIops()`:**
-1. Check `EBS_IOPS_TUNING_ENABLED` env
-2. Load state from store
-3. Discover volume (cache volumeId in state)
-4. Verify GP3 type
-5. Fetch 1h and 24h metrics from CloudWatch
-6. Analyze demand
-7. If `recommendedIops !== currentIops`:
-   - Check cooldown
-   - Modify volume
-   - Save state
-8. Return result
-
-```typescript
-/**
- * Get optimizer status for API.
- */
-export async function getEbsOptimizerStatus(): Promise<{
-  enabled: boolean;
-  volumeId: string | null;
-  currentIops: number | null;
-  lastAnalysis: IopsAnalysis | null;
-  lastModification: VolumeModificationResult | null;
-  modificationHistory: VolumeModificationResult[];
-}>
-```
-
-### 3.3 Scheduler Integration
-
-**File: `src/lib/scheduler.ts`** (MODIFY)
-
-```typescript
-// === IMPORT — add: ===
-import { optimizeEbsIops } from '@/lib/ebs-optimizer';
-
-// === MODULE STATE — add: ===
-let ebsOptTask: ScheduledTask | null = null;
-let ebsOptTaskRunning = false;
-
-// === INSIDE initializeScheduler() — add: ===
-
-// EBS IOPS Optimization — every hour at :30
-ebsOptTask = cron.schedule('30 * * * *', async () => {
-  if (ebsOptTaskRunning) return;
-  ebsOptTaskRunning = true;
-  try {
-    const result = await optimizeEbsIops();
-    if (result?.success) {
-      console.log(new Date().toISOString(), `[Scheduler] EBS IOPS adjusted: ${result.previousIops} → ${result.newIops}`);
-    }
-  } catch (error) {
-    console.error(new Date().toISOString(), '[Scheduler] EBS IOPS optimization failed:', error instanceof Error ? error.message : error);
-  } finally {
-    ebsOptTaskRunning = false;
-  }
-}, { timezone: 'Asia/Seoul' });
-
-// === INSIDE stopScheduler() — add: ===
-ebsOptTask?.stop();
-ebsOptTask = null;
-```
-
-### 3.4 API Endpoint
-
-**File: `src/app/api/ebs-optimizer/route.ts`** (NEW)
-
-```typescript
-import { NextResponse } from 'next/server';
-import { getEbsOptimizerStatus, optimizeEbsIops } from '@/lib/ebs-optimizer';
-
-export async function GET() {
-  const status = await getEbsOptimizerStatus();
-  return NextResponse.json(status);
-}
-
-export async function POST() {
-  const result = await optimizeEbsIops();
-  return NextResponse.json({ result });
-}
-```
-
-### 3.5 Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `EBS_IOPS_TUNING_ENABLED` | `false` | Enable dynamic IOPS tuning |
-| `EBS_VOLUME_ID` | auto-detect | Explicit EBS volume ID (skip auto-detection) |
-| `EBS_MAX_IOPS` | `10000` | Maximum IOPS to provision |
-
-Add to `.env.local.sample`:
-```bash
-# === EBS IOPS Tuning (Optional) ===
-# EBS_IOPS_TUNING_ENABLED=true    # Dynamic GP3 IOPS based on CloudWatch metrics
-# EBS_VOLUME_ID=vol-0abc123       # Explicit volume ID (auto-detected if omitted)
-# EBS_MAX_IOPS=10000              # Maximum IOPS to provision
-```
+- `getEbsOptimizerState()`
+- `setEbsOptimizerState(state)`
 
 ---
 
-## 4. Implementation Guide
+## 3. 상세 설계
 
-### File Changes
+### 3.1 신규 타입
 
-| # | File | Action | Changes |
-|---|------|--------|---------|
-| 1 | `src/types/ebs-optimizer.ts` | CREATE | Type definitions (~90 lines) |
-| 2 | `src/lib/ebs-optimizer.ts` | CREATE | Core module (~300 lines) |
-| 3 | `src/lib/scheduler.ts` | MODIFY | Hourly cron task (+18 lines) |
-| 4 | `src/types/redis.ts` | MODIFY | IStateStore extension (+2 lines) |
-| 5 | `src/lib/state-store.ts` | MODIFY | InMemoryStateStore (+10 lines) |
-| 6 | `src/lib/redis-state-store.ts` | MODIFY | RedisStateStore (+15 lines) |
-| 7 | `src/app/api/ebs-optimizer/route.ts` | CREATE | API endpoint (~15 lines) |
-| 8 | `src/lib/__tests__/ebs-optimizer.test.ts` | CREATE | Tests (~220 lines) |
-| 9 | `.env.local.sample` | MODIFY | Add env vars (+4 lines) |
-| 10 | `CLAUDE.md` | MODIFY | Add env vars + API route (+4 lines) |
+신규 파일: `src/types/ebs-optimizer.ts`
 
-### Reusable Functions
+핵심 타입:
 
-```typescript
-// AWS CLI execution — new helper, but uses same auth pattern as k8s-config.ts:
-// - AWS_PROFILE env var
-// - AWS_REGION / AWS_DEFAULT_REGION env var
-// - child_process.execSync for CLI calls
+1. `EbsVolumeInfo`: 볼륨 식별/현재 프로비저닝 값
+2. `IopsMetrics`: 기간별 읽기/쓰기 연산량, 합산 IOPS, 큐 길이
+3. `IopsAnalysis`: 1h/24h 평균·피크·추세·권장치
+4. `VolumeModificationResult`: 수정 전/후 값, 성공 여부, 오류
+5. `EbsOptimizerState`: 마지막 확인/수정 시각, 이력 버퍼
+6. `EbsOptimizerConfig`: 임계값, 쿨다운, 체크 주기, 최대치
 
-// From redis-store.ts
-import { getStore } from '@/lib/redis-store';
-```
+권장 기본값:
 
-### IStateStore Extension
+- `enabled=false`
+- `baselineIops=3000`
+- `maxIops=10000`
+- `baselineThroughput=125`
+- `scaleUpThresholdPct=80`
+- `scaleDownThresholdPct=30`
+- `cooldownHours=6`
+- `checkIntervalMinutes=60`
 
-```typescript
-// Add to IStateStore interface:
-getEbsOptimizerState(): Promise<EbsOptimizerState | null>;
-setEbsOptimizerState(state: EbsOptimizerState): Promise<void>;
-```
+### 3.2 코어 모듈
 
-### Implementation Order
+신규 파일: `src/lib/ebs-optimizer.ts`
 
-1. Types → 2. IStateStore → 3. Store implementations → 4. Core module → 5. Scheduler → 6. API → 7. Tests → 8. Config
+핵심 책임:
 
----
+1. 대상 볼륨 탐색
+2. CloudWatch 지표 조회
+3. 추세/임계값 기반 목표치 산출
+4. 쿨다운/안전 규칙 검증
+5. `modify-volume` 실행 및 상태 반영
+6. 예상 비용 절감 계산
 
-## 5. Test Specification
+### 3.3 Scheduler 연동
 
-**File: `src/lib/__tests__/ebs-optimizer.test.ts`** (NEW)
+- 60분 주기 잡 추가
+- 실패 시 다음 주기에 자동 재시도
+- 연속 실패는 알림/로그 레벨 상향
 
-### Mock Strategy
+### 3.4 API 엔드포인트
 
-```typescript
-import { execSync } from 'child_process';
-vi.mock('child_process', () => ({
-  execSync: vi.fn(),
-}));
+권장 API:
 
-vi.mock('@/lib/redis-store', () => ({
-  getStore: vi.fn().mockReturnValue({
-    getEbsOptimizerState: vi.fn().mockResolvedValue(null),
-    setEbsOptimizerState: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-```
+1. `GET /api/ebs-optimizer/status`
+2. `POST /api/ebs-optimizer/check`
+3. `POST /api/ebs-optimizer/adjust`
 
-### Test Cases
+### 3.5 환경 변수
 
-```
-describe('ebs-optimizer')
-  describe('discoverEbsVolume')
-    it('should find volume by PVC tag')
-    it('should use EBS_VOLUME_ID when explicitly set')
-    it('should return null for non-GP3 volumes')
-    it('should return null when no volume found')
-
-  describe('getIopsMetrics')
-    it('should parse CloudWatch response correctly')
-    it('should calculate totalIops from read+write ops')
-    it('should handle empty CloudWatch response')
-
-  describe('analyzeIopsDemand')
-    it('should recommend scale up when avg > 80% of current')
-    it('should recommend scale down when avg < 30% of current and stable')
-    it('should NOT scale down when trend is rising')
-    it('should clamp to baseline IOPS (3000) minimum')
-    it('should clamp to maxIops (10000) maximum')
-    it('should detect rising trend correctly')
-    it('should detect falling trend correctly')
-    it('should calculate appropriate throughput')
-
-  describe('modifyVolumeIops')
-    it('should call aws ec2 modify-volume with correct params')
-    it('should skip when in cooldown (< 6 hours)')
-    it('should handle AWS error gracefully')
-    it('should record modification in history')
-
-  describe('optimizeEbsIops')
-    it('should skip when disabled')
-    it('should run full cycle: discover → metrics → analyze → modify')
-    it('should skip modification when no change needed')
-    it('should cache volumeId in state')
-```
-
-### Minimum Coverage Target
-
-- Statement coverage: ≥ 80%
-- Branch coverage: ≥ 75%
+- `EBS_OPTIMIZER_ENABLED`
+- `EBS_OPTIMIZER_VOLUME_TAG`
+- `EBS_OPTIMIZER_MAX_IOPS`
+- `EBS_OPTIMIZER_SCALE_UP_THRESHOLD_PCT`
+- `EBS_OPTIMIZER_SCALE_DOWN_THRESHOLD_PCT`
+- `EBS_OPTIMIZER_COOLDOWN_HOURS`
+- `EBS_OPTIMIZER_CHECK_INTERVAL_MINUTES`
 
 ---
 
-## 6. Verification
+## 4. 구현 가이드
+
+### 파일 변경 목록
+
+신규:
+
+- `src/types/ebs-optimizer.ts`
+- `src/lib/ebs-optimizer.ts`
+- `src/app/api/ebs-optimizer/status/route.ts`
+- `src/lib/__tests__/ebs-optimizer.test.ts`
+
+수정:
+
+- `src/lib/scheduler.ts`
+- `src/lib/redis-store.ts`
+- `src/types/redis.ts`
+
+### 재사용 함수
+
+- `runK8sCommand()`
+- 기존 로거/스토어 유틸
+
+### 구현 순서
+
+1. 타입/설정 계약 확정
+2. CloudWatch 수집기 구현
+3. 분석 엔진 구현(추세/권장치)
+4. 볼륨 수정 실행기 구현
+5. Scheduler/API 연동
+6. 통합 검증
+
+---
+
+## 5. 테스트 명세
+
+### Mock 전략
+
+- AWS CLI 응답 mock(`describe-volumes`, `get-metric-statistics`, `modify-volume`)
+- 시간 경과 mock(6시간 쿨다운)
+- 저장소 상태 mock
+
+### 테스트 케이스
+
+1. 볼륨 탐색 실패/성공 처리
+2. 메트릭 없음/불충분 시 안전 스킵
+3. scale-up 임계값 초과 시 목표치 상향
+4. scale-down 임계값 미만 시 목표치 하향
+5. 쿨다운 중 수정 차단
+6. 최대/최소 경계값 클램프
+7. 수정 성공 시 상태/이력 업데이트
+8. 수정 실패 시 오류 기록 및 재시도 가능 상태 유지
+
+### 최소 커버리지
+
+- 라인 커버리지 85% 이상
+- 핵심 의사결정 분기 100%
+
+---
+
+## 6. 검증
 
 ### Step 1: Build
 
-```bash
-npm run build
-```
+- `npm run lint`
+- `npx tsc --noEmit`
 
 ### Step 2: Unit Tests
 
-```bash
-npx vitest run src/lib/__tests__/ebs-optimizer.test.ts
-```
+- `npm run test:run -- ebs-optimizer`
 
-### Step 3: Integration Test (requires AWS credentials)
+### Step 3: 통합 테스트 (AWS 자격 증명 필요)
 
-```bash
-# Check volume detection
-EBS_IOPS_TUNING_ENABLED=true npm run dev
-curl http://localhost:3002/api/ebs-optimizer | jq .
+1. 상태 조회 API 정상 응답 확인
+2. 지표 수집/분석 결과 확인
+3. 조건 충족 시 볼륨 수정 실행 확인
+4. 쿨다운 동안 재수정 차단 확인
 
-# Verify CloudWatch metrics are being fetched
-# (check server logs for "[EBS Optimizer]" messages)
-```
+### Step 4: 전체 테스트
 
-### Step 4: Full Test Suite
+- `npm run test:run`
 
-```bash
-npm run test:run
-```

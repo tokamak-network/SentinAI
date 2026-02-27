@@ -10,18 +10,22 @@ vi.mock('child_process', () => ({
   execFile: vi.fn(),
 }));
 
-vi.mock('util', () => ({
-  promisify: () => {
-    return (cmd: string, opts: Record<string, unknown>) => {
-      return new Promise((resolve, reject) => {
-        mockExec(cmd, opts, (err: Error | null, stdout: string, stderr: string) => {
-          if (err) reject(err);
-          else resolve({ stdout, stderr });
+vi.mock('util', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('util')>();
+  return {
+    ...actual,
+    promisify: () => {
+      return (cmd: string, opts: Record<string, unknown>) => {
+        return new Promise((resolve, reject) => {
+          mockExec(cmd, opts, (err: Error | null, stdout: string, stderr: string) => {
+            if (err) reject(err);
+            else resolve({ stdout, stderr });
+          });
         });
-      });
-    };
-  },
-}));
+      };
+    },
+  };
+});
 
 import { runK8sCommand, clearK8sConfigCache } from '../k8s-config';
 

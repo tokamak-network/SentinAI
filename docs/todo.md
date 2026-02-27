@@ -1,6 +1,6 @@
 # TODO: SentinAI Implementation
 
-> **Last Updated:** 2026-02-26
+> **Last Updated:** 2026-02-27
 
 ## Current Status
 
@@ -19,6 +19,13 @@
 - [ ] P1: 버전 고정 배포 옵션(`SENTINAI_REF`) 추가
 - [ ] P1: preflight-check 스크립트 추가
 - [ ] P2: update + rollback 자동화 스크립트 추가
+
+### Planned (2026-02-27 Client Auto-Customization Completion)
+- [ ] 부족분 보완 제안서 문서화 (`docs/todo/proposal-31-client-auto-customization-and-onboarding.md`)
+- [ ] Backend: 인스턴스 등록/검증/능력 매핑 API(v2) 구현 및 safety policy 기본값 적용
+- [ ] Frontend: 랜딩 `Connect Your Node` 4단계 마법사와 자동 capability UI 연결
+- [ ] 등록 직후 dashboard bootstrap 자동 연동 (`/api/v2/instances/{id}/bootstrap`)
+- [ ] 검증 시나리오 추가 (L1 reth + L1 CL + L2 op-stack onboarding e2e)
 
 ### Done (2026-02-26 Anomaly Immediate Activity Repro Stabilization)
 - [x] `spike` seed 데이터 tail을 단조 증가/고부하로 안정화해 anomaly 검출 재현성을 개선 (`src/app/api/metrics/seed/route.ts`)

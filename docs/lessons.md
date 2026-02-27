@@ -147,6 +147,11 @@
 - 진단 스크립트가 운영 환경 인증 가드를 통과하지 못하면 원인 분리가 지연된다.
 - Rule: Repro scripts for protected APIs should support `x-api-key` and print status-specific remediation hints (401/403/405) by default.
 
+## 2026-02-27
+
+- L1/L2 확장 논의에서 "지원 가능"과 "자동 연동 가능"을 분리하지 않으면 구현 범위가 모호해진다.
+- Rule: Multi-network expansion docs must explicitly separate `current supported behavior` vs `auto-customization gap` and tie each gap to an executable backlog item.
+
 ## 2026-02-21
 
 - A quarterly roadmap request becomes implementable only when each epic is split into file-level interface, env, and test contracts.

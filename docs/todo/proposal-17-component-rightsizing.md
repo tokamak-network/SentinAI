@@ -1,609 +1,233 @@
-# Proposal 17: Multi-Component Right-Sizing
+# 제안 17: 멀티 컴포넌트 라이트사이징
 
-## 1. Overview
+## 1. 개요
 
-### Problem Statement
+### 문제 정의
 
-SentinAI currently scales only **op-geth** (`sepolia-thanos-stack-op-geth`). However, the EKS cluster runs 4+ Optimism components, each with vastly different resource needs:
+현재 SentinAI의 자동 스케일링 대상은 **op-geth**(`sepolia-thanos-stack-op-geth`) 중심이다.
+그러나 실제 EKS 클러스터는 4개 이상의 Optimism 계열 컴포넌트를 상시 운영하며, 컴포넌트별 리소스 특성이 크게 다르다.
 
-| Component | CPU Characteristic | Typical Allocation | Actual Need | Waste |
-|-----------|-------------------|-------------------|-------------|-------|
-| op-geth | Block execution, I/O heavy | 1-4 vCPU (auto-scaled) | 1-4 vCPU | **Already optimized** |
-| op-node | Block derivation, periodic | 1 vCPU, 2 GiB | 0.25-0.5 vCPU | **75% idle** |
-| op-batcher | L1 submission every 2-5 min | 1 vCPU, 2 GiB | 0.25 vCPU | **90% idle** |
-| op-proposer | State proposal, very light | 0.5 vCPU, 1 GiB | 0.125 vCPU | **90% idle** |
+| 컴포넌트 | CPU 특성 | 현재 할당 | 실제 필요 | 낭비 수준 |
+|---|---|---|---|---|
+| op-geth | 블록 실행, I/O 집약 | 1-4 vCPU (자동) | 1-4 vCPU | 이미 최적화 |
+| op-node | 유도(derivation), 주기성 부하 | 1 vCPU, 2 GiB | 0.25-0.5 vCPU | 유휴 비율 높음 |
+| op-batcher | 2-5분 주기 L1 제출 | 1 vCPU, 2 GiB | 0.25 vCPU | 유휴 비율 높음 |
+| op-proposer | 상태 제안, 경량 부하 | 0.5 vCPU, 1 GiB | 0.125 vCPU | 유휴 비율 높음 |
 
-These components run 24/7 at fixed resource allocations, wasting ~$50/month in over-provisioned compute.
+고정 리소스 할당으로 24/7 운영되면서 월 약 $50 수준의 과할당 비용이 발생한다.
 
-### Solution Summary
+### 해결 요약
 
-Implement a **Component Resource Analyzer** that:
-1. Collects CPU/Memory usage for all L2 components via `kubectl top pod`
-2. Maintains per-component usage history (48-hour observation window)
-3. Calculates right-sized resource recommendations with 20% safety margin
-4. Auto-applies right-sizing via `kubectl patch statefulset`
-5. Independent cooldown per component (no interference with op-geth scaling)
+**Component Resource Analyzer**를 도입해 아래를 수행한다.
 
-### Goals
+1. `kubectl top pod`로 전체 L2 컴포넌트 CPU/메모리 수집
+2. 컴포넌트별 사용 이력 유지(48시간 관측)
+3. 20% 안전 마진을 포함한 권장 리소스 계산
+4. `kubectl patch statefulset`으로 라이트사이징 적용
+5. 컴포넌트별 독립 쿨다운으로 op-geth 스케일링과 간섭 방지
 
-- Right-size op-node, op-batcher, op-proposer resources based on actual usage
-- Save ~$50/month from over-provisioned sidecar components
-- Independent operation from existing op-geth scaling engine
-- Safe minimum thresholds to prevent OOM or CPU throttling
+### 목표
 
-### Non-Goals
+- op-node/op-batcher/op-proposer를 실제 사용량 기반으로 라이트사이징
+- 월 약 $50 비용 절감
+- 기존 op-geth 스케일링 엔진과 독립 운영
+- 최소 안전 임계값으로 OOM/CPU 스로틀링 방지
 
-- Scaling op-geth (already handled by `scaling-decision.ts` + `k8s-scaler.ts`)
-- Horizontal scaling (replica count changes)
-- Proxyd scaling (runs on minimal resources)
-- Cross-component dependency analysis
+### 비목표
 
-### Monthly Savings Estimate
+- op-geth 스케일링(기존 엔진 유지)
+- 수평 스케일(레플리카 증감)
+- Proxyd 스케일링
+- 컴포넌트 간 종속성 분석 자동화
 
-| Component | Current | Right-Sized | Monthly Savings |
-|-----------|---------|-------------|-----------------|
-| op-node | 1 vCPU, 2 GiB | 0.5 vCPU, 1 GiB | **$17** |
-| op-batcher | 1 vCPU, 2 GiB | 0.25 vCPU, 0.5 GiB | **$25** |
-| op-proposer | 0.5 vCPU, 1 GiB | 0.25 vCPU, 0.5 GiB | **$8** |
-| **Total** | | | **~$50/mo** |
+### 월 절감 추정
 
----
-
-## 2. Architecture
-
-### Data Flow
-
-```
-┌─ Agent Loop (30s cycle, existing) ─────────────────────────┐
-│                                                             │
-│  Phase 5 (NEW): collectComponentMetrics()                   │
-│       ├─> kubectl top pod -l app=op-node -n {ns}            │
-│       ├─> kubectl top pod -l app=op-batcher -n {ns}         │
-│       └─> kubectl top pod -l app=op-proposer -n {ns}        │
-│                      ▼                                      │
-│  ComponentResourceAnalyzer                                  │
-│       ├─> recordComponentUsage(component, cpu, mem)         │
-│       └─> [every 6 hours] evaluateRightSizing()             │
-│                      ▼                                      │
-│  [currentAlloc > recommended × 1.2]                         │
-│       └─> kubectl patch statefulset {component} -n {ns}     │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### Integration Points
-
-| Module | File | Usage |
-|--------|------|-------|
-| K8s Config | `src/lib/k8s-config.ts` | `runK8sCommand()` for kubectl top + patch |
-| Agent Loop | `src/lib/agent-loop.ts` | Phase 5 integration |
-| Daily Accumulator | `src/lib/daily-accumulator.ts` | Record right-sizing events |
-| State Store | `src/lib/redis-store.ts` | Usage history persistence |
-
-### State Management
-
-Extends `IStateStore`:
-- `getComponentUsageHistory(component: string): Promise<ComponentUsagePoint[]>`
-- `pushComponentUsage(component: string, point: ComponentUsagePoint): Promise<void>`
-- `getComponentRightSizingState(): Promise<ComponentRightSizingState | null>`
-- `setComponentRightSizingState(state: ComponentRightSizingState): Promise<void>`
+| 컴포넌트 | 현재 | 라이트사이징 후 | 월 절감 |
+|---|---|---|---|
+| op-node | 1 vCPU, 2 GiB | 0.5 vCPU, 1 GiB | 약 $17 |
+| op-batcher | 1 vCPU, 2 GiB | 0.25 vCPU, 0.5 GiB | 약 $25 |
+| op-proposer | 0.5 vCPU, 1 GiB | 0.25 vCPU, 0.5 GiB | 약 $8 |
+| 합계 |  |  | **약 $50/월** |
 
 ---
 
-## 3. Detailed Design
+## 2. 아키텍처
 
-### 3.1 New Types
+### 데이터 흐름
 
-**File: `src/types/component-rightsizing.ts`** (NEW)
+1. Agent Loop(30초 주기)에서 신규 단계로 `collectComponentMetrics()` 실행
+2. `kubectl top pod`로 대상 컴포넌트 사용량 수집
+3. `ComponentResourceAnalyzer`가 이력 저장
+4. 6시간마다 `evaluateRightSizing()` 실행
+5. `currentAlloc > recommended × 1.2` 조건이면 패치 적용
 
-```typescript
-/**
- * Multi-Component Right-Sizing Types
- * Independent resource optimization for op-node, op-batcher, op-proposer.
- */
+### 통합 지점
 
-/** Supported L2 components (excluding op-geth which has its own scaler) */
-export type L2Component = 'op-node' | 'op-batcher' | 'op-proposer';
+| 모듈 | 파일 | 용도 |
+|---|---|---|
+| K8s Config | `src/lib/k8s-config.ts` | `runK8sCommand()`로 top/patch 실행 |
+| Agent Loop | `src/lib/agent-loop.ts` | 신규 단계 통합 |
+| Daily Accumulator | `src/lib/daily-accumulator.ts` | 라이트사이징 이벤트 기록 |
+| State Store | `src/lib/redis-store.ts` | 사용량 이력 영속화 |
 
-export const L2_COMPONENTS: L2Component[] = ['op-node', 'op-batcher', 'op-proposer'];
+### 상태 관리
 
-/** Single usage data point */
-export interface ComponentUsagePoint {
-  timestamp: number;            // Unix timestamp (ms)
-  cpuMillicores: number;        // Actual CPU usage in millicores
-  memoryMiB: number;            // Actual memory usage in MiB
-}
+`IStateStore` 확장 항목:
 
-/** Resource allocation for a component */
-export interface ComponentResources {
-  cpuMillicores: number;        // Allocated CPU (requests = limits)
-  memoryMiB: number;            // Allocated memory (requests = limits)
-}
-
-/** Right-sizing recommendation for a component */
-export interface RightSizingRecommendation {
-  component: L2Component;
-  currentResources: ComponentResources;
-  recommendedResources: ComponentResources;
-  peakCpu: number;              // Peak CPU observed in window (millicores)
-  peakMemory: number;           // Peak memory observed (MiB)
-  avgCpu: number;               // Average CPU (millicores)
-  avgMemory: number;            // Average memory (MiB)
-  sampleCount: number;          // Data points in observation window
-  savingsMonthly: number;       // Estimated USD savings
-  confidence: number;           // 0-1 based on sample count and variance
-}
-
-/** Right-sizing execution result */
-export interface RightSizingResult {
-  component: L2Component;
-  statefulSetName: string;
-  previousResources: ComponentResources;
-  newResources: ComponentResources;
-  executed: boolean;
-  skippedReason?: string;       // 'insufficient-data' | 'cooldown' | 'already-optimal' | 'simulation' | 'disabled'
-  timestamp: string;
-}
-
-/** Per-component state tracking */
-export interface ComponentState {
-  component: L2Component;
-  lastRightSizeTime: number | null;   // Unix timestamp of last resize
-  lastEvaluationTime: number | null;  // Unix timestamp of last evaluation
-  currentResources: ComponentResources | null;
-}
-
-/** Overall right-sizing state */
-export interface ComponentRightSizingState {
-  components: ComponentState[];
-  lastCollectionTime: number;
-}
-
-/** Configuration */
-export interface ComponentRightSizingConfig {
-  enabled: boolean;
-  observationWindowHours: number;      // Minimum observation before first resize (default: 48)
-  evaluationIntervalHours: number;     // How often to evaluate (default: 6)
-  cooldownHours: number;               // Per-component cooldown (default: 12)
-  safetyMarginPct: number;             // Safety margin above peak (default: 20)
-  minCpuMillicores: number;            // Absolute minimum CPU (default: 125 = 0.125 vCPU)
-  minMemoryMiB: number;               // Absolute minimum memory (default: 256)
-}
-
-export const DEFAULT_COMPONENT_RIGHTSIZING_CONFIG: ComponentRightSizingConfig = {
-  enabled: false,
-  observationWindowHours: 48,
-  evaluationIntervalHours: 6,
-  cooldownHours: 12,
-  safetyMarginPct: 20,
-  minCpuMillicores: 125,
-  minMemoryMiB: 256,
-};
-
-/** Fargate pricing for savings calculation */
-export const FARGATE_PRICING = {
-  vcpuPerHour: 0.04656,          // USD per vCPU-hour (Seoul)
-  memGbPerHour: 0.00511,         // USD per GB-hour (Seoul)
-  hoursPerMonth: 730,
-};
-```
-
-### 3.2 Core Module
-
-**File: `src/lib/component-rightsizer.ts`** (NEW, ~280 lines)
-
-```typescript
-/**
- * Component Right-Sizer
- * Collects resource usage for op-node, op-batcher, op-proposer
- * and applies right-sizing recommendations.
- */
-
-import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
-import { getStore } from '@/lib/redis-store';
-import type {
-  L2Component,
-  L2_COMPONENTS,
-  ComponentUsagePoint,
-  ComponentResources,
-  RightSizingRecommendation,
-  RightSizingResult,
-  ComponentRightSizingConfig,
-  ComponentRightSizingState,
-} from '@/types/component-rightsizing';
-
-// ============================================================
-// Constants
-// ============================================================
-
-const STATEFULSET_PREFIX = process.env.K8S_STATEFULSET_PREFIX || 'sepolia-thanos-stack';
-const MAX_USAGE_POINTS = 5760;  // 48 hours at 30s intervals
-
-// ============================================================
-// Resource Collection
-// ============================================================
-
-/**
- * Get the StatefulSet name for a component.
- * Pattern: {prefix}-{component} (e.g., 'sepolia-thanos-stack-op-node')
- */
-export function getStatefulSetName(component: L2Component): string {
-  return `${STATEFULSET_PREFIX}-${component}`;
-}
-
-/**
- * Collect current CPU/Memory usage for a component via kubectl top pod.
- * Returns null if the command fails or pod is not found.
- *
- * kubectl top pod -l app={prefix}-{component} -n {namespace} --no-headers
- * Output format: "pod-name-0   125m   256Mi"
- */
-export async function collectComponentUsage(
-  component: L2Component
-): Promise<ComponentUsagePoint | null>
-```
-
-**Logic for `collectComponentUsage()`:**
-1. Build label: `app=${getAppPrefix()}-${component}` (e.g., `app=op-node`)
-2. `runK8sCommand(`top pod -l app=${label} -n ${getNamespace()} --no-headers`)`
-3. Parse output: extract CPU (e.g., `125m` → 125 millicores) and Memory (e.g., `256Mi` → 256 MiB)
-4. Handle `cpu` ending in `m` (millicores) vs plain number (cores × 1000)
-5. Handle `memory` ending in `Mi`, `Gi`, `Ki`
-6. Return `ComponentUsagePoint` or null on failure
-
-```typescript
-/**
- * Collect usage for all components and store.
- * Called from agent loop every 30 seconds.
- */
-export async function collectAllComponentMetrics(): Promise<void>
-```
-
-**Logic for `collectAllComponentMetrics()`:**
-1. For each component in `L2_COMPONENTS`:
-   - `collectComponentUsage(component)`
-   - If result: `getStore().pushComponentUsage(component, point)`
-2. All calls in parallel (`Promise.allSettled`)
-
-```typescript
-// ============================================================
-// Right-Sizing Analysis
-// ============================================================
-
-/**
- * Get current resource allocation for a component from StatefulSet spec.
- *
- * kubectl get statefulset {name} -n {ns}
- *   -o jsonpath='{.spec.template.spec.containers[0].resources.requests.cpu},{.spec.template.spec.containers[0].resources.requests.memory}'
- */
-export async function getCurrentAllocation(
-  component: L2Component
-): Promise<ComponentResources | null>
-
-/**
- * Calculate right-sizing recommendation for a component.
- */
-export function calculateRecommendation(
-  component: L2Component,
-  history: ComponentUsagePoint[],
-  currentResources: ComponentResources,
-  config: ComponentRightSizingConfig
-): RightSizingRecommendation | null
-```
-
-**Logic for `calculateRecommendation()`:**
-1. If `history.length < 100` (< ~50 min), return null (insufficient data)
-2. Calculate stats: `avgCpu`, `peakCpu`, `avgMemory`, `peakMemory`
-3. Recommended CPU = `peakCpu × (1 + safetyMarginPct / 100)`
-4. Recommended Memory = `peakMemory × (1 + safetyMarginPct / 100)`
-5. Clamp to minimums: `max(recommended, minCpuMillicores)`, `max(recommended, minMemoryMiB)`
-6. Round CPU to nearest 125m (Fargate granularity: 0.125 vCPU)
-7. Round Memory to nearest 256 MiB
-8. Calculate savings: `(currentCost - recommendedCost) * hoursPerMonth`
-9. Confidence = `min(1.0, sampleCount / 5760)` (full confidence at 48h of data)
-
-```typescript
-/**
- * Evaluate and apply right-sizing for all components.
- * Called every 6 hours (evaluationIntervalHours).
- */
-export async function evaluateAndApplyRightSizing(): Promise<RightSizingResult[]>
-```
-
-**Logic for `evaluateAndApplyRightSizing()`:**
-1. Check `COMPONENT_RIGHTSIZING_ENABLED` env var
-2. Load state from store
-3. For each component:
-   - Check cooldown (last right-size > cooldownHours ago?)
-   - Check observation window (oldest data > observationWindowHours?)
-   - Get history: `getStore().getComponentUsageHistory(component)`
-   - Get current allocation: `getCurrentAllocation(component)`
-   - Calculate recommendation
-   - If `currentResources > recommendedResources` (over-provisioned):
-     - Apply via `kubectl patch statefulset`
-     - Record result
-   - If `currentResources < recommendedResources` (under-provisioned):
-     - Apply scale-up (safety first)
-     - Record result
-4. Save state to store
-5. Return results
-
-```typescript
-/**
- * Apply resource changes to a StatefulSet.
- *
- * kubectl patch statefulset {name} -n {ns} --type=json -p '[
- *   {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/cpu","value":"{cpu}m"},
- *   {"op":"replace","path":"/spec/template/spec/containers/0/resources/limits/cpu","value":"{cpu}m"},
- *   {"op":"replace","path":"/spec/template/spec/containers/0/resources/requests/memory","value":"{mem}Mi"},
- *   {"op":"replace","path":"/spec/template/spec/containers/0/resources/limits/memory","value":"{mem}Mi"}
- * ]'
- */
-async function applyResourcePatch(
-  component: L2Component,
-  resources: ComponentResources
-): Promise<boolean>
-
-/**
- * Get right-sizing status for all components (for API/dashboard).
- */
-export async function getRightSizingStatus(): Promise<{
-  enabled: boolean;
-  components: Array<{
-    component: L2Component;
-    currentResources: ComponentResources | null;
-    recommendation: RightSizingRecommendation | null;
-    lastRightSizeTime: string | null;
-    dataPoints: number;
-  }>;
-}>
-```
-
-### 3.3 Agent Loop Integration
-
-**File: `src/lib/agent-loop.ts`** (MODIFY)
-
-Add after Phase 3+4 (Decide & Act):
-
-```typescript
-// === IMPORT — add: ===
-import { collectAllComponentMetrics, evaluateAndApplyRightSizing } from '@/lib/component-rightsizer';
-
-// === INSIDE runAgentCycle(), after scaling evaluation: ===
-
-// Phase 5: Component right-sizing (non-blocking)
-try {
-  await collectAllComponentMetrics();
-
-  // Evaluate every 6 hours (check if enough time has passed)
-  const rightSizingState = await getStore().getComponentRightSizingState();
-  const lastEval = rightSizingState?.components[0]?.lastEvaluationTime ?? 0;
-  const evalIntervalMs = 6 * 60 * 60 * 1000; // 6 hours
-  if (Date.now() - lastEval >= evalIntervalMs) {
-    const results = await evaluateAndApplyRightSizing();
-    const applied = results.filter(r => r.executed);
-    if (applied.length > 0) {
-      console.log(new Date().toISOString(), `[AgentLoop] Right-sizing applied: ${applied.map(r => `${r.component} → ${r.newResources.cpuMillicores}m`).join(', ')}`);
-    }
-  }
-} catch {
-  // Non-blocking — continue cycle
-}
-```
-
-### 3.4 API Endpoint
-
-**File: `src/app/api/component-rightsizing/route.ts`** (NEW)
-
-```typescript
-import { NextResponse } from 'next/server';
-import { getRightSizingStatus, evaluateAndApplyRightSizing } from '@/lib/component-rightsizer';
-
-// GET — Current status and recommendations
-export async function GET() {
-  const status = await getRightSizingStatus();
-  return NextResponse.json(status);
-}
-
-// POST — Force evaluation
-export async function POST() {
-  const results = await evaluateAndApplyRightSizing();
-  return NextResponse.json({ results });
-}
-```
-
-### 3.5 Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `COMPONENT_RIGHTSIZING_ENABLED` | `false` | Enable multi-component right-sizing |
-
-Add to `.env.local.sample`:
-```bash
-# === Component Right-Sizing (Optional) ===
-# COMPONENT_RIGHTSIZING_ENABLED=true  # Auto-optimize op-node, op-batcher, op-proposer resources
-```
+- `getComponentUsageHistory(component)`
+- `pushComponentUsage(component, point)`
+- `getComponentRightSizingState()`
+- `setComponentRightSizingState(state)`
 
 ---
 
-## 4. Implementation Guide
+## 3. 상세 설계
 
-### File Changes
+### 3.1 신규 타입
 
-| # | File | Action | Changes |
-|---|------|--------|---------|
-| 1 | `src/types/component-rightsizing.ts` | CREATE | Type definitions (~100 lines) |
-| 2 | `src/lib/component-rightsizer.ts` | CREATE | Core module (~280 lines) |
-| 3 | `src/lib/agent-loop.ts` | MODIFY | Phase 5 integration (+18 lines) |
-| 4 | `src/types/redis.ts` | MODIFY | IStateStore extension (+4 lines) |
-| 5 | `src/lib/state-store.ts` | MODIFY | InMemoryStateStore (+30 lines) |
-| 6 | `src/lib/redis-state-store.ts` | MODIFY | RedisStateStore (+40 lines) |
-| 7 | `src/app/api/component-rightsizing/route.ts` | CREATE | API endpoint (~20 lines) |
-| 8 | `src/lib/__tests__/component-rightsizer.test.ts` | CREATE | Tests (~250 lines) |
-| 9 | `.env.local.sample` | MODIFY | Add env var (+2 lines) |
-| 10 | `CLAUDE.md` | MODIFY | Add env var + API route (+3 lines) |
+신규 파일: `src/types/component-rightsizing.ts`
 
-### Reusable Functions
+핵심 타입:
 
-```typescript
-// From k8s-config.ts
-import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
-// runK8sCommand(command, options?) → { stdout, stderr }
-// getNamespace() → string (K8S_NAMESPACE || 'default')
-// getAppPrefix() → string (K8S_APP_PREFIX || 'op')
+1. `L2Component`: `op-node | op-batcher | op-proposer`
+2. `ComponentUsagePoint`: 시점별 CPU(millicores), Memory(MiB)
+3. `ComponentResources`: 할당 리소스
+4. `RightSizingRecommendation`: 현재/권장 리소스, 피크/평균, 신뢰도, 절감액
+5. `RightSizingResult`: 실행 결과, 스킵 사유, 타임스탬프
+6. `ComponentRightSizingConfig`: 관측 창, 평가 주기, 쿨다운, 안전 마진, 최소치
 
-// From redis-store.ts
-import { getStore } from '@/lib/redis-store';
-```
+기본값 권장:
 
-### IStateStore Extension
+- `enabled=false`
+- `observationWindowHours=48`
+- `evaluationIntervalHours=6`
+- `cooldownHours=12`
+- `safetyMarginPct=20`
+- `minCpuMillicores=125`
+- `minMemoryMiB=256`
 
-Add to `src/types/redis.ts`:
-```typescript
-// Component Right-Sizing
-getComponentUsageHistory(component: string): Promise<ComponentUsagePoint[]>;
-pushComponentUsage(component: string, point: ComponentUsagePoint): Promise<void>;
-getComponentRightSizingState(): Promise<ComponentRightSizingState | null>;
-setComponentRightSizingState(state: ComponentRightSizingState): Promise<void>;
-```
+### 3.2 코어 모듈
 
-InMemoryStateStore:
-```typescript
-private componentUsage: Map<string, ComponentUsagePoint[]> = new Map();
-private componentRightSizingState: ComponentRightSizingState | null = null;
+신규 파일: `src/lib/component-rightsizer.ts`
 
-async getComponentUsageHistory(component: string): Promise<ComponentUsagePoint[]> {
-  return this.componentUsage.get(component) || [];
-}
+핵심 책임:
 
-async pushComponentUsage(component: string, point: ComponentUsagePoint): Promise<void> {
-  const history = this.componentUsage.get(component) || [];
-  history.push(point);
-  if (history.length > 5760) history.shift(); // 48h at 30s intervals
-  this.componentUsage.set(component, history);
-}
-```
+1. 대상 컴포넌트별 현재 사용량 수집
+2. 히스토리 버퍼 관리(최대 포인트 제한)
+3. 권장 리소스 산출(피크 + 안전 마진)
+4. 현재 할당과 비교해 적용 여부 결정
+5. 조건 충족 시 StatefulSet patch 실행
+6. 결과 로그/이력 기록
 
-RedisStateStore:
-```typescript
-// Key pattern: sentinai:component-usage:{component}
-// Use Redis LIST with LPUSH + LTRIM(0, 5759)
-```
+### 3.3 Agent Loop 연동
 
-### Implementation Order
+- 감지/분석/계획/행동 단계 이후 라이트사이징 수집 단계를 추가
+- 평가 실행은 6시간 주기로 제한
+- 스케일링 충돌 방지를 위해 컴포넌트별 쿨다운/락 적용
 
-1. Types → 2. IStateStore → 3. Store implementations → 4. Core module → 5. Agent loop → 6. API → 7. Tests → 8. Config
+### 3.4 API 엔드포인트
+
+권장 API:
+
+1. `GET /api/component-rightsizing/status`
+2. `POST /api/component-rightsizing/evaluate`
+3. `POST /api/component-rightsizing/apply`
+
+응답은 컴포넌트별 권장값, 실행 여부, 스킵 사유, 예상 절감액 포함.
+
+### 3.5 환경 변수
+
+- `COMPONENT_RIGHTSIZING_ENABLED`
+- `COMPONENT_RIGHTSIZING_OBSERVATION_HOURS`
+- `COMPONENT_RIGHTSIZING_EVALUATION_HOURS`
+- `COMPONENT_RIGHTSIZING_COOLDOWN_HOURS`
+- `COMPONENT_RIGHTSIZING_SAFETY_MARGIN_PCT`
+- `COMPONENT_RIGHTSIZING_MIN_CPU_MILLICORES`
+- `COMPONENT_RIGHTSIZING_MIN_MEMORY_MIB`
 
 ---
 
-## 5. Test Specification
+## 4. 구현 가이드
 
-**File: `src/lib/__tests__/component-rightsizer.test.ts`** (NEW)
+### 파일 변경 목록
 
-### Mock Strategy
+신규:
 
-```typescript
-vi.mock('@/lib/k8s-config', () => ({
-  runK8sCommand: vi.fn(),
-  getNamespace: vi.fn().mockReturnValue('thanos-sepolia'),
-  getAppPrefix: vi.fn().mockReturnValue('op'),
-}));
+- `src/types/component-rightsizing.ts`
+- `src/lib/component-rightsizer.ts`
+- `src/app/api/component-rightsizing/status/route.ts`
+- `src/app/api/component-rightsizing/evaluate/route.ts`
+- `src/lib/__tests__/component-rightsizer.test.ts`
 
-vi.mock('@/lib/redis-store', () => ({
-  getStore: vi.fn().mockReturnValue({
-    getComponentUsageHistory: vi.fn().mockResolvedValue([]),
-    pushComponentUsage: vi.fn().mockResolvedValue(undefined),
-    getComponentRightSizingState: vi.fn().mockResolvedValue(null),
-    setComponentRightSizingState: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-```
+수정:
 
-### Test Cases
+- `src/lib/agent-loop.ts`
+- `src/lib/redis-store.ts`
+- `src/types/redis.ts` (스토어 계약 확장)
 
-```
-describe('component-rightsizer')
-  describe('getStatefulSetName')
-    it('should return correct name with prefix')
-    it('should use K8S_STATEFULSET_PREFIX env var')
+### 재사용 함수
 
-  describe('collectComponentUsage')
-    it('should parse kubectl top output correctly (125m, 256Mi)')
-    it('should handle CPU in cores (e.g., "1" → 1000m)')
-    it('should handle memory in Gi (e.g., "1Gi" → 1024Mi)')
-    it('should return null when pod not found')
-    it('should return null when kubectl fails')
+- `runK8sCommand()`
+- `getNamespace()`
+- `getAppPrefix()`
 
-  describe('collectAllComponentMetrics')
-    it('should collect for all 3 components in parallel')
-    it('should continue on individual failures')
+### 구현 순서
 
-  describe('getCurrentAllocation')
-    it('should parse StatefulSet resource spec')
-    it('should return null when StatefulSet not found')
-
-  describe('calculateRecommendation')
-    it('should return null with insufficient data (< 100 points)')
-    it('should calculate peak × 1.2 safety margin')
-    it('should clamp to minimum 125m CPU')
-    it('should clamp to minimum 256Mi memory')
-    it('should round CPU to nearest 125m')
-    it('should round memory to nearest 256Mi')
-    it('should calculate correct monthly savings')
-    it('should calculate confidence based on sample count')
-
-  describe('evaluateAndApplyRightSizing')
-    it('should skip when disabled')
-    it('should skip when in cooldown')
-    it('should skip when insufficient observation window')
-    it('should apply resource patch when over-provisioned')
-    it('should apply resource patch when under-provisioned')
-    it('should respect simulation mode')
-    it('should handle kubectl patch failure gracefully')
-
-  describe('applyResourcePatch')
-    it('should construct correct JSON patch')
-    it('should return false on kubectl error')
-```
-
-### Minimum Coverage Target
-
-- Statement coverage: ≥ 85%
-- Branch coverage: ≥ 80%
+1. 타입/스토어 계약 확정
+2. 수집기 구현 + 단위 테스트
+3. 추천 엔진 구현 + 단위 테스트
+4. 패치 실행기 구현 + 통합 테스트
+5. Agent Loop 연동
+6. API/대시보드 노출
 
 ---
 
-## 6. Verification
+## 5. 테스트 명세
+
+### Mock 전략
+
+- `kubectl top` 출력 mock
+- `kubectl patch` 성공/실패 mock
+- 시간 경과(쿨다운/평가 주기) mock
+- 저장소 read/write mock
+
+### 테스트 케이스
+
+1. 사용량 데이터 누적 및 히스토리 상한 유지
+2. 샘플 부족 시 `insufficient-data` 스킵
+3. 쿨다운 중 `cooldown` 스킵
+4. 이미 최적 범위면 `already-optimal` 스킵
+5. 권장치 산출 정확성(피크+마진, 최소치 반영)
+6. 패치 성공 시 상태 업데이트/이벤트 기록
+7. 패치 실패 시 오류 처리 및 재시도 가능 상태 유지
+8. 시뮬레이션 모드에서 실행 차단
+
+### 최소 커버리지
+
+- 라인 커버리지 85% 이상
+- 핵심 의사결정 분기 100%
+
+---
+
+## 6. 검증
 
 ### Step 1: Build
 
-```bash
-npm run build
-```
+- `npm run lint`
+- `npx tsc --noEmit`
 
 ### Step 2: Unit Tests
 
-```bash
-npx vitest run src/lib/__tests__/component-rightsizer.test.ts
-```
+- `npm run test:run -- component-rightsizer`
 
-### Step 3: Integration Test (requires live cluster)
+### Step 3: 통합 테스트 (라이브 클러스터 필요)
 
-```bash
-# Check current allocations
-kubectl get statefulset -n thanos-sepolia -o custom-columns=NAME:.metadata.name,CPU:.spec.template.spec.containers[0].resources.requests.cpu,MEM:.spec.template.spec.containers[0].resources.requests.memory
+1. 48시간 관측 전에는 적용되지 않는지 확인
+2. 관측 후 권장치 생성 확인
+3. 수동 evaluate/apply 호출 시 StatefulSet 리소스 변경 확인
+4. 변경 후 Pod 재기동/안정성 확인
 
-# Enable component right-sizing
-COMPONENT_RIGHTSIZING_ENABLED=true npm run dev
+### Step 4: 전체 테스트
 
-# Check status via API
-curl http://localhost:3002/api/component-rightsizing | jq .
+- `npm run test:run`
 
-# Wait for data collection (48h) or force evaluation
-curl -X POST http://localhost:3002/api/component-rightsizing | jq .
-```
-
-### Step 4: Full Test Suite
-
-```bash
-npm run test:run
-```
