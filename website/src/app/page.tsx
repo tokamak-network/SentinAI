@@ -57,12 +57,10 @@ function Navbar() {
 
         {/* CTA */}
         <a
-          href={GITHUB_URL}
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/connect"
           className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-cyan-500/20 transition-opacity hover:opacity-90"
         >
-          Get Started
+          Connect Your Node
           <ArrowRight className="h-4 w-4" />
         </a>
       </div>
@@ -95,38 +93,35 @@ function Hero() {
 
           {/* Heading */}
           <h1 className="mb-6 max-w-3xl text-4xl font-bold tracking-tight text-slate-100 sm:text-5xl lg:text-6xl">
-            AI-Native Ops for{" "}
+            L1 & L2 Node 인프라{" "}
             <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-              L2 & Rollup
-            </span>{" "}
-            Infrastructure
+              자율 운영
+            </span>
           </h1>
 
           {/* Subheading */}
           <p className="mb-10 max-w-2xl text-lg text-slate-400">
-            SentinAI detects incidents, plans actions by policy, and helps teams
-            recover safely with approval-gated automation.
+            Geth, Reth, OP Stack, Arbitrum — 모든 EVM 노드를 AI가 24/7 자율 운영.
+            장애 감지, 정책 기반 플래닝, 승인 게이트 자동화로 팀의 운영 부담을 줄입니다.
           </p>
 
           {/* CTAs */}
           <div className="mb-16 flex flex-wrap items-center justify-center gap-4">
             <a
-              href={EXAMPLE_DASHBOARD_URL}
-              target="_blank"
-              rel="noopener noreferrer"
+              href="/connect"
               className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-opacity hover:opacity-90"
             >
-              <ExternalLink className="h-4 w-4" />
-              View Example Dashboard
+              <Terminal className="h-4 w-4" />
+              Connect Your Node
             </a>
             <a
-              href={`${GITHUB_URL}#quick-start`}
+              href={EXAMPLE_DASHBOARD_URL}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/50 px-6 py-3 text-sm font-semibold text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100"
             >
-              <Terminal className="h-4 w-4" />
-              Run Local Demo
+              <ExternalLink className="h-4 w-4" />
+              View Example Dashboard
             </a>
             <a
               href="/docs"
@@ -166,6 +161,74 @@ function Hero() {
               </p>
             </div>
           </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ============================================================================
+// Supported Clients
+// ============================================================================
+
+const clientGroups = [
+  {
+    label: "L1 실행",
+    color: "text-blue-400",
+    borderColor: "border-blue-500/30",
+    bgColor: "bg-blue-500/5",
+    clients: ["Geth", "Reth", "Nethermind", "Besu"],
+  },
+  {
+    label: "L2",
+    color: "text-cyan-400",
+    borderColor: "border-cyan-500/30",
+    bgColor: "bg-cyan-500/5",
+    clients: ["OP Stack", "Arbitrum Nitro", "ZK Stack"],
+  },
+  {
+    label: "L1 합의",
+    color: "text-violet-400",
+    borderColor: "border-violet-500/30",
+    bgColor: "bg-violet-500/5",
+    clients: ["Lighthouse", "Prysm", "Teku"],
+  },
+];
+
+function SupportedClients() {
+  return (
+    <section className="py-16">
+      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+        <div className="mb-8 text-center">
+          <h2 className="mb-2 text-xl font-semibold text-slate-300">
+            지원 클라이언트
+          </h2>
+          <p className="text-sm text-slate-500">
+            모든 주요 EVM 실행·합의·L2 클라이언트와 호환
+          </p>
+        </div>
+
+        <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
+          {clientGroups.map((group) => (
+            <div
+              key={group.label}
+              className={`flex w-full flex-col gap-3 rounded-xl border ${group.borderColor} ${group.bgColor} p-4 sm:w-auto sm:min-w-[200px]`}
+            >
+              <span className={`text-xs font-semibold uppercase tracking-wider ${group.color}`}>
+                {group.label}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {group.clients.map((client) => (
+                  <span
+                    key={client}
+                    className="rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-xs font-medium text-slate-300"
+                  >
+                    {client}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </section>
@@ -216,6 +279,14 @@ const capabilities = [
     title: "Audit Trails",
     description:
       "Every decision, action, and outcome is logged. Full traceability for ops teams and governance.",
+  },
+  {
+    icon: Shield,
+    color: "text-rose-400",
+    bg: "bg-rose-500/10",
+    title: "L1 검증자 모니터링",
+    description:
+      "finality 지연, 피어 격리, sync 상태를 실시간 감지. L1 합의 레이어 이상을 L2 운영 전에 차단합니다.",
   },
 ];
 
@@ -566,6 +637,7 @@ export default function LandingPage() {
       <Navbar />
       <main>
         <Hero />
+        <SupportedClients />
         <WhatItDoes />
         <HowItWorks />
         <Deployment />

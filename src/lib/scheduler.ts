@@ -17,6 +17,7 @@ import { applyScheduledScaling, buildScheduleProfile } from '@/lib/scheduled-sca
 import { cleanupExpiredAgentMemory } from '@/lib/agent-memory';
 import { getStore } from '@/lib/redis-store';
 import { createLogger } from '@/lib/logger';
+import { getAgentOrchestrator } from '@/core/agent-orchestrator';
 
 const logger = createLogger('Scheduler');
 
@@ -601,6 +602,30 @@ export async function initializeScheduler(): Promise<void> {
     }
   }, { timezone: 'Asia/Seoul' });
 
+  // AgentOrchestrator v2 (AGENT_V2=true 시 활성화)
+  if (process.env.AGENT_V2 === 'true' && isAgentLoopEnabled()) {
+    const orchestrator = getAgentOrchestrator();
+    const instancesEnv = process.env.SENTINAI_INSTANCES;
+    if (instancesEnv) {
+      try {
+        const instances = JSON.parse(instancesEnv) as Array<{ instanceId: string; protocolId: string; rpcUrl?: string }>;
+        for (const inst of instances) {
+          orchestrator.startInstance(inst.instanceId, inst.protocolId, inst.rpcUrl);
+        }
+        logger.info(`AgentOrchestrator v2 started ${instances.length} instances`);
+      } catch {
+        logger.warn('Failed to parse SENTINAI_INSTANCES env var');
+      }
+    } else {
+      // Default: start a single instance using L2_RPC_URL
+      const defaultInstanceId = process.env.SENTINAI_DEFAULT_INSTANCE_ID ?? 'default';
+      const defaultProtocolId = process.env.SENTINAI_DEFAULT_PROTOCOL_ID ?? 'opstack-l2';
+      const defaultRpcUrl = process.env.L2_RPC_URL;
+      orchestrator.startInstance(defaultInstanceId, defaultProtocolId, defaultRpcUrl);
+      logger.info(`AgentOrchestrator v2 started default instance (instanceId=${defaultInstanceId})`);
+    }
+  }
+
   const watchdogStatus = isHeartbeatWatchdogEnabled() ? WATCHDOG_SCHEDULE : 'off';
   initialized = true;
   logger.info(
@@ -612,6 +637,15 @@ export async function initializeScheduler(): Promise<void> {
  * Stop all cron jobs (for testing).
  */
 export function stopScheduler(): void {
+  // Stop AgentOrchestrator v2 if running
+  if (process.env.AGENT_V2 === 'true') {
+    try {
+      getAgentOrchestrator().stopAll();
+    } catch {
+      // Non-fatal
+    }
+  }
+
   if (agentTask) {
     agentTask.stop();
     agentTask = null;
