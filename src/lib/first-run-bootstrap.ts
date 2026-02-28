@@ -21,9 +21,15 @@ function normalizeUrl(value?: string): string | undefined {
   return v ? v : undefined;
 }
 
+function normalizeForMatch(value?: string): string | undefined {
+  const normalized = normalizeUrl(value);
+  if (!normalized) return undefined;
+  return normalized.replace(/\/+$/, '').toLowerCase();
+}
+
 function envConnectionConfig(): { protocolId: NodeType; connectionConfig: ConnectionConfig } | null {
-  const l2Rpc = normalizeUrl(process.env.L2_RPC_URL);
-  const l1Rpc = normalizeUrl(process.env.SENTINAI_L1_RPC_URL);
+  const l2Rpc = normalizeUrl(process.env.L2_RPC_URL) ?? normalizeUrl(process.env.SENTINAI_L2_RPC_URL);
+  const l1Rpc = normalizeUrl(process.env.SENTINAI_L1_RPC_URL) ?? normalizeUrl(process.env.L1_RPC_URL);
   const cl = normalizeUrl(process.env.CL_BEACON_URL) ?? normalizeUrl(process.env.SENTINAI_L1_BEACON_URL);
 
   // Prefer CL-only when explicitly provided
@@ -33,7 +39,7 @@ function envConnectionConfig(): { protocolId: NodeType; connectionConfig: Connec
 
   // L2 first
   if (l2Rpc) {
-    return { protocolId: 'opstack-l2', connectionConfig: { rpcUrl: l2Rpc, ...(l1Rpc ? { chainId: undefined } : {}) } };
+    return { protocolId: 'opstack-l2', connectionConfig: { rpcUrl: l2Rpc } };
   }
 
   if (l1Rpc) {
@@ -70,9 +76,15 @@ export async function firstRunBootstrap(options?: {
     return { ok: false, protocolId, error: validation.error ?? 'Connection validation failed.' };
   }
 
-  // Idempotent instance create by rpcUrl
+  // Idempotent instance create by protocol + endpoint
   const all = await listInstances(operatorId).catch(() => []);
-  const existing = all.find((i) => i.connectionConfig.rpcUrl === connectionConfig.rpcUrl);
+  const endpoint = normalizeForMatch(connectionConfig.rpcUrl) ?? normalizeForMatch(connectionConfig.beaconApiUrl);
+  const existing = all.find((instance) => {
+    if (instance.protocolId !== protocolId) return false;
+    const existingEndpoint = normalizeForMatch(instance.connectionConfig.rpcUrl)
+      ?? normalizeForMatch(instance.connectionConfig.beaconApiUrl);
+    return !!endpoint && existingEndpoint === endpoint;
+  });
 
   const instanceId = existing?.instanceId ?? (
     await createInstance({

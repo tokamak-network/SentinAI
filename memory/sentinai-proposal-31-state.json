@@ -1,0 +1,33 @@
+{
+  "lastUpdate": "2026-03-01T00:00:08+09:00",
+  "progress": "100%",
+  "currentTask": "Proposal complete: self-hosted first onboarding finalized with real RPC validation",
+  "completed": [
+    "Connect UI",
+    "API skeleton",
+    "Client detector",
+    "Capability mapper",
+    "E2E mock test",
+    "Auto-bootstrap invocation in instrumentation.ts (guarded + once-per-process)",
+    "firstRunBootstrap env alias support (SENTINAI_L2_RPC_URL, L1_RPC_URL)",
+    "Idempotent instance matching hardened (protocol + normalized endpoint)",
+    "Unit tests for instrumentation auto-bootstrap and bootstrap idempotency",
+    "Optional real RPC integration test (route.real-rpc.test.ts, env-gated)",
+    "docker-compose self-hosted onboarding env wiring",
+    "Self-hosted onboarding guide added (docs/guide/self-hosted-onboarding.md)",
+    "README updated with first-run auto-bootstrap flow",
+    "onboarding complete API idempotency hardened (protocol + normalized endpoint)",
+    "onboarding complete route tests expanded for idempotent reuse",
+    "Self-hosted style bootstrap integration test (first run creates active instance, second run reuses idempotently)",
+    "Dedicated npm command for real RPC onboarding verification (test:real-rpc:onboarding)",
+    "Real RPC validation executed successfully against ethereum-sepolia-rpc.publicnode.com"
+  ],
+  "next": [
+    "Create final single squashed commit for Proposal 31"
+  ],
+  "commits": [
+    "53edd40",
+    "84ad44a"
+  ],
+  "issues": []
+}

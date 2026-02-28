@@ -51,6 +51,12 @@ function meta() {
   return { timestamp: new Date().toISOString(), version: 'v2' };
 }
 
+function normalizeForMatch(value?: string): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized) return undefined;
+  return normalized.replace(/\/+$/, '').toLowerCase();
+}
+
 // ============================================================
 // Request body type
 // ============================================================
@@ -95,6 +101,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const { nodeType, connectionConfig, label, operatorId } = body;
+  const effectiveOperatorId = operatorId ?? 'default';
   const errors: string[] = [];
 
   // ── Step 1: Validate connection ──────────────────────────────
@@ -126,17 +133,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let instanceId: string;
   let isNew = false;
 
-  const allInstances = await listInstances(operatorId).catch(() => []);
-  const existing = allInstances.find(
-    (inst) => inst.connectionConfig.rpcUrl === connectionConfig.rpcUrl
-  );
+  const allInstances = await listInstances(effectiveOperatorId).catch(() => []);
+  const endpoint = normalizeForMatch(connectionConfig.rpcUrl) ?? normalizeForMatch(connectionConfig.beaconApiUrl);
+  const existing = allInstances.find((inst) => {
+    if (inst.protocolId !== nodeType) return false;
+    const existingEndpoint = normalizeForMatch(inst.connectionConfig.rpcUrl)
+      ?? normalizeForMatch(inst.connectionConfig.beaconApiUrl);
+    return !!endpoint && existingEndpoint === endpoint;
+  });
 
   if (existing) {
     instanceId = existing.instanceId;
     logger.info(`[v2 onboarding] Reusing existing instance: ${instanceId}`);
   } else {
     const created = await createInstance({
-      operatorId: operatorId ?? 'default',
+      operatorId: effectiveOperatorId,
       protocolId: nodeType,
       displayName: label ?? `Node (${nodeType})`,
       connectionConfig,

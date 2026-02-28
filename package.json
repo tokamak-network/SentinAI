@@ -11,6 +11,7 @@
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "test:real-rpc:onboarding": "vitest run src/app/api/v2/onboarding/complete/route.real-rpc.test.ts",
     "prod:gate:tier1": "bash scripts/prod-gate-tier1.sh",
     "prod:gate:tier2": "bash scripts/prod-gate-tier2.sh",
     "prod:gate:tier3": "bash scripts/prod-gate-tier3.sh",

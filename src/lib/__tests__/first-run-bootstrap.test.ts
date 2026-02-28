@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+import { createInstance, listInstances } from '@/core/instance-registry';
 
 vi.mock('@/core/instance-registry', () => {
   return {
@@ -27,7 +28,9 @@ describe('first-run-bootstrap', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     delete process.env.L2_RPC_URL;
+    delete process.env.SENTINAI_L2_RPC_URL;
     delete process.env.SENTINAI_L1_RPC_URL;
+    delete process.env.L1_RPC_URL;
     delete process.env.CL_BEACON_URL;
   });
 
@@ -56,6 +59,19 @@ describe('first-run-bootstrap', () => {
     expect(res.dashboardUrl).toBe('/v2');
   });
 
+  it('uses SENTINAI_L2_RPC_URL alias', async () => {
+    process.env.SENTINAI_L2_RPC_URL = 'http://mock-l2';
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ result: 'ok' }), { status: 200 }))
+    );
+
+    const res = await firstRunBootstrap();
+    expect(res.ok).toBe(true);
+    expect(res.protocolId).toBe('opstack-l2');
+  });
+
   it('bootstraps using CL_BEACON_URL when set', async () => {
     process.env.CL_BEACON_URL = 'http://beacon';
 
@@ -78,5 +94,32 @@ describe('first-run-bootstrap', () => {
     const res = await firstRunBootstrap();
     expect(res.ok).toBe(true);
     expect(res.protocolId).toBe('ethereum-cl');
+  });
+
+  it('reuses existing instance with normalized endpoint', async () => {
+    process.env.L2_RPC_URL = 'HTTP://MOCK/';
+
+    vi.mocked(listInstances).mockResolvedValueOnce([
+      {
+        instanceId: 'inst-existing',
+        operatorId: 'default',
+        protocolId: 'opstack-l2',
+        displayName: 'Existing Node',
+        connectionConfig: { rpcUrl: 'http://mock' },
+        status: 'active',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ result: 'ok' }), { status: 200 }))
+    );
+
+    const res = await firstRunBootstrap();
+    expect(res.ok).toBe(true);
+    expect(res.instanceId).toBe('inst-existing');
+    expect(createInstance).not.toHaveBeenCalled();
   });
 });
