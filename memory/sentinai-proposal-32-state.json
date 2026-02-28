@@ -1,0 +1,35 @@
+{
+  "lastUpdate": "2026-02-28T23:34:29+09:00",
+  "progress": "94%",
+  "currentTask": "API integration implemented (/api/v2/instances/{id}/playbooks/*, operation-ledger, pattern-miner run) with route tests",
+  "completed": [
+    "Proposal 32 state tracking bootstrap",
+    "Incident analyzer core implementation (trigger normalization, 30-day window filtering, per-instance/action grouping)",
+    "Incident analyzer unit tests (signature normalization, min-occurrence filtering, instance isolation)",
+    "Playbook generator type contracts (EvolvedPlaybook, review status, evolution changelog)",
+    "Pattern→Playbook generation (initial confidence/status inference, performance snapshot)",
+    "Pattern reinforcement merge (confidence delta clamp, versioned changelog update)",
+    "Playbook generator unit tests (generation + reinforcement merge)",
+    "Template system implementation (template catalog, pattern-template matching, narrative rendering)",
+    "Validation logic implementation (shape validation + review status transition validation)",
+    "Template/validation unit tests",
+    "Learning feedback loop implementation (outcome delta application, confidence/status progression, suspension/archive automation)",
+    "Learning feedback loop unit tests (success update, 5-failure suspension, inactivity archive)",
+    "Playbook system persistence store 구현 (Redis + in-memory fallback)",
+    "API 통합: GET /api/v2/instances/{id}/playbooks",
+    "API 통합: GET /api/v2/instances/{id}/playbooks/{playbookId}/history",
+    "API 통합: POST approve/promote/suspend endpoints",
+    "API 통합: GET /api/v2/instances/{id}/operation-ledger",
+    "API 통합: POST /api/v2/instances/{id}/pattern-miner/run (pattern→playbook upsert 파이프라인)",
+    "API route tests 추가 (playbooks list, pattern-miner run)"
+  ],
+  "next": [
+    "엔드투엔드 통합 시나리오 테스트 추가 (ledger 입력→pattern mining→playbook lifecycle endpoint 흐름)",
+    "Proposal 문서 경로 정합성 정리 및 최종 QA",
+    "100% 완료 검증 후 단일 최종 커밋"
+  ],
+  "commits": [],
+  "issues": [
+    "요청된 proposal 문서 경로(/docs/todo/proposal-32-autonomous-playbook-generation.md) 미존재: 현재는 /docs/todo/proposal-32-ai-playbook-generator.md 기준으로 진행"
+  ]
+}
