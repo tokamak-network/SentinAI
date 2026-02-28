@@ -1,0 +1,82 @@
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('@/core/instance-registry', () => {
+  return {
+    listInstances: vi.fn(async () => []),
+    createInstance: vi.fn(async () => ({ instanceId: 'inst-1' })),
+    updateInstance: vi.fn(async () => undefined),
+  };
+});
+
+vi.mock('@/core/collectors/connection-validator', () => {
+  return {
+    validateRpcConnection: vi.fn(async () => ({ valid: true, checks: [], totalLatencyMs: 1, clientVersion: 'Geth/x', chainId: 10 })),
+    validateBeaconConnection: vi.fn(async () => ({ valid: true, checks: [], totalLatencyMs: 1, clientVersion: 'Lighthouse/x' })),
+  };
+});
+
+vi.mock('@/core/redis', () => {
+  return {
+    getCoreRedis: () => ({ set: vi.fn(async () => 'OK') }),
+  };
+});
+
+import { firstRunBootstrap } from '@/lib/first-run-bootstrap';
+
+describe('first-run-bootstrap', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.L2_RPC_URL;
+    delete process.env.SENTINAI_L1_RPC_URL;
+    delete process.env.CL_BEACON_URL;
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns error when no env vars present', async () => {
+    const res = await firstRunBootstrap();
+    expect(res.ok).toBe(false);
+    expect(res.error).toMatch(/No connection environment variables/);
+  });
+
+  it('bootstraps using L2_RPC_URL', async () => {
+    process.env.L2_RPC_URL = 'http://mock';
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify({ result: 'ok' }), { status: 200 }))
+    );
+
+    const res = await firstRunBootstrap();
+    expect(res.ok).toBe(true);
+    expect(res.instanceId).toBe('inst-1');
+    expect(res.protocolId).toBe('opstack-l2');
+    expect(res.dashboardUrl).toBe('/v2');
+  });
+
+  it('bootstraps using CL_BEACON_URL when set', async () => {
+    process.env.CL_BEACON_URL = 'http://beacon';
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.includes('/eth/v1/node/version')) {
+          return new Response(JSON.stringify({ data: { version: 'Lighthouse/v5' } }), { status: 200 });
+        }
+        if (url.includes('/eth/v1/node/syncing')) {
+          return new Response(JSON.stringify({ data: { is_syncing: false } }), { status: 200 });
+        }
+        if (url.includes('/eth/v1/node/peer_count')) {
+          return new Response(JSON.stringify({ data: { connected: '1' } }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ data: {} }), { status: 200 });
+      })
+    );
+
+    const res = await firstRunBootstrap();
+    expect(res.ok).toBe(true);
+    expect(res.protocolId).toBe('ethereum-cl');
+  });
+});

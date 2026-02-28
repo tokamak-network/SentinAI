@@ -1,6 +1,6 @@
 /**
  * v2 Instance Capabilities Endpoint
- * GET → Retrieve detected capabilities from Redis (written by /validate)
+ * GET → Retrieve detected client + mapped capabilities from Redis (written by /validate or /onboarding/complete)
  *
  * Returns { detected: false } when no capabilities data exists yet.
  */
@@ -50,9 +50,9 @@ export async function GET(
       });
     }
 
-    let capabilities: Record<string, unknown>;
+    let payload: Record<string, unknown>;
     try {
-      capabilities = JSON.parse(raw);
+      payload = JSON.parse(raw) as Record<string, unknown>;
     } catch {
       return NextResponse.json({
         data: { detected: false, reason: '저장된 데이터가 손상되었습니다.' },
@@ -61,7 +61,7 @@ export async function GET(
     }
 
     return NextResponse.json({
-      data: { detected: true, ...capabilities },
+      data: { detected: true, instanceId: id, protocolId: instance.protocolId, ...payload },
       meta: meta(),
     });
   } catch (error) {
