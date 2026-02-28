@@ -1,0 +1,29 @@
+{
+  "lastUpdate": "2026-02-28T15:06:15+09:00",
+  "progress": "100%",
+  "currentTask": "Proposal 20 implementation complete (final verification passed)",
+  "completed": [
+    "Base protocol interface",
+    "Config schema",
+    "zkstack plugin baseline",
+    "zkl2-generic plugin scaffold (components/chain/prompts/playbooks)",
+    "Registry mapping for scroll/linea/polygon-zkevm/zkevm",
+    "Autonomous adapter alias mapping for ZK L2 variants",
+    "Chain registry tests for Scroll/Linea/Polygon zkEVM",
+    "Chain-specific RPC method mapping layer for Scroll/Linea/Polygon zkEVM",
+    "ZK L2 RPC snapshot schema normalization utility",
+    "Dedicated tests for zkl2-generic metric mapping and RPC mapping",
+    "Collector capability detection wired to ZK L2 network-specific RPC probes",
+    "Collector tests for polygon-zkevm/scroll/linea capability probes",
+    "Metrics route optional proof/settlement payload generation unified via helper",
+    "API chain-isolation tests for proof/settlement payload gating",
+    "Health route chain metadata/capability payload integration (non-breaking)",
+    "Health API tests for chain snapshot presence/omission behavior",
+    "Integration verification sweep (chain plugin + rpc mapping + collector + metrics/health payload)"
+  ],
+  "next": [],
+  "commits": [
+    "final-single-commit"
+  ],
+  "issues": []
+}

@@ -9,6 +9,7 @@ import { ThanosPlugin } from './thanos';
 import { OptimismPlugin } from './optimism';
 import { ZkstackPlugin } from './zkstack';
 import { ArbitrumPlugin } from './arbitrum';
+import { ZkL2GenericPlugin } from './zkl2-generic';
 import logger from '@/lib/logger';
 
 let activePlugin: ChainPlugin | null = null;
@@ -33,6 +34,13 @@ function resolvePluginFromEnv(): ChainPlugin {
     case 'arbitrum-orbit':
     case 'nitro':
       return new ArbitrumPlugin();
+    case 'zkl2-generic':
+    case 'zkl2':
+    case 'scroll':
+    case 'linea':
+    case 'polygon-zkevm':
+    case 'zkevm':
+      return new ZkL2GenericPlugin();
     default:
       logger.warn(`[ChainRegistry] Unknown CHAIN_TYPE "${chainType}", falling back to thanos`);
       return new ThanosPlugin();

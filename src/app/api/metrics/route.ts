@@ -23,6 +23,7 @@ import { checkDerivationLag, isL1Healthy } from '@/lib/derivation-lag-monitor';
 import { resolveBlockInterval } from '@/lib/block-interval';
 import type { AnomalyResult } from '@/types/anomaly';
 import logger from '@/lib/logger';
+import { buildChainOptionalSections } from './payload';
 
 // Whether anomaly detection is enabled (default: enabled)
 const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'false';
@@ -437,27 +438,19 @@ export async function GET(request: Request) {
             ...(plugin.capabilities.disputeGameMonitoring
                 ? { disputeGames: await getDisputeGameStatus(getSentinaiL1RpcUrl()) }
                 : {}),
-            ...(plugin.capabilities.proofMonitoring
-                ? {
-                    proof: {
-                        enabled: true,
-                        queueDepth: 0,
-                        generationLagSec: 0,
-                        verificationLagSec: 0,
-                    },
-                }
-                : {}),
-            ...(plugin.capabilities.settlementMonitoring
-                ? {
-                    settlement: {
+            ...buildChainOptionalSections({
+                plugin,
+                syncLag: 0,
+                settlementStatus: plugin.capabilities.settlementMonitoring
+                    ? {
                         enabled: true,
                         layer: process.env.ZK_SETTLEMENT_LAYER || 'l1',
                         finalityMode: process.env.ZK_FINALITY_MODE || 'confirmed',
                         postingLagSec: 0,
                         healthy: true,
-                    },
-                }
-                : {}),
+                    }
+                    : null,
+            }),
         };
 
         return NextResponse.json(stressPayload, {
@@ -924,27 +917,19 @@ export async function GET(request: Request) {
             ...(plugin.capabilities.disputeGameMonitoring
                 ? { disputeGames: await getDisputeGameStatus(l1RpcUrl) }
                 : {}),
-            ...(plugin.capabilities.proofMonitoring
-                ? {
-                    proof: {
-                        enabled: true,
-                        queueDepth: 0,
-                        generationLagSec: Math.max(0, syncLag),
-                        verificationLagSec: Math.max(0, Math.floor(syncLag / 2)),
-                    },
-                }
-                : {}),
-            ...(settlementStatus
-                ? {
-                    settlement: {
+            ...buildChainOptionalSections({
+                plugin,
+                syncLag,
+                settlementStatus: settlementStatus
+                    ? {
                         enabled: settlementStatus.enabled,
                         layer: settlementStatus.layer,
                         finalityMode: settlementStatus.finalityMode,
                         postingLagSec: settlementStatus.postingLagSec,
                         healthy: settlementStatus.healthy,
-                    },
-                }
-                : {}),
+                    }
+                    : null,
+            }),
             // === Anomaly Detection Fields ===
             anomalies: detectedAnomalies,
             activeAnomalyEventId,

@@ -3,6 +3,7 @@ import { getLastCycleResult } from '@/lib/agent-loop';
 import { getStore } from '@/lib/redis-store';
 import { getSchedulerStatus } from '@/lib/scheduler';
 import logger from '@/lib/logger';
+import { getChainPlugin } from '@/chains';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,12 +24,40 @@ function computeLagSeconds(nowMs: number, timestamp: string | null): number | nu
   return Math.max(0, Math.floor((nowMs - parsed) / 1000));
 }
 
+function getChainSnapshot(): {
+  type: string;
+  displayName: string;
+  mode: string;
+  capabilities: {
+    proofMonitoring: boolean;
+    settlementMonitoring: boolean;
+    eoaBalanceMonitoring: boolean;
+  };
+} | null {
+  try {
+    const plugin = getChainPlugin();
+    return {
+      type: plugin.chainType,
+      displayName: plugin.displayName,
+      mode: plugin.chainMode,
+      capabilities: {
+        proofMonitoring: plugin.capabilities.proofMonitoring,
+        settlementMonitoring: plugin.capabilities.settlementMonitoring,
+        eoaBalanceMonitoring: plugin.capabilities.eoaBalanceMonitoring,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function GET() {
   const nowMs = Date.now();
   const nowIso = new Date(nowMs).toISOString();
   const staleThresholdSec = parseStaleThresholdSeconds(process.env.AGENT_HEARTBEAT_STALE_SECONDS);
 
   try {
+    const chain = getChainSnapshot();
     const [heartbeatAt, lastCycle, scheduler] = await Promise.all([
       getStore().getAgentLoopHeartbeat(),
       getLastCycleResult(),
@@ -41,6 +70,7 @@ export async function GET() {
     return NextResponse.json({
       status: 'ok',
       timestamp: nowIso,
+      ...(chain ? { chain } : {}),
       agentLoop: {
         enabled: scheduler.agentLoopEnabled,
         schedulerInitialized: scheduler.initialized,
@@ -62,10 +92,12 @@ export async function GET() {
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     logger.error('[API /health] Error:', message);
+    const chain = getChainSnapshot();
 
     return NextResponse.json({
       status: 'degraded',
       timestamp: nowIso,
+      ...(chain ? { chain } : {}),
       agentLoop: {
         enabled: false,
         schedulerInitialized: false,

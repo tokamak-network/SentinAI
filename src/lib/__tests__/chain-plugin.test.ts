@@ -8,6 +8,7 @@ import { ThanosPlugin } from '@/chains/thanos';
 import { OptimismPlugin } from '@/chains/optimism';
 import { ZkstackPlugin } from '@/chains/zkstack';
 import { ArbitrumPlugin } from '@/chains/arbitrum';
+import { ZkL2GenericPlugin } from '@/chains/zkl2-generic';
 import {
   getChainPlugin,
   resetChainRegistry,
@@ -570,6 +571,38 @@ describe('ArbitrumPlugin', () => {
 });
 
 // ============================================================
+// ZkL2GenericPlugin Tests
+// ============================================================
+
+describe('ZkL2GenericPlugin', () => {
+  let plugin: ZkL2GenericPlugin;
+
+  beforeEach(() => {
+    delete process.env.CHAIN_TYPE;
+    plugin = new ZkL2GenericPlugin();
+  });
+
+  it('should map execution metrics to zk-sequencer', () => {
+    expect(plugin.mapMetricToComponent('cpuUsage')).toBe('zk-sequencer');
+    expect(plugin.mapMetricToComponent('txPoolPending')).toBe('zk-sequencer');
+    expect(plugin.mapMetricToComponent('rpcLatency')).toBe('zk-sequencer');
+  });
+
+  it('should map settlement and proof metrics to specialized components', () => {
+    expect(plugin.mapMetricToComponent('settlementLag')).toBe('zk-batcher');
+    expect(plugin.mapMetricToComponent('batchSubmissionDelay')).toBe('zk-batcher');
+    expect(plugin.mapMetricToComponent('proofQueueDepth')).toBe('zk-prover');
+  });
+
+  it('should normalize component aliases', () => {
+    expect(plugin.normalizeComponentName('SEQUENCER')).toBe('zk-sequencer');
+    expect(plugin.normalizeComponentName('batcher')).toBe('zk-batcher');
+    expect(plugin.normalizeComponentName('prover')).toBe('zk-prover');
+    expect(plugin.normalizeComponentName('unknown')).toBe('system');
+  });
+});
+
+// ============================================================
 // Registry Tests
 // ============================================================
 
@@ -704,5 +737,32 @@ describe('ChainRegistry', () => {
     const plugin = getChainPlugin();
     expect(plugin.chainType).toBe('arbitrum');
     expect(plugin).toBeInstanceOf(ArbitrumPlugin);
+  });
+
+  it('should map CHAIN_TYPE=scroll to ZkL2GenericPlugin', () => {
+    process.env.CHAIN_TYPE = 'scroll';
+    resetChainRegistry();
+
+    const plugin = getChainPlugin();
+    expect(plugin.chainType).toBe('zkl2-generic');
+    expect(plugin).toBeInstanceOf(ZkL2GenericPlugin);
+  });
+
+  it('should map CHAIN_TYPE=linea to ZkL2GenericPlugin', () => {
+    process.env.CHAIN_TYPE = 'linea';
+    resetChainRegistry();
+
+    const plugin = getChainPlugin();
+    expect(plugin.chainType).toBe('zkl2-generic');
+    expect(plugin).toBeInstanceOf(ZkL2GenericPlugin);
+  });
+
+  it('should map CHAIN_TYPE=polygon-zkevm to ZkL2GenericPlugin', () => {
+    process.env.CHAIN_TYPE = 'polygon-zkevm';
+    resetChainRegistry();
+
+    const plugin = getChainPlugin();
+    expect(plugin.chainType).toBe('zkl2-generic');
+    expect(plugin).toBeInstanceOf(ZkL2GenericPlugin);
   });
 });

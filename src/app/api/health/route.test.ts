@@ -4,6 +4,7 @@ const hoisted = vi.hoisted(() => ({
   getStoreMock: vi.fn(),
   getLastCycleResultMock: vi.fn(),
   getSchedulerStatusMock: vi.fn(),
+  getChainPluginMock: vi.fn(),
 }));
 
 vi.mock('@/lib/redis-store', () => ({
@@ -16,6 +17,10 @@ vi.mock('@/lib/agent-loop', () => ({
 
 vi.mock('@/lib/scheduler', () => ({
   getSchedulerStatus: hoisted.getSchedulerStatusMock,
+}));
+
+vi.mock('@/chains', () => ({
+  getChainPlugin: hoisted.getChainPluginMock,
 }));
 
 const { GET } = await import('@/app/api/health/route');
@@ -33,6 +38,17 @@ describe('/api/health', () => {
       timestamp: '2026-02-23T15:58:00.000Z',
       phase: 'complete',
     });
+    hoisted.getChainPluginMock.mockReturnValue({
+      chainType: 'zkl2-generic',
+      displayName: 'ZK L2 Generic',
+      chainMode: 'generic',
+      capabilities: {
+        proofMonitoring: true,
+        settlementMonitoring: true,
+        eoaBalanceMonitoring: true,
+      },
+    });
+
     hoisted.getSchedulerStatusMock.mockReturnValue({
       initialized: true,
       agentLoopEnabled: true,
@@ -63,6 +79,8 @@ describe('/api/health', () => {
 
     expect(response.status).toBe(200);
     expect(body.status).toBe('ok');
+    expect(body.chain.type).toBe('zkl2-generic');
+    expect(body.chain.capabilities.proofMonitoring).toBe(true);
     expect(body.agentLoop.heartbeatLagSec).toBe(60);
     expect(body.agentLoop.stale).toBe(false);
     expect(body.agentLoop.lastCycleAt).toBe('2026-02-23T15:58:00.000Z');
@@ -92,7 +110,21 @@ describe('/api/health', () => {
 
     expect(response.status).toBe(200);
     expect(body.status).toBe('degraded');
+    expect(body.chain.type).toBe('zkl2-generic');
     expect(body.agentLoop.stale).toBe(true);
     expect(body.error).toContain('store unavailable');
+  });
+
+  it('omits chain snapshot when chain plugin cannot be resolved', async () => {
+    hoisted.getChainPluginMock.mockImplementation(() => {
+      throw new Error('chain unavailable');
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.status).toBe('ok');
+    expect(body.chain).toBeUndefined();
   });
 });

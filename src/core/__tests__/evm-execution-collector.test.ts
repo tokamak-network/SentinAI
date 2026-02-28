@@ -67,6 +67,7 @@ function buildFetchMock(methodMap: Record<string, unknown>): ReturnType<typeof v
 describe('EvmExecutionCollector', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    delete process.env.CHAIN_TYPE
   })
 
   it('collect() returns GenericMetricDataPoint with required fields', async () => {
@@ -180,6 +181,66 @@ describe('EvmExecutionCollector', () => {
     expect(caps.clientFamily).toBe('Geth')
     expect(caps.chainId).toBe(0xaa37dc)
     expect(caps.availableMethods).toContain('txpool_status')
+  })
+
+  it('detectCapabilities() probes chain-specific zk methods for polygon-zkevm', async () => {
+    process.env.CHAIN_TYPE = 'polygon-zkevm'
+
+    const fetchMock = buildFetchMock({
+      web3_clientVersion: 'zkevm-node/v1.0.0',
+      eth_chainId: '0x44d',
+      txpool_status: { pending: '0x1', queued: '0x0' },
+      zkevm_batchNumber: '123',
+      zkevm_virtualBatchNumber: '0x80',
+      zkevm_verifiedBatchNumber: '0x7f',
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { EvmExecutionCollector } = await import('@/core/collectors/evm-execution')
+    const collector = new EvmExecutionCollector()
+    const caps = await collector.detectCapabilities(makeInstance('http://localhost:8545'))
+
+    expect(caps.availableMethods).toContain('zkevm_batchNumber')
+    expect(caps.availableMethods).toContain('zkevm_virtualBatchNumber')
+    expect(caps.availableMethods).toContain('zkevm_verifiedBatchNumber')
+  })
+
+  it('detectCapabilities() probes scroll-specific methods when CHAIN_TYPE=scroll', async () => {
+    process.env.CHAIN_TYPE = 'scroll'
+
+    const fetchMock = buildFetchMock({
+      web3_clientVersion: 'scroll-node/v1.0.0',
+      eth_chainId: '0x8274f',
+      rollup_getInfo: { finalizedBatchIndex: '0x10' },
+      scroll_getBlockTraceByNumberOrHash: { traces: [] },
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { EvmExecutionCollector } = await import('@/core/collectors/evm-execution')
+    const collector = new EvmExecutionCollector()
+    const caps = await collector.detectCapabilities(makeInstance('http://localhost:8545'))
+
+    expect(caps.availableMethods).toContain('rollup_getInfo')
+    expect(caps.availableMethods).toContain('scroll_getBlockTraceByNumberOrHash')
+  })
+
+  it('detectCapabilities() probes linea-specific methods when CHAIN_TYPE=linea', async () => {
+    process.env.CHAIN_TYPE = 'linea'
+
+    const fetchMock = buildFetchMock({
+      web3_clientVersion: 'linea-node/v1.0.0',
+      eth_chainId: '0xe708',
+      linea_getTransactionExclusionStatusV1: { status: 'none' },
+      linea_getProof: { proof: [] },
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { EvmExecutionCollector } = await import('@/core/collectors/evm-execution')
+    const collector = new EvmExecutionCollector()
+    const caps = await collector.detectCapabilities(makeInstance('http://localhost:8545'))
+
+    expect(caps.availableMethods).toContain('linea_getTransactionExclusionStatusV1')
+    expect(caps.availableMethods).toContain('linea_getProof')
   })
 
   it('collect() handles fetch errors gracefully — does not throw, returns a result', async () => {

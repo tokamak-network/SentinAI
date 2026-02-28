@@ -7,6 +7,7 @@ import type { MetricsCollector, DetectedCapabilities } from './types'
 import type { NodeInstance, ConnectionValidationResult } from '@/core/types'
 import type { CollectorResult, GenericMetricDataPoint } from '@/core/metrics'
 import { validateRpcConnection } from './connection-validator'
+import { getZkL2RpcMethodMap, resolveZkL2Network } from '@/chains/zkl2-generic/rpc'
 
 const RPC_TIMEOUT_MS = 10000
 
@@ -114,10 +115,13 @@ export class EvmExecutionCollector implements MetricsCollector {
     let clientFamily = 'unknown'
     let clientVersion = 'unknown'
     let chainId = 0
+    let hasWeb3ClientVersion = false
+    let hasEthChainId = false
 
     try {
       const v = await rpcCall(rpcUrl, 'web3_clientVersion', [], authToken) as string
       clientVersion = v ?? 'unknown'
+      hasWeb3ClientVersion = true
       // Parse client family from version string: "Geth/v1.14..." → "Geth"
       const match = clientVersion.match(/^([^/]+)/)
       clientFamily = match?.[1] ?? 'unknown'
@@ -126,17 +130,29 @@ export class EvmExecutionCollector implements MetricsCollector {
     try {
       const cid = await rpcCall(rpcUrl, 'eth_chainId', [], authToken) as string
       chainId = parseInt(cid, 16)
+      hasEthChainId = true
     } catch { /* ignore */ }
 
-    const availableMethods: string[] = []
-    const methodChecks = [
-      ['txpool_status', 'txpoolSupported'],
-      ['admin_peers', 'adminPeersSupported'],
-      ['debug_metrics', 'debugMetricsSupported'],
-    ]
+    const availableMethods = new Set<string>()
+    if (hasWeb3ClientVersion) availableMethods.add('web3_clientVersion')
+    if (hasEthChainId) availableMethods.add('eth_chainId')
+
+    const baseMethodChecks = ['txpool_status', 'admin_peers', 'debug_metrics']
+
+    const chainTypeHint = process.env.CHAIN_TYPE?.trim().toLowerCase() || ''
+    const shouldProbeZkMethods = instance.protocolId === 'zkstack' || ['scroll', 'linea', 'polygon-zkevm', 'zkevm', 'zkl2', 'zkl2-generic'].includes(chainTypeHint)
+
+    const zkMethodChecks = shouldProbeZkMethods
+      ? (() => {
+          const methodMap = getZkL2RpcMethodMap(resolveZkL2Network(chainTypeHint || 'zkl2-generic'))
+          return [...methodMap.settlement, ...methodMap.proof]
+        })()
+      : []
+
+    const methodChecks = [...new Set([...baseMethodChecks, ...zkMethodChecks])]
 
     const results = await Promise.allSettled(
-      methodChecks.map(([method]) => rpcCall(rpcUrl, method, [], authToken))
+      methodChecks.map((method) => rpcCall(rpcUrl, method, [], authToken))
     )
 
     let txpoolSupported = false
@@ -144,15 +160,24 @@ export class EvmExecutionCollector implements MetricsCollector {
     let debugMetricsSupported = false
 
     results.forEach((r, i) => {
+      const method = methodChecks[i]
       if (r.status === 'fulfilled') {
-        availableMethods.push(methodChecks[i][0])
-        if (methodChecks[i][0] === 'txpool_status') txpoolSupported = true
-        if (methodChecks[i][0] === 'admin_peers') adminPeersSupported = true
-        if (methodChecks[i][0] === 'debug_metrics') debugMetricsSupported = true
+        availableMethods.add(method)
+        if (method === 'txpool_status') txpoolSupported = true
+        if (method === 'admin_peers') adminPeersSupported = true
+        if (method === 'debug_metrics') debugMetricsSupported = true
       }
     })
 
-    return { clientFamily, clientVersion, chainId, availableMethods, txpoolSupported, adminPeersSupported, debugMetricsSupported }
+    return {
+      clientFamily,
+      clientVersion,
+      chainId,
+      availableMethods: [...availableMethods],
+      txpoolSupported,
+      adminPeersSupported,
+      debugMetricsSupported,
+    }
   }
 }
 

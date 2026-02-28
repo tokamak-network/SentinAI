@@ -14,6 +14,12 @@ const ADAPTERS: Record<string, AutonomousAdapter> = {
   zkstack: new ZkstackAutonomousAdapter(),
   'zk-stack': new ZkstackAutonomousAdapter(),
   zksync: new ZkstackAutonomousAdapter(),
+  'zkl2-generic': new ZkstackAutonomousAdapter(),
+  zkl2: new ZkstackAutonomousAdapter(),
+  scroll: new ZkstackAutonomousAdapter(),
+  linea: new ZkstackAutonomousAdapter(),
+  'polygon-zkevm': new ZkstackAutonomousAdapter(),
+  zkevm: new ZkstackAutonomousAdapter(),
 };
 
 export function getAutonomousAdapter(chainType: string): AutonomousAdapter {
