@@ -1171,9 +1171,12 @@ export default function Dashboard() {
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
           console.info(new Date().toISOString(), 'Fetch aborted');
-        } else {
-          console.error(new Date().toISOString(), err);
+          return;
         }
+        console.error(new Date().toISOString(), err);
+        // Avoid locking the UI on a permanent loading screen in demo/test environments.
+        setIsLoading(false);
+        if (!current) setCurrent(null);
       }
     };
 

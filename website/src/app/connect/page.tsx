@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ShieldCheck,
   Github,
@@ -14,6 +14,8 @@ import {
   ArrowRight,
   Sparkles,
   Info,
+  Plug,
+  Loader2,
 } from "lucide-react";
 
 const GITHUB_URL = "https://github.com/tokamak-network/SentinAI";
@@ -23,7 +25,7 @@ const DOCKER_IMAGE = "ghcr.io/tokamak-network/sentinai:latest";
 // Types
 // ============================================================================
 
-type NodeType = "l2-opstack" | "l2-arbitrum" | "l1-el" | "l1-cl";
+type NodeType = "ethereum-el" | "opstack-l2" | "arbitrum-nitro" | "ethereum-cl";
 
 interface NodeConfig {
   type: NodeType;
@@ -34,7 +36,20 @@ interface NodeConfig {
   iconBg: string;
   urlLabel: string;
   urlPlaceholder: string;
+  supportsAuthToken: boolean;
 }
+
+type OnboardingResponse = {
+  data?: {
+    instanceId: string;
+    dashboardUrl?: string;
+    detectedClient?: unknown;
+    mappedCapabilities?: unknown;
+    warnings?: string[];
+  };
+  error?: string;
+  code?: string;
+};
 
 // ============================================================================
 // Node type config
@@ -42,7 +57,7 @@ interface NodeConfig {
 
 const NODE_CONFIGS: NodeConfig[] = [
   {
-    type: "l1-el",
+    type: "ethereum-el",
     label: "L1 실행 클라이언트",
     clients: "Geth · Reth · Nethermind · Besu",
     Icon: Server,
@@ -50,9 +65,10 @@ const NODE_CONFIGS: NodeConfig[] = [
     iconBg: "bg-blue-500/10",
     urlLabel: "Execution Client RPC URL",
     urlPlaceholder: "http://localhost:8545",
+    supportsAuthToken: true,
   },
   {
-    type: "l2-opstack",
+    type: "opstack-l2",
     label: "L2 시퀀서 (OP Stack)",
     clients: "OP Stack · Optimism · Thanos",
     Icon: Activity,
@@ -60,9 +76,10 @@ const NODE_CONFIGS: NodeConfig[] = [
     iconBg: "bg-cyan-500/10",
     urlLabel: "L2 RPC URL",
     urlPlaceholder: "https://rpc.your-l2-network.io",
+    supportsAuthToken: true,
   },
   {
-    type: "l2-arbitrum",
+    type: "arbitrum-nitro",
     label: "L2 시퀀서 (Arbitrum Nitro)",
     clients: "Arbitrum Nitro · Arbitrum Orbit",
     Icon: Activity,
@@ -70,9 +87,10 @@ const NODE_CONFIGS: NodeConfig[] = [
     iconBg: "bg-emerald-500/10",
     urlLabel: "L2 RPC URL",
     urlPlaceholder: "https://rpc.your-arbitrum-node.io",
+    supportsAuthToken: true,
   },
   {
-    type: "l1-cl",
+    type: "ethereum-cl",
     label: "L1 합의 클라이언트",
     clients: "Lighthouse · Prysm · Teku",
     Icon: Cpu,
@@ -80,6 +98,7 @@ const NODE_CONFIGS: NodeConfig[] = [
     iconBg: "bg-violet-500/10",
     urlLabel: "Beacon API URL",
     urlPlaceholder: "http://localhost:5052",
+    supportsAuthToken: false,
   },
 ];
 
@@ -87,41 +106,38 @@ const NODE_CONFIGS: NodeConfig[] = [
 // Output generators
 // ============================================================================
 
-// ENV_MAP: node type → environment variable mapping
 const ENV_MAP: Record<NodeType, { primary: string; optional?: string }> = {
-  "l1-el": { primary: "L2_RPC_URL", optional: "SENTINAI_L1_RPC_URL" },
-  "l2-opstack": { primary: "L2_RPC_URL" },
-  "l2-arbitrum": { primary: "L2_RPC_URL" },
-  "l1-cl": { primary: "CL_BEACON_URL" },
+  "ethereum-el": { primary: "SENTINAI_L1_RPC_URL" },
+  "opstack-l2": { primary: "L2_RPC_URL", optional: "SENTINAI_L1_RPC_URL" },
+  "arbitrum-nitro": { primary: "L2_RPC_URL", optional: "SENTINAI_L1_RPC_URL" },
+  "ethereum-cl": { primary: "CL_BEACON_URL" },
 };
 
-function buildDockerRun(nodeType: NodeType, rpcUrl: string): string {
-  const url = rpcUrl.trim() || "<your-rpc-url>";
+function buildDockerRun(nodeType: NodeType, url: string, authToken?: string): string {
   const { primary, optional } = ENV_MAP[nodeType];
+  const u = url.trim() || "<your-url>";
   const lines: string[] = [];
 
-  lines.push(`  -e ${primary}=${url} \\`);
-  if (optional) {
-    lines.push(`  -e ${optional}=${url} \\`);
-  }
-  lines.push(`  -e ANTHROPIC_API_KEY=<your-anthropic-key> \\`);
-  lines.push(`  -p 3002:3002 \\`);
+  lines.push(`  -e ${primary}=${u} \\\n`);
+  if (optional) lines.push(`  -e ${optional}=<optional-l1-rpc-url> \\\n`);
+  if (authToken?.trim()) lines.push(`  -e SENTINAI_RPC_AUTH_TOKEN=${authToken.trim()} \\\n`);
+
+  lines.push(`  -e ANTHROPIC_API_KEY=<your-anthropic-key> \\\n`);
+  lines.push(`  -p 3002:3002 \\\n`);
   lines.push(`  ${DOCKER_IMAGE}`);
 
-  return `docker run \\\n${lines.join("\n")}`;
+  return `docker run \\\n${lines.join("")}`.trimEnd();
 }
 
-function buildEnvLocal(nodeType: NodeType, rpcUrl: string): string {
-  const url = rpcUrl.trim() || "<your-rpc-url>";
+function buildEnvLocal(nodeType: NodeType, url: string, authToken?: string): string {
   const { primary, optional } = ENV_MAP[nodeType];
+  const u = url.trim() || "<your-url>";
   const lines: string[] = [];
 
-  lines.push(`${primary}=${url}`);
-  if (optional) {
-    lines.push(`${optional}=${url}`);
-  }
+  lines.push(`${primary}=${u}`);
+  if (optional) lines.push(`${optional}=<optional-l1-rpc-url>`);
+  if (authToken?.trim()) lines.push(`SENTINAI_RPC_AUTH_TOKEN=${authToken.trim()}`);
   lines.push(`ANTHROPIC_API_KEY=<your-anthropic-key>`);
-  lines.push(`# Optional: SENTINAI_L1_RPC_URL=https://eth-mainnet-rpc...`);
 
   return lines.join("\n");
 }
@@ -163,7 +179,7 @@ function Navbar() {
 }
 
 // ============================================================================
-// Code block with copy button
+// Code block
 // ============================================================================
 
 function CodeBlock({
@@ -183,7 +199,6 @@ function CodeBlock({
 
   return (
     <div className="overflow-hidden rounded-xl border border-slate-700 bg-slate-900">
-      {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-700 bg-slate-800/60 px-4 py-2.5">
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-rose-500/70" />
@@ -209,7 +224,6 @@ function CodeBlock({
         </button>
       </div>
 
-      {/* Code */}
       <pre className="overflow-x-auto p-5 font-mono text-sm leading-relaxed text-slate-200 whitespace-pre">
         {content}
       </pre>
@@ -222,12 +236,34 @@ function CodeBlock({
 // ============================================================================
 
 export default function ConnectPage() {
-  const [nodeType, setNodeType] = useState<NodeType>("l1-el");
-  const [rpcUrl, setRpcUrl] = useState("");
+  const [nodeType, setNodeType] = useState<NodeType>("ethereum-el");
+  const [url, setUrl] = useState("");
+  const [authToken, setAuthToken] = useState("");
   const [generated, setGenerated] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<OnboardingResponse | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+
   const currentConfig = NODE_CONFIGS.find((c) => c.type === nodeType)!;
+
+  const dockerCommand = useMemo(
+    () => buildDockerRun(nodeType, url, authToken),
+    [nodeType, url, authToken]
+  );
+  const envLocal = useMemo(
+    () => buildEnvLocal(nodeType, url, authToken),
+    [nodeType, url, authToken]
+  );
+
+  useEffect(() => {
+    if (!testResult?.data?.dashboardUrl) return;
+    const t = window.setTimeout(() => {
+      window.location.assign(testResult.data!.dashboardUrl!);
+    }, 900);
+    return () => window.clearTimeout(t);
+  }, [testResult?.data?.dashboardUrl]);
 
   function handleGenerate() {
     setGenerated(true);
@@ -235,7 +271,6 @@ export default function ConnectPage() {
 
   function copyToClipboard(text: string, id: string) {
     navigator.clipboard.writeText(text).catch(() => {
-      // Fallback for environments without clipboard API
       const el = document.createElement("textarea");
       el.value = text;
       document.body.appendChild(el);
@@ -247,15 +282,54 @@ export default function ConnectPage() {
     setTimeout(() => setCopiedId(null), 2000);
   }
 
-  const dockerCommand = buildDockerRun(nodeType, rpcUrl);
-  const envLocal = buildEnvLocal(nodeType, rpcUrl);
+  async function handleTestConnection() {
+    setTesting(true);
+    setTestError(null);
+    setTestResult(null);
+
+    try {
+      const connectionConfig: Record<string, unknown> =
+        nodeType === "ethereum-cl"
+          ? { rpcUrl: url.trim(), beaconApiUrl: url.trim() }
+          : { rpcUrl: url.trim(), ...(authToken.trim() ? { authToken: authToken.trim() } : {}) };
+
+      const res = await fetch("/api/v2/onboarding/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          nodeType,
+          connectionConfig,
+          label: "Connect UI",
+          operatorId: "default",
+        }),
+      });
+
+      const json = (await res.json()) as OnboardingResponse;
+      if (!res.ok) {
+        setTestError(json.error ?? `HTTP ${res.status}`);
+        setTesting(false);
+        return;
+      }
+
+      setTestResult(json);
+      setGenerated(true);
+
+      if (json.data?.dashboardUrl) {
+        // Provide a quick redirect option
+        // (Do not auto-navigate to avoid surprises)
+      }
+    } catch (e) {
+      setTestError(String(e));
+    } finally {
+      setTesting(false);
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
       <Navbar />
 
       <main className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
-        {/* Back link */}
         <a
           href="/"
           className="mb-8 inline-flex items-center gap-2 text-sm text-slate-500 transition-colors hover:text-slate-300"
@@ -264,28 +338,25 @@ export default function ConnectPage() {
           홈으로
         </a>
 
-        {/* Page header */}
         <div className="mb-12">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-1.5 text-sm text-cyan-400">
             <Terminal className="h-3.5 w-3.5" />
-            설정 생성기
+            Connect Flow
           </div>
           <h1 className="mb-4 text-3xl font-bold tracking-tight text-slate-100 sm:text-4xl">
             Connect Your Node
           </h1>
-          <p className="max-w-xl text-slate-400">
-            RPC URL을 입력하면 <code className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-xs text-cyan-300">docker run</code> 명령어를 즉시 생성합니다.
-            브라우저에서 연결 테스트는 하지 않습니다 — 감지와 설정은 SentinAI가 첫 부팅 시 자동으로 처리합니다.
+          <p className="max-w-2xl text-slate-400">
+            URL(+옵션 Auth)을 입력하면 연결 테스트를 수행하고, 자동 감지 결과를 표시하며,
+            바로 실행 가능한 <code className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-xs text-cyan-300">docker run</code> / <code className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-xs text-cyan-300">.env.local</code> 블록을 생성합니다.
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
-          {/* Form */}
           <div className="lg:col-span-2">
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
               <h2 className="mb-6 font-semibold text-slate-100">노드 정보 입력</h2>
 
-              {/* Node type selector */}
               <div className="mb-5">
                 <label className="mb-2 block text-sm font-medium text-slate-300">
                   노드 타입
@@ -301,6 +372,8 @@ export default function ConnectPage() {
                         onClick={() => {
                           setNodeType(config.type);
                           setGenerated(false);
+                          setTestResult(null);
+                          setTestError(null);
                         }}
                         className={`w-full rounded-lg border p-3 text-left transition-all ${
                           isSelected
@@ -315,7 +388,9 @@ export default function ConnectPage() {
                             }`}
                           >
                             <Icon
-                              className={`h-4 w-4 ${isSelected ? config.iconColor : "text-slate-400"}`}
+                              className={`h-4 w-4 ${
+                                isSelected ? config.iconColor : "text-slate-400"
+                              }`}
                             />
                           </div>
                           <div className="min-w-0">
@@ -340,73 +415,159 @@ export default function ConnectPage() {
                 </div>
               </div>
 
-              {/* RPC URL input */}
-              <div className="mb-6">
+              <div className="mb-4">
                 <label
-                  htmlFor="rpc-url"
+                  htmlFor="node-url"
                   className="mb-2 block text-sm font-medium text-slate-300"
                 >
                   {currentConfig.urlLabel}
                 </label>
                 <input
-                  id="rpc-url"
+                  id="node-url"
                   type="url"
-                  value={rpcUrl}
+                  value={url}
                   onChange={(e) => {
-                    setRpcUrl(e.target.value);
+                    setUrl(e.target.value);
                     setGenerated(false);
+                    setTestResult(null);
+                    setTestError(null);
                   }}
                   placeholder={currentConfig.urlPlaceholder}
                   className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 font-mono text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                 />
                 <p className="mt-1.5 text-xs text-slate-500">
-                  입력값은 서버로 전송되지 않습니다.
+                  테스트 시에만 서버로 전송됩니다.
                 </p>
               </div>
 
-              {/* Generate button */}
-              <button
-                type="button"
-                onClick={handleGenerate}
-                className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-opacity hover:opacity-90"
-              >
-                <Sparkles className="h-4 w-4" />
-                설정 생성
-                <ArrowRight className="h-4 w-4" />
-              </button>
+              {currentConfig.supportsAuthToken && (
+                <div className="mb-6">
+                  <label
+                    htmlFor="auth-token"
+                    className="mb-2 block text-sm font-medium text-slate-300"
+                  >
+                    Auth Token (optional)
+                  </label>
+                  <input
+                    id="auth-token"
+                    type="password"
+                    value={authToken}
+                    onChange={(e) => {
+                      setAuthToken(e.target.value);
+                      setGenerated(false);
+                    }}
+                    placeholder="Bearer 토큰 또는 Basic 자격증명"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 font-mono text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 gap-3">
+                <button
+                  type="button"
+                  onClick={handleTestConnection}
+                  disabled={testing || !url.trim()}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-100 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {testing ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plug className="h-4 w-4" />
+                  )}
+                  연결 테스트
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleGenerate}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-opacity hover:opacity-90"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  설정 생성
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
-            {/* Note */}
             <div className="mt-4 flex gap-3 rounded-lg border border-slate-800 bg-slate-900/30 p-4">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
               <p className="text-xs text-slate-500 leading-relaxed">
-                클라이언트 버전, 지원 메트릭, 이상 탐지 규칙은 SentinAI가 첫 번째 에이전트 사이클에서 자동으로 감지합니다.
+                연결 테스트는 <code className="font-mono">/api/v2/onboarding/complete</code> 를 호출하며,
+                성공 시 인스턴스를 생성(또는 재사용)하고 자동 감지 결과를 저장합니다.
               </p>
             </div>
           </div>
 
-          {/* Output */}
           <div className="lg:col-span-3">
+            {testError && (
+              <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">
+                {testError}
+              </div>
+            )}
+
+            {testResult?.data && (
+              <div className="mb-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
+                <div className="flex items-center gap-2 text-sm text-emerald-300">
+                  <Check className="h-4 w-4" />
+                  연결 성공 — instanceId: <span className="font-mono">{testResult.data.instanceId}</span>
+                </div>
+                {testResult.data.warnings?.length ? (
+                  <ul className="mt-3 list-disc pl-5 text-xs text-amber-200">
+                    {testResult.data.warnings.map((w, i) => (
+                      <li key={i}>{w}</li>
+                    ))}
+                  </ul>
+                ) : null}
+
+                <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <CodeBlock
+                    title="detectedClient"
+                    content={JSON.stringify(testResult.data.detectedClient ?? {}, null, 2)}
+                    copyId="detectedClient"
+                    copiedId={copiedId}
+                    onCopy={copyToClipboard}
+                  />
+                  <CodeBlock
+                    title="mappedCapabilities"
+                    content={JSON.stringify(testResult.data.mappedCapabilities ?? {}, null, 2)}
+                    copyId="mappedCapabilities"
+                    copiedId={copiedId}
+                    onCopy={copyToClipboard}
+                  />
+                </div>
+
+                {testResult.data.dashboardUrl ? (
+                  <div className="mt-4">
+                    <a
+                      href={testResult.data.dashboardUrl}
+                      className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
+                    >
+                      대시보드로 이동
+                      <ArrowRight className="h-4 w-4" />
+                    </a>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
             {!generated ? (
               <div className="flex h-full min-h-[320px] items-center justify-center rounded-xl border border-dashed border-slate-800 bg-slate-900/20">
                 <div className="text-center">
                   <Terminal className="mx-auto mb-3 h-8 w-8 text-slate-700" />
                   <p className="text-sm text-slate-600">
-                    노드 타입과 RPC URL을 입력하고
+                    노드 타입과 URL을 입력하고
                     <br />
-                    <span className="text-slate-500">설정 생성</span> 버튼을 누르세요
+                    <span className="text-slate-500">연결 테스트</span> 또는 <span className="text-slate-500">설정 생성</span>을 실행하세요
                   </p>
                 </div>
               </div>
             ) : (
               <div className="space-y-4">
-                {/* Generated header */}
                 <div className="flex items-center gap-2 text-sm text-emerald-400">
                   <Check className="h-4 w-4" />
                   설정이 생성되었습니다
                 </div>
 
-                {/* docker run */}
                 <CodeBlock
                   title="docker run"
                   content={dockerCommand}
@@ -415,7 +576,6 @@ export default function ConnectPage() {
                   onCopy={copyToClipboard}
                 />
 
-                {/* .env.local */}
                 <CodeBlock
                   title=".env.local"
                   content={envLocal}
@@ -423,66 +583,12 @@ export default function ConnectPage() {
                   copiedId={copiedId}
                   onCopy={copyToClipboard}
                 />
-
-                {/* Next steps */}
-                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-5">
-                  <h3 className="mb-4 text-sm font-semibold text-slate-200">
-                    실행 후 단계
-                  </h3>
-                  <ol className="space-y-3">
-                    {[
-                      {
-                        step: "1",
-                        text: "위 명령어를 실행합니다",
-                        note: "ANTHROPIC_API_KEY는 실제 키로 교체하세요",
-                        color: "border-cyan-500/50 text-cyan-400",
-                      },
-                      {
-                        step: "2",
-                        text: "http://localhost:3002 에서 대시보드 접속",
-                        note: "SentinAI가 자동으로 클라이언트를 감지합니다",
-                        color: "border-blue-500/50 text-blue-400",
-                      },
-                      {
-                        step: "3",
-                        text: "첫 에이전트 사이클 확인",
-                        note: "30초 이내에 메트릭 수집 시작",
-                        color: "border-violet-500/50 text-violet-400",
-                      },
-                    ].map(({ step, text, note, color }) => (
-                      <li key={step} className="flex gap-3">
-                        <span
-                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border font-mono text-xs font-bold ${color}`}
-                        >
-                          {step}
-                        </span>
-                        <div>
-                          <p className="text-sm text-slate-200">{text}</p>
-                          <p className="text-xs text-slate-500">{note}</p>
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-
-                {/* Docs link */}
-                <p className="text-center text-sm text-slate-500">
-                  추가 환경변수 설정은{" "}
-                  <a
-                    href="/docs"
-                    className="text-cyan-400 transition-colors hover:text-cyan-300"
-                  >
-                    문서
-                  </a>
-                  를 참고하세요
-                </p>
               </div>
             )}
           </div>
         </div>
       </main>
 
-      {/* Footer */}
       <footer className="mt-16 border-t border-slate-800 py-8">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 text-sm text-slate-600 sm:px-6 lg:px-8">
           <span>SentinAI by Tokamak Network</span>

@@ -278,6 +278,11 @@ docker build -t sentinai:local .
 
 docker run -p 8080:8080 \
   -e L2_RPC_URL="https://..." \
+  -e SENTINAI_L1_RPC_URL="https://..." \
   -e ANTHROPIC_API_KEY="sk-ant-..." \
   sentinai:local
 ```
+
+On first startup, SentinAI will auto-bootstrap onboarding from environment variables and create an active instance for `/v2`.
+
+See full guide: `docs/guide/self-hosted-onboarding.md`

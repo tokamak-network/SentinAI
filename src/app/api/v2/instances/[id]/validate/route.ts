@@ -1,6 +1,6 @@
 /**
  * v2 Instance Connection Validate Endpoint
- * POST → Test RPC/Beacon connectivity + detect client version
+ * POST → Test RPC/Beacon connectivity + auto-detect client + map capabilities
  *
  * body: { rpcUrl?: string, beaconUrl?: string }
  * Falls back to instance's connectionConfig when body fields are omitted.
@@ -12,10 +12,11 @@ import {
   validateRpcConnection,
   validateBeaconConnection,
 } from '@/core/collectors/connection-validator';
-import { EvmExecutionCollector } from '@/core/collectors/evm-execution';
 import type { ConnectionConfig } from '@/core/types';
 import { getCoreRedis } from '@/core/redis';
 import logger from '@/lib/logger';
+import { detectClient } from '@/lib/client-detector';
+import { mapDetectedClientToCapabilities } from '@/lib/capability-mapper';
 
 export const dynamic = 'force-dynamic';
 
@@ -54,55 +55,50 @@ export async function POST(
       ...(body.beaconUrl && { beaconApiUrl: body.beaconUrl }),
     };
 
-    // Choose validator based on protocol type
     const isBeaconProtocol = instance.protocolId === 'ethereum-cl';
 
     const validationResult = isBeaconProtocol
       ? await validateBeaconConnection(connectionConfig)
       : await validateRpcConnection(connectionConfig);
 
-    // Detect capabilities for EVM-based protocols
-    let clientFamily: string | undefined;
-    let detectedCapabilities: Record<string, unknown> | undefined;
+    let detectedClient: unknown;
+    let mappedCapabilities: unknown;
 
-    if (!isBeaconProtocol && validationResult.valid) {
+    if (validationResult.valid) {
       try {
-        const collector = new EvmExecutionCollector();
-        const caps = await collector.detectCapabilities({
-          ...instance,
-          connectionConfig,
+        const detected = await detectClient(connectionConfig, {
+          protocolIdHint: instance.protocolId,
         });
-        clientFamily = caps.clientFamily;
-        detectedCapabilities = {
-          txpoolSupported: caps.txpoolSupported,
-          adminPeersSupported: caps.adminPeersSupported,
-          debugMetricsSupported: caps.debugMetricsSupported,
-          availableMethods: caps.availableMethods,
-        };
+        const mapped = mapDetectedClientToCapabilities(detected, instance.protocolId);
 
-        // Persist capabilities to Redis
+        detectedClient = detected;
+        mappedCapabilities = mapped;
+
         const redis = getCoreRedis();
         if (redis) {
           await redis.set(
             `inst:${id}:capabilities`,
             JSON.stringify({
-              ...caps,
               detectedAt: new Date().toISOString(),
+              detectedClient: detected,
+              mapped,
+              clientVersion: validationResult.clientVersion,
+              chainId: validationResult.chainId,
             })
           );
         }
       } catch (capErr) {
-        logger.warn(`[v2 validate/${id}] Capability detection failed:`, capErr);
+        logger.warn(`[v2 validate/${id}] Auto-detect failed:`, capErr);
       }
     }
 
     return NextResponse.json({
       data: {
         valid: validationResult.valid,
-        clientFamily,
         clientVersion: validationResult.clientVersion,
         chainId: validationResult.chainId,
-        detectedCapabilities,
+        detectedClient,
+        mappedCapabilities,
         checks: validationResult.checks,
         totalLatencyMs: validationResult.totalLatencyMs,
         error: validationResult.error,

@@ -3,10 +3,10 @@
  * POST → Idempotent single-call onboarding flow
  *
  * Steps:
- *   1. Validate RPC connection
+ *   1. Validate RPC/Beacon connection
  *   2. Create (or reuse) instance — idempotent by rpcUrl
- *   3. Detect capabilities
- *   4. Persist capabilities to Redis (inst:{id}:capabilities)
+ *   3. Auto-detect client
+ *   4. Map + persist capabilities to Redis (inst:{id}:capabilities)
  *   5. Bootstrap: status 'pending' → 'active'
  *
  * Partial success is allowed; errors in steps 3-5 do not abort the response.
@@ -20,11 +20,15 @@ import {
   createInstance,
   updateInstance,
 } from '@/core/instance-registry';
-import { validateRpcConnection } from '@/core/collectors/connection-validator';
-import { EvmExecutionCollector } from '@/core/collectors/evm-execution';
+import {
+  validateRpcConnection,
+  validateBeaconConnection,
+} from '@/core/collectors/connection-validator';
 import { getCoreRedis } from '@/core/redis';
 import type { NodeType, ConnectionConfig } from '@/core/types';
 import logger from '@/lib/logger';
+import { detectClient } from '@/lib/client-detector';
+import { mapDetectedClientToCapabilities } from '@/lib/capability-mapper';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +49,12 @@ function checkWriteAuth(request: NextRequest): boolean {
 
 function meta() {
   return { timestamp: new Date().toISOString(), version: 'v2' };
+}
+
+function normalizeForMatch(value?: string): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized) return undefined;
+  return normalized.replace(/\/+$/, '').toLowerCase();
 }
 
 // ============================================================
@@ -91,11 +101,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   const { nodeType, connectionConfig, label, operatorId } = body;
+  const effectiveOperatorId = operatorId ?? 'default';
   const errors: string[] = [];
 
   // ── Step 1: Validate connection ──────────────────────────────
   logger.info('[v2 onboarding] Step 1: validating connection');
-  const validation = await validateRpcConnection(connectionConfig).catch((err) => {
+  const validation = await (
+    nodeType === 'ethereum-cl'
+      ? validateBeaconConnection(connectionConfig)
+      : validateRpcConnection(connectionConfig)
+  ).catch((err) => {
     errors.push(`Connection validation error: ${String(err)}`);
     return null;
   });
@@ -118,17 +133,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   let instanceId: string;
   let isNew = false;
 
-  const allInstances = await listInstances(operatorId).catch(() => []);
-  const existing = allInstances.find(
-    (inst) => inst.connectionConfig.rpcUrl === connectionConfig.rpcUrl
-  );
+  const allInstances = await listInstances(effectiveOperatorId).catch(() => []);
+  const endpoint = normalizeForMatch(connectionConfig.rpcUrl) ?? normalizeForMatch(connectionConfig.beaconApiUrl);
+  const existing = allInstances.find((inst) => {
+    if (inst.protocolId !== nodeType) return false;
+    const existingEndpoint = normalizeForMatch(inst.connectionConfig.rpcUrl)
+      ?? normalizeForMatch(inst.connectionConfig.beaconApiUrl);
+    return !!endpoint && existingEndpoint === endpoint;
+  });
 
   if (existing) {
     instanceId = existing.instanceId;
     logger.info(`[v2 onboarding] Reusing existing instance: ${instanceId}`);
   } else {
     const created = await createInstance({
-      operatorId: operatorId ?? 'default',
+      operatorId: effectiveOperatorId,
       protocolId: nodeType,
       displayName: label ?? `Node (${nodeType})`,
       connectionConfig,
@@ -138,35 +157,18 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     logger.info(`[v2 onboarding] Created new instance: ${instanceId}`);
   }
 
-  // ── Step 3: Detect capabilities ─────────────────────────────
-  logger.info('[v2 onboarding] Step 3: detecting capabilities');
+  // ── Step 3: Auto-detect client ─────────────────────────────
+  logger.info('[v2 onboarding] Step 3: auto-detecting client');
 
-  let detectedClient: string | undefined;
-  let detectedCapabilities: Record<string, unknown> | undefined;
+  let detectedClient: unknown;
+  let mappedCapabilities: unknown;
 
   try {
-    const collector = new EvmExecutionCollector();
-    const caps = await collector.detectCapabilities({
-      instanceId,
-      operatorId: operatorId ?? 'default',
-      protocolId: nodeType,
-      displayName: label ?? `Node (${nodeType})`,
-      connectionConfig,
-      status: 'pending',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    });
+    const detected = await detectClient(connectionConfig, { protocolIdHint: nodeType });
+    const mapped = mapDetectedClientToCapabilities(detected, nodeType);
 
-    detectedClient = caps.clientVersion;
-    detectedCapabilities = {
-      clientFamily: caps.clientFamily,
-      clientVersion: caps.clientVersion,
-      chainId: caps.chainId,
-      txpoolSupported: caps.txpoolSupported,
-      adminPeersSupported: caps.adminPeersSupported,
-      debugMetricsSupported: caps.debugMetricsSupported,
-      availableMethods: caps.availableMethods,
-    };
+    detectedClient = detected;
+    mappedCapabilities = mapped;
 
     // ── Step 4: Persist capabilities to Redis ────────────────
     logger.info('[v2 onboarding] Step 4: persisting capabilities');
@@ -175,13 +177,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       await redis.set(
         `inst:${instanceId}:capabilities`,
         JSON.stringify({
-          ...detectedCapabilities,
           detectedAt: new Date().toISOString(),
+          detectedClient: detected,
+          mapped,
+          clientVersion: validation.clientVersion,
+          chainId: validation.chainId,
         })
       );
     }
   } catch (capErr) {
-    const msg = `Capability detection failed: ${String(capErr)}`;
+    const msg = `Auto-detect failed: ${String(capErr)}`;
     errors.push(msg);
     logger.warn(`[v2 onboarding] ${msg}`);
   }
@@ -205,9 +210,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     data: {
       instanceId,
       isNew,
-      dashboardUrl: '/dashboard',
+      dashboardUrl: '/v2',
       detectedClient,
-      detectedCapabilities,
+      mappedCapabilities,
       nextActions: [
         {
           action: 'set-policy',
