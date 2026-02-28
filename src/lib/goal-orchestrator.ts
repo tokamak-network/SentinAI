@@ -91,6 +91,32 @@ function isQueueItemDispatchable(item: AutonomousGoalQueueItem, now: number): bo
   return parseTimeMs(item.nextAttemptAt) <= now;
 }
 
+function isQueueItemExpired(item: AutonomousGoalQueueItem, now: number): boolean {
+  if (!item.expiresAt) return false;
+  const expiresAt = parseTimeMs(item.expiresAt);
+  if (expiresAt <= 0) return false;
+  return expiresAt <= now;
+}
+
+function compareQueuePriority(a: AutonomousGoalQueueItem, b: AutonomousGoalQueueItem): number {
+  const scoreDiff = (b.score?.total || 0) - (a.score?.total || 0);
+  if (scoreDiff !== 0) return scoreDiff;
+
+  const riskRank: Record<AutonomousGoalQueueItem['risk'], number> = {
+    critical: 4,
+    high: 3,
+    medium: 2,
+    low: 1,
+  };
+  const riskDiff = riskRank[b.risk] - riskRank[a.risk];
+  if (riskDiff !== 0) return riskDiff;
+
+  const enqueuedDiff = parseTimeMs(a.enqueuedAt) - parseTimeMs(b.enqueuedAt);
+  if (enqueuedDiff !== 0) return enqueuedDiff;
+
+  return a.goalId.localeCompare(b.goalId);
+}
+
 function buildIdempotencyKey(item: AutonomousGoalQueueItem, dryRun: boolean, allowWrites: boolean): string {
   return createHash('sha256')
     .update(`${item.goalId}|${item.signature}|${dryRun}|${allowWrites}`)
@@ -99,8 +125,27 @@ function buildIdempotencyKey(item: AutonomousGoalQueueItem, dryRun: boolean, all
 }
 
 async function getNextQueuedGoal(now: number): Promise<AutonomousGoalQueueItem | null> {
-  const queue = await getStore().getAutonomousGoalQueue(500);
-  return queue.find((item) => isQueueItemDispatchable(item, now)) || null;
+  const store = getStore();
+  const queue = (await store.getAutonomousGoalQueue(500)).sort(compareQueuePriority);
+
+  for (const item of queue) {
+    if (!isQueueItemDispatchable(item, now)) {
+      continue;
+    }
+
+    if (isQueueItemExpired(item, now)) {
+      await store.upsertAutonomousGoalQueueItem({
+        ...item,
+        status: 'expired',
+        finishedAt: new Date(now).toISOString(),
+      });
+      continue;
+    }
+
+    return item;
+  }
+
+  return null;
 }
 
 async function updateQueueItem(
@@ -248,6 +293,10 @@ export async function dispatchNextGoalWithOrchestration(
 
   const lease = await acquireGoalLease(queueItem.goalId, now);
   if (!lease) {
+    await updateQueueItem(queueItem.goalId, {
+      status: 'queued',
+      scheduledAt: undefined,
+    });
     await writeCheckpoint(queueItem.goalId, 'failed', now, 'lease_active');
     return {
       dispatched: false,
@@ -493,12 +542,16 @@ export async function replayGoalFromDlq(goalId: string, now: number = Date.now()
     leaseOwner: undefined,
     leaseExpiresAt: undefined,
     lastError: undefined,
+    idempotencyKey: undefined,
   };
 
   await store.upsertAutonomousGoalQueueItem(replayItem);
   await store.removeGoalDlqItem(goalId);
   await store.clearGoalLease(goalId);
   await store.clearGoalCheckpoint(goalId);
+  if (target.queueItem.idempotencyKey) {
+    await store.clearGoalIdempotency(target.queueItem.idempotencyKey);
+  }
 
   return {
     replayed: true,

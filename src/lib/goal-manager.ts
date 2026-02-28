@@ -11,7 +11,11 @@ import {
 import { recordGoalLearningEpisode } from '@/lib/goal-learning';
 import { collectGoalSignalSnapshot } from '@/lib/goal-signal-collector';
 import { generateAutonomousGoalCandidates } from '@/lib/goal-candidate-generator';
-import { persistSuppressionRecords, prioritizeGoalCandidates } from '@/lib/goal-priority-engine';
+import {
+  persistSuppressionRecords,
+  prioritizeGoalCandidates,
+  type GoalPriorityPolicy,
+} from '@/lib/goal-priority-engine';
 import { getStore } from '@/lib/redis-store';
 import type {
   AutonomousGoalCandidate,
@@ -69,6 +73,13 @@ function parseIntSafe(value: string | undefined, fallback: number, min: number, 
   return Math.min(max, Math.max(min, parsed));
 }
 
+function parseFloatSafe(value: string | undefined, fallback: number, min: number, max: number): number {
+  if (!value) return fallback;
+  const parsed = Number.parseFloat(value);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(max, Math.max(min, parsed));
+}
+
 function getQueueLimit(): number {
   return parseIntSafe(process.env.GOAL_MANAGER_QUEUE_LIMIT, DEFAULT_QUEUE_LIMIT, 10, 500);
 }
@@ -80,6 +91,20 @@ export function getGoalManagerConfig(): GoalManagerConfig {
     llmEnhancerEnabled: parseBoolean(process.env.GOAL_CANDIDATE_LLM_ENABLED, false),
     dispatchDryRun: parseBoolean(process.env.GOAL_MANAGER_DISPATCH_DRY_RUN, true),
     dispatchAllowWrites: parseBoolean(process.env.GOAL_MANAGER_DISPATCH_ALLOW_WRITES, false),
+  };
+}
+
+function getPriorityPolicyOverrides(): Partial<GoalPriorityPolicy> {
+  const minConfidence = parseFloatSafe(process.env.GOAL_MANAGER_MIN_CONFIDENCE, 0.5, 0, 1);
+  const dedupWindowMinutes = parseIntSafe(process.env.GOAL_MANAGER_DEDUP_WINDOW_MINUTES, 30, 1, 1440);
+  const staleSignalMinutes = parseIntSafe(process.env.GOAL_MANAGER_STALE_SIGNAL_MINUTES, 90, 1, 1440);
+  const defaultTtlMinutes = parseIntSafe(process.env.GOAL_MANAGER_DEFAULT_TTL_MINUTES, 60, 5, 24 * 60);
+
+  return {
+    minConfidence,
+    dedupWindowMinutes,
+    staleSignalMinutes,
+    defaultTtlMinutes,
   };
 }
 
@@ -144,6 +169,7 @@ export async function tickGoalManager(now: number = Date.now()): Promise<GoalMan
     existingQueue,
     recentCandidates,
     now,
+    policy: getPriorityPolicyOverrides(),
   });
 
   const suppressedByCandidateId = new Map(

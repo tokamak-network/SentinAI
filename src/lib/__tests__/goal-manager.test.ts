@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   dispatchTopGoal,
   getGoalManagerConfig,
+  replayGoalManagerDlq,
   tickGoalManager,
 } from '@/lib/goal-manager';
 import type {
@@ -232,6 +233,10 @@ describe('goal-manager', () => {
     delete process.env.GOAL_MANAGER_DISPATCH_DRY_RUN;
     delete process.env.GOAL_MANAGER_DISPATCH_ALLOW_WRITES;
     delete process.env.GOAL_CANDIDATE_LLM_ENABLED;
+    delete process.env.GOAL_MANAGER_MIN_CONFIDENCE;
+    delete process.env.GOAL_MANAGER_DEDUP_WINDOW_MINUTES;
+    delete process.env.GOAL_MANAGER_STALE_SIGNAL_MINUTES;
+    delete process.env.GOAL_MANAGER_DEFAULT_TTL_MINUTES;
 
     hoisted.storeState.candidates = [];
     hoisted.storeState.queue = [];
@@ -316,6 +321,27 @@ describe('goal-manager', () => {
     expect(hoisted.storeState.candidates).toHaveLength(1);
   });
 
+  it('should pass priority policy overrides from env', async () => {
+    process.env.GOAL_MANAGER_ENABLED = 'true';
+    process.env.GOAL_MANAGER_MIN_CONFIDENCE = '0.91';
+    process.env.GOAL_MANAGER_DEDUP_WINDOW_MINUTES = '45';
+    process.env.GOAL_MANAGER_STALE_SIGNAL_MINUTES = '120';
+    process.env.GOAL_MANAGER_DEFAULT_TTL_MINUTES = '75';
+
+    await tickGoalManager(new Date('2026-02-22T12:00:00.000Z').getTime());
+
+    expect(hoisted.priorityEngineMock.prioritizeGoalCandidates).toHaveBeenCalledWith(
+      expect.objectContaining({
+        policy: {
+          minConfidence: 0.91,
+          dedupWindowMinutes: 45,
+          staleSignalMinutes: 120,
+          defaultTtlMinutes: 75,
+        },
+      })
+    );
+  });
+
   it('should return queue_empty when no queued goal exists', async () => {
     process.env.GOAL_MANAGER_ENABLED = 'true';
     process.env.GOAL_MANAGER_DISPATCH_ENABLED = 'true';
@@ -353,6 +379,37 @@ describe('goal-manager', () => {
     expect(updated?.status).toBe('completed');
     expect(updated?.planId).toBe('plan-1');
     expect(hoisted.goalPlannerMock.planAndExecuteGoal).toHaveBeenCalled();
+  });
+
+  it('should clear active pointer, lease, and checkpoint after successful dispatch ack', async () => {
+    process.env.GOAL_MANAGER_ENABLED = 'true';
+    process.env.GOAL_MANAGER_DISPATCH_ENABLED = 'true';
+    hoisted.storeState.queue = [
+      {
+        goalId: 'goal-ack-1',
+        candidateId: 'c1',
+        enqueuedAt: '2026-02-22T12:00:00.000Z',
+        attempts: 0,
+        status: 'queued',
+        goal: 'goal-c1',
+        intent: 'stabilize',
+        source: 'anomaly',
+        risk: 'high',
+        confidence: 0.82,
+        signature: 'sig-ack-1',
+        score: { impact: 30, urgency: 15, confidence: 16, policyFit: 10, total: 71 },
+      },
+    ];
+
+    const result = await dispatchTopGoal({ initiatedBy: 'scheduler', dryRun: true, allowWrites: false });
+
+    expect(result.status).toBe('completed');
+    expect(hoisted.storeState.activeGoalId).toBeNull();
+    expect(hoisted.storeState.goalLeases.has('goal-ack-1')).toBe(false);
+    expect(hoisted.storeState.goalCheckpoints.has('goal-ack-1')).toBe(false);
+    expect(hoisted.mockStore.clearGoalLease).toHaveBeenCalledWith('goal-ack-1');
+    expect(hoisted.mockStore.clearGoalCheckpoint).toHaveBeenCalledWith('goal-ack-1');
+    expect(hoisted.mockStore.setActiveAutonomousGoalId).toHaveBeenCalledWith(null);
   });
 
   it('should fail dispatch when policy denies execution', async () => {
@@ -512,5 +569,120 @@ describe('goal-manager', () => {
     expect(updated?.status).toBe('dlq');
     expect(hoisted.storeState.goalDlqItems.length).toBe(1);
     expect(hoisted.storeState.goalDlqItems[0].goalId).toBe('goal-dlq-1');
+  });
+
+  it('should expire queued goal before dispatch when expiresAt already passed', async () => {
+    process.env.GOAL_MANAGER_ENABLED = 'true';
+    process.env.GOAL_MANAGER_DISPATCH_ENABLED = 'true';
+
+    hoisted.storeState.queue = [
+      {
+        goalId: 'goal-expired-1',
+        candidateId: 'c1',
+        enqueuedAt: '2026-02-22T12:00:00.000Z',
+        expiresAt: '2026-02-22T12:01:00.000Z',
+        attempts: 0,
+        status: 'queued',
+        goal: 'goal-c1',
+        intent: 'stabilize',
+        source: 'anomaly',
+        risk: 'high',
+        confidence: 0.82,
+        signature: 'sig-expired-1',
+        score: { impact: 30, urgency: 15, confidence: 16, policyFit: 10, total: 71 },
+      },
+    ];
+
+    const result = await dispatchTopGoal({
+      initiatedBy: 'scheduler',
+      dryRun: true,
+      allowWrites: false,
+      now: new Date('2026-02-22T12:02:00.000Z').getTime(),
+    });
+
+    const updated = hoisted.storeState.queue.find((item) => item.goalId === 'goal-expired-1');
+    expect(result.dispatched).toBe(false);
+    expect(result.reason).toBe('queue_empty');
+    expect(updated?.status).toBe('expired');
+    expect(hoisted.goalPlannerMock.planAndExecuteGoal).not.toHaveBeenCalled();
+  });
+
+  it('should restore scheduled goal back to queued when lease is already active', async () => {
+    process.env.GOAL_MANAGER_ENABLED = 'true';
+    process.env.GOAL_MANAGER_DISPATCH_ENABLED = 'true';
+
+    hoisted.storeState.queue = [
+      {
+        goalId: 'goal-lease-1',
+        candidateId: 'c1',
+        enqueuedAt: '2026-02-22T12:00:00.000Z',
+        attempts: 0,
+        status: 'queued',
+        goal: 'goal-c1',
+        intent: 'stabilize',
+        source: 'anomaly',
+        risk: 'high',
+        confidence: 0.82,
+        signature: 'sig-lease-1',
+        score: { impact: 30, urgency: 15, confidence: 16, policyFit: 10, total: 71 },
+      },
+    ];
+    hoisted.storeState.goalLeases.set('goal-lease-1', {
+      goalId: 'goal-lease-1',
+      ownerId: 'other-worker',
+      leasedAt: '2026-02-22T12:00:00.000Z',
+      leaseExpiresAt: '2099-01-01T00:00:00.000Z',
+      heartbeatAt: '2026-02-22T12:00:00.000Z',
+      version: 1,
+    });
+
+    const result = await dispatchTopGoal({
+      initiatedBy: 'scheduler',
+      dryRun: true,
+      allowWrites: false,
+      now: new Date('2026-02-22T12:00:30.000Z').getTime(),
+    });
+
+    const updated = hoisted.storeState.queue.find((item) => item.goalId === 'goal-lease-1');
+    expect(result.dispatched).toBe(false);
+    expect(result.reason).toBe('lease_active');
+    expect(updated?.status).toBe('queued');
+    expect(updated?.scheduledAt).toBeUndefined();
+  });
+
+  it('should clear stale idempotency key when replaying dlq goal', async () => {
+    hoisted.storeState.goalDlqItems = [
+      {
+        id: 'dlq-1',
+        goalId: 'goal-dlq-replay-1',
+        movedAt: '2026-02-22T12:05:00.000Z',
+        reason: 'max_retries_exceeded',
+        attempts: 1,
+        lastError: 'fatal failure',
+        queueItem: {
+          goalId: 'goal-dlq-replay-1',
+          candidateId: 'c1',
+          enqueuedAt: '2026-02-22T12:00:00.000Z',
+          attempts: 1,
+          status: 'dlq',
+          goal: 'goal-c1',
+          intent: 'stabilize',
+          source: 'anomaly',
+          risk: 'high',
+          confidence: 0.82,
+          signature: 'sig-dlq-replay-1',
+          idempotencyKey: 'idem-1',
+          score: { impact: 30, urgency: 15, confidence: 16, policyFit: 10, total: 71 },
+        },
+      },
+    ];
+
+    const result = await replayGoalManagerDlq('goal-dlq-replay-1', new Date('2026-02-22T12:06:00.000Z').getTime());
+    const replayed = hoisted.storeState.queue.find((item) => item.goalId === 'goal-dlq-replay-1');
+
+    expect(result.replayed).toBe(true);
+    expect(replayed?.status).toBe('queued');
+    expect(replayed?.idempotencyKey).toBeUndefined();
+    expect(hoisted.mockStore.clearGoalIdempotency).toHaveBeenCalledWith('idem-1');
   });
 });

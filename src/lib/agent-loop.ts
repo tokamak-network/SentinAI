@@ -100,8 +100,13 @@ export interface AgentCycleResult {
     suppressedCount?: number;
     queueDepth?: number;
     llmEnhanced?: boolean;
+    llmFallbackReason?: string;
+    snapshotId?: string;
     dispatched?: boolean;
     dispatchStatus?: string;
+    dispatchReason?: string;
+    dispatchGoalId?: string;
+    dispatchPlanId?: string;
     error?: string;
   };
   error?: string;
@@ -700,12 +705,17 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
         suppressedCount: tick.suppressedCount,
         queueDepth: tick.queueDepth,
         llmEnhanced: tick.llmEnhanced,
+        llmFallbackReason: tick.llmFallbackReason,
+        snapshotId: tick.snapshot?.snapshotId,
       };
 
       if (tick.enabled) {
         const dispatch = await dispatchTopGoal({ initiatedBy: 'scheduler' });
         goalManagerResult.dispatched = dispatch.dispatched;
         goalManagerResult.dispatchStatus = dispatch.status || dispatch.reason;
+        goalManagerResult.dispatchReason = dispatch.reason;
+        goalManagerResult.dispatchGoalId = dispatch.goalId;
+        goalManagerResult.dispatchPlanId = dispatch.planId;
         if (dispatch.error) {
           goalManagerResult.error = dispatch.error;
           degradedReasons.push(`goal-dispatch-failed:${dispatch.error}`);

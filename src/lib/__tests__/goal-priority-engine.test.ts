@@ -153,6 +153,30 @@ describe('goal-priority-engine', () => {
     expect(result.suppressed[0].reasonCode).toBe('duplicate_goal');
   });
 
+  it('should allow duplicate signature when outside dedup window and not in active queue', () => {
+    const snapshot = createSnapshot();
+    const candidate = createCandidate({ signature: 'sig-old-dup' });
+
+    const result = prioritizeGoalCandidates({
+      snapshot,
+      candidates: [candidate],
+      recentCandidates: [
+        createCandidate({
+          id: 'old-candidate',
+          signature: 'sig-old-dup',
+          createdAt: '2026-02-22T10:30:00.000Z',
+          updatedAt: '2026-02-22T10:30:00.000Z',
+          status: 'suppressed',
+        }),
+      ],
+      now: new Date('2026-02-22T12:00:00.000Z').getTime(),
+      policy: { dedupWindowMinutes: 30 },
+    });
+
+    expect(result.suppressed).toHaveLength(0);
+    expect(result.queued).toHaveLength(1);
+  });
+
   it('should suppress stabilize candidate during cooldown', () => {
     const snapshot = createSnapshot({
       metrics: {

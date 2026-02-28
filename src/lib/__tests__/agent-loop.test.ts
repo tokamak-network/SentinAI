@@ -111,6 +111,23 @@ vi.mock('@/lib/daily-accumulator', () => ({
   addScalingEvent: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('@/lib/goal-manager', () => ({
+  tickGoalManager: vi.fn().mockResolvedValue({
+    enabled: false,
+    generatedCount: 0,
+    queuedCount: 0,
+    suppressedCount: 0,
+    queueDepth: 0,
+    llmEnhanced: false,
+    llmFallbackReason: 'goal_manager_disabled',
+  }),
+  dispatchTopGoal: vi.fn().mockResolvedValue({
+    enabled: false,
+    dispatched: false,
+    reason: 'goal_manager_disabled',
+  }),
+}));
+
 // Mock global fetch for txpool_status
 const mockFetch = vi.fn().mockResolvedValue({
   json: () => Promise.resolve({ result: { pending: '0xa' } }), // 10 pending
@@ -124,12 +141,28 @@ import { scaleOpGeth, isAutoScalingEnabled, checkCooldown } from '@/lib/k8s-scal
 import { getRecentMetrics } from '@/lib/metrics-store';
 import { analyzeLogChunk } from '@/lib/ai-analyzer';
 import * as failoverModule from '@/lib/l1-rpc-failover';
+import { tickGoalManager, dispatchTopGoal } from '@/lib/goal-manager';
 
 describe('agent-loop', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     resetAgentState();
     process.env.L2_RPC_URL = 'http://mock-rpc:8545';
+
+    vi.mocked(tickGoalManager).mockResolvedValue({
+      enabled: false,
+      generatedCount: 0,
+      queuedCount: 0,
+      suppressedCount: 0,
+      queueDepth: 0,
+      llmEnhanced: false,
+      llmFallbackReason: 'goal_manager_disabled',
+    });
+    vi.mocked(dispatchTopGoal).mockResolvedValue({
+      enabled: false,
+      dispatched: false,
+      reason: 'goal_manager_disabled',
+    });
   });
 
   afterEach(() => {
@@ -328,6 +361,67 @@ describe('agent-loop', () => {
       expect(result.phase).toBe('complete');
       expect(result.phaseTrace?.some((entry) => entry.phase === 'analyze' && entry.ok === false)).toBe(true);
       expect(result.scaling).not.toBeNull();
+    });
+
+    it('should expose goal-manager tick/dispatch observability fields in cycle result', async () => {
+      vi.mocked(tickGoalManager).mockResolvedValueOnce({
+        enabled: true,
+        generatedCount: 2,
+        queuedCount: 1,
+        suppressedCount: 1,
+        queueDepth: 3,
+        llmEnhanced: true,
+        llmFallbackReason: undefined,
+        snapshot: {
+          snapshotId: 'snapshot-observe-1',
+          collectedAt: '2026-03-01T00:00:00.000Z',
+          chainType: 'thanos',
+          sources: ['metrics', 'anomaly', 'policy', 'cost', 'failover', 'memory'],
+          metrics: {
+            latestCpuUsage: 80,
+            latestTxPoolPending: 120,
+            latestGasUsedRatio: 0.8,
+            currentVcpu: 2,
+            cooldownRemaining: 0,
+            cpuTrend: 'rising',
+            txPoolTrend: 'rising',
+            gasTrend: 'rising',
+          },
+          anomalies: { activeCount: 1, criticalCount: 0, latestEventTimestamp: null },
+          failover: { recentCount: 0, latestEventTimestamp: null, activeL1RpcUrl: 'https://rpc.example' },
+          cost: { avgVcpu: 2, peakVcpu: 4, avgUtilization: 55, dataPointCount: 10 },
+          memory: {
+            recentEntryCount: 2,
+            recentIncidentCount: 0,
+            recentHighSeverityCount: 0,
+            latestEntryTimestamp: null,
+          },
+          policy: { readOnlyMode: false, autoScalingEnabled: true },
+        },
+      });
+      vi.mocked(dispatchTopGoal).mockResolvedValueOnce({
+        enabled: true,
+        dispatched: true,
+        goalId: 'goal-1',
+        planId: 'plan-1',
+        status: 'completed',
+      });
+
+      const result = await runAgentCycle();
+
+      expect(result.goalManager?.enabled).toBe(true);
+      expect(result.goalManager?.ticked).toBe(true);
+      expect(result.goalManager?.generatedCount).toBe(2);
+      expect(result.goalManager?.queuedCount).toBe(1);
+      expect(result.goalManager?.suppressedCount).toBe(1);
+      expect(result.goalManager?.queueDepth).toBe(3);
+      expect(result.goalManager?.llmEnhanced).toBe(true);
+      expect(result.goalManager?.snapshotId).toBe('snapshot-observe-1');
+      expect(result.goalManager?.dispatched).toBe(true);
+      expect(result.goalManager?.dispatchStatus).toBe('completed');
+      expect(result.goalManager?.dispatchGoalId).toBe('goal-1');
+      expect(result.goalManager?.dispatchPlanId).toBe('plan-1');
+      expect(dispatchTopGoal).toHaveBeenCalledWith({ initiatedBy: 'scheduler' });
     });
 
     it('should continue cycle in degraded mode when scaling action fails', async () => {
