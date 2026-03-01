@@ -75,7 +75,7 @@ describe('buildChainOptionalSections', () => {
     expect((sections.proof as { verificationLagSec: number }).verificationLagSec).toBe(5);
   });
 
-  it('includes settlement section only when settlement status exists', () => {
+  it('includes settlement section only when capability is enabled and status exists', () => {
     const plugin = makePlugin({ proofMonitoring: false, settlementMonitoring: true });
     const sections = buildChainOptionalSections({
       plugin,
@@ -92,5 +92,22 @@ describe('buildChainOptionalSections', () => {
     expect(sections).toHaveProperty('settlement');
     expect((sections.settlement as { layer: string }).layer).toBe('l1');
     expect((sections.settlement as { postingLagSec: number }).postingLagSec).toBe(3);
+  });
+
+  it('does not include settlement section when capability is disabled even if status exists', () => {
+    const plugin = makePlugin({ proofMonitoring: false, settlementMonitoring: false });
+    const sections = buildChainOptionalSections({
+      plugin,
+      syncLag: 0,
+      settlementStatus: {
+        enabled: true,
+        layer: 'l1',
+        finalityMode: 'finalized',
+        postingLagSec: 3,
+        healthy: true,
+      },
+    });
+
+    expect(sections).not.toHaveProperty('settlement');
   });
 });

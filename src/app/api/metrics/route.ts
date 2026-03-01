@@ -24,6 +24,7 @@ import { resolveBlockInterval } from '@/lib/block-interval';
 import type { AnomalyResult } from '@/types/anomaly';
 import logger from '@/lib/logger';
 import { buildChainOptionalSections } from './payload';
+import { fetchZkstackMetricFields } from './zkstack';
 
 // Whether anomaly detection is enabled (default: enabled)
 const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'false';
@@ -625,6 +626,8 @@ export async function GET(request: Request) {
                 clearTimeout(txPoolTimeoutId);
             }
         }
+        const zkstackMetrics = await fetchZkstackMetricFields(plugin.chainType, rpcUrl, RPC_TIMEOUT_MS);
+
         logger.info(`[Timer] RPC Fetch: ${(performance.now() - startRpc).toFixed(2)}ms`);
 
         // 3. Check if seed scenario is active - use stored metrics if so
@@ -860,6 +863,7 @@ export async function GET(request: Request) {
                 syncLagReliable,
                 cpuSource,
                 source: responseSource,
+                ...zkstackMetrics,
             },
             components,
             cost: {

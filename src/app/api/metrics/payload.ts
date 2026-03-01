@@ -30,7 +30,7 @@ export function buildChainOptionalSections({
           },
         }
       : {}),
-    ...(settlementStatus
+    ...(plugin.capabilities.settlementMonitoring && settlementStatus
       ? {
           settlement: {
             enabled: settlementStatus.enabled,

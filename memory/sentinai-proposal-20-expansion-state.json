@@ -1,0 +1,31 @@
+{
+  "lastUpdate": "2026-03-01T15:09:05+09:00",
+  "progress": "100%",
+  "currentTask": "Proposal complete: ZKsync Stack plugin + RPC mapping + collector/metrics/health integration + strict isolation tests",
+  "completed": [
+    "Created zkstack RPC mapping module (src/chains/zkstack/rpc.ts) with zks_* settlement/proof methods",
+    "Integrated zkstack-specific RPC capability detection into EVM execution collector",
+    "Added zkstack RPC unit tests (src/lib/__tests__/zkstack-rpc.test.ts)",
+    "Extended collector tests to verify zks_* method probing for CHAIN_TYPE=zkstack",
+    "Wired zkstack RPC snapshot parsing into EVM metrics collection (l1BatchNumber field)",
+    "Added collector test to verify zkstack-only metric field emission",
+    "Enforced strict chain isolation in optional payload builder (settlement gated by capability)",
+    "Extended metrics payload tests for settlement capability guard",
+    "Added zkstack plugin behavior tests (mode switch, probe-driven capabilities, docker core-only profile, metric-component mapping)",
+    "Added zkstack metrics utility for zks_* batch data fetch/normalization (src/app/api/metrics/zkstack.ts)",
+    "Integrated zkstack metric fields into /api/metrics response with chain-type guard",
+    "Added unit tests for zkstack metrics utility including null-safe failure handling",
+    "Added /api/health route test for zkstack strict capability snapshot",
+    "Added zkstack protocol descriptor tests for metric/anomaly contract (including l1BatchNumber + optional prover queue)",
+    "Added /api/metrics isolation contract tests (zkstack vs non-zk payload exposure)",
+    "Executed zkstack-focused regression suite: 38 tests passed"
+  ],
+  "next": [],
+  "commits": [
+    {
+      "hash": "f888096",
+      "message": "feat(proposal-20-expansion): implement ZKsync Stack plugin"
+    }
+  ],
+  "issues": []
+}

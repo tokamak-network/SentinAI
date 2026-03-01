@@ -8,6 +8,11 @@ import type { NodeInstance, ConnectionValidationResult } from '@/core/types'
 import type { CollectorResult, GenericMetricDataPoint } from '@/core/metrics'
 import { validateRpcConnection } from './connection-validator'
 import { getZkL2RpcMethodMap, resolveZkL2Network } from '@/chains/zkl2-generic/rpc'
+import {
+  getZkstackRpcMethodMap,
+  normalizeZkstackRpcSnapshot,
+  resolveZkstackMode,
+} from '@/chains/zkstack/rpc'
 
 const RPC_TIMEOUT_MS = 10000
 
@@ -86,6 +91,39 @@ export class EvmExecutionCollector implements MetricsCollector {
         }
       } catch { /* txpool not supported — leave null */ }
 
+      const chainTypeHint = process.env.CHAIN_TYPE?.trim().toLowerCase() || ''
+      const isZkstack = instance.protocolId === 'zkstack' || ['zkstack', 'zksync', 'zk-stack'].includes(chainTypeHint)
+
+      let zkstackFields: Record<string, number | null> = {}
+      if (isZkstack) {
+        const zkMethodMap = getZkstackRpcMethodMap(resolveZkstackMode(process.env.ZKSTACK_MODE))
+        const zkCalls = await Promise.allSettled([
+          ...zkMethodMap.settlement.map((method) => rpcCall(rpcUrl, method, [], authToken)),
+          ...zkMethodMap.proof.map((method) => rpcCall(rpcUrl, method, [0], authToken)),
+        ])
+
+        const raw: Record<string, unknown> = {
+          eth_blockNumber: blockNumberResult.status === 'fulfilled' ? blockNumberResult.value : null,
+        }
+
+        const settlementMethods = zkMethodMap.settlement
+        const proofMethods = zkMethodMap.proof
+        for (let i = 0; i < zkCalls.length; i += 1) {
+          const method = i < settlementMethods.length
+            ? settlementMethods[i]
+            : proofMethods[i - settlementMethods.length]
+          const result = zkCalls[i]
+          if (method && result.status === 'fulfilled') {
+            raw[method] = result.value
+          }
+        }
+
+        const snapshot = normalizeZkstackRpcSnapshot(raw)
+        zkstackFields = {
+          l1BatchNumber: snapshot.l1BatchNumber,
+        }
+      }
+
       const dataPoint: GenericMetricDataPoint = {
         instanceId: instance.instanceId,
         timestamp: new Date().toISOString(),
@@ -96,6 +134,7 @@ export class EvmExecutionCollector implements MetricsCollector {
           syncDistance,
           txPoolPending,
           txPoolQueued,
+          ...zkstackFields,
         },
       }
 
@@ -140,14 +179,24 @@ export class EvmExecutionCollector implements MetricsCollector {
     const baseMethodChecks = ['txpool_status', 'admin_peers', 'debug_metrics']
 
     const chainTypeHint = process.env.CHAIN_TYPE?.trim().toLowerCase() || ''
-    const shouldProbeZkMethods = instance.protocolId === 'zkstack' || ['scroll', 'linea', 'polygon-zkevm', 'zkevm', 'zkl2', 'zkl2-generic'].includes(chainTypeHint)
 
-    const zkMethodChecks = shouldProbeZkMethods
-      ? (() => {
-          const methodMap = getZkL2RpcMethodMap(resolveZkL2Network(chainTypeHint || 'zkl2-generic'))
-          return [...methodMap.settlement, ...methodMap.proof]
-        })()
-      : []
+    const isZkstack = instance.protocolId === 'zkstack' || ['zkstack', 'zksync', 'zk-stack'].includes(chainTypeHint)
+    const isGenericZkL2 = ['scroll', 'linea', 'polygon-zkevm', 'zkevm', 'zkl2', 'zkl2-generic'].includes(chainTypeHint)
+
+    const zkMethodChecks = [
+      ...(isZkstack
+        ? (() => {
+            const methodMap = getZkstackRpcMethodMap(resolveZkstackMode(process.env.ZKSTACK_MODE))
+            return [...methodMap.settlement, ...methodMap.proof]
+          })()
+        : []),
+      ...(isGenericZkL2
+        ? (() => {
+            const methodMap = getZkL2RpcMethodMap(resolveZkL2Network(chainTypeHint || 'zkl2-generic'))
+            return [...methodMap.settlement, ...methodMap.proof]
+          })()
+        : []),
+    ]
 
     const methodChecks = [...new Set([...baseMethodChecks, ...zkMethodChecks])]
 

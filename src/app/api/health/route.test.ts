@@ -115,6 +115,32 @@ describe('/api/health', () => {
     expect(body.error).toContain('store unavailable');
   });
 
+  it('returns strict capability snapshot for zkstack chain', async () => {
+    hoisted.getChainPluginMock.mockReturnValue({
+      chainType: 'zkstack',
+      displayName: 'ZK Stack L2 (legacy-era)',
+      chainMode: 'legacy-era',
+      capabilities: {
+        proofMonitoring: false,
+        settlementMonitoring: true,
+        eoaBalanceMonitoring: true,
+      },
+    });
+
+    const response = await GET();
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.status).toBe('ok');
+    expect(body.chain.type).toBe('zkstack');
+    expect(body.chain.mode).toBe('legacy-era');
+    expect(body.chain.capabilities).toEqual({
+      proofMonitoring: false,
+      settlementMonitoring: true,
+      eoaBalanceMonitoring: true,
+    });
+  });
+
   it('omits chain snapshot when chain plugin cannot be resolved', async () => {
     hoisted.getChainPluginMock.mockImplementation(() => {
       throw new Error('chain unavailable');

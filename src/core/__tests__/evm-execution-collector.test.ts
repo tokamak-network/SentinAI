@@ -23,11 +23,15 @@ const mockValidateRpcConnection = vi.mocked(validateRpcConnection)
 // Helpers
 // ============================================================
 
-function makeInstance(rpcUrl = 'http://localhost:8545', authToken?: string): NodeInstance {
+function makeInstance(
+  rpcUrl = 'http://localhost:8545',
+  authToken?: string,
+  protocolId: NodeInstance['protocolId'] = 'opstack-l2'
+): NodeInstance {
   return {
     instanceId: 'test-instance',
     operatorId: 'default',
-    protocolId: 'opstack-l2',
+    protocolId,
     displayName: 'Test Node',
     connectionConfig: { rpcUrl, authToken },
     status: 'active',
@@ -106,6 +110,29 @@ describe('EvmExecutionCollector', () => {
     expect(result.success).toBe(true)
     expect(result.dataPoint!.fields.syncStatus).toBe(100)
     expect(result.dataPoint!.fields.syncDistance).toBe(0)
+    expect(result.dataPoint!.fields.l1BatchNumber).toBeUndefined()
+  })
+
+  it('collect() appends zkstack-only fields when protocol is zkstack', async () => {
+    process.env.CHAIN_TYPE = 'zkstack'
+
+    const fetchMock = buildFetchMock({
+      eth_blockNumber: '0x64',
+      eth_syncing: false,
+      net_peerCount: '0x5',
+      txpool_status: { pending: '0x1', queued: '0x0' },
+      zks_L1BatchNumber: '0x20',
+      zks_getL1BatchDetails: { timestamp: '0x10', l1TxCount: '0x2' },
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { EvmExecutionCollector } = await import('@/core/collectors/evm-execution')
+    const collector = new EvmExecutionCollector()
+    const result = await collector.collect(makeInstance('http://localhost:8545', undefined, 'zkstack'))
+
+    expect(result.success).toBe(true)
+    expect(result.dataPoint!.fields.blockHeight).toBe(100)
+    expect(result.dataPoint!.fields.l1BatchNumber).toBe(32)
   })
 
   it('collect() handles syncStatus when node is syncing', async () => {
@@ -203,6 +230,26 @@ describe('EvmExecutionCollector', () => {
     expect(caps.availableMethods).toContain('zkevm_batchNumber')
     expect(caps.availableMethods).toContain('zkevm_virtualBatchNumber')
     expect(caps.availableMethods).toContain('zkevm_verifiedBatchNumber')
+  })
+
+  it('detectCapabilities() probes zkstack zks_* methods when CHAIN_TYPE=zkstack', async () => {
+    process.env.CHAIN_TYPE = 'zkstack'
+    process.env.ZKSTACK_MODE = 'legacy-era'
+
+    const fetchMock = buildFetchMock({
+      web3_clientVersion: 'zksync/v2.0.0',
+      eth_chainId: '0x144',
+      zks_L1BatchNumber: '0x20',
+      zks_getL1BatchDetails: { timestamp: '0x100', l1TxCount: '0x2' },
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { EvmExecutionCollector } = await import('@/core/collectors/evm-execution')
+    const collector = new EvmExecutionCollector()
+    const caps = await collector.detectCapabilities(makeInstance('http://localhost:8545'))
+
+    expect(caps.availableMethods).toContain('zks_L1BatchNumber')
+    expect(caps.availableMethods).toContain('zks_getL1BatchDetails')
   })
 
   it('detectCapabilities() probes scroll-specific methods when CHAIN_TYPE=scroll', async () => {
