@@ -3,13 +3,12 @@
  * POST → Transition instance status from 'pending' to 'active'
  *
  * Idempotent: already-active instances return immediately.
- * Real AgentOrchestrator wiring is a future concern.
- *
  * Auth: requires SENTINAI_API_KEY if set.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getInstance, updateInstance } from '@/core/instance-registry';
+import { getAgentOrchestrator } from '@/core/agent-orchestrator';
 import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
@@ -55,6 +54,14 @@ export async function POST(
 
     // Idempotent: already active is fine
     if (instance.status === 'active') {
+      // Recovery: ensure agents are running even if previous bootstrap partially failed
+      if (process.env.AGENT_V2 === 'true') {
+        const orchestrator = getAgentOrchestrator();
+        if (!orchestrator.isInstanceRunning(id)) {
+          orchestrator.startInstance(id, instance.protocolId, instance.connectionConfig.rpcUrl);
+          logger.info(`[v2 bootstrap/${id}] Recovery — started agents for already-active instance`);
+        }
+      }
       return NextResponse.json({
         data: {
           instanceId: id,
@@ -67,6 +74,15 @@ export async function POST(
 
     const bootstrappedAt = new Date().toISOString();
     await updateInstance(id, { status: 'active' });
+
+    // Start agents if AGENT_V2 is enabled
+    if (process.env.AGENT_V2 === 'true') {
+      const orchestrator = getAgentOrchestrator();
+      if (!orchestrator.isInstanceRunning(id)) {
+        orchestrator.startInstance(id, instance.protocolId, instance.connectionConfig.rpcUrl);
+        logger.info(`[v2 bootstrap/${id}] AgentOrchestrator started for instance`);
+      }
+    }
 
     logger.info(`[v2 bootstrap/${id}] Status transitioned to 'active'`);
 
