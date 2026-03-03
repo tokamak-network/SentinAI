@@ -2,11 +2,12 @@
  * v2 Instance Agent Status Endpoint
  * GET → Agent runtime state for this instance
  *
- * Returns stub data until AgentOrchestrator is wired per-instance.
+ * Returns real agent status from AgentOrchestrator.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getInstance } from '@/core/instance-registry';
+import { getAgentOrchestrator } from '@/core/agent-orchestrator';
 import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
@@ -32,13 +33,27 @@ export async function GET(
       );
     }
 
-    // TODO: Wire to AgentOrchestrator per-instance state when implemented
+    const orchestrator = getAgentOrchestrator();
+    const statuses = orchestrator.getStatuses().filter(s => s.instanceId === id);
+
+    const agentRunning = statuses.length > 0 && statuses.some(s => s.running);
+    const lastCycleAt = statuses
+      .map(s => s.lastActivityAt)
+      .filter((v): v is string => v !== null)
+      .sort()
+      .pop() ?? null;
+
     return NextResponse.json({
       data: {
         instanceId: id,
-        agentRunning: false,
-        lastCycleAt: null,
+        agentRunning,
+        lastCycleAt,
         cycleCount: 0,
+        agents: statuses.map(s => ({
+          role: s.role,
+          running: s.running,
+          lastActivityAt: s.lastActivityAt,
+        })),
       },
       meta: meta(),
     });
