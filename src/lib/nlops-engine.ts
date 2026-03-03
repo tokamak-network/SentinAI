@@ -544,11 +544,17 @@ export async function processCommand(
     };
   }
 
-  // Step 2: Execute tools
-  const toolResults: Array<{ name: string; data: Record<string, unknown> }> = [];
-  for (const tc of toolCalls) {
-    const data = await executeTool(tc.name, tc.params, baseUrl);
-    toolResults.push({ name: tc.name, data });
+  // Step 2: Execute tools in parallel
+  const toolPromises = toolCalls.map(tc =>
+    executeTool(tc.name, tc.params, baseUrl)
+      .then(data => ({ name: tc.name, data }))
+      .catch(err => ({ name: tc.name, data: { error: err instanceof Error ? err.message : 'Tool execution failed' } }))
+  );
+  const toolResults = await Promise.all(toolPromises);
+
+  const failedTools = toolResults.filter(r => r.data?.error);
+  if (failedTools.length > 0) {
+    logger.warn('[NLOps] Some tools failed', { failed: failedTools.map(r => r.name) });
   }
 
   // Step 3: Generate response

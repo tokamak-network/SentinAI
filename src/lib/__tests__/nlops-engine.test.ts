@@ -389,6 +389,93 @@ describe('nlops-engine', () => {
   });
 
   // ============================================================
+  // processCommand - Parallel Tool Execution
+  // ============================================================
+
+  describe('processCommand - parallel tool execution', () => {
+    it('should execute multiple tools in parallel (not sequentially)', async () => {
+      mockFetchCurrentState();
+      // Plan: call get_metrics + get_anomalies simultaneously
+      mockPlanResponse([
+        { name: 'get_metrics', params: {} },
+        { name: 'get_anomalies', params: {} },
+      ]);
+
+      const TOOL_DELAY_MS = 50;
+      const executionTimestamps: { name: string; start: number; end: number }[] = [];
+
+      // Override mockFetch for the two tool calls with delays
+      // After fetchCurrentState (2 calls) and planToolCalls (0 fetch calls),
+      // the next fetches are for the tools themselves
+      mockFetch
+        // get_metrics tool call
+        .mockImplementationOnce(async (url: string) => {
+          const start = Date.now();
+          await new Promise((r) => setTimeout(r, TOOL_DELAY_MS));
+          const end = Date.now();
+          executionTimestamps.push({ name: 'get_metrics', start, end });
+          return { ok: true, json: async () => ({ metrics: { cpuUsage: 20 } }) };
+        })
+        // get_anomalies tool call
+        .mockImplementationOnce(async (url: string) => {
+          const start = Date.now();
+          await new Promise((r) => setTimeout(r, TOOL_DELAY_MS));
+          const end = Date.now();
+          executionTimestamps.push({ name: 'get_anomalies', start, end });
+          return { ok: true, json: async () => ({ events: [], total: 0 }) };
+        });
+
+      mockGenerateResponse('Metrics and anomalies look good.');
+
+      const overallStart = Date.now();
+      const result = await processCommand('show metrics and anomalies', BASE_URL);
+      const overallDuration = Date.now() - overallStart;
+
+      expect(result.executed).toBe(true);
+      expect(executionTimestamps).toHaveLength(2);
+
+      // If parallel: both tools start around the same time, total ~50ms
+      // If sequential: second tool starts after first finishes, total ~100ms+
+      // Check that the second tool started before the first one ended (overlap)
+      const sorted = [...executionTimestamps].sort((a, b) => a.start - b.start);
+      const firstEnd = sorted[0].end;
+      const secondStart = sorted[1].start;
+
+      // In parallel execution, the second tool should start BEFORE the first one ends
+      // Allow 10ms tolerance for timer imprecision
+      expect(secondStart).toBeLessThanOrEqual(firstEnd + 10);
+
+      // Total duration should be closer to TOOL_DELAY_MS than 2 * TOOL_DELAY_MS
+      // With parallel: ~50ms overhead; with sequential: ~100ms+
+      expect(overallDuration).toBeLessThan(TOOL_DELAY_MS * 2);
+    });
+
+    it('should handle individual tool errors without failing the batch', async () => {
+      mockFetchCurrentState();
+      mockPlanResponse([
+        { name: 'get_metrics', params: {} },
+        { name: 'get_anomalies', params: {} },
+      ]);
+
+      // get_metrics succeeds
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ metrics: { cpuUsage: 30 } }),
+      });
+      // get_anomalies fails with network error
+      mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
+
+      mockGenerateResponse('Metrics retrieved, but anomaly check failed.');
+
+      const result = await processCommand('show metrics and anomalies', BASE_URL);
+
+      expect(result.executed).toBe(true);
+      // Both results should be present (one with error)
+      expect(result.data).toBeDefined();
+    });
+  });
+
+  // ============================================================
   // Responder
   // ============================================================
 
