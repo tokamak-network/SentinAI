@@ -41,6 +41,7 @@ import {
 } from '@/types/goal-orchestrator';
 import { GoalLearningEpisode } from '@/types/goal-learning';
 import { RCAHistoryEntry } from '@/types/rca';
+import { ExperienceEntry } from '@/types/experience';
 import logger from '@/lib/logger';
 
 // ============================================================
@@ -79,6 +80,10 @@ const GOAL_LEARNING_EPISODE_MAX = 5000;
 // RCA History Constants
 const RCA_HISTORY_MAX = 100;
 const RCA_HISTORY_TTL = 7 * 24 * 60 * 60; // 7 days
+
+// Experience Store Constants
+const EXPERIENCE_MAX = 5000;
+const EXPERIENCE_TTL = 90 * 24 * 60 * 60; // 90 days
 
 // Redis key names (appended to keyPrefix)
 const KEYS = {
@@ -127,6 +132,8 @@ const KEYS = {
   predictions: 'predictions:records',
   // RCA History
   rcaHistory: 'rca:history',
+  // Experience Store
+  experienceLog: 'experience:log',
 } as const;
 
 // ============================================================
@@ -1284,6 +1291,31 @@ export class RedisStateStore implements IStateStore {
     return this.client.llen(key);
   }
 
+  // --- Experience Store ---
+
+  async addExperience(entry: ExperienceEntry): Promise<void> {
+    const key = this.key(KEYS.experienceLog);
+    await this.client.lpush(key, JSON.stringify(entry));
+    await this.client.ltrim(key, 0, EXPERIENCE_MAX - 1);
+    await this.client.expire(key, EXPERIENCE_TTL);
+  }
+
+  async getExperience(limit: number = 50, offset: number = 0): Promise<ExperienceEntry[]> {
+    const key = this.key(KEYS.experienceLog);
+    const items = await this.client.lrange(key, offset, offset + limit - 1);
+    return items.map(i => JSON.parse(i));
+  }
+
+  async getExperienceByInstance(instanceId: string, limit: number = 50): Promise<ExperienceEntry[]> {
+    const all = await this.getExperience(EXPERIENCE_MAX);
+    return all.filter(e => e.instanceId === instanceId).slice(0, limit);
+  }
+
+  async getExperienceCount(): Promise<number> {
+    const key = this.key(KEYS.experienceLog);
+    return this.client.llen(key);
+  }
+
   // --- Connection Management ---
 
   isConnected(): boolean {
@@ -2039,6 +2071,29 @@ export class InMemoryStateStore implements IStateStore {
 
   async getRCAHistoryCount(): Promise<number> {
     return this.rcaHistory.length;
+  }
+
+  // === Experience Store ===
+
+  private experienceLog: ExperienceEntry[] = [];
+
+  async addExperience(entry: ExperienceEntry): Promise<void> {
+    this.experienceLog.unshift(entry);
+    if (this.experienceLog.length > EXPERIENCE_MAX) {
+      this.experienceLog.pop();
+    }
+  }
+
+  async getExperience(limit: number = 50, offset: number = 0): Promise<ExperienceEntry[]> {
+    return this.experienceLog.slice(offset, offset + limit);
+  }
+
+  async getExperienceByInstance(instanceId: string, limit: number = 50): Promise<ExperienceEntry[]> {
+    return this.experienceLog.filter(e => e.instanceId === instanceId).slice(0, limit);
+  }
+
+  async getExperienceCount(): Promise<number> {
+    return this.experienceLog.length;
   }
 
   // --- Connection Management ---

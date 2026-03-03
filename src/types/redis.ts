@@ -24,6 +24,7 @@ import {
 } from './goal-orchestrator';
 import { GoalLearningEpisode } from './goal-learning';
 import { RCAHistoryEntry } from './rca';
+import { ExperienceEntry } from './experience';
 
 // ============================================================
 // Store Interface
@@ -187,6 +188,13 @@ export interface IStateStore {
   getRCAHistory(limit?: number): Promise<RCAHistoryEntry[]>;
   getRCAById(id: string): Promise<RCAHistoryEntry | undefined>;
   getRCAHistoryCount(): Promise<number>;
+
+  // === Experience Store ===
+  // Operational knowledge accumulation (Agent-for-Hire foundation)
+  addExperience(entry: ExperienceEntry): Promise<void>;
+  getExperience(limit?: number, offset?: number): Promise<ExperienceEntry[]>;
+  getExperienceByInstance(instanceId: string, limit?: number): Promise<ExperienceEntry[]>;
+  getExperienceCount(): Promise<number>;
 }
 
 // ============================================================
