@@ -131,7 +131,7 @@ export class CollectorAgent {
         blockInterval: dp.fields['blockInterval'] ?? 2,
         gasUsedRatio: dp.fields['gasUsedRatio'] ?? 0,
         txPoolPending: dp.fields['txPoolPending'] ?? 0,
-        cpuUsage: 0,
+        cpuUsage: 0, // TODO: collect from kubectl top or container runtime — not available via RPC
         currentVcpu,
       });
     } catch {
