@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server';
 import { recordUsage } from '@/lib/usage-tracker';
 import { getCachedL1BlockNumber } from '@/lib/l1-rpc-cache';
 import { getCurrentVcpu } from '@/lib/seed-vcpu-manager';
+import { generateTraceId, withTraceId } from '@/lib/trace-context';
 
 // Disable Next.js caching for this route
 export const dynamic = 'force-dynamic';
@@ -317,6 +318,9 @@ async function getComponentDetails(component: string, labelSelector: string, dis
 // --- Main Handler ---
 
 export async function GET(request: Request) {
+    const traceId = request.headers.get('x-trace-id') || generateTraceId();
+
+    return withTraceId(traceId, async () => {
     const plugin = getChainPlugin();
     // 0. Simulation Mode Check (Fast Path) - Bypass real K8s/RPC calls for instant feedback
     const url = new URL(request.url);
@@ -455,7 +459,10 @@ export async function GET(request: Request) {
         };
 
         return NextResponse.json(stressPayload, {
-            headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' }
+            headers: {
+                'Cache-Control': 'no-store, no-cache, must-revalidate',
+                'x-trace-id': traceId,
+            }
         });
     }
     // Debug: Log incoming request URL
@@ -580,7 +587,10 @@ export async function GET(request: Request) {
                     },
                     anomalies: [],
                 },
-                { headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+                { headers: {
+                    'Cache-Control': 'no-store, no-cache, must-revalidate',
+                    'x-trace-id': traceId,
+                } }
             );
         }
         const l1RpcUrl = getSentinaiL1RpcUrl();
@@ -941,6 +951,7 @@ export async function GET(request: Request) {
 
         // Disable caching
         response.headers.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+        response.headers.set('x-trace-id', traceId);
         logger.info(`[Timer] Total GET: ${(performance.now() - startTotal).toFixed(2)}ms`);
         return response;
 
@@ -948,7 +959,8 @@ export async function GET(request: Request) {
         logger.error("Metric Fetch Error:", error);
         return NextResponse.json(
             { error: "Failed to fetch L2 metrics" },
-            { status: 500 }
+            { status: 500, headers: { 'x-trace-id': traceId } }
         );
     }
+    }); // end withTraceId
 }
