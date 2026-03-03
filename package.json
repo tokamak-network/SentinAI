@@ -33,6 +33,7 @@
     "@iarna/toml": "^3.0.0",
     "@kubernetes/client-node": "^1.4.0",
     "clsx": "^2.1.1",
+    "framer-motion": "^12.34.4",
     "highlight.js": "^11.11.1",
     "ioredis": "^5.9.2",
     "lucide-react": "^0.563.0",
