@@ -10,6 +10,8 @@
 
 import { createLogger } from '@/lib/logger';
 import { pushMetric, getRecentMetrics } from '@/core/instance-metrics-store';
+import { pushMetric as pushGlobalMetric } from '@/lib/metrics-store';
+import { getCurrentVcpu } from '@/lib/k8s-scaler';
 import type { GenericMetricDataPoint } from '@/core/metrics';
 
 const logger = createLogger('CollectorAgent');
@@ -98,6 +100,10 @@ export class CollectorAgent {
       const dataPoint = await this.collectMetrics();
       if (dataPoint) {
         await pushMetric(dataPoint);
+
+        // Bridge to global MetricsStore for dashboard API compatibility
+        await this.bridgeToGlobalStore(dataPoint);
+
         this.lastCollectedAt = dataPoint.timestamp;
         logger.debug(
           `[CollectorAgent:${this.instanceId}] Collected — blockHeight=${dataPoint.fields['blockHeight'] ?? 'n/a'}`
@@ -107,6 +113,29 @@ export class CollectorAgent {
       const message = error instanceof Error ? error.message : String(error);
       logger.error(`[CollectorAgent:${this.instanceId}] Collection error: ${message}`);
       // Non-fatal: collection failure doesn't stop the agent
+    }
+  }
+
+  /**
+   * Bridge collected metrics to the global MetricsStore.
+   * This ensures dashboard APIs (/api/metrics, predictive scaler, anomaly detection)
+   * continue working when AGENT_V2=true.
+   * Non-fatal: bridge failure doesn't stop the collection pipeline.
+   */
+  private async bridgeToGlobalStore(dp: GenericMetricDataPoint): Promise<void> {
+    try {
+      const currentVcpu = await getCurrentVcpu();
+      await pushGlobalMetric({
+        timestamp: dp.timestamp,
+        blockHeight: dp.fields['blockHeight'] ?? 0,
+        blockInterval: dp.fields['blockInterval'] ?? 2,
+        gasUsedRatio: dp.fields['gasUsedRatio'] ?? 0,
+        txPoolPending: dp.fields['txPoolPending'] ?? 0,
+        cpuUsage: 0,
+        currentVcpu,
+      });
+    } catch {
+      // Non-fatal: global store bridge failure doesn't stop collection
     }
   }
 
