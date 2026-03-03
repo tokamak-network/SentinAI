@@ -485,44 +485,50 @@ export async function initializeScheduler(): Promise<void> {
       );
     }
 
-    agentTask = cron.schedule('*/60 * * * * *', async () => {
-      const cycle = await executeAgentCycle('schedule');
-      if (cycle.outcome === 'skipped') {
-        return;
-      }
-    });
-    logger.info('Agent loop enabled (every 60s, 50s timeout)');
+    const agentV2Active = process.env.AGENT_V2 === 'true';
 
-    if (isHeartbeatWatchdogEnabled()) {
-      watchdogTask = cron.schedule(WATCHDOG_SCHEDULE, async () => {
-        if (watchdogTaskRunning) return;
-        watchdogTaskRunning = true;
-        try {
-          await runHeartbeatWatchdog();
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unknown error';
-          await handleWatchdogFailure({
-            source: 'watchdog',
-            reason: `watchdog execution failed: ${message}`,
-            heartbeatAt: null,
-            lagSec: null,
-          });
-        } finally {
-          watchdogTaskRunning = false;
+    if (!agentV2Active) {
+      agentTask = cron.schedule('*/60 * * * * *', async () => {
+        const cycle = await executeAgentCycle('schedule');
+        if (cycle.outcome === 'skipped') {
+          return;
         }
       });
-      logger.info('Agent heartbeat watchdog enabled (every 30s)');
-    } else {
-      logger.info('Agent heartbeat watchdog disabled');
-    }
+      logger.info('Agent loop enabled (every 60s, 50s timeout)');
 
-    if (isAnomalyImmediateTriggerEnabled()) {
-      anomalyTriggerTask = cron.schedule(ANOMALY_TRIGGER_SCHEDULE, async () => {
-        await runAnomalyImmediateTrigger();
-      });
-      logger.info('Anomaly immediate trigger enabled (every 5s)');
+      if (isHeartbeatWatchdogEnabled()) {
+        watchdogTask = cron.schedule(WATCHDOG_SCHEDULE, async () => {
+          if (watchdogTaskRunning) return;
+          watchdogTaskRunning = true;
+          try {
+            await runHeartbeatWatchdog();
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown error';
+            await handleWatchdogFailure({
+              source: 'watchdog',
+              reason: `watchdog execution failed: ${message}`,
+              heartbeatAt: null,
+              lagSec: null,
+            });
+          } finally {
+            watchdogTaskRunning = false;
+          }
+        });
+        logger.info('Agent heartbeat watchdog enabled (every 30s)');
+      } else {
+        logger.info('Agent heartbeat watchdog disabled');
+      }
+
+      if (isAnomalyImmediateTriggerEnabled()) {
+        anomalyTriggerTask = cron.schedule(ANOMALY_TRIGGER_SCHEDULE, async () => {
+          await runAnomalyImmediateTrigger();
+        });
+        logger.info('Anomaly immediate trigger enabled (every 5s)');
+      } else {
+        logger.info('Anomaly immediate trigger disabled');
+      }
     } else {
-      logger.info('Anomaly immediate trigger disabled');
+      logger.info('Serial agent-loop disabled (AGENT_V2=true — parallel agents active)');
     }
   } else {
     logger.info('Agent loop disabled (set AGENT_LOOP_ENABLED=true or L2_RPC_URL to enable)');
