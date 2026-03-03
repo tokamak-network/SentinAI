@@ -282,26 +282,21 @@ async function waitForReady(
 
   while (Date.now() - startTime < timeoutMs) {
     try {
-      // 1. Check Pod Ready status
-      const { stdout: readyStatus } = await runK8sCommand(
-        `get pod ${podName} -n ${namespace} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}'`,
+      // 1. Check Pod Ready status + Pod IP in a single kubectl call
+      const { stdout: combinedOutput } = await runK8sCommand(
+        `get pod ${podName} -n ${namespace} -o jsonpath='{.status.conditions[?(@.type=="Ready")].status},{.status.podIP}'`,
         { timeout: 10000 }
       );
 
-      if (readyStatus.replace(/'/g, '').trim() !== 'True') {
+      const [readyStatus, podIp] = combinedOutput.replace(/'/g, '').trim().split(',');
+
+      if (readyStatus !== 'True') {
         await _testHooks.sleep(BACKOFF_INTERVALS[Math.min(pollAttempt, BACKOFF_INTERVALS.length - 1)]);
         pollAttempt++;
         continue;
       }
 
-      // 2. Get Pod IP
-      const { stdout: podIpRaw } = await runK8sCommand(
-        `get pod ${podName} -n ${namespace} -o jsonpath='{.status.podIP}'`,
-        { timeout: 10000 }
-      );
-      const podIp = podIpRaw.replace(/'/g, '').trim();
-
-      // 3. RPC L7 check (call localhost via kubectl exec)
+      // 2. RPC L7 check (call localhost via kubectl exec)
       const { stdout: rpcResponse } = await runK8sCommand(
         `exec ${podName} -n ${namespace} -- wget -qO- --timeout=5 http://localhost:8545 --post-data='{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'`,
         { timeout: parseInt(process.env.RPC_CHECK_TIMEOUT_MS || '15000', 10) }

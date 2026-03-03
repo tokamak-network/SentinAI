@@ -85,12 +85,9 @@ function setupFullSuccessMocks() {
       return { stdout: 'pod/test-geth-standby created', stderr: '' };
     }
 
-    // Phase 2: waitForReady
-    if (cmd.includes('jsonpath') && cmd.includes('Ready')) {
-      return { stdout: "'True'", stderr: '' };
-    }
-    if (cmd.includes('jsonpath') && cmd.includes('podIP')) {
-      return { stdout: "'10.0.0.99'", stderr: '' };
+    // Phase 2: waitForReady (consolidated Ready+podIP in single jsonpath call)
+    if (cmd.includes('jsonpath') && cmd.includes('Ready') && cmd.includes('podIP')) {
+      return { stdout: "'True,10.0.0.99'", stderr: '' };
     }
     if (cmd.includes('exec') && cmd.includes('wget')) {
       return { stdout: rpcSuccessResponse, stderr: '' };
@@ -291,9 +288,9 @@ describe('zero-downtime-scaler', () => {
         if (cmd.includes('apply -f -')) {
           return { stdout: 'created', stderr: '' };
         }
-        // Always return not ready
-        if (cmd.includes('jsonpath') && cmd.includes('Ready')) {
-          return { stdout: "'False'", stderr: '' };
+        // Always return not ready (consolidated Ready+podIP call)
+        if (cmd.includes('jsonpath') && cmd.includes('Ready') && cmd.includes('podIP')) {
+          return { stdout: "'False,'", stderr: '' };
         }
         if (cmd.includes('delete pod') || cmd.includes('label pod')) {
           return { stdout: 'ok', stderr: '' };
@@ -319,12 +316,9 @@ describe('zero-downtime-scaler', () => {
         if (cmd.includes('apply -f -')) {
           return { stdout: 'created', stderr: '' };
         }
-        // waitForReady (immediate success)
-        if (cmd.includes('jsonpath') && cmd.includes('Ready')) {
-          return { stdout: "'True'", stderr: '' };
-        }
-        if (cmd.includes('jsonpath') && cmd.includes('podIP')) {
-          return { stdout: "'10.0.0.99'", stderr: '' };
+        // waitForReady (immediate success — consolidated Ready+podIP)
+        if (cmd.includes('jsonpath') && cmd.includes('Ready') && cmd.includes('podIP')) {
+          return { stdout: "'True,10.0.0.99'", stderr: '' };
         }
         if (cmd.includes('exec') && cmd.includes('wget')) {
           return { stdout: rpcSuccessResponse, stderr: '' };
@@ -418,6 +412,29 @@ describe('zero-downtime-scaler', () => {
       expect(execCalls.length).toBe(1);
     });
 
+    it('should use a single consolidated kubectl get pod call for Ready+podIP per poll (not two)', async () => {
+      setupFullSuccessMocks();
+      await zeroDowntimeScale(4, 8, testConfig);
+
+      // Count kubectl "get pod ... jsonpath" calls during waitForReady phase
+      const jsonpathGetPodCalls = mockRunK8sCommand.mock.calls.filter(
+        (c: unknown[]) => {
+          const cmd = c[0] as string;
+          return cmd.includes('get pod') && cmd.includes('jsonpath');
+        }
+      );
+
+      // With consolidated call, there should be exactly 1 get-pod-jsonpath call
+      // per successful poll iteration (combining Ready status + podIP).
+      // Previously there were 2 separate calls (one for Ready, one for podIP).
+      expect(jsonpathGetPodCalls.length).toBe(1);
+
+      // The single call should fetch BOTH Ready status and podIP
+      const cmd = jsonpathGetPodCalls[0][0] as string;
+      expect(cmd).toContain('Ready');
+      expect(cmd).toContain('podIP');
+    });
+
     it('should use exponential backoff intervals [1s, 2s, 5s, 10s] when polling', async () => {
       const sleepCalls: number[] = [];
       _testHooks.sleep = (ms: number) => {
@@ -436,15 +453,13 @@ describe('zero-downtime-scaler', () => {
         }
 
         // Phase 2: waitForReady — return not-ready for first 4 attempts, then ready
-        if (cmd.includes('jsonpath') && cmd.includes('Ready')) {
+        // (consolidated Ready+podIP in single jsonpath call)
+        if (cmd.includes('jsonpath') && cmd.includes('Ready') && cmd.includes('podIP')) {
           readyCheckCount++;
           if (readyCheckCount <= 4) {
-            return { stdout: "'False'", stderr: '' };
+            return { stdout: "'False,'", stderr: '' };
           }
-          return { stdout: "'True'", stderr: '' };
-        }
-        if (cmd.includes('jsonpath') && cmd.includes('podIP')) {
-          return { stdout: "'10.0.0.99'", stderr: '' };
+          return { stdout: "'True,10.0.0.99'", stderr: '' };
         }
         if (cmd.includes('exec') && cmd.includes('wget')) {
           return { stdout: rpcSuccessResponse, stderr: '' };
@@ -479,8 +494,8 @@ describe('zero-downtime-scaler', () => {
           return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
         }
         if (cmd.includes('apply -f -')) return { stdout: 'created', stderr: '' };
-        if (cmd.includes('jsonpath') && cmd.includes('Ready')) return { stdout: "'True'", stderr: '' };
-        if (cmd.includes('jsonpath') && cmd.includes('podIP')) return { stdout: "'10.0.0.99'", stderr: '' };
+        // consolidated Ready+podIP
+        if (cmd.includes('jsonpath') && cmd.includes('Ready') && cmd.includes('podIP')) return { stdout: "'True,10.0.0.99'", stderr: '' };
         if (cmd.includes('exec') && cmd.includes('wget')) return { stdout: rpcSuccessResponse, stderr: '' };
 
         // Return service WITHOUT slot selector
