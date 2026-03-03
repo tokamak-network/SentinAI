@@ -536,6 +536,85 @@ describe('zero-downtime-scaler', () => {
       expect(drainingCalls.length).toBe(1);
       expect(drainingCalls[0][0]).toContain(`${testConfig.statefulSetName}-0`);
     });
+
+    it('should attempt partial rollback when draining old pod fails', async () => {
+      mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        // Phase 1: createStandbyPod
+        if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
+          return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
+        }
+        if (cmd.includes('apply -f -')) {
+          return { stdout: 'pod/test-geth-standby created', stderr: '' };
+        }
+
+        // Phase 2: waitForReady (immediate success)
+        if (cmd.includes('jsonpath') && cmd.includes('Ready') && cmd.includes('podIP')) {
+          return { stdout: "'True,10.0.0.99'", stderr: '' };
+        }
+        if (cmd.includes('exec') && cmd.includes('wget')) {
+          return { stdout: rpcSuccessResponse, stderr: '' };
+        }
+
+        // Phase 3: switchTraffic
+        if (cmd.includes('get service') && cmd.includes('-o json')) {
+          return { stdout: JSON.stringify(mockServiceWithSlot), stderr: '' };
+        }
+
+        // Step 3 (standby -> active): succeeds
+        if (cmd.includes('label pod') && cmd.includes('slot=active') && cmd.includes('standby')) {
+          return { stdout: 'pod labeled', stderr: '' };
+        }
+
+        // Step 4 (old pod -> draining): FAILS
+        if (cmd.includes('label pod') && cmd.includes('slot=draining')) {
+          throw new Error('failed to label pod: connection refused');
+        }
+
+        // Recovery labels (old pod -> active, new pod -> standby) should succeed
+        if (cmd.includes('label pod') && cmd.includes('slot=active')) {
+          return { stdout: 'pod labeled', stderr: '' };
+        }
+        if (cmd.includes('label pod') && cmd.includes('slot=standby')) {
+          return { stdout: 'pod labeled', stderr: '' };
+        }
+
+        // Rollback calls from parent orchestration
+        if (cmd.includes('delete pod')) {
+          return { stdout: 'pod deleted', stderr: '' };
+        }
+        if (cmd.includes('label pod')) {
+          return { stdout: 'pod labeled', stderr: '' };
+        }
+
+        return { stdout: '', stderr: '' };
+      });
+
+      const result = await zeroDowntimeScale(4, 8, testConfig);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('connection refused');
+
+      // Verify partial rollback was attempted:
+      // Recovery should re-label old pod as active
+      const recoveryActiveCalls = mockRunK8sCommand.mock.calls.filter(
+        (c: unknown[]) => {
+          const cmd = c[0] as string;
+          return cmd.includes('label pod') && cmd.includes(`${testConfig.statefulSetName}-0`) && cmd.includes('slot=active');
+        }
+      );
+      // At least 2: one from switchTraffic init (if no slot), and one from recovery
+      // With slot already present, recovery call is the second one
+      expect(recoveryActiveCalls.length).toBeGreaterThanOrEqual(2);
+
+      // Recovery should re-label new (standby) pod back to standby
+      const recoveryStandbyCalls = mockRunK8sCommand.mock.calls.filter(
+        (c: unknown[]) => {
+          const cmd = c[0] as string;
+          return cmd.includes('label pod') && cmd.includes('standby') && cmd.includes('slot=standby');
+        }
+      );
+      expect(recoveryStandbyCalls.length).toBeGreaterThanOrEqual(1);
+    });
   });
 
   describe('cleanupOldPod (via orchestration)', () => {

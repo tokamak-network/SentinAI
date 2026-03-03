@@ -369,10 +369,32 @@ async function switchTraffic(
   );
 
   // 4. Old Pod -> draining (Service selects only slot=active, so traffic switches immediately)
-  await runK8sCommand(
-    `label pod ${statefulSetName}-0 -n ${namespace} slot=draining --overwrite`,
-    { timeout: 10000 }
-  );
+  //    If this fails, both pods have slot=active — inconsistent state.
+  //    Partial rollback: re-label old pod as active, new pod as standby.
+  try {
+    await runK8sCommand(
+      `label pod ${statefulSetName}-0 -n ${namespace} slot=draining --overwrite`,
+      { timeout: 10000 }
+    );
+  } catch (err) {
+    logger.error('[ZeroDowntime] Failed to drain old pod, attempting partial rollback', { error: err });
+    try {
+      // Recovery: re-label old pod as active, remove new pod from active
+      await runK8sCommand(
+        `label pod ${statefulSetName}-0 -n ${namespace} slot=active --overwrite`,
+        { timeout: 10000 }
+      );
+      await runK8sCommand(
+        `label pod ${newPodName} -n ${namespace} slot=standby --overwrite`,
+        { timeout: 10000 }
+      );
+      logger.info('[ZeroDowntime] Partial rollback successful — labels restored');
+    } catch (rollbackErr) {
+      logger.error('[ZeroDowntime] Partial rollback failed — manual intervention required', { error: rollbackErr });
+    }
+    // Re-throw so parent orchestrator enters rolling_back phase and cleans up standby pod
+    throw err;
+  }
 
   return {
     success: true,
