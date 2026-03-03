@@ -88,7 +88,7 @@ export function useAutonomyState() {
       }
       if (policyRes.status === 'fulfilled' && policyRes.value.ok) {
         const data = await policyRes.value.json();
-        setAutonomyPolicy(data);
+        setAutonomyPolicy(data.policy ?? data);
       }
     } catch {
       // silent - polling failure should not break UI
@@ -386,7 +386,7 @@ export function useAutonomyState() {
       });
       if (!res.ok) throw new Error('Failed to update autonomy level');
       const data = await res.json();
-      setAutonomyPolicy(data);
+      setAutonomyPolicy(data.policy ?? data);
       setFeedback({ type: 'success', message: `Autonomy level set to ${level}` });
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Update failed';

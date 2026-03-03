@@ -10,7 +10,10 @@ test.describe('autonomy pipeline', () => {
     const levelBadge = page.getByTestId('autonomy-current-level-badge');
     await expect(levelBadge).toBeVisible();
 
-    const currentLevel = (await levelBadge.textContent())?.trim() || 'A2';
+    // Wait for initial polling to populate the badge (it starts as "A?")
+    await expect(levelBadge).not.toHaveText('A?', { timeout: 10_000 });
+
+    const currentLevel = (await levelBadge.textContent())?.trim() || 'A0';
     const targetLevel = currentLevel === 'A3' ? 'A4' : 'A3';
 
     const targetButton = page.getByTestId(`autonomy-level-btn-${targetLevel}`);
@@ -18,8 +21,8 @@ test.describe('autonomy pipeline', () => {
     await targetButton.click();
 
     const feedback = page.getByTestId('autonomy-action-feedback');
-    await expect(feedback).toContainText(`Autonomy level set to ${targetLevel}`);
-    await expect(levelBadge).toHaveText(targetLevel);
+    await expect(feedback).toContainText(`Autonomy level set to ${targetLevel}`, { timeout: 10_000 });
+    await expect(levelBadge).toHaveText(targetLevel, { timeout: 10_000 });
   });
 
   test('renders all 5 pipeline stages', async ({ page }) => {
