@@ -28,8 +28,8 @@ import { fetchZkstackMetricFields } from './zkstack';
 
 // Whether anomaly detection is enabled (default: enabled)
 const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'false';
-const RPC_TIMEOUT_MS = 15_000;
-const STATUS_PROBE_TIMEOUT_MS = 5_000;
+const RPC_TIMEOUT_MS = parseInt(process.env.RPC_TIMEOUT_MS || '15000', 10);
+const STATUS_PROBE_TIMEOUT_MS = parseInt(process.env.STATUS_PROBE_TIMEOUT_MS || '5000', 10);
 
 // Block interval tracking moved to state store (Redis or InMemory)
 

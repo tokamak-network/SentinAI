@@ -452,5 +452,34 @@ describe('scaling-decision', () => {
       // With custom thresholds, score 12 < 50 → 1 vCPU
       expect(decision.targetVcpu).toBe(1);
     });
+
+    it('should include formulaSummary in the decision', () => {
+      const metrics = createMetrics({
+        cpuUsage: 50,
+        gasUsedRatio: 0.5,
+        txPoolPending: 100,
+      });
+      const decision = makeScalingDecision(metrics);
+      expect(decision.formulaSummary).toBeDefined();
+      expect(decision.formulaSummary).toContain('CPU');
+      expect(decision.formulaSummary).toContain('Gas');
+      expect(decision.formulaSummary).toContain('TxPool');
+      expect(decision.formulaSummary).toContain('AI');
+    });
+
+    it('should normalize weights that do not sum to 1.0', () => {
+      const metrics = createMetrics({
+        cpuUsage: 100,
+        gasUsedRatio: 0,
+        txPoolPending: 0,
+      });
+      const config = {
+        ...DEFAULT_SCALING_CONFIG,
+        weights: { cpu: 0.6, gas: 0.6, txPool: 0.4, ai: 0.4 },  // sum = 2.0
+      };
+      const decision = makeScalingDecision(metrics, config);
+      // After normalization: cpu = 0.6/2.0 = 0.3, so score = 100 * 0.3 = 30
+      expect(decision.score).toBeCloseTo(30, 0);
+    });
   });
 });

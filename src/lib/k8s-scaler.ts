@@ -55,7 +55,7 @@ export async function getContainerCpuUsage(
     const { namespace, statefulSetName } = config;
     const podName = `${statefulSetName}-0`;
     const cmd = `top pod ${podName} -n ${namespace} --no-headers`;
-    const { stdout } = await runK8sCommand(cmd, { timeout: 5000 });
+    const { stdout } = await runK8sCommand(cmd, { timeout: parseInt(process.env.KUBECTL_TOP_TIMEOUT_MS || '5000', 10) });
 
     // Output format: "op-geth-0   250m   1024Mi"
     const parts = stdout.trim().split(/\s+/);
@@ -135,7 +135,7 @@ export async function getAllContainerUsage(
 
   try {
     const cmd = `top pods -n ${ns} --no-headers`;
-    const { stdout } = await runK8sCommand(cmd, { timeout: 5000 });
+    const { stdout } = await runK8sCommand(cmd, { timeout: parseInt(process.env.KUBECTL_TOP_TIMEOUT_MS || '5000', 10) });
 
     if (!stdout.trim()) return null;
 

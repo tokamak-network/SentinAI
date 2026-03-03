@@ -31,6 +31,8 @@ export interface ScalingDecision {
     txPoolScore: number;
     aiScore: number;
   };
+  /** Full scoring formula for debugging/audit */
+  formulaSummary?: string;
 }
 
 // Scaling Execution Result
@@ -135,10 +137,10 @@ export const DEFAULT_SCALING_CONFIG: ScalingConfig = {
   statefulSetName: process.env.K8S_STATEFULSET_NAME || defaultStsName,
   containerIndex: 0,
   weights: {
-    cpu: 0.3,
-    gas: 0.3,
-    txPool: 0.2,
-    ai: 0.2,
+    cpu: parseFloat(process.env.SCALING_WEIGHT_CPU || '0.3'),
+    gas: parseFloat(process.env.SCALING_WEIGHT_GAS || '0.3'),
+    txPool: parseFloat(process.env.SCALING_WEIGHT_TXPOOL || '0.2'),
+    ai: parseFloat(process.env.SCALING_WEIGHT_AI || '0.2'),
   },
   thresholds: {
     idle: parseInt(process.env.SCALING_IDLE_THRESHOLD ?? '30'),

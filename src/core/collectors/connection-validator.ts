@@ -5,7 +5,7 @@
  */
 import type { ConnectionConfig, ConnectionValidationResult, ConnectionCheck } from '@/core/types'
 
-const DEFAULT_TIMEOUT_MS = 8000
+const DEFAULT_TIMEOUT_MS = parseInt(process.env.CONN_VALIDATE_TIMEOUT_MS || '8000', 10)
 
 async function rpcCall(
   url: string,

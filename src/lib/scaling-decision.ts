@@ -13,6 +13,7 @@ import {
   DEFAULT_SCALING_CONFIG,
   AI_SEVERITY_SCORES,
 } from '@/types/scaling';
+import logger from '@/lib/logger';
 
 /**
  * Calculate scaling score based on metrics (0-100)
@@ -21,7 +22,20 @@ export function calculateScalingScore(
   metrics: ScalingMetrics,
   config: ScalingConfig = DEFAULT_SCALING_CONFIG
 ): { score: number; breakdown: ScalingDecision['breakdown'] } {
-  const { weights } = config;
+  // Validate and normalize weights
+  const rawWeights = config.weights;
+  const sum = rawWeights.cpu + rawWeights.gas + rawWeights.txPool + rawWeights.ai;
+  if (Math.abs(sum - 1.0) > 0.01) {
+    logger.warn(`[ScalingDecision] Weights sum to ${sum.toFixed(3)}, normalizing to 1.0`);
+  }
+  const weights = Math.abs(sum - 1.0) > 0.01
+    ? {
+        cpu: rawWeights.cpu / sum,
+        gas: rawWeights.gas / sum,
+        txPool: rawWeights.txPool / sum,
+        ai: rawWeights.ai / sum,
+      }
+    : rawWeights;
 
   // CPU Score: 0-100% → 0-100
   const cpuScore = Math.min(metrics.cpuUsage, 100);
@@ -161,6 +175,26 @@ export function makeScalingDecision(
   const reason = generateReason(score, targetVcpu, breakdown, metrics);
   const confidence = calculateConfidence(metrics);
 
+  const formulaSummary = `CPU ${config.weights.cpu}x${breakdown.cpuScore.toFixed(1)} + Gas ${config.weights.gas}x${breakdown.gasScore.toFixed(1)} + TxPool ${config.weights.txPool}x${breakdown.txPoolScore.toFixed(1)} + AI ${config.weights.ai}x${breakdown.aiScore.toFixed(1)} = ${score.toFixed(1)}`;
+
+  logger.info('[ScalingDecision]', JSON.stringify({
+    score: score.toFixed(1),
+    targetVcpu,
+    breakdown: {
+      cpu: `${breakdown.cpuScore.toFixed(1)} * ${config.weights.cpu}`,
+      gas: `${breakdown.gasScore.toFixed(1)} * ${config.weights.gas}`,
+      txPool: `${breakdown.txPoolScore.toFixed(1)} * ${config.weights.txPool}`,
+      ai: `${breakdown.aiScore.toFixed(1)} * ${config.weights.ai}`,
+    },
+    metrics: {
+      cpuUsage: metrics.cpuUsage,
+      gasUsedRatio: metrics.gasUsedRatio,
+      txPoolPending: metrics.txPoolPending,
+      aiSeverity: metrics.aiSeverity || 'none',
+    },
+    confidence: confidence.toFixed(2),
+  }));
+
   return {
     targetVcpu,
     targetMemoryGiB,
@@ -168,6 +202,7 @@ export function makeScalingDecision(
     confidence,
     score,
     breakdown,
+    formulaSummary,
   };
 }
 

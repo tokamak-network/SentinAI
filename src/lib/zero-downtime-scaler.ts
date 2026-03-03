@@ -267,8 +267,8 @@ async function createStandbyPod(
 async function waitForReady(
   podName: string,
   config: ScalingConfig,
-  timeoutMs: number = 300000,
-  intervalMs: number = 10000
+  timeoutMs: number = parseInt(process.env.ZERO_DOWNTIME_READY_TIMEOUT_MS || '300000', 10),
+  intervalMs: number = parseInt(process.env.ZERO_DOWNTIME_POLL_INTERVAL_MS || '10000', 10)
 ): Promise<ReadinessCheckResult> {
   const { namespace } = config;
   const startTime = Date.now();
@@ -296,7 +296,7 @@ async function waitForReady(
       // 3. RPC L7 check (call localhost via kubectl exec)
       const { stdout: rpcResponse } = await runK8sCommand(
         `exec ${podName} -n ${namespace} -- wget -qO- --timeout=5 http://localhost:8545 --post-data='{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'`,
-        { timeout: 15000 }
+        { timeout: parseInt(process.env.RPC_CHECK_TIMEOUT_MS || '15000', 10) }
       );
 
       const parsed = JSON.parse(rpcResponse);
@@ -387,7 +387,7 @@ async function cleanupOldPod(podName: string, config: ScalingConfig): Promise<vo
   const { namespace } = config;
 
   // Wait for drain
-  await _testHooks.sleep(30000);
+  await _testHooks.sleep(parseInt(process.env.ZERO_DOWNTIME_POD_CLEANUP_SLEEP_MS || '30000', 10));
 
   await runK8sCommand(
     `delete pod ${podName} -n ${namespace} --grace-period=60`,

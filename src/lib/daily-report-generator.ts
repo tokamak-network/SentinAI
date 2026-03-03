@@ -396,8 +396,8 @@ export async function generateDailyReport(
       systemPrompt,
       userPrompt,
       modelTier: 'best',
-      temperature: 0.3,
-      maxTokens: 4096,
+      temperature: parseFloat(process.env.DAILY_REPORT_TEMPERATURE || '0.3'),
+      maxTokens: parseInt(process.env.DAILY_REPORT_MAX_TOKENS || '4096', 10),
     });
 
     const content = aiResult.content || '';

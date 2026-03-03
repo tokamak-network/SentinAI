@@ -17,10 +17,10 @@ import logger from '@/lib/logger';
 // ============================================================
 
 /** L1 block number cache TTL: 6 seconds (half block time) */
-const L1_BLOCK_CACHE_TTL_MS = 6_000;
+const L1_BLOCK_CACHE_TTL_MS = parseInt(process.env.L1_CACHE_TTL_MS || '6000', 10);
 
 /** EOA balance cache TTL: 5 minutes (balances change slowly) */
-const EOA_BALANCE_CACHE_TTL_MS = 5 * 60_000;
+const EOA_BALANCE_CACHE_TTL_MS = parseInt(process.env.EOA_CACHE_TTL_MS || '300000', 10);
 
 // ============================================================
 // Type Definitions

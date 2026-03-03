@@ -14,7 +14,7 @@ import {
   resolveZkstackMode,
 } from '@/chains/zkstack/rpc'
 
-const RPC_TIMEOUT_MS = 10000
+const RPC_TIMEOUT_MS = parseInt(process.env.EVM_RPC_TIMEOUT_MS || '10000', 10)
 
 async function rpcCall(
   url: string,

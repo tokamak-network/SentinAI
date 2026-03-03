@@ -16,6 +16,132 @@ import { getStore } from '@/lib/redis-store';
 import logger from '@/lib/logger';
 
 // ============================================================================
+// Dead Letter Queue (DLQ)
+// ============================================================================
+
+interface FailedAlert {
+  id: string;
+  payload: object;
+  webhookUrl: string;
+  error: string;
+  attempts: number;
+  firstFailedAt: number;
+  lastAttemptAt: number;
+}
+
+let failedAlerts: FailedAlert[] = [];
+const MAX_DLQ_SIZE = 100;
+
+function addToDeadLetterQueue(webhookUrl: string, payload: object, error: string): void {
+  const entry: FailedAlert = {
+    id: crypto.randomUUID(),
+    payload,
+    webhookUrl,
+    error,
+    attempts: 1,
+    firstFailedAt: Date.now(),
+    lastAttemptAt: Date.now(),
+  };
+  failedAlerts.push(entry);
+  if (failedAlerts.length > MAX_DLQ_SIZE) {
+    failedAlerts = failedAlerts.slice(-MAX_DLQ_SIZE);
+  }
+  logger.warn(`[AlertDispatcher] Alert added to DLQ: ${entry.id} (${error})`);
+}
+
+export function getDeadLetterQueue(): FailedAlert[] {
+  return [...failedAlerts];
+}
+
+export function getDeadLetterQueueSize(): number {
+  return failedAlerts.length;
+}
+
+export async function retryDeadLetterQueue(): Promise<{ succeeded: number; failed: number }> {
+  let succeeded = 0;
+  let failed = 0;
+  const remaining: FailedAlert[] = [];
+
+  for (const entry of failedAlerts) {
+    const result = await sendWebhookWithRetry(entry.webhookUrl, entry.payload);
+    if (result.success) {
+      succeeded++;
+    } else {
+      entry.attempts++;
+      entry.lastAttemptAt = Date.now();
+      entry.error = result.error || entry.error;
+      remaining.push(entry);
+      failed++;
+    }
+  }
+
+  failedAlerts = remaining;
+  return { succeeded, failed };
+}
+
+// ============================================================================
+// Webhook Delivery with Retry
+// ============================================================================
+
+/**
+ * Send a webhook with timeout, retry with exponential backoff.
+ * Non-retryable: 4xx (except 429). Retryable: 5xx, 429, timeout, network errors.
+ */
+async function sendWebhookWithRetry(
+  url: string,
+  payload: object,
+): Promise<{ success: boolean; statusCode?: number; error?: string }> {
+  const timeoutMs = parseInt(process.env.WEBHOOK_TIMEOUT_MS || '5000', 10);
+  const maxAttempts = parseInt(process.env.WEBHOOK_RETRY_ATTEMPTS || '3', 10);
+  const baseBackoffMs = parseInt(process.env.WEBHOOK_RETRY_BACKOFF_MS || '100', 10);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+
+      if (response.ok) {
+        return { success: true, statusCode: response.status };
+      }
+
+      // Non-retryable 4xx (except 429)
+      if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+        return { success: false, statusCode: response.status, error: `HTTP ${response.status}` };
+      }
+
+      // Retryable (5xx or 429)
+      throw new Error(`HTTP ${response.status}`);
+    } catch (err) {
+      clearTimeout(timer);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const isAbort = err instanceof Error && err.name === 'AbortError';
+
+      if (attempt < maxAttempts) {
+        const delay = baseBackoffMs * Math.pow(2, attempt - 1);
+        logger.warn(`[AlertDispatcher] Webhook attempt ${attempt}/${maxAttempts} failed (${isAbort ? 'timeout' : errorMessage}), retrying in ${delay}ms`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+
+      return {
+        success: false,
+        error: `Failed after ${maxAttempts} attempts: ${isAbort ? `timeout after ${timeoutMs}ms` : errorMessage}`,
+      };
+    }
+  }
+
+  return { success: false, error: 'Unexpected: exhausted retry loop' };
+}
+
+// ============================================================================
 // Slack Message Formatting
 // ============================================================================
 
@@ -216,25 +342,16 @@ export async function dispatchAlert(
 
   // 5. Send webhook (if URL configured)
   if (config.webhookUrl) {
-    try {
-      const slackMessage = formatSlackMessage(analysis, metrics, anomalies);
+    const slackMessage = formatSlackMessage(analysis, metrics, anomalies);
+    const webhookResult = await sendWebhookWithRetry(config.webhookUrl, slackMessage);
 
-      const response = await fetch(config.webhookUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(slackMessage),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Webhook responded with ${response.status}`);
-      }
-
+    if (webhookResult.success) {
       record.success = true;
       logger.info(`[AlertDispatcher] Alert sent to Slack: ${analysis.severity} ${analysis.anomalyType}`);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      record.error = errorMessage;
-      logger.error('[AlertDispatcher] Webhook error:', errorMessage);
+    } else {
+      record.error = webhookResult.error;
+      addToDeadLetterQueue(config.webhookUrl, slackMessage, webhookResult.error || 'Unknown error');
+      logger.error('[AlertDispatcher] Webhook error:', webhookResult.error);
     }
   } else {
     // Dashboard-only alert

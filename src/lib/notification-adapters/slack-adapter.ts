@@ -5,6 +5,8 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import type { ApprovalRequest, NotificationResult } from '@/types/notification'
 
+const WEBHOOK_TIMEOUT_MS = parseInt(process.env.WEBHOOK_TIMEOUT_MS || '5000', 10)
+
 function buildBlocks(req: ApprovalRequest) {
   const riskEmoji: Record<string, string> = { low: '🟢', medium: '🟡', high: '🟠', critical: '🔴' }
   return {
@@ -58,17 +60,25 @@ export async function sendSlackApprovalRequest(req: ApprovalRequest): Promise<No
     return { channel: 'slack', success: false, error: 'SLACK_BOT_TOKEN 또는 SLACK_CHANNEL_ID 미설정' }
   }
 
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS)
   try {
     const body = { channel: channelId, ...buildBlocks(req) }
     const res = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(body),
+      signal: controller.signal,
     })
+    clearTimeout(timer)
     const data = await res.json() as { ok: boolean; ts?: string; error?: string }
     if (!data.ok) return { channel: 'slack', success: false, error: data.error }
     return { channel: 'slack', success: true, messageId: data.ts }
   } catch (err) {
+    clearTimeout(timer)
+    if (err instanceof Error && err.name === 'AbortError') {
+      return { channel: 'slack' as const, success: false, error: `Slack API timeout after ${WEBHOOK_TIMEOUT_MS}ms` }
+    }
     return { channel: 'slack', success: false, error: String(err) }
   }
 }
@@ -78,11 +88,20 @@ export async function editSlackMessage(messageId: string, text: string): Promise
   const channelId = process.env.SLACK_CHANNEL_ID
   if (!token || !channelId || !messageId) return
 
-  await fetch('https://slack.com/api/chat.update', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ channel: channelId, ts: messageId, text }),
-  }).catch(() => {})
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), WEBHOOK_TIMEOUT_MS)
+  try {
+    await fetch('https://slack.com/api/chat.update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ channel: channelId, ts: messageId, text }),
+      signal: controller.signal,
+    })
+    clearTimeout(timer)
+  } catch {
+    clearTimeout(timer)
+    // Silently ignore errors (same as original .catch(() => {}))
+  }
 }
 
 /**

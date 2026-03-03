@@ -14,13 +14,13 @@ import { AnomalyResult, AnomalyMetric, AnomalyDirection } from '@/types/anomaly'
 // ============================================================================
 
 /** Z-Score anomaly threshold (anomaly if |z| > 3.0) */
-const Z_SCORE_THRESHOLD = 3.0;
+const Z_SCORE_THRESHOLD = parseFloat(process.env.ANOMALY_Z_SCORE_THRESHOLD || '3.0');
 
 /** Block plateau detection time (seconds) - anomaly if no change for 2+ minutes */
-const BLOCK_PLATEAU_SECONDS = 120;
+const BLOCK_PLATEAU_SECONDS = parseInt(process.env.ANOMALY_BLOCK_PLATEAU_SECONDS || '120', 10);
 
 /** TxPool monotonic increase detection time (seconds) - anomaly if continuously increasing for 5 minutes */
-const TXPOOL_MONOTONIC_SECONDS = 300;
+const TXPOOL_MONOTONIC_SECONDS = parseInt(process.env.ANOMALY_TXPOOL_MONOTONIC_SECONDS || '300', 10);
 
 /** Minimum number of history data points (skip detection if fewer) */
 const MIN_HISTORY_POINTS = 5;
@@ -32,10 +32,10 @@ const MIN_HISTORY_POINTS = 5;
  * tiny fluctuations (e.g., CPU oscillating between 0.15 and 0.18).
  */
 const MIN_STD_DEV: Partial<Record<string, number>> = {
-  cpuUsage: 0.02,        // 2% CPU — below this, variation is noise
-  gasUsedRatio: 0.01,    // 1% gas ratio — near-zero chains produce noise
-  txPoolPending: 5,      // 5 tx — small pool changes are normal
-  l2BlockInterval: 0.3,  // 0.3s — natural jitter in block timing
+  cpuUsage: parseFloat(process.env.ANOMALY_MIN_STD_DEV_CPU || '0.02'),
+  gasUsedRatio: parseFloat(process.env.ANOMALY_MIN_STD_DEV_GAS || '0.01'),
+  txPoolPending: parseFloat(process.env.ANOMALY_MIN_STD_DEV_TXPOOL || '5'),
+  l2BlockInterval: parseFloat(process.env.ANOMALY_MIN_STD_DEV_BLOCK_INTERVAL || '0.3'),
 };
 
 // ============================================================================

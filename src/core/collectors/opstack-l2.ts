@@ -8,7 +8,7 @@ import type { NodeInstance, ConnectionValidationResult } from '@/core/types'
 import type { CollectorResult, GenericMetricDataPoint } from '@/core/metrics'
 import { validateRpcConnection } from './connection-validator'
 
-const RPC_TIMEOUT_MS = 15000
+const RPC_TIMEOUT_MS = parseInt(process.env.OPSTACK_RPC_TIMEOUT_MS || '15000', 10)
 
 async function rpcFetch(url: string, method: string, params: unknown[] = [], authToken?: string): Promise<unknown> {
   const controller = new AbortController()

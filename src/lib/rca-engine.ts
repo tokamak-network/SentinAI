@@ -54,7 +54,7 @@ const LOG_LEVEL_MAP: Record<string, 'error' | 'warning'> = {
 /**
  * Maximum RCA history entries to keep
  */
-const MAX_HISTORY_SIZE = 20;
+const MAX_HISTORY_SIZE = parseInt(process.env.RCA_MAX_HISTORY_SIZE || '20', 10);
 
 // ============================================================================
 // In-Memory State
@@ -366,14 +366,14 @@ async function callAIForRCA(
 }> {
   const userPrompt = buildUserPrompt(timeline, anomalies, metrics, logs);
 
-  const maxRetries = 2;
+  const maxRetries = parseInt(process.env.RCA_MAX_RETRIES || '2', 10);
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       logger.info(`[RCA Engine] Calling AI provider... (attempt ${attempt + 1}/${maxRetries + 1})`);
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 30000);
+      const timeout = setTimeout(() => controller.abort(), parseInt(process.env.RCA_TIMEOUT_MS || '30000', 10));
 
       const aiResult = await chatCompletion({
         systemPrompt: getRcaSystemPrompt(),
