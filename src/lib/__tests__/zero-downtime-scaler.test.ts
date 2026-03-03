@@ -417,6 +417,59 @@ describe('zero-downtime-scaler', () => {
       );
       expect(execCalls.length).toBe(1);
     });
+
+    it('should use exponential backoff intervals [1s, 2s, 5s, 10s] when polling', async () => {
+      const sleepCalls: number[] = [];
+      _testHooks.sleep = (ms: number) => {
+        sleepCalls.push(ms);
+        return Promise.resolve();
+      };
+
+      let readyCheckCount = 0;
+      mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        // Phase 1: createStandbyPod
+        if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
+          return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
+        }
+        if (cmd.includes('apply -f -')) {
+          return { stdout: 'pod/test-geth-standby created', stderr: '' };
+        }
+
+        // Phase 2: waitForReady — return not-ready for first 4 attempts, then ready
+        if (cmd.includes('jsonpath') && cmd.includes('Ready')) {
+          readyCheckCount++;
+          if (readyCheckCount <= 4) {
+            return { stdout: "'False'", stderr: '' };
+          }
+          return { stdout: "'True'", stderr: '' };
+        }
+        if (cmd.includes('jsonpath') && cmd.includes('podIP')) {
+          return { stdout: "'10.0.0.99'", stderr: '' };
+        }
+        if (cmd.includes('exec') && cmd.includes('wget')) {
+          return { stdout: rpcSuccessResponse, stderr: '' };
+        }
+
+        // Phase 3-5: standard mocks
+        if (cmd.includes('get service') && cmd.includes('-o json')) {
+          return { stdout: JSON.stringify(mockServiceWithSlot), stderr: '' };
+        }
+        if (cmd.includes('label pod')) return { stdout: 'pod labeled', stderr: '' };
+        if (cmd.includes('patch service')) return { stdout: 'service patched', stderr: '' };
+        if (cmd.includes('delete pod')) return { stdout: 'pod deleted', stderr: '' };
+        if (cmd.includes('wait --for=delete')) return { stdout: 'condition met', stderr: '' };
+        if (cmd.includes('patch statefulset')) return { stdout: 'statefulset patched', stderr: '' };
+        return { stdout: '', stderr: '' };
+      });
+
+      const result = await zeroDowntimeScale(4, 8, testConfig);
+      expect(result.success).toBe(true);
+
+      // Filter sleep calls from waitForReady phase (not cleanup phase's 30s sleep)
+      // waitForReady sleeps 4 times (one per not-ready check)
+      const backoffSleeps = sleepCalls.filter(ms => ms !== 30000);
+      expect(backoffSleeps).toEqual([1000, 2000, 5000, 10000]);
+    });
   });
 
   describe('switchTraffic (via orchestration)', () => {

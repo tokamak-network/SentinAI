@@ -20,6 +20,13 @@ import { ScalingConfig, DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 import logger from '@/lib/logger';
 
 // ============================================================
+// Constants
+// ============================================================
+
+/** Exponential backoff intervals for readiness polling (ms) */
+export const BACKOFF_INTERVALS = [1000, 2000, 5000, 10000];
+
+// ============================================================
 // Singleton State
 // ============================================================
 
@@ -268,10 +275,10 @@ async function waitForReady(
   podName: string,
   config: ScalingConfig,
   timeoutMs: number = parseInt(process.env.ZERO_DOWNTIME_READY_TIMEOUT_MS || '300000', 10),
-  intervalMs: number = parseInt(process.env.ZERO_DOWNTIME_POLL_INTERVAL_MS || '10000', 10)
 ): Promise<ReadinessCheckResult> {
   const { namespace } = config;
   const startTime = Date.now();
+  let pollAttempt = 0;
 
   while (Date.now() - startTime < timeoutMs) {
     try {
@@ -282,7 +289,8 @@ async function waitForReady(
       );
 
       if (readyStatus.replace(/'/g, '').trim() !== 'True') {
-        await _testHooks.sleep(intervalMs);
+        await _testHooks.sleep(BACKOFF_INTERVALS[Math.min(pollAttempt, BACKOFF_INTERVALS.length - 1)]);
+        pollAttempt++;
         continue;
       }
 
@@ -311,7 +319,8 @@ async function waitForReady(
       };
     } catch {
       // Pod not ready yet — keep polling
-      await _testHooks.sleep(intervalMs);
+      await _testHooks.sleep(BACKOFF_INTERVALS[Math.min(pollAttempt, BACKOFF_INTERVALS.length - 1)]);
+      pollAttempt++;
     }
   }
 
