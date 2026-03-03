@@ -217,8 +217,8 @@ describe('rca-engine', () => {
   });
 
   describe('RCA History Management', () => {
-    it('should add RCA result to history', () => {
-      const initialCount = rcaEngine.getRCAHistoryCount();
+    it('should add RCA result to history', async () => {
+      const initialCount = await rcaEngine.getRCAHistoryCount();
 
       const result = {
         id: 'rca-001',
@@ -241,16 +241,16 @@ describe('rca-engine', () => {
         ],
       };
 
-      rcaEngine.addRCAHistory(result, 'manual');
+      await rcaEngine.addRCAHistory(result, 'manual');
 
-      const newCount = rcaEngine.getRCAHistoryCount();
+      const newCount = await rcaEngine.getRCAHistoryCount();
       expect(newCount).toBeGreaterThan(initialCount);
     });
 
-    it('should retrieve RCA history with limit', () => {
+    it('should retrieve RCA history with limit', async () => {
       // Add multiple entries
       for (let i = 0; i < 5; i++) {
-        rcaEngine.addRCAHistory(
+        await rcaEngine.addRCAHistory(
           {
             id: `rca-${i}`,
             timestamp: new Date(Date.now() - i * 60000).toISOString(),
@@ -269,15 +269,15 @@ describe('rca-engine', () => {
         );
       }
 
-      const history = rcaEngine.getRCAHistory(3);
+      const history = await rcaEngine.getRCAHistory(3);
 
       expect(history.length).toBeLessThanOrEqual(3);
     });
 
-    it('should retrieve RCA by ID', () => {
+    it('should retrieve RCA by ID', async () => {
       const testId = `rca-test-${Date.now()}`;
 
-      rcaEngine.addRCAHistory(
+      await rcaEngine.addRCAHistory(
         {
           id: testId,
           timestamp: new Date().toISOString(),
@@ -295,14 +295,14 @@ describe('rca-engine', () => {
         'manual'
       );
 
-      const entry = rcaEngine.getRCAById(testId);
+      const entry = await rcaEngine.getRCAById(testId);
 
       expect(entry).toBeDefined();
       expect(entry?.result.id).toBe(testId);
     });
 
-    it('should return undefined for non-existent RCA ID', () => {
-      const entry = rcaEngine.getRCAById('non-existent-id-12345');
+    it('should return undefined for non-existent RCA ID', async () => {
+      const entry = await rcaEngine.getRCAById('non-existent-id-12345');
 
       expect(entry).toBeUndefined();
     });

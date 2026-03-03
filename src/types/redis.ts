@@ -23,6 +23,7 @@ import {
   GoalLeaseRecord,
 } from './goal-orchestrator';
 import { GoalLearningEpisode } from './goal-learning';
+import { RCAHistoryEntry } from './rca';
 
 // ============================================================
 // Store Interface
@@ -179,6 +180,13 @@ export interface IStateStore {
   addPredictionRecord(record: PredictionRecord): Promise<void>;
   updatePredictionRecord(id: string, updates: Partial<PredictionRecord>): Promise<void>;
   clearPredictionRecords(): Promise<void>;
+
+  // === RCA History ===
+  // Root cause analysis history storage
+  addRCAHistory(entry: RCAHistoryEntry): Promise<void>;
+  getRCAHistory(limit?: number): Promise<RCAHistoryEntry[]>;
+  getRCAById(id: string): Promise<RCAHistoryEntry | undefined>;
+  getRCAHistoryCount(): Promise<number>;
 }
 
 // ============================================================

@@ -21,6 +21,7 @@ import type {
 import type { AISeverity } from '@/types/scaling';
 import { chatCompletion } from './ai-client';
 import { getChainPlugin } from '@/chains';
+import { getStore } from '@/lib/redis-store';
 import logger from '@/lib/logger';
 
 // ============================================================================
@@ -50,17 +51,6 @@ const LOG_LEVEL_MAP: Record<string, 'error' | 'warning'> = {
 };
 
 // Component name normalization — delegated to chain plugin
-
-/**
- * Maximum RCA history entries to keep
- */
-const MAX_HISTORY_SIZE = parseInt(process.env.RCA_MAX_HISTORY_SIZE || '20', 10);
-
-// ============================================================================
-// In-Memory State
-// ============================================================================
-
-let rcaHistory: RCAHistoryEntry[] = [];
 
 // ============================================================================
 // Timeline Builder Functions
@@ -528,7 +518,7 @@ export async function performRCA(
 /**
  * Add an entry to the RCA history
  */
-export function addRCAHistory(result: RCAResult, triggeredBy: 'manual' | 'auto'): void {
+export async function addRCAHistory(result: RCAResult, triggeredBy: 'manual' | 'auto'): Promise<void> {
   const entry: RCAHistoryEntry = {
     id: result.id,
     result,
@@ -536,30 +526,30 @@ export function addRCAHistory(result: RCAResult, triggeredBy: 'manual' | 'auto')
     triggeredAt: new Date().toISOString(),
   };
 
-  rcaHistory.unshift(entry);
-
-  if (rcaHistory.length > MAX_HISTORY_SIZE) {
-    rcaHistory = rcaHistory.slice(0, MAX_HISTORY_SIZE);
-  }
+  const store = getStore();
+  await store.addRCAHistory(entry);
 }
 
 /**
  * Get RCA history
  */
-export function getRCAHistory(limit: number = 10): RCAHistoryEntry[] {
-  return rcaHistory.slice(0, Math.min(limit, MAX_HISTORY_SIZE));
+export async function getRCAHistory(limit: number = 10): Promise<RCAHistoryEntry[]> {
+  const store = getStore();
+  return store.getRCAHistory(limit);
 }
 
 /**
  * Get a specific RCA result by ID
  */
-export function getRCAById(id: string): RCAHistoryEntry | undefined {
-  return rcaHistory.find(entry => entry.id === id);
+export async function getRCAById(id: string): Promise<RCAHistoryEntry | undefined> {
+  const store = getStore();
+  return store.getRCAById(id);
 }
 
 /**
  * Get total RCA history count
  */
-export function getRCAHistoryCount(): number {
-  return rcaHistory.length;
+export async function getRCAHistoryCount(): Promise<number> {
+  const store = getStore();
+  return store.getRCAHistoryCount();
 }

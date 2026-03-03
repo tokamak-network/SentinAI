@@ -67,7 +67,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
     const result = await performRCA(anomalies, logs, metrics);
 
     // 5. Add to history
-    addRCAHistory(result, triggeredBy);
+    await addRCAHistory(result, triggeredBy);
 
     logger.info(`[API /rca] Analysis complete in ${Date.now() - startTime}ms`);
 
@@ -101,8 +101,8 @@ export async function GET(request: NextRequest): Promise<NextResponse<RCAHistory
     const limitParam = searchParams.get('limit');
     const limit = limitParam ? Math.min(parseInt(limitParam, 10), 20) : 10;
 
-    const history = getRCAHistory(limit);
-    const total = getRCAHistoryCount();
+    const history = await getRCAHistory(limit);
+    const total = await getRCAHistoryCount();
 
     return NextResponse.json({
       history,

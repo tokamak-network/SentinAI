@@ -470,7 +470,7 @@ async function executeRunRca(): Promise<unknown> {
   }
 
   const result = await performRCA(anomalies, logs, metrics);
-  addRCAHistory(result, 'manual');
+  await addRCAHistory(result, 'manual');
 
   return {
     result,

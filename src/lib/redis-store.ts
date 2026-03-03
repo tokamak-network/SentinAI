@@ -40,6 +40,7 @@ import {
   GoalLeaseRecord,
 } from '@/types/goal-orchestrator';
 import { GoalLearningEpisode } from '@/types/goal-learning';
+import { RCAHistoryEntry } from '@/types/rca';
 import logger from '@/lib/logger';
 
 // ============================================================
@@ -74,6 +75,10 @@ const AUTONOMOUS_GOAL_QUEUE_MAX = 200;
 const GOAL_SUPPRESSION_RECORD_MAX = 500;
 const GOAL_DLQ_MAX = 500;
 const GOAL_LEARNING_EPISODE_MAX = 5000;
+
+// RCA History Constants
+const RCA_HISTORY_MAX = 100;
+const RCA_HISTORY_TTL = 7 * 24 * 60 * 60; // 7 days
 
 // Redis key names (appended to keyPrefix)
 const KEYS = {
@@ -120,6 +125,8 @@ const KEYS = {
   alertCooldown: (type: string) => `alerts:cooldown:${type}`,
   // P3: Prediction Tracker
   predictions: 'predictions:records',
+  // RCA History
+  rcaHistory: 'rca:history',
 } as const;
 
 // ============================================================
@@ -1246,6 +1253,37 @@ export class RedisStateStore implements IStateStore {
     await this.client.del(key);
   }
 
+  // --- RCA History ---
+
+  async addRCAHistory(entry: RCAHistoryEntry): Promise<void> {
+    const key = this.key(KEYS.rcaHistory);
+    const data = JSON.stringify(entry);
+    await this.client.lpush(key, data);
+    await this.client.ltrim(key, 0, RCA_HISTORY_MAX - 1);
+    await this.client.expire(key, RCA_HISTORY_TTL);
+  }
+
+  async getRCAHistory(limit: number = 20): Promise<RCAHistoryEntry[]> {
+    const key = this.key(KEYS.rcaHistory);
+    const items = await this.client.lrange(key, 0, limit - 1);
+    return items.map(item => JSON.parse(item));
+  }
+
+  async getRCAById(id: string): Promise<RCAHistoryEntry | undefined> {
+    const key = this.key(KEYS.rcaHistory);
+    const all = await this.client.lrange(key, 0, RCA_HISTORY_MAX - 1);
+    for (const item of all) {
+      const entry: RCAHistoryEntry = JSON.parse(item);
+      if (entry.id === id) return entry;
+    }
+    return undefined;
+  }
+
+  async getRCAHistoryCount(): Promise<number> {
+    const key = this.key(KEYS.rcaHistory);
+    return this.client.llen(key);
+  }
+
   // --- Connection Management ---
 
   isConnected(): boolean {
@@ -1978,6 +2016,29 @@ export class InMemoryStateStore implements IStateStore {
 
   async clearPredictionRecords(): Promise<void> {
     this.predictionRecords = [];
+  }
+
+  // === RCA History ===
+
+  private rcaHistory: RCAHistoryEntry[] = [];
+
+  async addRCAHistory(entry: RCAHistoryEntry): Promise<void> {
+    this.rcaHistory.unshift(entry);
+    if (this.rcaHistory.length > RCA_HISTORY_MAX) {
+      this.rcaHistory.pop();
+    }
+  }
+
+  async getRCAHistory(limit: number = 20): Promise<RCAHistoryEntry[]> {
+    return this.rcaHistory.slice(0, limit);
+  }
+
+  async getRCAById(id: string): Promise<RCAHistoryEntry | undefined> {
+    return this.rcaHistory.find(e => e.id === id);
+  }
+
+  async getRCAHistoryCount(): Promise<number> {
+    return this.rcaHistory.length;
   }
 
   // --- Connection Management ---

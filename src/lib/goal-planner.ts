@@ -493,7 +493,7 @@ async function executeRcaStep(): Promise<{ ok: boolean; message: string }> {
   }
 
   const result = await performRCA(anomalies, logs, metrics);
-  addRCAHistory(result, 'manual');
+  await addRCAHistory(result, 'manual');
 
   return {
     ok: true,

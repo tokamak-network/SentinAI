@@ -85,7 +85,7 @@ export async function POST(
 
     // 4. Perform RCA
     const result = await performRCA(anomalies, logs, metrics);
-    addRCAHistory(result, 'manual');
+    await addRCAHistory(result, 'manual');
 
     logger.info(`[v2 rca/${id}] RCA complete in ${Date.now() - startTime}ms`);
 
