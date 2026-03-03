@@ -1,6 +1,7 @@
 /**
  * Unit tests for predictive-scaler module
- * Tests AI-powered scaling predictions, rate limiting, and fallback logic
+ * Tests AI-powered scaling predictions, rate limiting, fallback logic,
+ * prediction recording, and accuracy verification
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -20,6 +21,11 @@ vi.mock('@/lib/metrics-store', () => ({
   getRecentMetrics: vi.fn(),
   getMetricsStats: vi.fn(),
   getMetricsCount: vi.fn(),
+}));
+
+vi.mock('@/lib/prediction-tracker', () => ({
+  recordPrediction: vi.fn().mockResolvedValue('pred_mock_1'),
+  recordActualForRecent: vi.fn().mockResolvedValue(true),
 }));
 
 vi.mock('@/lib/redis-store', () => {
@@ -49,6 +55,9 @@ vi.mock('@/lib/redis-store', () => {
 const { chatCompletion } = await import('@/lib/ai-client');
 const { getRecentMetrics, getMetricsStats, getMetricsCount } = await import(
   '@/lib/metrics-store'
+);
+const { recordPrediction, recordActualForRecent } = await import(
+  '@/lib/prediction-tracker'
 );
 
 /**
@@ -489,6 +498,103 @@ describe('predictive-scaler', () => {
       expect(result).not.toBeNull();
       expect(result?.reasoning).toContain('Fallback');
       expect(result?.confidence).toBeLessThanOrEqual(0.5);
+    });
+  });
+
+  describe('Prediction recording', () => {
+    it('should record prediction after successful AI prediction', async () => {
+      vi.mocked(chatCompletion).mockResolvedValue({
+        content: createValidAIResponse(),
+        stopReason: 'end_turn',
+      });
+
+      const result = await predictiveScaler.predictScaling(2);
+
+      expect(result).not.toBeNull();
+      expect(recordPrediction).toHaveBeenCalledTimes(1);
+      expect(recordPrediction).toHaveBeenCalledWith(result);
+    });
+
+    it('should record prediction after fallback (AI error)', async () => {
+      vi.mocked(chatCompletion).mockRejectedValue(new Error('AI error'));
+
+      const result = await predictiveScaler.predictScaling(2);
+
+      expect(result).not.toBeNull();
+      expect(recordPrediction).toHaveBeenCalledTimes(1);
+      expect(recordPrediction).toHaveBeenCalledWith(result);
+    });
+
+    it('should record prediction after fallback (invalid AI response)', async () => {
+      vi.mocked(chatCompletion).mockResolvedValue({
+        content: JSON.stringify({
+          predictedVcpu: 3, // Invalid vCPU triggers fallback
+          confidence: 0.7,
+          trend: 'stable',
+          reasoning: 'Test',
+          recommendedAction: 'maintain',
+          factors: [],
+        }),
+        stopReason: 'end_turn',
+      });
+
+      const result = await predictiveScaler.predictScaling(2);
+
+      expect(result).not.toBeNull();
+      expect(recordPrediction).toHaveBeenCalledTimes(1);
+      expect(recordPrediction).toHaveBeenCalledWith(result);
+    });
+
+    it('should NOT record prediction when rate limited (cached)', async () => {
+      vi.mocked(chatCompletion).mockResolvedValue({
+        content: createValidAIResponse(),
+        stopReason: 'end_turn',
+      });
+
+      // First prediction — recorded
+      await predictiveScaler.predictScaling(2);
+      expect(recordPrediction).toHaveBeenCalledTimes(1);
+
+      // Second call within cooldown — returns cached, no new recording
+      await predictiveScaler.predictScaling(2);
+      expect(recordPrediction).toHaveBeenCalledTimes(1); // Still 1
+    });
+
+    it('should NOT record prediction when insufficient data', async () => {
+      vi.mocked(getMetricsCount).mockResolvedValue(5); // Below minimum
+
+      const result = await predictiveScaler.predictScaling(2);
+
+      expect(result).toBeNull();
+      expect(recordPrediction).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('Prediction accuracy verification', () => {
+    it('should verify accuracy via recordActualForRecent', async () => {
+      const result = await predictiveScaler.verifyPredictionAccuracy(2);
+
+      expect(result).toBe(true);
+      expect(recordActualForRecent).toHaveBeenCalledTimes(1);
+      expect(recordActualForRecent).toHaveBeenCalledWith(2);
+    });
+
+    it('should return false when no unverified records exist', async () => {
+      vi.mocked(recordActualForRecent).mockResolvedValueOnce(false);
+
+      const result = await predictiveScaler.verifyPredictionAccuracy(4);
+
+      expect(result).toBe(false);
+      expect(recordActualForRecent).toHaveBeenCalledWith(4);
+    });
+
+    it('should accept all valid vCPU tiers', async () => {
+      for (const vcpu of [1, 2, 4] as const) {
+        vi.mocked(recordActualForRecent).mockResolvedValueOnce(true);
+        const result = await predictiveScaler.verifyPredictionAccuracy(vcpu);
+        expect(result).toBe(true);
+        expect(recordActualForRecent).toHaveBeenCalledWith(vcpu);
+      }
     });
   });
 });

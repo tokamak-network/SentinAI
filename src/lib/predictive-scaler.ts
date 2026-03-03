@@ -17,6 +17,7 @@ import { getStore } from '@/lib/redis-store';
 import { chatCompletion } from './ai-client';
 import { parseAIJSON } from './ai-response-parser';
 import { getChainPlugin } from '@/chains';
+import { recordPrediction, recordActualForRecent } from './prediction-tracker';
 import logger from '@/lib/logger';
 
 // ============================================================================
@@ -252,6 +253,7 @@ export async function predictScaling(
     if (prediction) {
       await store.setLastPredictionTime(now);
       await store.setLastPrediction(prediction);
+      await recordPrediction(prediction);
       return prediction;
     }
 
@@ -260,6 +262,7 @@ export async function predictScaling(
     const fallback = await generateFallbackPrediction(currentVcpu);
     await store.setLastPredictionTime(now);
     await store.setLastPrediction(fallback);
+    await recordPrediction(fallback);
     return fallback;
 
   } catch (error) {
@@ -270,6 +273,7 @@ export async function predictScaling(
     const fallback = await generateFallbackPrediction(currentVcpu);
     await store.setLastPredictionTime(now);
     await store.setLastPrediction(fallback);
+    await recordPrediction(fallback);
     return fallback;
   }
 }
@@ -299,6 +303,17 @@ export async function getNextPredictionIn(config: PredictionConfig = DEFAULT_PRE
   const lastTime = await getStore().getLastPredictionTime();
   const elapsed = (now - lastTime) / 1000;
   return Math.max(0, config.predictionCooldownSeconds - elapsed);
+}
+
+/**
+ * Verify prediction accuracy by comparing the most recent unverified
+ * prediction against the actual vCPU that was applied.
+ *
+ * @param actualVcpu - The actual vCPU tier that was needed/applied
+ * @returns true if a prediction record was found and updated, false otherwise
+ */
+export async function verifyPredictionAccuracy(actualVcpu: TargetVcpu): Promise<boolean> {
+  return recordActualForRecent(actualVcpu);
 }
 
 /**
