@@ -6,10 +6,14 @@ import type { OperationalPattern } from '@/types/pattern';
 // Mock experience-store
 const mockGetExperienceByInstance = vi.fn();
 const mockGetExperienceStats = vi.fn();
+const mockGetLifetimeStats = vi.fn();
+const mockLifetimeToExperienceStats = vi.fn();
 
 vi.mock('@/lib/experience-store', () => ({
   getExperienceByInstance: (...args: unknown[]) => mockGetExperienceByInstance(...args),
   getExperienceStats: (...args: unknown[]) => mockGetExperienceStats(...args),
+  getLifetimeStats: (...args: unknown[]) => mockGetLifetimeStats(...args),
+  lifetimeToExperienceStats: (...args: unknown[]) => mockLifetimeToExperienceStats(...args),
 }));
 
 // Mock pattern-extractor
@@ -22,6 +26,8 @@ vi.mock('@/lib/pattern-extractor', () => ({
 describe('agent-resume', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetLifetimeStats.mockResolvedValue(null);
+    mockLifetimeToExperienceStats.mockImplementation((stats: unknown) => stats);
   });
 
   describe('calculateTier', () => {
