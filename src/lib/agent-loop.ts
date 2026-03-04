@@ -133,6 +133,21 @@ interface CollectedMetrics {
   challengerBalanceEth?: number;
 }
 
+function resolveL2RpcUrl(): string | null {
+  const candidates = [
+    process.env.L2_RPC_URL,
+    process.env.SENTINAI_L2_RPC_URL,
+    process.env.NEXT_PUBLIC_L2_RPC_URL,
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = candidate?.trim();
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
 async function getRecentSafeMetrics(): Promise<CollectedMetrics | null> {
   const recent = await getRecentMetrics(1);
   if (!recent || recent.length === 0) return null;
@@ -148,9 +163,9 @@ async function getRecentSafeMetrics(): Promise<CollectedMetrics | null> {
 }
 
 async function collectMetrics(): Promise<CollectedMetrics | null> {
-  const rpcUrl = process.env.L2_RPC_URL;
+  const rpcUrl = resolveL2RpcUrl();
   if (!rpcUrl) {
-    logger.warn('[AgentLoop] L2_RPC_URL not set, skipping metrics collection');
+    logger.warn('[AgentLoop] L2 RPC URL not set, skipping metrics collection');
     return null;
   }
 
@@ -326,9 +341,21 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     currentVcpu,
   };
 
-  // Push to metrics store and record usage
-  await pushMetric(dataPoint);
-  recordUsage(currentVcpu, cpuUsage);
+  // Push to metrics store and record usage (non-blocking).
+  // Persistence/telemetry failures should not degrade observe path.
+  try {
+    await pushMetric(dataPoint);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`[AgentLoop] Failed to push metric, continuing: ${message}`);
+  }
+
+  try {
+    recordUsage(currentVcpu, cpuUsage);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    logger.warn(`[AgentLoop] Failed to record usage, continuing: ${message}`);
+  }
 
   return { dataPoint, l1BlockHeight: Number(l1BlockNumber), failover: failoverInfo, batcherBalanceEth, proposerBalanceEth, challengerBalanceEth };
 }

@@ -142,12 +142,23 @@ import { getRecentMetrics } from '@/lib/metrics-store';
 import { analyzeLogChunk } from '@/lib/ai-analyzer';
 import * as failoverModule from '@/lib/l1-rpc-failover';
 import { tickGoalManager, dispatchTopGoal } from '@/lib/goal-manager';
+import { recordUsage } from '@/lib/usage-tracker';
 
 describe('agent-loop', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     resetAgentState();
     process.env.L2_RPC_URL = 'http://mock-rpc:8545';
+    const { createPublicClient } = await import('viem');
+    vi.mocked(createPublicClient).mockReturnValue({
+      getBlock: vi.fn().mockResolvedValue({
+        number: BigInt(1000),
+        transactions: ['0x1', '0x2'],
+        gasUsed: BigInt(5000000),
+        gasLimit: BigInt(10000000),
+      }),
+      getBlockNumber: vi.fn().mockResolvedValue(BigInt(500)),
+    } as never);
 
     vi.mocked(tickGoalManager).mockResolvedValue({
       enabled: false,
@@ -167,6 +178,8 @@ describe('agent-loop', () => {
 
   afterEach(() => {
     delete process.env.L2_RPC_URL;
+    delete process.env.SENTINAI_L2_RPC_URL;
+    delete process.env.NEXT_PUBLIC_L2_RPC_URL;
   });
 
   describe('runAgentCycle', () => {
@@ -279,6 +292,16 @@ describe('agent-loop', () => {
 
       expect(result.phase).toBe('error');
       expect(result.error).toContain('L2_RPC_URL');
+    });
+
+    it('should collect metrics with SENTINAI_L2_RPC_URL when L2_RPC_URL is not set', async () => {
+      delete process.env.L2_RPC_URL;
+      process.env.SENTINAI_L2_RPC_URL = 'https://mock-rpc.example';
+
+      const result = await runAgentCycle();
+
+      expect(result.phase).toBe('complete');
+      expect(result.metrics).not.toBeNull();
     });
 
     it('should prevent concurrent cycles', async () => {
@@ -471,6 +494,18 @@ describe('agent-loop', () => {
       expect(result.degraded?.active).toBe(true);
       expect(result.degraded?.reasons).toContain('observe-fallback:last-safe-metrics');
       expect(result.metrics?.l2BlockHeight).toBe(123456);
+    });
+
+    it('should continue observe when metric persistence fails', async () => {
+      const { pushMetric } = await import('@/lib/metrics-store');
+      vi.mocked(pushMetric).mockRejectedValueOnce(new Error('store unavailable'));
+
+      const result = await runAgentCycle();
+
+      expect(result.phase).toBe('complete');
+      expect(result.degraded?.reasons ?? []).not.toContain('observe-fallback:last-safe-metrics');
+      expect(result.metrics?.l2BlockHeight).toBe(1000);
+      expect(recordUsage).toHaveBeenCalledTimes(1);
     });
   });
 
