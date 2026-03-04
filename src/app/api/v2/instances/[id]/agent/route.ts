@@ -8,6 +8,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getInstance } from '@/core/instance-registry';
 import { getAgentOrchestrator } from '@/core/agent-orchestrator';
+import type { AgentStatus } from '@/core/agent-orchestrator';
 import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
@@ -34,14 +35,14 @@ export async function GET(
     }
 
     const orchestrator = getAgentOrchestrator();
-    const statuses = orchestrator.getStatuses().filter(s => s.instanceId === id);
+    const statuses = orchestrator.getInstanceStatuses(id);
 
     const agentRunning = statuses.length > 0 && statuses.some(s => s.running);
-    const lastCycleAt = statuses
-      .map(s => s.lastActivityAt)
-      .filter((v): v is string => v !== null)
-      .sort()
-      .pop() ?? null;
+    const lastCycleAt = statuses.reduce<string | null>((latest, s) => {
+      if (!s.lastActivityAt) return latest;
+      if (!latest) return s.lastActivityAt;
+      return s.lastActivityAt > latest ? s.lastActivityAt : latest;
+    }, null);
 
     return NextResponse.json({
       data: {

@@ -1,5 +1,15 @@
 # Lessons Learned
 
+## 2026-03-03
+
+- 병렬 에이전트 대시보드 지표를 route 내부에서 직접 계산하면 UI/API/테스트 간 계약이 쉽게 분산된다.
+- Rule: For dashboard observability features, compute KPIs in a pure shared module first, test it independently, then reuse it from API routes and UI polling layers.
+
+## 2026-03-04
+
+- 운영 스모크가 `/api/metrics`만 검증하면 런타임 핵심 제어면(`agent-loop`, `goal-manager`, `agent-fleet`) 회귀를 놓치기 쉽다.
+- Rule: Runtime smoke must include at least `health + agent-loop + goal-manager + fleet` endpoint payload checks in one fast script.
+
 ## 2026-02-24
 
 - 멀티체인 운영 문서에서 “공통 UI”와 “체인별 기능 차이”를 분리하지 않으면 운영자가 capability 불일치를 장애로 오판하기 쉽다.

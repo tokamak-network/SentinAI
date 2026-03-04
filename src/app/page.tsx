@@ -242,6 +242,29 @@ interface AgentLoopStatus {
   };
 }
 
+interface AgentFleetRoleSummary {
+  total: number;
+  running: number;
+  stale: number;
+}
+
+interface AgentFleetData {
+  summary: {
+    totalAgents: number;
+    runningAgents: number;
+    staleAgents: number;
+    instanceCount: number;
+  };
+  kpi: {
+    throughputPerMin: number;
+    successRate: number;
+    p95CycleMs: number;
+    criticalPathPhase: string;
+  };
+  roles: Record<'collector' | 'detector' | 'analyzer' | 'executor' | 'verifier', AgentFleetRoleSummary>;
+  updatedAt: string;
+}
+
 interface DecisionTraceData {
   decisionId: string;
   timestamp: string;
@@ -388,6 +411,7 @@ export default function Dashboard() {
 
   // --- Agent Loop State ---
   const [agentLoop, setAgentLoop] = useState<AgentLoopStatus | null>(null);
+  const [agentFleet, setAgentFleet] = useState<AgentFleetData | null>(null);
   const [showFullHistory, setShowFullHistory] = useState(false);
   const [selectedDecisionTrace, setSelectedDecisionTrace] = useState<DecisionTraceData | null>(null);
   const [decisionTraceLoading, setDecisionTraceLoading] = useState(false);
@@ -618,7 +642,7 @@ export default function Dashboard() {
         console.error(new Date().toISOString(), err);
         // Avoid locking the UI on a permanent loading screen in demo/test environments.
         setIsLoading(false);
-        if (!current) setCurrent(null);
+        setCurrent(null);
       }
     };
 
@@ -662,6 +686,23 @@ export default function Dashboard() {
     const interval = setInterval(fetchAgentLoop, AGENT_LOOP_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [showFullHistory]);
+
+  // --- Parallel Agent Fleet polling (every 30s) ---
+  useEffect(() => {
+    const fetchAgentFleet = async () => {
+      try {
+        const res = await fetch(`${BASE_PATH}/api/agent-fleet?limit=120`, { cache: 'no-store' });
+        if (res.ok) {
+          setAgentFleet(await res.json());
+        }
+      } catch {
+        // Silently ignore — fleet panel will show stale data
+      }
+    };
+    fetchAgentFleet();
+    const interval = setInterval(fetchAgentFleet, AGENT_LOOP_REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
 
   // --- Anomaly Events polling (with agent loop) ---
   useEffect(() => {
@@ -1024,7 +1065,6 @@ export default function Dashboard() {
             const memGiB = current?.metrics.gethMemGiB ?? 2;
             const isPeak = current?.cost.isPeakMode ?? false;
             const hourlyRate = monthlyCost / 730;
-            const baselineHourly = fixedCost / 730;
             const savingsPct = ((fixedCost - monthlyCost) / fixedCost * 100);
             const barPct = Math.min(Math.max((monthlyCost / fixedCost) * 100, 5), 100);
             const scenarioLabel = vcpu >= 8 ? { text: 'Emergency', color: 'text-red-500 bg-red-50' }
@@ -1296,6 +1336,83 @@ export default function Dashboard() {
               )}
             </div>
 
+          </div>
+        )}
+      </div>
+
+      {/* Parallel Agent Fleet Panel */}
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60 mb-6" data-testid="parallel-agent-fleet-panel">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Activity size={18} className="text-gray-500" />
+            <h3 className="font-bold text-gray-900 text-lg">Parallel Agent Fleet</h3>
+          </div>
+          <span className="text-[10px] text-gray-400 font-mono">
+            {agentFleet?.updatedAt ? `updated ${formatRelativeTime(agentFleet.updatedAt)}` : 'no fleet data'}
+          </span>
+        </div>
+
+        {agentFleet ? (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                <p className="text-[10px] text-gray-400 uppercase font-semibold">Agents</p>
+                <p className="text-xl font-bold text-gray-900 font-mono mt-1">{agentFleet.summary.runningAgents}/{agentFleet.summary.totalAgents}</p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                <p className="text-[10px] text-gray-400 uppercase font-semibold">Instances</p>
+                <p className="text-xl font-bold text-gray-900 font-mono mt-1">{agentFleet.summary.instanceCount}</p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                <p className="text-[10px] text-gray-400 uppercase font-semibold">Success Rate</p>
+                <p className="text-xl font-bold text-gray-900 font-mono mt-1">{agentFleet.kpi.successRate.toFixed(1)}%</p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                <p className="text-[10px] text-gray-400 uppercase font-semibold">P95 Cycle</p>
+                <p className="text-xl font-bold text-gray-900 font-mono mt-1">{Math.round(agentFleet.kpi.p95CycleMs / 1000)}s</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <div className="bg-blue-50 rounded-xl p-3 border border-blue-100">
+                <p className="text-[10px] text-blue-500 uppercase font-semibold">Throughput</p>
+                <p className="text-lg font-bold text-blue-700 font-mono mt-1">{agentFleet.kpi.throughputPerMin.toFixed(2)} tasks/min</p>
+              </div>
+              <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
+                <p className="text-[10px] text-amber-600 uppercase font-semibold">Stale Agents</p>
+                <p className="text-lg font-bold text-amber-700 font-mono mt-1">{agentFleet.summary.staleAgents}</p>
+              </div>
+              <div className="bg-purple-50 rounded-xl p-3 border border-purple-100">
+                <p className="text-[10px] text-purple-600 uppercase font-semibold">Critical Path</p>
+                <p className="text-lg font-bold text-purple-700 font-mono mt-1">{agentFleet.kpi.criticalPathPhase}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              {(['collector', 'detector', 'analyzer', 'executor', 'verifier'] as const).map((role) => {
+                const roleData = agentFleet.roles[role];
+                const isRoleStale = roleData.stale > 0;
+                return (
+                  <div
+                    key={role}
+                    className={`rounded-lg border px-2 py-2 ${
+                      isRoleStale ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'
+                    }`}
+                  >
+                    <p className="text-[10px] text-gray-500 uppercase font-semibold">{role}</p>
+                    <p className="text-sm font-bold text-gray-900 font-mono">{roleData.running}/{roleData.total}</p>
+                    <p className={`text-[10px] font-semibold ${isRoleStale ? 'text-amber-700' : 'text-gray-400'}`}>
+                      stale {roleData.stale}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        ) : (
+          <div className="flex items-center justify-center gap-2 py-6 text-gray-400">
+            <AlertTriangle size={16} />
+            <span className="text-sm">No fleet data available yet</span>
           </div>
         )}
       </div>

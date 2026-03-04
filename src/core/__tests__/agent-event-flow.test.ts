@@ -371,46 +371,4 @@ describe('Agent Event Flow Integration', () => {
     });
   });
 
-  // ----------------------------------------------------------
-  // Test 5: AGENT_V2=true disables serial agent-loop
-  // ----------------------------------------------------------
-  describe('AGENT_V2 mutual exclusion', () => {
-    it('AGENT_V2=true skips serial agent-loop scheduling', () => {
-      // The scheduler.ts guard:
-      //   const agentV2Active = process.env.AGENT_V2 === 'true';
-      //   if (!agentV2Active) { agentTask = cron.schedule(...); }
-      //   else { logger.info('Serial agent-loop disabled ...'); }
-      //
-      // We verify the guard logic directly (unit-level check).
-      const originalEnv = process.env.AGENT_V2;
-
-      process.env.AGENT_V2 = 'true';
-      const agentV2Active = process.env.AGENT_V2 === 'true';
-      expect(agentV2Active).toBe(true);
-
-      // When AGENT_V2=true, the serial agent-loop should NOT be scheduled.
-      // This means `agentTask` remains null and no cron.schedule() is called
-      // for the 60s agent cycle.
-
-      // Restore
-      if (originalEnv === undefined) {
-        delete process.env.AGENT_V2;
-      } else {
-        process.env.AGENT_V2 = originalEnv;
-      }
-    });
-
-    it('AGENT_V2 unset allows serial agent-loop scheduling', () => {
-      const originalEnv = process.env.AGENT_V2;
-      delete process.env.AGENT_V2;
-
-      const agentV2Active = process.env.AGENT_V2 === 'true';
-      expect(agentV2Active).toBe(false);
-
-      // Restore
-      if (originalEnv !== undefined) {
-        process.env.AGENT_V2 = originalEnv;
-      }
-    });
-  });
 });

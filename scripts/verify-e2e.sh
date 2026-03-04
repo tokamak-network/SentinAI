@@ -291,6 +291,55 @@ if should_run 1; then
   else
     fail "/api/metrics failed (HTTP: $HTTP_CODE)"
   fi
+
+  # Core runtime smoke: health + agent-loop + goal-manager + agent-fleet
+  api_get "$BASE_URL/api/health" "$TIMEOUT_DEFAULT"
+  if [ "$HTTP_CODE" = "200" ]; then
+    HEALTH_STATUS=$(jq_body -r '.status // empty')
+    if [ -n "$HEALTH_STATUS" ]; then
+      pass "/api/health status: $HEALTH_STATUS"
+    else
+      fail "/api/health missing status field"
+    fi
+  else
+    fail "/api/health failed (HTTP: $HTTP_CODE)"
+  fi
+
+  api_get "$BASE_URL/api/agent-loop?limit=5" "$TIMEOUT_DEFAULT"
+  if [ "$HTTP_CODE" = "200" ]; then
+    HAS_SCHEDULER=$(jq_body 'if .scheduler and (.recentCycles | type == "array") then true else false end')
+    if [ "$HAS_SCHEDULER" = "true" ]; then
+      pass "/api/agent-loop runtime payload ok"
+    else
+      fail "/api/agent-loop payload missing scheduler/recentCycles"
+    fi
+  else
+    fail "/api/agent-loop failed (HTTP: $HTTP_CODE)"
+  fi
+
+  api_get "$BASE_URL/api/goal-manager?limit=5" "$TIMEOUT_DEFAULT"
+  if [ "$HTTP_CODE" = "200" ]; then
+    HAS_GOAL_MANAGER=$(jq_body 'if (.queueDepth != null) and (.queue | type == "array") then true else false end')
+    if [ "$HAS_GOAL_MANAGER" = "true" ]; then
+      pass "/api/goal-manager runtime payload ok"
+    else
+      fail "/api/goal-manager payload missing queueDepth/queue"
+    fi
+  else
+    fail "/api/goal-manager failed (HTTP: $HTTP_CODE)"
+  fi
+
+  api_get "$BASE_URL/api/agent-fleet?limit=30" "$TIMEOUT_DEFAULT"
+  if [ "$HTTP_CODE" = "200" ]; then
+    HAS_FLEET=$(jq_body 'if .summary and .kpi and (.agents | type == "array") then true else false end')
+    if [ "$HAS_FLEET" = "true" ]; then
+      pass "/api/agent-fleet runtime payload ok"
+    else
+      fail "/api/agent-fleet payload missing summary/kpi/agents"
+    fi
+  else
+    fail "/api/agent-fleet failed (HTTP: $HTTP_CODE)"
+  fi
 fi
 
 # ============================================================

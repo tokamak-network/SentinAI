@@ -46,6 +46,8 @@ export class CollectorAgent {
   private readonly authToken?: string;
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastCollectedAt: string | null = null;
+  private cachedVcpu: number = 1;
+  private vcpuCachedAt: number = 0;
 
   constructor(config: CollectorAgentConfig) {
     this.instanceId = config.instanceId;
@@ -124,7 +126,12 @@ export class CollectorAgent {
    */
   private async bridgeToGlobalStore(dp: GenericMetricDataPoint): Promise<void> {
     try {
-      const currentVcpu = await getCurrentVcpu();
+      const VCPU_CACHE_TTL_MS = 60_000; // Cache vCPU for 60s — avoids K8s subprocess every 5s
+      const now = Date.now();
+      if (now - this.vcpuCachedAt > VCPU_CACHE_TTL_MS) {
+        this.cachedVcpu = await getCurrentVcpu();
+        this.vcpuCachedAt = now;
+      }
       await pushGlobalMetric({
         timestamp: dp.timestamp,
         blockHeight: dp.fields['blockHeight'] ?? 0,
@@ -132,7 +139,7 @@ export class CollectorAgent {
         gasUsedRatio: dp.fields['gasUsedRatio'] ?? 0,
         txPoolPending: dp.fields['txPoolPending'] ?? 0,
         cpuUsage: 0, // TODO: collect from kubectl top or container runtime — not available via RPC
-        currentVcpu,
+        currentVcpu: this.cachedVcpu,
       });
     } catch {
       // Non-fatal: global store bridge failure doesn't stop collection

@@ -17,7 +17,7 @@ import { applyScheduledScaling, buildScheduleProfile } from '@/lib/scheduled-sca
 import { cleanupExpiredAgentMemory } from '@/lib/agent-memory';
 import { getStore } from '@/lib/redis-store';
 import { createLogger } from '@/lib/logger';
-import { getAgentOrchestrator } from '@/core/agent-orchestrator';
+import { getAgentOrchestrator, isAgentV2Enabled } from '@/core/agent-orchestrator';
 
 const logger = createLogger('Scheduler');
 
@@ -485,7 +485,7 @@ export async function initializeScheduler(): Promise<void> {
       );
     }
 
-    const agentV2Active = process.env.AGENT_V2 === 'true';
+    const agentV2Active = isAgentV2Enabled();
 
     if (!agentV2Active) {
       agentTask = cron.schedule('*/60 * * * * *', async () => {
@@ -609,7 +609,7 @@ export async function initializeScheduler(): Promise<void> {
   }, { timezone: 'Asia/Seoul' });
 
   // AgentOrchestrator v2 (AGENT_V2=true 시 활성화)
-  if (process.env.AGENT_V2 === 'true' && isAgentLoopEnabled()) {
+  if (isAgentV2Enabled() && isAgentLoopEnabled()) {
     const orchestrator = getAgentOrchestrator();
     const instancesEnv = process.env.SENTINAI_INSTANCES;
     if (instancesEnv) {
@@ -644,7 +644,7 @@ export async function initializeScheduler(): Promise<void> {
  */
 export function stopScheduler(): void {
   // Stop AgentOrchestrator v2 if running
-  if (process.env.AGENT_V2 === 'true') {
+  if (isAgentV2Enabled()) {
     try {
       getAgentOrchestrator().stopAll();
     } catch {

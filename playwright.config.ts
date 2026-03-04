@@ -24,6 +24,6 @@ export default defineConfig({
     },
     port: PORT,
     timeout: 300_000,
-    reuseExistingServer: false,
+    reuseExistingServer: !!(process.env.PW_REUSE_SERVER) || false,
   },
 });

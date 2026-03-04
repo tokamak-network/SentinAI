@@ -194,6 +194,33 @@ export class AgentOrchestrator {
   }
 
   /**
+   * Get statuses for a specific instance (O(1) lookup vs O(n) scan).
+   */
+  getInstanceStatuses(instanceId: string): AgentStatus[] {
+    const instance = this.instances.get(instanceId);
+    if (!instance) return [];
+
+    const statuses: AgentStatus[] = [];
+    for (const [role, agent] of instance.agents) {
+      let lastActivityAt: string | null = null;
+      if ('getLastCollectedAt' in agent && typeof agent.getLastCollectedAt === 'function') {
+        lastActivityAt = (agent as CollectorAgent).getLastCollectedAt();
+      } else if ('getLastExecutedAt' in agent && typeof agent.getLastExecutedAt === 'function') {
+        lastActivityAt = (agent as ExecutorAgent).getLastExecutedAt();
+      }
+
+      statuses.push({
+        role,
+        instanceId,
+        running: agent.isRunning(),
+        lastActivityAt,
+      });
+    }
+
+    return statuses;
+  }
+
+  /**
    * Get all running instance IDs.
    */
   getInstanceIds(): string[] {
@@ -206,6 +233,18 @@ export class AgentOrchestrator {
   isInstanceRunning(instanceId: string): boolean {
     return this.instances.has(instanceId);
   }
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+
+/**
+ * Check whether the parallel agent system (AGENT_V2) is enabled.
+ * Single source of truth — use this instead of raw `process.env.AGENT_V2 === 'true'`.
+ */
+export function isAgentV2Enabled(): boolean {
+  return process.env.AGENT_V2 === 'true';
 }
 
 // ============================================================

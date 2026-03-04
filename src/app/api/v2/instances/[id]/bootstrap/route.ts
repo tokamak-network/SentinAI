@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getInstance, updateInstance } from '@/core/instance-registry';
-import { getAgentOrchestrator } from '@/core/agent-orchestrator';
+import { getAgentOrchestrator, isAgentV2Enabled } from '@/core/agent-orchestrator';
 import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
@@ -26,6 +26,18 @@ function checkWriteAuth(request: NextRequest): boolean {
 
 function meta() {
   return { timestamp: new Date().toISOString(), version: 'v2' };
+}
+
+/**
+ * Start agents for an instance if AGENT_V2 is enabled and not already running.
+ */
+function ensureAgentsRunning(instanceId: string, protocolId: string, rpcUrl: string): void {
+  if (!isAgentV2Enabled()) return;
+  const orchestrator = getAgentOrchestrator();
+  if (!orchestrator.isInstanceRunning(instanceId)) {
+    orchestrator.startInstance(instanceId, protocolId, rpcUrl);
+    logger.info(`[v2 bootstrap/${instanceId}] AgentOrchestrator started for instance`);
+  }
 }
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -54,14 +66,7 @@ export async function POST(
 
     // Idempotent: already active is fine
     if (instance.status === 'active') {
-      // Recovery: ensure agents are running even if previous bootstrap partially failed
-      if (process.env.AGENT_V2 === 'true') {
-        const orchestrator = getAgentOrchestrator();
-        if (!orchestrator.isInstanceRunning(id)) {
-          orchestrator.startInstance(id, instance.protocolId, instance.connectionConfig.rpcUrl);
-          logger.info(`[v2 bootstrap/${id}] Recovery — started agents for already-active instance`);
-        }
-      }
+      ensureAgentsRunning(id, instance.protocolId, instance.connectionConfig.rpcUrl);
       return NextResponse.json({
         data: {
           instanceId: id,
@@ -74,15 +79,7 @@ export async function POST(
 
     const bootstrappedAt = new Date().toISOString();
     await updateInstance(id, { status: 'active' });
-
-    // Start agents if AGENT_V2 is enabled
-    if (process.env.AGENT_V2 === 'true') {
-      const orchestrator = getAgentOrchestrator();
-      if (!orchestrator.isInstanceRunning(id)) {
-        orchestrator.startInstance(id, instance.protocolId, instance.connectionConfig.rpcUrl);
-        logger.info(`[v2 bootstrap/${id}] AgentOrchestrator started for instance`);
-      }
-    }
+    ensureAgentsRunning(id, instance.protocolId, instance.connectionConfig.rpcUrl);
 
     logger.info(`[v2 bootstrap/${id}] Status transitioned to 'active'`);
 

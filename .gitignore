@@ -32,6 +32,7 @@ foundryup-zksync
 # Playwright
 playwright-report/
 test-results/
+e2e-artifacts/
 
 # Website (Vercel landing page)
 website/node_modules

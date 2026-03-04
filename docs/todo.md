@@ -1,8 +1,23 @@
 # TODO: SentinAI Implementation
 
-> **Last Updated:** 2026-02-27
+> **Last Updated:** 2026-03-03
 
 ## Current Status
+
+### In Progress (2026-03-03 Parallel Agent Dashboard Upgrade)
+- [x] 구현 계획 문서 작성 (`docs/plans/2026-03-03-parallel-agent-dashboard-plan.md`)
+- [x] 병렬 에이전트 KPI 계산 유틸 테스트 추가 (`src/lib/__tests__/agent-fleet.test.ts`)
+- [x] 병렬 에이전트 KPI 계산 유틸 구현 (`src/lib/agent-fleet.ts`)
+- [x] 병렬 에이전트 관제 API 추가 (`src/app/api/agent-fleet/route.ts`)
+- [x] Dashboard Agent Fleet + Parallel KPI 패널 추가 (`src/app/page.tsx`)
+- [x] 검증 실행 (`npm run lint -- src/app/page.tsx src/app/api/agent-fleet/route.ts src/lib/agent-fleet.ts src/lib/__tests__/agent-fleet.test.ts`, `npm run test:run -- src/lib/__tests__/agent-fleet.test.ts`, `npx tsc --noEmit`)
+
+### In Progress (2026-03-04 Next Sprint Top-5 Immediate Execution)
+- [x] `GET /api/agent-fleet` route 테스트 추가 (`src/app/api/agent-fleet/route.test.ts`)
+- [x] Core runtime smoke 스크립트 추가 (`scripts/smoke-runtime-core.sh`, `package.json`)
+- [x] `verify-e2e` Phase 1에 `health + agent-loop + goal-manager + agent-fleet` 검증 확장 (`scripts/verify-e2e.sh`)
+- [x] `src/app/page.tsx` 기존 lint 경고 2건 제거 (`react-hooks/exhaustive-deps`, `no-unused-vars`)
+- [x] 검증 실행 (`npm run lint -- src/app/page.tsx src/app/api/agent-fleet/route.ts src/app/api/agent-fleet/route.test.ts src/lib/agent-fleet.ts src/lib/__tests__/agent-fleet.test.ts`, `npm run test:run -- src/app/api/agent-fleet/route.test.ts src/lib/__tests__/agent-fleet.test.ts`, `npx tsc --noEmit`, `bash -n scripts/verify-e2e.sh scripts/smoke-runtime-core.sh`)
 
 ### Planned (2026-02-26 Verifiable Accountability Framework)
 - [ ] 검증 가능한 책임 체계 통합 계획 문서화 (`docs/todo/proposal-29-verifiable-accountability-framework.md`)
@@ -764,6 +779,24 @@ Full codebase analysis: 56,224 LOC TypeScript, 67 lib modules, 33 API routes, 94
 
 ---
 
+## Detailed Review (2026-03-03 Parallel Agent Dashboard Upgrade)
+
+- 병렬 에이전트 관제 1차로 `agent-fleet` 집계 유틸을 분리해 요약/성공률/처리량/P95/critical-path를 순수 함수로 계산하도록 고정했다.
+- 대시보드 데이터 경로는 `/api/agent-fleet` 단일 endpoint로 추가해 오케스트레이터 상태와 최근 cycle 이력을 한 번에 제공하도록 구성했다.
+- 메인 대시보드(`src/app/page.tsx`)에 `Parallel Agent Fleet` 패널을 추가해 Fleet 규모/정체(stale)/핵심 KPI/role별 헬스를 즉시 확인할 수 있게 했다.
+- 검증 결과 `test`/`tsc`는 통과했고, `lint`는 기존 `src/app/page.tsx`의 사전 존재 경고 2건(`react-hooks/exhaustive-deps`, `unused var`)만 유지됐다.
+
+---
+
+## Detailed Review (2026-03-04 Next Sprint Top-5 Immediate Execution)
+
+- `GET /api/agent-fleet` route에 성공/실패 경로 테스트를 추가해 집계 API 회귀를 빠르게 검출할 수 있게 했다.
+- 런타임 코어 스모크를 `health + agent-loop + goal-manager + agent-fleet`로 확장하고, 단독 실행 스크립트(`smoke:runtime:core`)를 추가했다.
+- 기존 `src/app/page.tsx` 경고 2건을 제거해 변경 파일 기준 lint 무경고 상태를 복구했다.
+- 검증은 lint/test/typecheck + shell syntax check까지 완료했다.
+
+---
+
 ## Detailed Review (2026-02-25 Algorithm Effectiveness Evaluation)
 
 - Conducted full algorithm audit (23 algorithms across 5 subsystems) from 20-year L1/L2 DevOps perspective, scoring overall 7.4/10.
@@ -773,4 +806,4 @@ Full codebase analysis: 56,224 LOC TypeScript, 67 lib modules, 33 API routes, 94
 
 ---
 
-**Updated:** 2026-02-25
+**Updated:** 2026-03-03
