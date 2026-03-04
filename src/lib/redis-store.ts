@@ -41,7 +41,7 @@ import {
 } from '@/types/goal-orchestrator';
 import { GoalLearningEpisode } from '@/types/goal-learning';
 import { RCAHistoryEntry } from '@/types/rca';
-import { ExperienceEntry } from '@/types/experience';
+import type { ExperienceEntry, LifetimeStats } from '@/types/experience';
 import logger from '@/lib/logger';
 
 // ============================================================
@@ -84,6 +84,7 @@ const RCA_HISTORY_TTL = 7 * 24 * 60 * 60; // 7 days
 // Experience Store Constants
 const EXPERIENCE_MAX = 5000;
 const EXPERIENCE_TTL = 90 * 24 * 60 * 60; // 90 days
+const LIFETIME_CATEGORY_PREFIX = 'cat:';
 
 // Redis key names (appended to keyPrefix)
 const KEYS = {
@@ -134,6 +135,7 @@ const KEYS = {
   rcaHistory: 'rca:history',
   // Experience Store
   experienceLog: 'experience:log',
+  experienceLifetime: (instanceId: string) => `experience:lifetime:${instanceId}`,
 } as const;
 
 // ============================================================
@@ -1316,6 +1318,45 @@ export class RedisStateStore implements IStateStore {
     return this.client.llen(key);
   }
 
+  async incrementLifetimeStats(instanceId: string, entry: ExperienceEntry): Promise<void> {
+    const key = this.key(KEYS.experienceLifetime(instanceId));
+    const outcomeField = `${entry.outcome}Count`;
+    const categoryField = `${LIFETIME_CATEGORY_PREFIX}${entry.category}`;
+    const multi = this.client.multi();
+    multi.hincrby(key, 'totalOps', 1);
+    multi.hincrby(key, outcomeField, 1);
+    multi.hincrby(key, 'totalResolutionMs', Math.round(entry.resolutionMs));
+    multi.hincrby(key, categoryField, 1);
+    multi.hsetnx(key, 'firstSeenAt', entry.timestamp);
+    multi.hset(key, 'lastSeenAt', entry.timestamp);
+    await multi.exec();
+  }
+
+  async getLifetimeStats(instanceId: string): Promise<LifetimeStats | null> {
+    const key = this.key(KEYS.experienceLifetime(instanceId));
+    const data = await this.client.hgetall(key);
+    if (!data || Object.keys(data).length === 0) return null;
+
+    const categories: Record<string, number> = {};
+    for (const [k, v] of Object.entries(data)) {
+      if (k.startsWith(LIFETIME_CATEGORY_PREFIX)) {
+        categories[k.slice(LIFETIME_CATEGORY_PREFIX.length)] = parseInt(v, 10) || 0;
+      }
+    }
+
+    const totalOps = parseInt(data.totalOps, 10) || 0;
+    return {
+      totalOps,
+      successCount: parseInt(data.successCount, 10) || 0,
+      failureCount: parseInt(data.failureCount, 10) || 0,
+      partialCount: parseInt(data.partialCount, 10) || 0,
+      totalResolutionMs: parseInt(data.totalResolutionMs, 10) || 0,
+      firstSeenAt: data.firstSeenAt || '',
+      lastSeenAt: data.lastSeenAt || '',
+      categories,
+    };
+  }
+
   // --- Connection Management ---
 
   isConnected(): boolean {
@@ -2076,6 +2117,7 @@ export class InMemoryStateStore implements IStateStore {
   // === Experience Store ===
 
   private experienceLog: ExperienceEntry[] = [];
+  private lifetimeStatsMap = new Map<string, LifetimeStats>();
 
   async addExperience(entry: ExperienceEntry): Promise<void> {
     this.experienceLog.unshift(entry);
@@ -2094,6 +2136,34 @@ export class InMemoryStateStore implements IStateStore {
 
   async getExperienceCount(): Promise<number> {
     return this.experienceLog.length;
+  }
+
+  async incrementLifetimeStats(instanceId: string, entry: ExperienceEntry): Promise<void> {
+    const existing = this.lifetimeStatsMap.get(instanceId);
+    if (existing) {
+      existing.totalOps += 1;
+      if (entry.outcome === 'success') existing.successCount += 1;
+      else if (entry.outcome === 'failure') existing.failureCount += 1;
+      else existing.partialCount += 1;
+      existing.totalResolutionMs += entry.resolutionMs;
+      existing.lastSeenAt = entry.timestamp;
+      existing.categories[entry.category] = (existing.categories[entry.category] || 0) + 1;
+    } else {
+      this.lifetimeStatsMap.set(instanceId, {
+        totalOps: 1,
+        successCount: entry.outcome === 'success' ? 1 : 0,
+        failureCount: entry.outcome === 'failure' ? 1 : 0,
+        partialCount: entry.outcome === 'partial' ? 1 : 0,
+        totalResolutionMs: entry.resolutionMs,
+        firstSeenAt: entry.timestamp,
+        lastSeenAt: entry.timestamp,
+        categories: { [entry.category]: 1 },
+      });
+    }
+  }
+
+  async getLifetimeStats(instanceId: string): Promise<LifetimeStats | null> {
+    return this.lifetimeStatsMap.get(instanceId) ?? null;
   }
 
   // --- Connection Management ---

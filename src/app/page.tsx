@@ -1112,13 +1112,19 @@ export default function Dashboard() {
         {/* Card 1: Monthly Cost */}
         <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60">
           {(() => {
-            const monthlyCost = current?.cost.opGethMonthlyCost ?? current?.cost.monthlyEstimated ?? 42;
-            const fixedCost = current?.cost.fixedCost ?? 166;
+            const monthlyCostRaw = current?.cost.opGethMonthlyCost ?? current?.cost.monthlyEstimated;
+            const monthlyCost = typeof monthlyCostRaw === 'number' && Number.isFinite(monthlyCostRaw) && monthlyCostRaw >= 0
+              ? monthlyCostRaw
+              : 42;
+            const fixedCostRaw = current?.cost.fixedCost;
+            const fixedCost = typeof fixedCostRaw === 'number' && Number.isFinite(fixedCostRaw) && fixedCostRaw > 0
+              ? fixedCostRaw
+              : 166;
             const vcpu = current?.metrics.gethVcpu ?? 1;
             const memGiB = current?.metrics.gethMemGiB ?? 2;
             const isPeak = current?.cost.isPeakMode ?? false;
             const hourlyRate = monthlyCost / 730;
-            const savingsPct = ((fixedCost - monthlyCost) / fixedCost * 100);
+            const savingsPct = fixedCost > 0 ? ((fixedCost - monthlyCost) / fixedCost * 100) : 0;
             const barPct = Math.min(Math.max((monthlyCost / fixedCost) * 100, 5), 100);
             const scenarioLabel = vcpu >= 8 ? { text: 'Emergency', color: 'text-red-500 bg-red-50' }
               : vcpu >= 4 ? { text: 'High Load',  color: 'text-orange-500 bg-orange-50' }

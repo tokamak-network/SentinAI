@@ -15,6 +15,8 @@ vi.mock('@/lib/redis-store', () => ({
       return experienceLog.filter(e => e.instanceId === instanceId).slice(0, limit);
     },
     getExperienceCount: async () => experienceLog.length,
+    incrementLifetimeStats: async () => {},
+    getLifetimeStats: async () => null,
   }),
 }));
 

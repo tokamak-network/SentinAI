@@ -31,6 +31,9 @@ import { fetchZkstackMetricFields } from './zkstack';
 const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'false';
 const RPC_TIMEOUT_MS = parseInt(process.env.RPC_TIMEOUT_MS || '15000', 10);
 const STATUS_PROBE_TIMEOUT_MS = parseInt(process.env.STATUS_PROBE_TIMEOUT_MS || '5000', 10);
+const HOURS_PER_MONTH = 730;
+const FARGATE_VCPU_HOUR = 0.04656;
+const FARGATE_MEM_GB_HOUR = 0.00511;
 
 // Block interval tracking moved to state store (Redis or InMemory)
 
@@ -68,6 +71,25 @@ interface SettlementProbeStatus {
     postingLagSec: number;
     healthy: boolean;
     componentStatus?: Record<string, string>;
+}
+
+function resolveL2RpcUrl(): string | null {
+    const candidates = [
+        process.env.L2_RPC_URL,
+        process.env.SENTINAI_L2_RPC_URL,
+        process.env.NEXT_PUBLIC_L2_RPC_URL,
+    ];
+
+    for (const candidate of candidates) {
+        const normalized = candidate?.trim();
+        if (normalized) return normalized;
+    }
+    return null;
+}
+
+function calculateMonthlyFargateCost(vcpu: number): number {
+    const memoryGiB = vcpu * 2;
+    return (vcpu * FARGATE_VCPU_HOUR + memoryGiB * FARGATE_MEM_GB_HOUR) * HOURS_PER_MONTH;
 }
 
 function toTitleCase(value: string): string {
@@ -194,14 +216,31 @@ async function fetchSettlementStatus(
 async function getComponentDetails(component: string, labelSelector: string, displayName: string, icon: string, strategy: string = "Static"): Promise<ComponentDetail | null> {
     const namespace = getNamespace();
     try {
-        // 1. Get Pod Info (JSON)
-        const podCmd = `get pods -n ${namespace} -l ${labelSelector} -o json`;
-        const { stdout: podOut } = await runK8sCommand(podCmd);
+        const selectorCandidates = [
+            labelSelector,
+            `app=${component}`,
+            `app.kubernetes.io/name=${labelSelector.replace(/^app=/, '')}`,
+            `app.kubernetes.io/name=${component}`,
+            `app.kubernetes.io/component=${component}`,
+        ].filter((selector, index, arr) => selector && arr.indexOf(selector) === index);
 
-        if (!podOut) return null;
-        const podData = JSON.parse(podOut);
+        let podData: { items?: Array<Record<string, any>> } | null = null;
+        for (const selector of selectorCandidates) {
+            try {
+                const podCmd = `get pods -n ${namespace} -l ${selector} -o json`;
+                const { stdout: podOut } = await runK8sCommand(podCmd);
+                if (!podOut) continue;
+                const parsed = JSON.parse(podOut) as { items?: Array<Record<string, any>> };
+                if (parsed?.items && Array.isArray(parsed.items) && parsed.items.length > 0) {
+                    podData = parsed;
+                    break;
+                }
+            } catch {
+                // Try next selector
+            }
+        }
 
-        if (!podData.items || podData.items.length === 0) {
+        if (!podData?.items || podData.items.length === 0) {
             return {
                 component,
                 name: displayName,
@@ -352,7 +391,7 @@ export async function GET(request: Request) {
         let realL1Block = 0;
         let realL2Block = 0;
         try {
-            const rpcUrl = process.env.L2_RPC_URL;
+            const rpcUrl = resolveL2RpcUrl();
             const l1RpcUrl = getSentinaiL1RpcUrl();
             if (rpcUrl) {
                 const l2Client = createPublicClient({ chain: plugin.l2Chain, transport: http(rpcUrl) });
@@ -529,13 +568,18 @@ export async function GET(request: Request) {
 
         // 2. Metrics (Chain Data)
         const startRpc = performance.now();
-        const rpcUrl = process.env.L2_RPC_URL;
+        const rpcUrl = resolveL2RpcUrl();
         if (!rpcUrl) {
-            // Demo/test-friendly fallback: return a minimal payload instead of hard failing.
-            // This prevents the UI from being stuck on a permanent loading screen.
-            const now = Date.now();
-            const fallbackL1 = 12_500_000 + Math.floor(now / 12_000) % 10_000;
-            const fallbackL2 = 6_200_000 + Math.floor(now / 2_000) % 10_000;
+            // Fallback path without L2 RPC: keep K8s-derived component/cost data instead of zeroing UI.
+            const lastBlock = await getStore().getLastBlock();
+            const fallbackL2 = lastBlock.height ? Number(lastBlock.height) : 0;
+            const fallbackL1 = 0;
+            const primaryComponent = components.find(c => c.component === plugin.primaryExecutionClient);
+            const fallbackVcpu = primaryComponent?.rawCpu && primaryComponent.rawCpu > 0 ? primaryComponent.rawCpu : 1;
+            const fallbackMemGiB = Math.max(fallbackVcpu * 2, 2);
+            const fallbackMonthlyCost = calculateMonthlyFargateCost(fallbackVcpu);
+            const fallbackFixedCost = calculateMonthlyFargateCost(4);
+            const fallbackSaving = fallbackFixedCost - fallbackMonthlyCost;
 
             return NextResponse.json(
                 {
@@ -551,24 +595,24 @@ export async function GET(request: Request) {
                         blockHeight: fallbackL2,
                         txPoolCount: 0,
                         cpuUsage: 0,
-                        memoryUsage: 0,
-                        gethVcpu: 1,
-                        gethMemGiB: 2,
+                        memoryUsage: Math.round(fallbackMemGiB * 1024),
+                        gethVcpu: fallbackVcpu,
+                        gethMemGiB: fallbackMemGiB,
                         syncLag: 0,
                         syncLagReliable: plugin.chainType !== 'zkstack',
                         cpuSource: 'evm_load',
                         source: 'NO_RPC_FALLBACK',
                     },
-                    components: [],
+                    components,
                     cost: {
-                        hourlyRate: 0,
-                        opGethMonthlyCost: 0,
-                        currentSaving: 0,
-                        dynamicMonthlyCost: 0,
-                        maxMonthlySaving: 0,
-                        fixedCost: 0,
-                        monthlyEstimated: 0,
-                        monthlySaving: 0,
+                        hourlyRate: Number((fallbackMonthlyCost / HOURS_PER_MONTH).toFixed(3)),
+                        opGethMonthlyCost: Number(fallbackMonthlyCost.toFixed(2)),
+                        currentSaving: Number(fallbackSaving.toFixed(2)),
+                        dynamicMonthlyCost: Number(calculateMonthlyFargateCost(1.5).toFixed(2)),
+                        maxMonthlySaving: Number((fallbackFixedCost - calculateMonthlyFargateCost(1.5)).toFixed(2)),
+                        fixedCost: Number(fallbackFixedCost.toFixed(2)),
+                        monthlyEstimated: Number(fallbackMonthlyCost.toFixed(2)),
+                        monthlySaving: Number(fallbackSaving.toFixed(2)),
                         isPeakMode: false,
                     },
                     status: 'degraded',
@@ -737,24 +781,18 @@ export async function GET(request: Request) {
         // - Dynamic (1-4 vCPU): $64/month (70% idle, 20% normal, 10% peak)
         // - Saving: ~$300/month
 
-        const FARGATE_VCPU_HOUR = 0.04656;
-        const FARGATE_MEM_GB_HOUR = 0.00511;
-        const HOURS_PER_MONTH = 730;
-
         // Calculate monthly op-geth cost based on current vCPU
-        const memoryGiB = currentVcpu * 2;
-        const opGethMonthlyCost = (currentVcpu * FARGATE_VCPU_HOUR + memoryGiB * FARGATE_MEM_GB_HOUR) * HOURS_PER_MONTH;
+        const opGethMonthlyCost = calculateMonthlyFargateCost(currentVcpu);
 
         // Cost for fixed 4 vCPU (Baseline)
-        const fixedCost = (4 * FARGATE_VCPU_HOUR + 8 * FARGATE_MEM_GB_HOUR) * HOURS_PER_MONTH; // $165.67
+        const fixedCost = calculateMonthlyFargateCost(4);
 
         // Current savings vs 4 vCPU
         const currentSaving = fixedCost - opGethMonthlyCost;
 
         // Dynamic Scaler estimated average cost (70% 1vCPU, 20% 2vCPU, 10% 4vCPU)
         const avgVcpu = 0.7 * 1 + 0.2 * 2 + 0.1 * 4; // 1.5 vCPU Average
-        const avgMemory = avgVcpu * 2;
-        const dynamicMonthlyCost = (avgVcpu * FARGATE_VCPU_HOUR + avgMemory * FARGATE_MEM_GB_HOUR) * HOURS_PER_MONTH;
+        const dynamicMonthlyCost = calculateMonthlyFargateCost(avgVcpu);
         const maxMonthlySaving = fixedCost - dynamicMonthlyCost; // ~$114
 
         const currentHourlyCost = opGethMonthlyCost / HOURS_PER_MONTH;

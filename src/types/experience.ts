@@ -32,6 +32,20 @@ export interface ExperienceStats {
   operatingDays: number;
 }
 
+// === Lifetime Stats (permanent, survives log rotation) ===
+
+/** Per-instance cumulative stats. Incremented atomically on every recordExperience(). */
+export interface LifetimeStats {
+  totalOps: number;
+  successCount: number;
+  failureCount: number;
+  partialCount: number;
+  totalResolutionMs: number;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  categories: Record<string, number>;
+}
+
 // === Domain Category Mapping ===
 
 export type ExperienceCategory = ExperienceEntry['category'];

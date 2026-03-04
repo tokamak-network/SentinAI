@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { computeExperienceStats } from '@/lib/experience-store';
+import { computeExperienceStats, getLifetimeStats, lifetimeToExperienceStats } from '@/lib/experience-store';
 import { extractPatterns } from '@/lib/pattern-extractor';
 import { calculateTier } from '@/lib/agent-resume';
 import { getStore } from '@/lib/redis-store';
@@ -17,9 +17,15 @@ export async function GET(request: Request) {
     const category = url.searchParams.get('category') || undefined;
     const instanceId = url.searchParams.get('instanceId') || undefined;
 
-    // Single store fetch — derive stats, entries, and patterns from this
-    const allEntries = await getStore().getExperience(5000);
-    const stats = computeExperienceStats(allEntries);
+    // Lifetime stats preferred (survives log rotation), fallback to raw computation
+    const store = getStore();
+    const lifetime = instanceId ? await store.getLifetimeStats(instanceId) : null;
+
+    // When lifetime stats exist, only fetch 500 entries (for patterns + display).
+    // Without lifetime stats, fetch full 5000 for raw stats computation.
+    const fetchLimit = lifetime ? 500 : 5000;
+    const allEntries = await store.getExperience(fetchLimit);
+    const stats = lifetime ? lifetimeToExperienceStats(lifetime) : computeExperienceStats(allEntries);
 
     // Slice for display entries
     let displayEntries = instanceId

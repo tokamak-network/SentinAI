@@ -16,7 +16,7 @@
  *   const resume = await generateResume('inst-1', 'opstack');
  */
 
-import { getExperienceByInstance, getExperienceStats } from '@/lib/experience-store';
+import { getExperienceByInstance, getExperienceStats, getLifetimeStats, lifetimeToExperienceStats } from '@/lib/experience-store';
 import { extractPatterns } from '@/lib/pattern-extractor';
 import { DOMAIN_CATEGORY_MAP } from '@/types/experience';
 import type { AgentResume, DomainStats, ExperienceTier } from '@/types/agent-resume';
@@ -43,8 +43,12 @@ export async function generateResume(
   instanceId: string,
   protocolId: string
 ): Promise<AgentResume> {
-  const stats = await getExperienceStats();
-  const entries = await getExperienceByInstance(instanceId, 500);
+  // Lifetime stats preferred — survives log rotation. Fallback to raw log.
+  const [lifetime, entries] = await Promise.all([
+    getLifetimeStats(instanceId),
+    getExperienceByInstance(instanceId, 500),
+  ]);
+  const stats = lifetime ? lifetimeToExperienceStats(lifetime) : await getExperienceStats();
   const { patterns } = extractPatterns(entries);
 
   const topPatterns = patterns.slice(0, 5);
@@ -56,9 +60,8 @@ export async function generateResume(
     instanceId,
     protocolId,
     tier: calculateTier(stats.operatingDays),
-    operatingSince: entries.length > 0
-      ? entries[entries.length - 1].timestamp
-      : new Date().toISOString(),
+    operatingSince: lifetime?.firstSeenAt
+      ?? (entries.length > 0 ? entries[entries.length - 1].timestamp : new Date().toISOString()),
     stats,
     topPatterns,
     specialties,

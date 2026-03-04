@@ -24,7 +24,7 @@ import {
 } from './goal-orchestrator';
 import { GoalLearningEpisode } from './goal-learning';
 import { RCAHistoryEntry } from './rca';
-import { ExperienceEntry } from './experience';
+import { ExperienceEntry, LifetimeStats } from './experience';
 
 // ============================================================
 // Store Interface
@@ -195,6 +195,11 @@ export interface IStateStore {
   getExperience(limit?: number, offset?: number): Promise<ExperienceEntry[]>;
   getExperienceByInstance(instanceId: string, limit?: number): Promise<ExperienceEntry[]>;
   getExperienceCount(): Promise<number>;
+
+  // === Lifetime Experience Stats ===
+  // Permanent per-instance cumulative stats (no TTL, no max)
+  incrementLifetimeStats(instanceId: string, entry: ExperienceEntry): Promise<void>;
+  getLifetimeStats(instanceId: string): Promise<LifetimeStats | null>;
 }
 
 // ============================================================

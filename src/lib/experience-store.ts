@@ -24,7 +24,7 @@ import { getStore } from '@/lib/redis-store';
 import { getTraceId } from '@/lib/trace-context';
 import { randomUUID } from 'node:crypto';
 import logger from '@/lib/logger';
-import type { ExperienceEntry, ExperienceStats } from '@/types/experience';
+import type { ExperienceEntry, ExperienceStats, LifetimeStats } from '@/types/experience';
 
 /**
  * Record a new operational experience entry.
@@ -41,7 +41,10 @@ export async function recordExperience(
   };
 
   const store = getStore();
-  await store.addExperience(entry);
+  await Promise.all([
+    store.addExperience(entry),
+    store.incrementLifetimeStats(entry.instanceId, entry),
+  ]);
   logger.debug('[ExperienceStore] Recorded', { category: entry.category, instanceId: entry.instanceId });
   return entry;
 }
@@ -111,4 +114,36 @@ export async function getExperienceStats(): Promise<ExperienceStats> {
   const store = getStore();
   const entries = await store.getExperience(5000);
   return computeExperienceStats(entries);
+}
+
+/**
+ * Retrieve permanent lifetime stats for an instance.
+ * Returns null if no experience has been recorded for this instance.
+ */
+export async function getLifetimeStats(instanceId: string): Promise<LifetimeStats | null> {
+  const store = getStore();
+  return store.getLifetimeStats(instanceId);
+}
+
+/**
+ * Convert LifetimeStats to ExperienceStats for backward compatibility.
+ */
+export function lifetimeToExperienceStats(lt: LifetimeStats): ExperienceStats {
+  const topCategories = Object.entries(lt.categories)
+    .map(([category, count]) => ({ category, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const firstMs = new Date(lt.firstSeenAt).getTime();
+  const lastMs = new Date(lt.lastSeenAt).getTime();
+  const operatingDays = Number.isFinite(firstMs) && Number.isFinite(lastMs)
+    ? Math.max(1, Math.ceil((lastMs - firstMs) / (24 * 60 * 60 * 1000)))
+    : 1;
+
+  return {
+    totalOperations: lt.totalOps,
+    successRate: lt.totalOps > 0 ? lt.successCount / lt.totalOps : 0,
+    avgResolutionMs: lt.totalOps > 0 ? lt.totalResolutionMs / lt.totalOps : 0,
+    topCategories,
+    operatingDays,
+  };
 }

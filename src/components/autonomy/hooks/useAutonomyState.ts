@@ -17,7 +17,7 @@ import type {
 } from '../types';
 import { PHASE_STAGE_MAP, SEED_INTENT_MAP } from '../types';
 
-const BASE_PATH = '';
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || '';
 const MAX_HISTORY = 20;
 const POLL_INTERVAL_MS = 5000;
 
