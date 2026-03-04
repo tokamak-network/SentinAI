@@ -20,10 +20,17 @@ const logger = createLogger('AgentEventBus');
 // ============================================================
 
 export type AgentEventType =
+  // Pipeline events
   | 'anomaly-detected'       // DetectorAgent → AnalyzerAgent, ExecutorAgent
   | 'analysis-complete'      // AnalyzerAgent → VerifierAgent, reports
   | 'execution-complete'     // ExecutorAgent → VerifierAgent
-  | 'verification-complete'; // VerifierAgent → logs
+  | 'verification-complete'  // VerifierAgent → logs
+  // Domain agent events
+  | 'scaling-recommendation' // ScalingAgent → dashboards, ExecutorAgent
+  | 'security-alert'         // SecurityAgent → notifications, dashboards
+  | 'reliability-issue'      // ReliabilityAgent → notifications, RCAAgent
+  | 'rca-result'             // RCAAgent → ExecutorAgent, notifications
+  | 'cost-insight';          // CostAgent → dashboards, reports
 
 export interface AgentEvent {
   type: AgentEventType;

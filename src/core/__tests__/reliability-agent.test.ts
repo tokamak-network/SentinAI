@@ -1,0 +1,187 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { ReliabilityAgent } from '@/core/agents/reliability-agent';
+
+// ============================================================
+// Mocks
+// ============================================================
+
+vi.mock('@/lib/l1-rpc-failover', () => ({
+  getActiveL1RpcUrl: vi.fn().mockReturnValue('https://eth.example.com'),
+  healthCheckEndpoint: vi.fn().mockResolvedValue(true),
+  checkProxydBackends: vi.fn().mockResolvedValue(null),
+  getL1FailoverState: vi.fn().mockReturnValue({
+    activeUrl: 'https://eth.example.com',
+    activeIndex: 0,
+    endpoints: [{ url: 'https://eth.example.com', healthy: true, lastSuccess: null, lastFailure: null, consecutiveFailures: 0 }],
+    lastFailoverTime: null,
+    events: [],
+    proxydHealth: [],
+    backendReplacements: [],
+    spareUrls: [],
+  }),
+}));
+
+vi.mock('@/lib/experience-store', () => ({
+  recordExperience: vi.fn().mockResolvedValue({
+    id: 'exp-1', instanceId: 'inst-1', protocolId: 'opstack',
+    timestamp: '2026-03-03T00:00:00.000Z', category: 'reliability-failover',
+    trigger: { type: 'l1-rpc-unhealthy', metric: 'l1_health', value: 1 },
+    action: 'reliability issue', outcome: 'success', resolutionMs: 10, metricsSnapshot: {},
+  }),
+}));
+
+const mockBusEmit = vi.fn();
+vi.mock('@/core/agent-event-bus', () => ({
+  getAgentEventBus: () => ({
+    emit: mockBusEmit,
+    on: vi.fn(),
+    off: vi.fn(),
+  }),
+}));
+
+vi.mock('@/lib/logger', () => ({
+  createLogger: () => ({
+    info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn(),
+  }),
+}));
+
+// ============================================================
+// Tests
+// ============================================================
+
+describe('ReliabilityAgent', () => {
+  let agent: ReliabilityAgent;
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    vi.clearAllMocks();
+
+    const failover = await import('@/lib/l1-rpc-failover');
+    (failover.getActiveL1RpcUrl as ReturnType<typeof vi.fn>).mockReturnValue('https://eth.example.com');
+    (failover.healthCheckEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    (failover.checkProxydBackends as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+    (failover.getL1FailoverState as ReturnType<typeof vi.fn>).mockReturnValue({
+      activeUrl: 'https://eth.example.com',
+      activeIndex: 0,
+      endpoints: [{ url: 'https://eth.example.com', healthy: true, lastSuccess: null, lastFailure: null, consecutiveFailures: 0 }],
+      lastFailoverTime: null, events: [], proxydHealth: [], backendReplacements: [], spareUrls: [],
+    });
+
+    agent = new ReliabilityAgent({ instanceId: 'inst-1', protocolId: 'opstack', intervalMs: 50 });
+  });
+
+  afterEach(() => {
+    agent.stop();
+    vi.useRealTimers();
+  });
+
+  it('should have domain = reliability', () => {
+    expect(agent.domain).toBe('reliability');
+  });
+
+  it('should default interval to 30s', () => {
+    const defaultAgent = new ReliabilityAgent({ instanceId: 'inst-2', protocolId: 'opstack' });
+    expect(defaultAgent.getIntervalMs()).toBe(30_000);
+  });
+
+  it('should not emit when L1 RPC is healthy', async () => {
+    agent.start();
+    await vi.advanceTimersByTimeAsync(55);
+
+    expect(mockBusEmit).not.toHaveBeenCalled();
+  });
+
+  it('should emit reliability-issue when L1 health check fails', async () => {
+    const failover = await import('@/lib/l1-rpc-failover');
+    (failover.healthCheckEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+
+    agent.start();
+    await vi.advanceTimersByTimeAsync(55);
+
+    expect(mockBusEmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'reliability-issue',
+        payload: expect.objectContaining({
+          issues: expect.arrayContaining([
+            expect.objectContaining({ type: 'l1-rpc-unhealthy' }),
+          ]),
+        }),
+      })
+    );
+  });
+
+  it('should detect consecutive failures from failover state', async () => {
+    const failover = await import('@/lib/l1-rpc-failover');
+    (failover.getL1FailoverState as ReturnType<typeof vi.fn>).mockReturnValue({
+      activeUrl: 'https://eth.example.com',
+      activeIndex: 0,
+      endpoints: [{ url: 'https://eth.example.com', healthy: false, lastSuccess: null, lastFailure: null, consecutiveFailures: 5 }],
+      lastFailoverTime: null, events: [], proxydHealth: [], backendReplacements: [], spareUrls: [],
+    });
+
+    agent.start();
+    await vi.advanceTimersByTimeAsync(55);
+
+    expect(mockBusEmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'reliability-issue',
+        payload: expect.objectContaining({
+          issues: expect.arrayContaining([
+            expect.objectContaining({ type: 'l1-consecutive-failures' }),
+          ]),
+        }),
+      })
+    );
+  });
+
+  it('should detect proxyd backend replacement', async () => {
+    const failover = await import('@/lib/l1-rpc-failover');
+    (failover.checkProxydBackends as ReturnType<typeof vi.fn>).mockResolvedValue({
+      backendName: 'main-0',
+      reason: 'rate-limited',
+    });
+
+    agent.start();
+    await vi.advanceTimersByTimeAsync(55);
+
+    expect(mockBusEmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'reliability-issue',
+        payload: expect.objectContaining({
+          issues: expect.arrayContaining([
+            expect.objectContaining({ type: 'proxyd-backend-replaced' }),
+          ]),
+        }),
+      })
+    );
+  });
+
+  it('should survive L1 check failures gracefully', async () => {
+    const failover = await import('@/lib/l1-rpc-failover');
+    (failover.getActiveL1RpcUrl as ReturnType<typeof vi.fn>).mockImplementation(() => {
+      throw new Error('No L1 RPC');
+    });
+
+    agent.start();
+    await vi.advanceTimersByTimeAsync(55);
+
+    expect(agent.isRunning()).toBe(true);
+  });
+
+  it('should record experience when issues detected', async () => {
+    const failover = await import('@/lib/l1-rpc-failover');
+    (failover.healthCheckEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+
+    const { recordExperience } = await import('@/lib/experience-store');
+
+    agent.start();
+    await vi.advanceTimersByTimeAsync(55);
+
+    expect(recordExperience).toHaveBeenCalledWith(
+      expect.objectContaining({
+        category: 'reliability-failover',
+        trigger: expect.objectContaining({ type: 'l1-rpc-unhealthy' }),
+      })
+    );
+  });
+});

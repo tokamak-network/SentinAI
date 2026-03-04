@@ -18,7 +18,9 @@
 
 import { getExperienceByInstance, getExperienceStats } from '@/lib/experience-store';
 import { extractPatterns } from '@/lib/pattern-extractor';
-import type { AgentResume, ExperienceTier } from '@/types/agent-resume';
+import { DOMAIN_CATEGORY_MAP } from '@/types/experience';
+import type { AgentResume, DomainStats, ExperienceTier } from '@/types/agent-resume';
+import type { ExperienceEntry } from '@/types/experience';
 
 /**
  * Determine experience tier based on operating days.
@@ -48,6 +50,8 @@ export async function generateResume(
   const topPatterns = patterns.slice(0, 5);
   const specialties = [...new Set(topPatterns.map(p => p.trigger.metric))];
 
+  const domainStats = computeDomainStats(entries);
+
   return {
     instanceId,
     protocolId,
@@ -58,6 +62,63 @@ export async function generateResume(
     stats,
     topPatterns,
     specialties,
+    domainStats,
     generatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * Compute per-domain statistics from experience entries.
+ * Returns undefined if no domain-specific entries exist.
+ */
+function computeDomainStats(entries: ExperienceEntry[]): DomainStats | undefined {
+  const domainCategoryValues = Object.values(DOMAIN_CATEGORY_MAP);
+
+  const hasDomainEntries = entries.some(e =>
+    (domainCategoryValues as string[]).includes(e.category)
+  );
+
+  if (!hasDomainEntries) return undefined;
+
+  function statsFor(category: string): ExperienceEntry[] {
+    return entries.filter(e => e.category === category);
+  }
+
+  function successRate(domainEntries: ExperienceEntry[]): number {
+    if (domainEntries.length === 0) return 0;
+    return domainEntries.filter(e => e.outcome === 'success').length / domainEntries.length;
+  }
+
+  const scalingEntries = statsFor(DOMAIN_CATEGORY_MAP.scaling);
+  const securityEntries = statsFor(DOMAIN_CATEGORY_MAP.security);
+  const reliabilityEntries = statsFor(DOMAIN_CATEGORY_MAP.reliability);
+  const rcaEntries = statsFor(DOMAIN_CATEGORY_MAP.rca);
+  const costEntries = statsFor(DOMAIN_CATEGORY_MAP.cost);
+
+  return {
+    scaling: {
+      operations: scalingEntries.length,
+      successRate: successRate(scalingEntries),
+    },
+    security: {
+      alertsDetected: securityEntries.length,
+      falsePositiveRate: securityEntries.length > 0
+        ? securityEntries.filter(e => e.outcome === 'failure').length / securityEntries.length
+        : 0,
+    },
+    reliability: {
+      failoversExecuted: reliabilityEntries.length,
+      uptimePercent: reliabilityEntries.length > 0
+        ? successRate(reliabilityEntries) * 100
+        : 100,
+    },
+    rca: {
+      diagnosesRun: rcaEntries.length,
+      accuracyRate: successRate(rcaEntries),
+    },
+    cost: {
+      savingsIdentified: costEntries.length,
+      savingsExecuted: costEntries.filter(e => e.outcome === 'success').length,
+    },
   };
 }

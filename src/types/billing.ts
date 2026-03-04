@@ -6,6 +6,8 @@
  * bridging operational events to revenue for the Agent-for-Hire model.
  */
 
+import type { ExperienceTier } from './agent-resume';
+
 /** Classification of an operation outcome after verification. */
 export type OutcomeType = 'auto-resolved' | 'escalated' | 'false-positive' | 'failed';
 
@@ -26,4 +28,23 @@ export interface BillingEvent {
   operationId: string;
   value: number;
   metadata: Record<string, unknown>;
+}
+
+// === Pricing Engine Types ===
+
+/** Outcome-based bonus for verified agent performance. */
+export interface OutcomeBonus {
+  type: 'auto-resolved' | 'uptime-bonus' | 'cost-savings';
+  amount: number;
+  description: string;
+}
+
+/** Complete pricing calculation result for an agent instance. */
+export interface PricingResult {
+  instanceId: string;
+  tier: ExperienceTier;
+  monthlyRate: number;
+  outcomeBonuses: OutcomeBonus[];
+  totalMonthlyValue: number;
+  calculatedAt: string;
 }

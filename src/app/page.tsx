@@ -9,6 +9,9 @@ import {
 } from 'lucide-react';
 import type { ChatMessage, NLOpsResponse, NLOpsIntent } from '@/types/nlops';
 import type { CostReport } from '@/types/cost';
+import type { ExperienceStats } from '@/types/experience';
+import type { ExperienceTier } from '@/types/agent-resume';
+import { DOMAIN_CATEGORY_MAP } from '@/types/experience';
 import { AutonomyPipeline } from '@/components/autonomy';
 
 // --- Interfaces ---
@@ -261,8 +264,32 @@ interface AgentFleetData {
     p95CycleMs: number;
     criticalPathPhase: string;
   };
-  roles: Record<'collector' | 'detector' | 'analyzer' | 'executor' | 'verifier', AgentFleetRoleSummary>;
+  roles: Record<
+    | 'collector' | 'detector' | 'analyzer' | 'executor' | 'verifier'
+    | 'scaling' | 'security' | 'reliability' | 'rca' | 'cost',
+    AgentFleetRoleSummary
+  >;
   updatedAt: string;
+}
+
+interface ExperienceData {
+  stats: ExperienceStats;
+  entries: Array<{
+    id: string;
+    category: string;
+    action: string;
+    outcome: string;
+    timestamp: string;
+  }>;
+  patterns: Array<{
+    id: string;
+    description: string;
+    occurrences: number;
+    successRate: number;
+    confidence: number;
+  }>;
+  tier: ExperienceTier;
+  total: number;
 }
 
 interface DecisionTraceData {
@@ -353,6 +380,15 @@ function formatRelativeTime(isoString?: string): string {
   return `${diffHour}h ago`;
 }
 
+function tierColor(tier: ExperienceTier): string {
+  switch (tier) {
+    case 'expert': return 'text-purple-600';
+    case 'senior': return 'text-green-600';
+    case 'junior': return 'text-blue-600';
+    case 'trainee': return 'text-gray-500';
+  }
+}
+
 function StatusBadgeIcon({ status }: { status: ChainOperationalStatus }) {
   if (status === 'operational') return <CheckCircle2 size={14} className="text-green-500" />;
   if (status === 'degraded') return <AlertTriangle size={14} className="text-amber-500" />;
@@ -422,6 +458,8 @@ export default function Dashboard() {
   const [costAnalysisData, setCostAnalysisData] = useState<CostReport | null>(null);
   const [costAnalysisLoading, setCostAnalysisLoading] = useState(false);
 
+  // --- Agent Experience State ---
+  const [experience, setExperience] = useState<ExperienceData | null>(null);
 
   // --- Public Status / Showcase Banner State ---
   const [publicStatus, setPublicStatus] = useState<PublicStatus | null>(null);
@@ -717,6 +755,21 @@ export default function Dashboard() {
     };
     fetchAnomalies();
     const interval = setInterval(fetchAnomalies, AGENT_LOOP_REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
+
+  // --- Agent Experience polling (30s) ---
+  useEffect(() => {
+    const fetchExperience = async () => {
+      try {
+        const res = await fetch(`${BASE_PATH}/api/experience?limit=10`, { cache: 'no-store' });
+        if (res.ok) {
+          setExperience(await res.json());
+        }
+      } catch { /* ignore */ }
+    };
+    fetchExperience();
+    const interval = setInterval(fetchExperience, AGENT_LOOP_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
 
@@ -1388,7 +1441,8 @@ export default function Dashboard() {
               </div>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Pipeline</p>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
               {(['collector', 'detector', 'analyzer', 'executor', 'verifier'] as const).map((role) => {
                 const roleData = agentFleet.roles[role];
                 const isRoleStale = roleData.stale > 0;
@@ -1408,11 +1462,111 @@ export default function Dashboard() {
                 );
               })}
             </div>
+            <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Domain Specialists</p>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              {(['scaling', 'security', 'reliability', 'rca', 'cost'] as const).map((role) => {
+                const roleData = agentFleet.roles[role];
+                const isRoleStale = roleData.stale > 0;
+                return (
+                  <div
+                    key={role}
+                    className={`rounded-lg border px-2 py-2 ${
+                      isRoleStale ? 'bg-amber-50 border-amber-200' : 'bg-indigo-50 border-indigo-200'
+                    }`}
+                  >
+                    <p className="text-[10px] text-indigo-500 uppercase font-semibold">{role}</p>
+                    <p className="text-sm font-bold text-gray-900 font-mono">{roleData.running}/{roleData.total}</p>
+                    <p className={`text-[10px] font-semibold ${isRoleStale ? 'text-amber-700' : 'text-gray-400'}`}>
+                      stale {roleData.stale}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
           </>
         ) : (
           <div className="flex items-center justify-center gap-2 py-6 text-gray-400">
             <AlertTriangle size={16} />
             <span className="text-sm">No fleet data available yet</span>
+          </div>
+        )}
+      </div>
+
+      {/* Agent Experience Panel */}
+      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60 mb-6" data-testid="agent-experience-panel">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Zap size={18} className="text-gray-500" />
+            <h3 className="font-bold text-gray-900 text-lg">Agent Experience</h3>
+          </div>
+          <span className="text-[10px] text-gray-400 font-mono">
+            {experience ? `${experience.total} total ops` : 'loading...'}
+          </span>
+        </div>
+
+        {experience && experience.total > 0 ? (
+          <>
+            {/* KPI Summary */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                <p className="text-[10px] text-gray-400 uppercase font-semibold">Total Ops</p>
+                <p className="text-xl font-bold text-gray-900 font-mono mt-1">{experience.total}</p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                <p className="text-[10px] text-gray-400 uppercase font-semibold">Success Rate</p>
+                <p className="text-xl font-bold text-gray-900 font-mono mt-1">{(experience.stats.successRate * 100).toFixed(1)}%</p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                <p className="text-[10px] text-gray-400 uppercase font-semibold">Avg Resolution</p>
+                <p className="text-xl font-bold text-gray-900 font-mono mt-1">{Math.round(experience.stats.avgResolutionMs / 1000)}s</p>
+              </div>
+              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                <p className="text-[10px] text-gray-400 uppercase font-semibold">Tier</p>
+                <p className={`text-xl font-bold font-mono mt-1 capitalize ${tierColor(experience.tier)}`}>{experience.tier}</p>
+              </div>
+            </div>
+
+            {/* Domain Activity */}
+            <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Domain Activity</p>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
+              {(Object.keys(DOMAIN_CATEGORY_MAP) as Array<keyof typeof DOMAIN_CATEGORY_MAP>).map((domain) => {
+                const count = experience.stats.topCategories.find(c => c.category === DOMAIN_CATEGORY_MAP[domain])?.count || 0;
+                return (
+                  <div key={domain} className="bg-indigo-50 rounded-lg border border-indigo-200 px-2 py-2">
+                    <p className="text-[10px] text-indigo-500 uppercase font-semibold">{domain}</p>
+                    <p className="text-sm font-bold text-gray-900 font-mono">{count} ops</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Learned Patterns */}
+            {experience.patterns.length > 0 && (
+              <>
+                <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Learned Patterns</p>
+                <div className="space-y-1.5">
+                  {experience.patterns.map((pattern) => (
+                    <div key={pattern.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs text-gray-700 truncate">{pattern.description}</p>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[10px] text-gray-400 font-mono">{pattern.occurrences}x</span>
+                        <span className="text-[10px] text-green-600 font-mono font-bold">{(pattern.successRate * 100).toFixed(0)}%</span>
+                        <span className="w-8 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                          <span className="block h-full rounded-full bg-blue-500" style={{ width: `${pattern.confidence * 100}%` }} />
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </>
+        ) : (
+          <div className="flex items-center justify-center gap-2 py-6 text-gray-400">
+            <AlertTriangle size={16} />
+            <span className="text-sm">No experience data yet</span>
           </div>
         )}
       </div>

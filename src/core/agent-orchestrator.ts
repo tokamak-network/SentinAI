@@ -19,6 +19,11 @@ import { DetectorAgent } from '@/core/agents/detector-agent';
 import { AnalyzerAgent } from '@/core/agents/analyzer-agent';
 import { ExecutorAgent } from '@/core/agents/executor-agent';
 import { VerifierAgent } from '@/core/agents/verifier-agent';
+import { ScalingAgent } from '@/core/agents/scaling-agent';
+import { SecurityAgent } from '@/core/agents/security-agent';
+import { ReliabilityAgent } from '@/core/agents/reliability-agent';
+import { RCADomainAgent } from '@/core/agents/rca-agent';
+import { CostAgent } from '@/core/agents/cost-agent';
 
 const logger = createLogger('AgentOrchestrator');
 
@@ -26,7 +31,9 @@ const logger = createLogger('AgentOrchestrator');
 // Types
 // ============================================================
 
-export type AgentRole = 'collector' | 'detector' | 'analyzer' | 'executor' | 'verifier';
+export type AgentRole =
+  | 'collector' | 'detector' | 'analyzer' | 'executor' | 'verifier'  // pipeline
+  | 'scaling' | 'security' | 'reliability' | 'rca' | 'cost';         // domain
 
 export interface AgentStatus {
   role: AgentRole;
@@ -104,6 +111,22 @@ export class AgentOrchestrator {
     // Verifier: post-condition check, ledger write
     const verifier = new VerifierAgent({ instanceId });
     agents.set('verifier', verifier);
+
+    // Domain agents — specialized operators running in parallel
+    const scaling = new ScalingAgent({ instanceId, protocolId });
+    agents.set('scaling', scaling);
+
+    const security = new SecurityAgent({ instanceId, protocolId });
+    agents.set('security', security);
+
+    const reliability = new ReliabilityAgent({ instanceId, protocolId });
+    agents.set('reliability', reliability);
+
+    const rca = new RCADomainAgent({ instanceId, protocolId });
+    agents.set('rca', rca);
+
+    const cost = new CostAgent({ instanceId, protocolId });
+    agents.set('cost', cost);
 
     // Start all agents
     for (const [role, agent] of agents) {

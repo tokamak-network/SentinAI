@@ -65,10 +65,11 @@ export async function getExperienceByInstance(instanceId: string, limit: number 
 /**
  * Calculate aggregate statistics across all experience entries.
  */
-export async function getExperienceStats(): Promise<ExperienceStats> {
-  const store = getStore();
-  const entries = await store.getExperience(5000);
-
+/**
+ * Compute aggregate statistics from a pre-fetched array of entries.
+ * Pure function — no I/O.
+ */
+export function computeExperienceStats(entries: ExperienceEntry[]): ExperienceStats {
   if (entries.length === 0) {
     return {
       totalOperations: 0,
@@ -104,4 +105,10 @@ export async function getExperienceStats(): Promise<ExperienceStats> {
     topCategories,
     operatingDays,
   };
+}
+
+export async function getExperienceStats(): Promise<ExperienceStats> {
+  const store = getStore();
+  const entries = await store.getExperience(5000);
+  return computeExperienceStats(entries);
 }

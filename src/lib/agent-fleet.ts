@@ -1,4 +1,6 @@
-export type FleetRole = 'collector' | 'detector' | 'analyzer' | 'executor' | 'verifier';
+import type { AgentRole } from '@/core/agent-orchestrator';
+
+export type FleetRole = AgentRole;
 
 export interface FleetAgentStatus {
   role: FleetRole;
@@ -62,6 +64,11 @@ function makeRoleSummary(): Record<FleetRole, FleetRoleSummary> {
     analyzer: { total: 0, running: 0, stale: 0 },
     executor: { total: 0, running: 0, stale: 0 },
     verifier: { total: 0, running: 0, stale: 0 },
+    scaling: { total: 0, running: 0, stale: 0 },
+    security: { total: 0, running: 0, stale: 0 },
+    reliability: { total: 0, running: 0, stale: 0 },
+    rca: { total: 0, running: 0, stale: 0 },
+    cost: { total: 0, running: 0, stale: 0 },
   };
 }
 

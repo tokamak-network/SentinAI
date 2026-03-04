@@ -12,6 +12,14 @@ import type { OperationalPattern } from './pattern';
 
 export type ExperienceTier = 'trainee' | 'junior' | 'senior' | 'expert';
 
+export interface DomainStats {
+  scaling: { operations: number; successRate: number };
+  security: { alertsDetected: number; falsePositiveRate: number };
+  reliability: { failoversExecuted: number; uptimePercent: number };
+  rca: { diagnosesRun: number; accuracyRate: number };
+  cost: { savingsIdentified: number; savingsExecuted: number };
+}
+
 export interface AgentResume {
   instanceId: string;
   protocolId: string;
@@ -20,5 +28,6 @@ export interface AgentResume {
   stats: ExperienceStats;
   topPatterns: OperationalPattern[];
   specialties: string[];
+  domainStats?: DomainStats;
   generatedAt: string;
 }

@@ -58,6 +58,37 @@ vi.mock('@/core/agents/verifier-agent', () => ({
   })),
 }))
 
+// Domain agent mocks
+const makeDomainAgentMock = (domain: string) => ({
+  instanceId: 'mock',
+  domain,
+  start: vi.fn(),
+  stop: vi.fn(),
+  isRunning: vi.fn().mockReturnValue(true),
+  getTickCount: vi.fn().mockReturnValue(0),
+  getLastTickAt: vi.fn().mockReturnValue(null),
+})
+
+vi.mock('@/core/agents/scaling-agent', () => ({
+  ScalingAgent: vi.fn().mockImplementation(() => makeDomainAgentMock('scaling')),
+}))
+
+vi.mock('@/core/agents/security-agent', () => ({
+  SecurityAgent: vi.fn().mockImplementation(() => makeDomainAgentMock('security')),
+}))
+
+vi.mock('@/core/agents/reliability-agent', () => ({
+  ReliabilityAgent: vi.fn().mockImplementation(() => makeDomainAgentMock('reliability')),
+}))
+
+vi.mock('@/core/agents/rca-agent', () => ({
+  RCADomainAgent: vi.fn().mockImplementation(() => makeDomainAgentMock('rca')),
+}))
+
+vi.mock('@/core/agents/cost-agent', () => ({
+  CostAgent: vi.fn().mockImplementation(() => makeDomainAgentMock('cost')),
+}))
+
 vi.mock('@/lib/logger', () => ({
   default: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
   createLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() }),
