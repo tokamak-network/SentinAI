@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import {
   Activity, Server, Zap,
   CheckCircle2, Shield, Globe, AlertTriangle, XCircle,
@@ -413,6 +413,8 @@ function chainStatusColor(status: ChainOperationalStatus): string {
 
 /** Metrics API polling interval (ms). Adjusted to reduce L1 RPC load (1s → 60s). */
 const METRICS_REFRESH_INTERVAL_MS = 60_000;
+/** Accelerated polling when seed scenario is active */
+const SEED_ACTIVE_REFRESH_INTERVAL_MS = 5_000;
 
 /** Agent Loop status polling interval (ms) */
 const AGENT_LOOP_REFRESH_INTERVAL_MS = 30_000;
@@ -445,6 +447,9 @@ export default function Dashboard() {
   } | null>(null);
   const chatMessagesEndRef = useRef<HTMLDivElement>(null);
 
+  // --- Seed Scenario Polling Acceleration ---
+  const [isSeedActive, setIsSeedActive] = useState(false);
+
   // --- Agent Loop State ---
   const [agentLoop, setAgentLoop] = useState<AgentLoopStatus | null>(null);
   const [agentFleet, setAgentFleet] = useState<AgentFleetData | null>(null);
@@ -464,6 +469,13 @@ export default function Dashboard() {
   // --- Public Status / Showcase Banner State ---
   const [publicStatus, setPublicStatus] = useState<PublicStatus | null>(null);
   const [toastDismissed, setToastDismissed] = useState(true);
+
+  // --- Seed Injection Trigger (forces immediate metrics re-fetch) ---
+  const [seedTrigger, setSeedTrigger] = useState(0);
+  const handleSeedInjected = useCallback(() => {
+    setIsSeedActive(true);
+    setSeedTrigger(Date.now());
+  }, []);
 
   // --- NLOps Chat Handlers ---
 
@@ -629,6 +641,7 @@ export default function Dashboard() {
         const data = await res.json();
 
         setCurrent(data);
+        setIsSeedActive(data.metrics?.source === 'SEED_SCENARIO');
 
         const point = {
           name: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
@@ -685,14 +698,15 @@ export default function Dashboard() {
     };
 
     fetchData();
-    const interval = setInterval(fetchData, METRICS_REFRESH_INTERVAL_MS);
+    const metricsInterval = isSeedActive ? SEED_ACTIVE_REFRESH_INTERVAL_MS : METRICS_REFRESH_INTERVAL_MS;
+    const interval = setInterval(fetchData, metricsInterval);
     return () => {
       clearInterval(interval);
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
       }
     };
-  }, []);
+  }, [isSeedActive, seedTrigger]);
 
   // --- Public Status polling (every 30s) ---
   useEffect(() => {
@@ -721,9 +735,10 @@ export default function Dashboard() {
       }
     };
     fetchAgentLoop();
-    const interval = setInterval(fetchAgentLoop, AGENT_LOOP_REFRESH_INTERVAL_MS);
+    const agentInterval = isSeedActive ? SEED_ACTIVE_REFRESH_INTERVAL_MS : AGENT_LOOP_REFRESH_INTERVAL_MS;
+    const interval = setInterval(fetchAgentLoop, agentInterval);
     return () => clearInterval(interval);
-  }, [showFullHistory]);
+  }, [showFullHistory, isSeedActive]);
 
   // --- Parallel Agent Fleet polling (every 30s) ---
   useEffect(() => {
@@ -754,9 +769,10 @@ export default function Dashboard() {
       } catch { /* ignore */ }
     };
     fetchAnomalies();
-    const interval = setInterval(fetchAnomalies, AGENT_LOOP_REFRESH_INTERVAL_MS);
+    const anomalyInterval = isSeedActive ? SEED_ACTIVE_REFRESH_INTERVAL_MS : AGENT_LOOP_REFRESH_INTERVAL_MS;
+    const interval = setInterval(fetchAnomalies, anomalyInterval);
     return () => clearInterval(interval);
-  }, []);
+  }, [isSeedActive]);
 
   // --- Agent Experience polling (30s) ---
   useEffect(() => {
@@ -1254,7 +1270,7 @@ export default function Dashboard() {
       </div>
 
       {/* Autonomy Pipeline (3D Visualization) */}
-      <AutonomyPipeline />
+      <AutonomyPipeline onSeedInjected={handleSeedInjected} />
 
       {/* Agent Loop Status Panel */}
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60 mb-6" data-testid="agent-loop-panel">

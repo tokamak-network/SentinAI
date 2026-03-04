@@ -34,7 +34,11 @@ function getStageSubtitle(stageId: string, state: PipelineState): string | undef
   }
 }
 
-export function AutonomyPipeline() {
+interface AutonomyPipelineProps {
+  onSeedInjected?: () => void;
+}
+
+export function AutonomyPipeline({ onSeedInjected }: AutonomyPipelineProps) {
   const {
     state,
     goalManager,
@@ -46,7 +50,7 @@ export function AutonomyPipeline() {
     runAction,
     updateAutonomyLevel,
     refreshData,
-  } = useAutonomyState();
+  } = useAutonomyState({ onSeedInjected });
 
   const prefersReducedMotion = useReducedMotion();
   const reducedMotion = prefersReducedMotion ?? false;
