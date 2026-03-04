@@ -224,8 +224,12 @@ async function getK8sToken(): Promise<string | undefined> {
     const tokenData = JSON.parse(stdout);
     const token = tokenData.status.token;
 
-    // Cache for 10 minutes (AWS tokens last 15 min)
-    tokenCache = { token, expiresAt: now + 10 * 60 * 1000 };
+    // Use real expiration from AWS response; fallback to 10 min for legacy tokens
+    const expirationTimestamp = tokenData.status?.expirationTimestamp;
+    const expiresAt = expirationTimestamp
+      ? new Date(expirationTimestamp).getTime()
+      : now + 10 * 60 * 1000;
+    tokenCache = { token, expiresAt };
     return token;
   } catch (e) {
     const message = e instanceof Error ? e.message : 'Unknown error';
@@ -237,6 +241,13 @@ async function getK8sToken(): Promise<string | undefined> {
 // ============================================================
 // kubectl Command Execution
 // ============================================================
+
+/** Strip sensitive credentials from kubectl error messages */
+function sanitizeK8sError(message: string): string {
+  return message
+    .replace(/--token\s+'[^']*'/g, "--token '***'")
+    .replace(/--server\s+'[^']*'/g, "--server '***'");
+}
 
 /**
  * Escape shell argument for safe inclusion in shell string
@@ -296,9 +307,9 @@ export async function runK8sCommand(
     if (options?.stdin) {
       // Safely escape stdin for shell
       const escapedStdin = options.stdin.replace(/'/g, "'\\''");
-      fullCmd = `echo '${escapedStdin}' | ${baseCmd}${argsStr} ${command} 2>/dev/null`;
+      fullCmd = `echo '${escapedStdin}' | ${baseCmd}${argsStr} ${command}`;
     } else {
-      fullCmd = `${baseCmd}${argsStr} ${command} 2>/dev/null`;
+      fullCmd = `${baseCmd}${argsStr} ${command}`;
     }
 
     const result = await execAsync(fullCmd, {
@@ -307,9 +318,12 @@ export async function runK8sCommand(
     logger.info(`kubectl (${Date.now() - startTime}ms): ${command.substring(0, 40)}...`);
     return result;
   } catch (e) {
-    // Only log kubectl failures in production/configured environments
     if (!isDevelopmentEnvironment()) {
       logger.info(`kubectl failed (${Date.now() - startTime}ms): ${command}`);
+    }
+    // SECURITY: Strip token and server URL from error messages before propagation
+    if (e instanceof Error) {
+      e.message = sanitizeK8sError(e.message);
     }
     throw e;
   }
