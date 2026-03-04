@@ -16,13 +16,6 @@ services:
       - NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH:-}
       # Self-hosted first-run onboarding (enabled by default)
       - SENTINAI_AUTO_BOOTSTRAP=${SENTINAI_AUTO_BOOTSTRAP:-true}
-      # Optional endpoint aliases for bootstrap autodetection
-      - L2_RPC_URL=${L2_RPC_URL:-}
-      - SENTINAI_L2_RPC_URL=${SENTINAI_L2_RPC_URL:-}
-      - SENTINAI_L1_RPC_URL=${SENTINAI_L1_RPC_URL:-}
-      - L1_RPC_URL=${L1_RPC_URL:-}
-      - CL_BEACON_URL=${CL_BEACON_URL:-}
-      - SENTINAI_L1_BEACON_URL=${SENTINAI_L1_BEACON_URL:-}
       # Read-only mode (protects public dashboard)
       - NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE=true
     volumes:
