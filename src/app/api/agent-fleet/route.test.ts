@@ -10,6 +10,7 @@ vi.mock('@/core/agent-orchestrator', () => ({
   getAgentOrchestrator: () => ({
     getStatuses: hoisted.getStatusesMock,
   }),
+  isAgentV2Enabled: () => false,
 }));
 
 vi.mock('@/lib/agent-loop', () => ({

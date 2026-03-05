@@ -47,6 +47,7 @@ export class DetectorAgent {
   private readonly protocolId: string;
   private timer: ReturnType<typeof setInterval> | null = null;
   private running = false;
+  private lastActivityAt: string | null = null;
 
   constructor(config: DetectorAgentConfig) {
     this.instanceId = config.instanceId;
@@ -87,6 +88,10 @@ export class DetectorAgent {
     return this.running && this.timer !== null;
   }
 
+  getLastActivityAt(): string | null {
+    return this.lastActivityAt;
+  }
+
   // ============================================================
   // Private
   // ============================================================
@@ -95,6 +100,8 @@ export class DetectorAgent {
     try {
       const result = await this.detect();
       if (!result) return;
+
+      this.lastActivityAt = new Date().toISOString();
 
       if (result.hasAnomaly) {
         logger.info(

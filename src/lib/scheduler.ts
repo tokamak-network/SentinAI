@@ -28,7 +28,7 @@ const DEFAULT_WATCHDOG_RECOVERY_COOLDOWN_SECONDS = 120;
 const WATCHDOG_SCHEDULE = '*/30 * * * * *';
 const ANOMALY_TRIGGER_SCHEDULE = '*/5 * * * * *';
 
-type AgentCycleSource = 'schedule' | 'watchdog-recovery' | 'anomaly-event';
+type AgentCycleSource = 'schedule' | 'watchdog-recovery' | 'anomaly-event' | 'seed';
 type WatchdogRecoveryStatus = 'idle' | 'success' | 'failed';
 
 interface AgentCycleExecutionResult {
@@ -281,7 +281,7 @@ async function evaluateHeartbeatHealth(): Promise<HeartbeatHealthCheck> {
   }
 }
 
-async function executeAgentCycle(source: AgentCycleSource): Promise<AgentCycleExecutionResult> {
+export async function executeAgentCycle(source: AgentCycleSource): Promise<AgentCycleExecutionResult> {
   if (agentTaskRunning) {
     return {
       outcome: 'skipped',
@@ -702,6 +702,7 @@ export function stopScheduler(): void {
 export function getSchedulerStatus(): {
   initialized: boolean;
   agentLoopEnabled: boolean;
+  agentV2Enabled: boolean;
   agentTaskRunning: boolean;
   snapshotTaskRunning: boolean;
   reportTaskRunning: boolean;
@@ -719,6 +720,7 @@ export function getSchedulerStatus(): {
   return {
     initialized,
     agentLoopEnabled: isAgentLoopEnabled(),
+    agentV2Enabled: isAgentV2Enabled(),
     agentTaskRunning,
     snapshotTaskRunning,
     reportTaskRunning,

@@ -11,6 +11,8 @@ import { getChainPlugin } from '@/chains';
 import { getRecentMetrics } from '@/lib/metrics-store';
 import { getEvents } from '@/lib/anomaly-event-store';
 import { getAgentCycleCount, getLastCycleResult } from '@/lib/agent-loop';
+import { isAgentV2Enabled } from '@/core/agent-orchestrator';
+import { getGoalManagerConfig } from '@/lib/goal-manager';
 import type { AnomalyEvent } from '@/types/anomaly';
 import logger from '@/lib/logger';
 
@@ -63,14 +65,18 @@ export interface PublicStatusResponse {
 
 /**
  * Calculate uptime percentage for a given window.
- * Uptime = (window_duration - downtime_with_active_anomaly) / window_duration * 100
+ * Uptime = (window_duration - downtime_with_high_severity_anomaly) / window_duration * 100
+ * Only high/critical severity anomalies count as downtime —
+ * low/medium anomalies don't affect uptime (consistent with resolveStatus).
  */
 function calculateUptime(events: AnomalyEvent[], windowStartMs: number, windowEndMs: number): number {
   const windowDuration = windowEndMs - windowStartMs;
   if (windowDuration <= 0) return 100;
 
-  // Find events that overlap with the window
+  // Only count high/critical severity anomalies as downtime
   const overlapping = events.filter(event => {
+    const severity = event.deepAnalysis?.severity;
+    if (severity !== 'high' && severity !== 'critical') return false;
     const eventEnd = event.resolvedAt ?? windowEndMs;
     return event.timestamp < windowEndMs && eventEnd > windowStartMs;
   });
@@ -101,7 +107,9 @@ function calculateUptime(events: AnomalyEvent[], windowStartMs: number, windowEn
 }
 
 /**
- * Determine operational status from active anomaly events
+ * Determine operational status from active anomaly events.
+ * Only high/critical severity anomalies affect public status —
+ * low/medium anomalies are tracked internally but don't degrade the public status.
  */
 function resolveStatus(
   events: AnomalyEvent[],
@@ -112,12 +120,18 @@ function resolveStatus(
   const activeEvents = events.filter(e => e.status === 'active');
   if (activeEvents.length === 0) return 'operational';
 
-  // Check if any active event has critical-level analysis
   const hasCritical = activeEvents.some(e =>
     e.deepAnalysis?.severity === 'critical'
   );
+  if (hasCritical) return 'major_outage';
 
-  return hasCritical ? 'major_outage' : 'degraded';
+  const hasHigh = activeEvents.some(e =>
+    e.deepAnalysis?.severity === 'high'
+  );
+  if (hasHigh) return 'degraded';
+
+  // low/medium severity anomalies — network is functionally operational
+  return 'operational';
 }
 
 /**
@@ -192,9 +206,11 @@ export async function GET(): Promise<NextResponse<PublicStatusResponse | { error
       .slice(0, 5)
       .map(buildIncidentSummary);
 
-    // Agent loop info
-    const agentRunning = lastCycle !== null &&
-      (now - new Date(lastCycle.timestamp).getTime()) < 120_000; // running if last cycle < 2 min ago
+    // Agent loop info — Agent V2 uses Goal Manager instead of cron-based agent loop
+    const agentV2 = isAgentV2Enabled();
+    const agentRunning = agentV2
+      ? getGoalManagerConfig().enabled
+      : (lastCycle !== null && (now - new Date(lastCycle.timestamp).getTime()) < 120_000);
 
     const response: PublicStatusResponse = {
       chain: {

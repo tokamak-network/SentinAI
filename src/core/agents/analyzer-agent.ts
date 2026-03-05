@@ -45,6 +45,7 @@ export class AnalyzerAgent {
 
   private running = false;
   private analysisCount = 0;
+  private lastActivityAt: string | null = null;
   private readonly handler: AgentEventHandler;
 
   constructor(config: AnalyzerAgentConfig) {
@@ -88,6 +89,10 @@ export class AnalyzerAgent {
 
   getAnalysisCount(): number {
     return this.analysisCount;
+  }
+
+  getLastActivityAt(): string | null {
+    return this.lastActivityAt;
   }
 
   // ============================================================
@@ -158,6 +163,7 @@ export class AnalyzerAgent {
 
       const durationMs = Date.now() - startedAt;
       this.analysisCount += 1;
+      this.lastActivityAt = new Date().toISOString();
 
       logger.info(
         `[AnalyzerAgent:${this.instanceId}] Analysis complete — severity=${aiSeverity} (${durationMs}ms)`

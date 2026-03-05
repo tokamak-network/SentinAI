@@ -252,6 +252,7 @@ interface AgentFleetRoleSummary {
 }
 
 interface AgentFleetData {
+  agentV2?: boolean;
   summary: {
     totalAgents: number;
     runningAgents: number;
@@ -453,6 +454,7 @@ export default function Dashboard() {
   // --- Agent Loop State ---
   const [agentLoop, setAgentLoop] = useState<AgentLoopStatus | null>(null);
   const [agentFleet, setAgentFleet] = useState<AgentFleetData | null>(null);
+  const [v2Activities, setV2Activities] = useState<ExperienceData['entries']>([]);
   const [showFullHistory, setShowFullHistory] = useState(false);
   const [selectedDecisionTrace, setSelectedDecisionTrace] = useState<DecisionTraceData | null>(null);
   const [decisionTraceLoading, setDecisionTraceLoading] = useState(false);
@@ -721,8 +723,10 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, []);
 
-  // --- Agent Loop polling (every 60s) ---
+  // --- Agent Loop polling (every 60s) — skipped when Agent V2 is active ---
+  const isAgentV2 = agentFleet?.agentV2 === true;
   useEffect(() => {
+    if (isAgentV2) return; // Agent V2 uses Goal Manager, not agent loop
     const fetchAgentLoop = async () => {
       try {
         const limit = showFullHistory ? 500 : 50;
@@ -738,7 +742,27 @@ export default function Dashboard() {
     const agentInterval = isSeedActive ? SEED_ACTIVE_REFRESH_INTERVAL_MS : AGENT_LOOP_REFRESH_INTERVAL_MS;
     const interval = setInterval(fetchAgentLoop, agentInterval);
     return () => clearInterval(interval);
-  }, [showFullHistory, isSeedActive]);
+  }, [showFullHistory, isSeedActive, isAgentV2]);
+
+  // --- V2 Activity polling (every 30s) — only when Agent V2 is active ---
+  useEffect(() => {
+    if (!isAgentV2) return;
+    const fetchV2Activities = async () => {
+      try {
+        const limit = showFullHistory ? 200 : 50;
+        const res = await fetch(`${BASE_PATH}/api/experience?limit=${limit}`, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json() as ExperienceData;
+          setV2Activities(data.entries ?? []);
+        }
+      } catch {
+        // Silently ignore
+      }
+    };
+    fetchV2Activities();
+    const interval = setInterval(fetchV2Activities, AGENT_LOOP_REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [isAgentV2, showFullHistory]);
 
   // --- Parallel Agent Fleet polling (every 30s) ---
   useEffect(() => {
@@ -1272,8 +1296,8 @@ export default function Dashboard() {
       {/* Autonomy Pipeline (3D Visualization) */}
       <AutonomyPipeline onSeedInjected={handleSeedInjected} />
 
-      {/* Agent Loop Status Panel */}
-      <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60 mb-6" data-testid="agent-loop-panel">
+      {/* Agent Loop Status Panel — hidden when Agent V2 (Parallel Agent Fleet) is active */}
+      {!isAgentV2 && <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60 mb-6" data-testid="agent-loop-panel">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
@@ -1413,7 +1437,7 @@ export default function Dashboard() {
 
           </div>
         )}
-      </div>
+      </div>}
 
       {/* Parallel Agent Fleet Panel */}
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-200/60 mb-6" data-testid="parallel-agent-fleet-panel">
@@ -1597,7 +1621,128 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-4 lg:auto-rows-fr">
 
         {/* Activity Log */}
-        {(() => {
+        {isAgentV2 ? (() => {
+          const v2CategoryColor: Record<string, string> = {
+            'scaling-action': 'text-amber-400',
+            'cost-optimization': 'text-green-400',
+            'rca-diagnosis': 'text-purple-400',
+            'security-alert': 'text-red-400',
+            'reliability-failover': 'text-blue-400',
+            'anomaly-resolution': 'text-cyan-400',
+            'remediation': 'text-fuchsia-400',
+          };
+          const v2CategoryBorder: Record<string, string> = {
+            'scaling-action': 'border-l-2 border-amber-500 pl-2',
+            'security-alert': 'border-l-2 border-red-500 pl-2',
+            'reliability-failover': 'border-l-2 border-blue-500 pl-2',
+            'rca-diagnosis': 'border-l-2 border-purple-500 pl-2',
+          };
+          const v2CategoryLabel: Record<string, string> = {
+            'scaling-action': 'SCALING',
+            'cost-optimization': 'COST',
+            'rca-diagnosis': 'RCA',
+            'security-alert': 'SECURITY',
+            'reliability-failover': 'FAILOVER',
+            'anomaly-resolution': 'ANOMALY',
+            'remediation': 'REMEDIATE',
+          };
+          const v2OutcomeColor: Record<string, string> = {
+            success: 'bg-green-500/15 text-green-400 border-green-500/25',
+            failure: 'bg-red-500/15 text-red-400 border-red-500/25',
+            partial: 'bg-amber-500/15 text-amber-400 border-amber-500/25',
+          };
+          // Category counts for status bar
+          const catCounts = new Map<string, number>();
+          for (const a of v2Activities) {
+            catCounts.set(a.category, (catCounts.get(a.category) ?? 0) + 1);
+          }
+
+          return (
+          <div className="lg:col-span-7 bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col h-[34rem] lg:h-[38rem]">
+            {/* Terminal Header */}
+            <div className="bg-[#25282D] px-6 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <Zap className="text-blue-400" size={22} />
+                <span className="text-gray-200 font-bold text-base tracking-wide">ACTIVITY LOG</span>
+              </div>
+              <div className="flex items-center gap-3">
+                {v2Activities.length > 0 && (
+                  <span className="text-[10px] text-gray-500 font-mono">
+                    {v2Activities.length} entries
+                  </span>
+                )}
+                {v2Activities.length > 50 && (
+                  <button
+                    onClick={() => setShowFullHistory(prev => !prev)}
+                    className={`text-[10px] font-mono px-2 py-0.5 rounded border transition-colors ${
+                      showFullHistory
+                        ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+                        : 'bg-gray-700/30 text-gray-500 border-gray-700 hover:text-gray-400 hover:border-gray-600'
+                    }`}
+                  >
+                    {showFullHistory ? 'Recent' : 'Full History'}
+                  </button>
+                )}
+                <span className="text-xs text-gray-500 font-mono">Agent V2</span>
+              </div>
+            </div>
+
+            <div className="flex-1 bg-[#0D1117] p-6 overflow-y-auto font-mono text-xs custom-scrollbar relative">
+              <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-[#0D1117] to-transparent pointer-events-none z-10"></div>
+              <div className="space-y-1">
+                {v2Activities.length > 0 ? v2Activities.map((entry) => {
+                  const d = new Date(entry.timestamp);
+                  const date = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
+                  const time = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
+                  const color = v2CategoryColor[entry.category] ?? 'text-gray-400';
+                  const borderColor = v2CategoryBorder[entry.category] ?? '';
+                  const label = v2CategoryLabel[entry.category] ?? entry.category.toUpperCase();
+                  const outcomeStyle = v2OutcomeColor[entry.outcome] ?? 'bg-gray-800/40 text-gray-400';
+
+                  return (
+                    <div key={entry.id} className={`flex flex-col gap-2 leading-relaxed ${borderColor}`}>
+                      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5 min-w-0">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-900/40 border border-gray-800 text-gray-500 text-[10px] tabular-nums shrink-0" suppressHydrationWarning>
+                          <span className="text-gray-700">{date}</span> {time}
+                        </span>
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded border border-current/20 bg-black/10 font-bold text-[10px] tracking-wide shrink-0 ${color}`}>{label}</span>
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-bold shrink-0 ${outcomeStyle}`}>{entry.outcome}</span>
+                        <span className="text-gray-400 text-[11px] break-words min-w-0">{entry.action}</span>
+                      </div>
+                    </div>
+                  );
+                }) : (
+                  <div className="flex items-center justify-center gap-3 py-8 text-gray-500">
+                    <Zap size={20} className="text-blue-400/40" />
+                    <div>
+                      <p className="text-blue-400/70 font-semibold text-sm font-sans">Waiting for agent activity...</p>
+                      <p className="text-gray-600 text-xs mt-0.5 font-sans">Domain agents record experience as they operate</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Status Bar */}
+            <div className="bg-[#25282D] px-4 py-2.5 border-t border-gray-800 flex items-center gap-4 shrink-0 text-[10px] font-mono">
+              <div className="flex items-center gap-1.5 font-bold shrink-0 text-blue-400">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                AGENT V2
+              </div>
+              <span className="text-gray-700">|</span>
+              <div className="flex items-center gap-1.5 text-gray-500">
+                <span>{v2Activities.length} entries</span>
+                {[...catCounts.entries()].slice(0, 3).map(([cat, count]) => (
+                  <span key={cat}>
+                    <span className="text-gray-700">·</span>
+                    <span className={v2CategoryColor[cat] ?? 'text-gray-400'}> {v2CategoryLabel[cat] ?? cat} {count}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+          );
+        })() : (() => {
           const cycles = agentLoop?.recentCycles ? [...agentLoop.recentCycles].reverse() : [];
           const hasScalingAction = cycles.some(c => c.scaling?.executed);
 
@@ -1850,7 +1995,15 @@ export default function Dashboard() {
                     );
                   }) : (
                   <div className="flex items-center justify-center gap-3 py-8 text-gray-500">
-                    {agentLoop?.scheduler.agentLoopEnabled ? (
+                    {isAgentV2 ? (
+                      <>
+                        <Zap size={20} className="text-blue-400/40" />
+                        <div>
+                          <p className="text-blue-400/70 font-semibold text-sm font-sans">Agent V2 Active</p>
+                          <p className="text-gray-600 text-xs mt-0.5 font-sans">Parallel Agent Fleet replaces serial agent loop</p>
+                        </div>
+                      </>
+                    ) : agentLoop?.scheduler.agentLoopEnabled ? (
                       <>
                         <RefreshCw size={20} className="text-blue-400/40" />
                         <div>

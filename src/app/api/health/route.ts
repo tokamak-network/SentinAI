@@ -4,6 +4,7 @@ import { getStore } from '@/lib/redis-store';
 import { getSchedulerStatus } from '@/lib/scheduler';
 import logger from '@/lib/logger';
 import { getChainPlugin } from '@/chains';
+import { isAgentV2Enabled } from '@/core/agent-orchestrator';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,7 +66,8 @@ export async function GET() {
     ]);
 
     const heartbeatLagSec = computeLagSeconds(nowMs, heartbeatAt);
-    const stale = scheduler.agentLoopEnabled && (heartbeatLagSec === null || heartbeatLagSec > staleThresholdSec);
+    const agentV2 = isAgentV2Enabled();
+    const stale = !agentV2 && scheduler.agentLoopEnabled && (heartbeatLagSec === null || heartbeatLagSec > staleThresholdSec);
 
     return NextResponse.json({
       status: 'ok',
@@ -73,6 +75,7 @@ export async function GET() {
       ...(chain ? { chain } : {}),
       agentLoop: {
         enabled: scheduler.agentLoopEnabled,
+        agentV2,
         schedulerInitialized: scheduler.initialized,
         heartbeatAt,
         heartbeatLagSec,

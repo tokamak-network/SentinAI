@@ -98,6 +98,7 @@ export class VerifierAgent {
 
   private running = false;
   private verificationCount = 0;
+  private lastActivityAt: string | null = null;
   private readonly handler: AgentEventHandler;
 
   constructor(config: VerifierAgentConfig) {
@@ -139,6 +140,10 @@ export class VerifierAgent {
 
   getVerificationCount(): number {
     return this.verificationCount;
+  }
+
+  getLastActivityAt(): string | null {
+    return this.lastActivityAt;
   }
 
   // ============================================================
@@ -188,6 +193,7 @@ export class VerifierAgent {
 
       await persistOperationRecord(record);
       this.verificationCount += 1;
+      this.lastActivityAt = new Date().toISOString();
 
       logger.info(
         `[VerifierAgent:${this.instanceId}] Verification complete — passed=${passed}`

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { getAgentOrchestrator } from '@/core/agent-orchestrator';
+import { getAgentOrchestrator, isAgentV2Enabled } from '@/core/agent-orchestrator';
 import { getAgentCycleHistory, type AgentCycleResult } from '@/lib/agent-loop';
 import { buildAgentFleetSnapshot } from '@/lib/agent-fleet';
+import { getExperienceStats } from '@/lib/experience-store';
 import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
@@ -12,9 +13,11 @@ export async function GET(request: Request) {
     const limitParam = parseInt(url.searchParams.get('limit') || '120', 10);
     const limit = Math.min(Math.max(10, limitParam), 500);
 
+    const agentV2 = isAgentV2Enabled();
+
     const [statuses, recentCycles] = await Promise.all([
       Promise.resolve(getAgentOrchestrator().getStatuses()),
-      getAgentCycleHistory(limit),
+      agentV2 ? Promise.resolve([]) : getAgentCycleHistory(limit),
     ]);
 
     const cycles = recentCycles.map((cycle: AgentCycleResult) => ({
@@ -29,8 +32,29 @@ export async function GET(request: Request) {
 
     const snapshot = buildAgentFleetSnapshot({ statuses, cycles });
 
+    // In Agent V2 mode, enrich KPIs from experience store
+    if (agentV2) {
+      try {
+        const expStats = await getExperienceStats();
+        if (expStats.totalOperations > 0) {
+          snapshot.kpi.successRate = Number((expStats.successRate * 100).toFixed(2));
+          snapshot.kpi.p95CycleMs = Math.round(expStats.avgResolutionMs);
+          snapshot.kpi.criticalPathPhase = expStats.topCategories[0]?.category ?? 'unknown';
+          // throughput: total ops / operating days → ops per minute
+          if (expStats.operatingDays > 0) {
+            const opsPerDay = expStats.totalOperations / expStats.operatingDays;
+            snapshot.kpi.throughputPerMin = Number((opsPerDay / (24 * 60)).toFixed(2));
+          }
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'unknown';
+        logger.warn(`[API] Agent fleet: experience stats fallback — ${msg}`);
+      }
+    }
+
     return NextResponse.json({
       ...snapshot,
+      agentV2,
       agents: statuses,
       updatedAt: new Date().toISOString(),
     });

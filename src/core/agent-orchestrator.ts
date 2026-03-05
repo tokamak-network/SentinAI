@@ -24,6 +24,7 @@ import { SecurityAgent } from '@/core/agents/security-agent';
 import { ReliabilityAgent } from '@/core/agents/reliability-agent';
 import { RCADomainAgent } from '@/core/agents/rca-agent';
 import { CostAgent } from '@/core/agents/cost-agent';
+import type { DomainAgent } from '@/core/agents/domain-agent';
 
 const logger = createLogger('AgentOrchestrator');
 
@@ -53,6 +54,31 @@ export interface OrchestratorInstance {
   protocolId: string;
   agents: Map<AgentRole, RoleAgent>;
   startedAt: string;
+}
+
+// ============================================================
+// Helpers
+// ============================================================
+
+/**
+ * Extract lastActivityAt from any agent type via duck-typing.
+ * Checks: getLastCollectedAt (Collector), getLastExecutedAt (Executor),
+ *         getLastTickAt (DomainAgent subclasses), getLastActivityAt (generic).
+ */
+function resolveLastActivityAt(agent: RoleAgent): string | null {
+  if ('getLastCollectedAt' in agent && typeof agent.getLastCollectedAt === 'function') {
+    return (agent as CollectorAgent).getLastCollectedAt();
+  }
+  if ('getLastExecutedAt' in agent && typeof agent.getLastExecutedAt === 'function') {
+    return (agent as ExecutorAgent).getLastExecutedAt();
+  }
+  if ('getLastTickAt' in agent && typeof agent.getLastTickAt === 'function') {
+    return (agent as DomainAgent).getLastTickAt();
+  }
+  if ('getLastActivityAt' in agent && typeof agent.getLastActivityAt === 'function') {
+    return (agent as { getLastActivityAt(): string | null }).getLastActivityAt();
+  }
+  return null;
 }
 
 // ============================================================
@@ -196,19 +222,11 @@ export class AgentOrchestrator {
 
     for (const instance of this.instances.values()) {
       for (const [role, agent] of instance.agents) {
-        // Best-effort: get last activity from agents that expose it
-        let lastActivityAt: string | null = null;
-        if ('getLastCollectedAt' in agent && typeof agent.getLastCollectedAt === 'function') {
-          lastActivityAt = (agent as CollectorAgent).getLastCollectedAt();
-        } else if ('getLastExecutedAt' in agent && typeof agent.getLastExecutedAt === 'function') {
-          lastActivityAt = (agent as ExecutorAgent).getLastExecutedAt();
-        }
-
         statuses.push({
           role,
           instanceId: instance.instanceId,
           running: agent.isRunning(),
-          lastActivityAt,
+          lastActivityAt: resolveLastActivityAt(agent),
         });
       }
     }
@@ -225,18 +243,11 @@ export class AgentOrchestrator {
 
     const statuses: AgentStatus[] = [];
     for (const [role, agent] of instance.agents) {
-      let lastActivityAt: string | null = null;
-      if ('getLastCollectedAt' in agent && typeof agent.getLastCollectedAt === 'function') {
-        lastActivityAt = (agent as CollectorAgent).getLastCollectedAt();
-      } else if ('getLastExecutedAt' in agent && typeof agent.getLastExecutedAt === 'function') {
-        lastActivityAt = (agent as ExecutorAgent).getLastExecutedAt();
-      }
-
       statuses.push({
         role,
         instanceId,
         running: agent.isRunning(),
-        lastActivityAt,
+        lastActivityAt: resolveLastActivityAt(agent),
       });
     }
 
