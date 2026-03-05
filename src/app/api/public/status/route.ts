@@ -13,6 +13,8 @@ import { getEvents } from '@/lib/anomaly-event-store';
 import { getAgentCycleCount, getLastCycleResult } from '@/lib/agent-loop';
 import { isAgentV2Enabled } from '@/core/agent-orchestrator';
 import { getGoalManagerConfig } from '@/lib/goal-manager';
+import { getExperienceStats } from '@/lib/experience-store';
+import { getAgentOrchestrator } from '@/core/agent-orchestrator';
 import type { AnomalyEvent } from '@/types/anomaly';
 import logger from '@/lib/logger';
 
@@ -59,6 +61,10 @@ export interface PublicStatusResponse {
     running: boolean;
     totalCycles: number;
     lastCycleAt?: string;
+    /** V2: total domain operations from experience store */
+    totalOps?: number;
+    /** V2: most recent agent activity timestamp */
+    lastActivityAt?: string;
   };
   generatedAt: string;
 }
@@ -212,6 +218,28 @@ export async function GET(): Promise<NextResponse<PublicStatusResponse | { error
       ? getGoalManagerConfig().enabled
       : (lastCycle !== null && (now - new Date(lastCycle.timestamp).getTime()) < 120_000);
 
+    // V2: derive totalOps and lastActivityAt from experience store + agent statuses
+    let totalOps: number | undefined;
+    let lastActivityAt: string | undefined;
+    if (agentV2) {
+      try {
+        const [expStats, statuses] = await Promise.all([
+          getExperienceStats(),
+          Promise.resolve(getAgentOrchestrator().getStatuses()),
+        ]);
+        totalOps = expStats.totalOperations;
+        // Find most recent activity across all agents
+        const activityTimes = statuses
+          .map(s => s.lastActivityAt)
+          .filter((t): t is string => t !== null)
+          .sort()
+          .reverse();
+        lastActivityAt = activityTimes[0];
+      } catch {
+        // Non-critical — fall back to undefined
+      }
+    }
+
     const response: PublicStatusResponse = {
       chain: {
         name: process.env.NEXT_PUBLIC_NETWORK_NAME ?? plugin.displayName,
@@ -236,6 +264,8 @@ export async function GET(): Promise<NextResponse<PublicStatusResponse | { error
         running: agentRunning,
         totalCycles,
         lastCycleAt: lastCycle?.timestamp,
+        totalOps,
+        lastActivityAt,
       },
       generatedAt: new Date(now).toISOString(),
     };

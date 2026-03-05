@@ -330,7 +330,7 @@ interface PublicStatus {
   metrics: { blockHeight: number; lastUpdatedAt: string };
   uptime: { h24: number; d7: number };
   incidents: { active: number; last24h: number };
-  agent: { running: boolean; totalCycles: number; lastCycleAt?: string };
+  agent: { running: boolean; totalCycles: number; lastCycleAt?: string; totalOps?: number; lastActivityAt?: string };
 }
 
 // --- Configuration Constants ---
@@ -875,15 +875,21 @@ export default function Dashboard() {
               </div>
               <div className="text-center">
                 <p className="text-lg font-bold text-indigo-600 leading-none">
-                  {publicStatus ? publicStatus.agent.totalCycles.toLocaleString() : '—'}
+                  {publicStatus
+                    ? (isAgentV2
+                        ? (publicStatus.agent.totalOps ?? 0).toLocaleString()
+                        : publicStatus.agent.totalCycles.toLocaleString())
+                    : '—'}
                 </p>
-                <p className="text-[10px] text-gray-400 mt-0.5">agent cycles</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{isAgentV2 ? 'total ops' : 'agent cycles'}</p>
               </div>
               <div className="text-center">
                 <p className="text-sm font-semibold text-gray-700 leading-none">
-                  {publicStatus ? formatRelativeTime(publicStatus.agent.lastCycleAt) : '—'}
+                  {publicStatus
+                    ? formatRelativeTime(isAgentV2 ? publicStatus.agent.lastActivityAt : publicStatus.agent.lastCycleAt)
+                    : '—'}
                 </p>
-                <p className="text-[10px] text-gray-400 mt-0.5">last cycle</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">{isAgentV2 ? 'last activity' : 'last cycle'}</p>
               </div>
             </div>
           </div>
