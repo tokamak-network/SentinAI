@@ -1,6 +1,6 @@
 # TODO: SentinAI Implementation
 
-> Last Updated: 2026-03-04
+> Last Updated: 2026-03-05
 
 ## Scope Policy (Hot vs Cold)
 
@@ -12,22 +12,13 @@
 ## Active (Max 5)
 
 ### 1) Verifiable Accountability Framework (proposal-29)
-- [ ] Standardize SLO gates in `operation-verifier` and verify APIs.
-- [ ] Persist reason provenance across `agent-loop`, `goal-planner`, and memory flows.
-- [ ] Add failure liability classification (`policy_defect` vs `execution_defect`).
-- [ ] Add dashboard accountability view (24h/7d pass-fail, rollback, liability).
+→ Contract: `docs/contracts/proposal-29-CONTRACT.md`
 
 ### 2) Deployment Readiness and Hardening (proposal-30)
-- [ ] Patch quickstart/setup consistency against runtime behavior.
-- [ ] Extend post-install smoke for `health + agent-loop + goal-manager`.
-- [ ] Add deploy version pin option (`SENTINAI_REF`).
-- [ ] Add preflight checks and rollback automation scripts.
+→ Contract: `docs/contracts/proposal-30-CONTRACT.md`
 
 ### 3) Client Auto-Customization Completion (proposal-31)
-- [ ] Implement instance registration/validation/capability mapping API v2.
-- [ ] Add onboarding wizard for `Connect Your Node` end-to-end flow.
-- [ ] Add dashboard bootstrap auto-connection after registration.
-- [ ] Add onboarding verification scenarios for L1 + L2 combinations.
+→ Contract: `docs/contracts/proposal-31-CONTRACT.md`
 
 ### 4) Runtime Verification Stability
 - [ ] Keep smoke script coverage on `health + agent-loop + goal-manager + agent-fleet`.
@@ -35,14 +26,8 @@
 
 ### 5) Docs Context Hygiene
 - [ ] Keep this file under ~200 lines.
-- [ ] Keep `docs/lessons.md` under ~120 lines of active rules.
+- [ ] Keep `rules/` files focused on reusable rules.
 - [ ] Archive monthly snapshots under `docs/archive/`.
-
-## Review (2026-03-04)
-
-- [x] Introduced hot/cold split for TODO tracking.
-- [x] Archived full historical TODO log to monthly snapshot.
-- [x] Reduced root TODO to active execution checklist.
 
 ## Archive
 
