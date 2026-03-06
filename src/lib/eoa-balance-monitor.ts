@@ -115,9 +115,12 @@ function getEOAAddress(role: EOARole): `0x${string}` | null {
 }
 
 function getTreasuryKey(): `0x${string}` | null {
-  const key = process.env.TREASURY_PRIVATE_KEY;
-  if (!key || !key.startsWith('0x')) return null;
-  return key as `0x${string}`;
+  const key = process.env.TREASURY_PRIVATE_KEY?.trim();
+  if (!key) return null;
+  if (key.startsWith('0x')) return key as `0x${string}`;
+  // Accept raw hex keys without 0x prefix (64 hex chars)
+  if (/^[0-9a-fA-F]{64}$/.test(key)) return `0x${key}`;
+  return null;
 }
 
 function createL1Client(l1RpcUrl: string) {
