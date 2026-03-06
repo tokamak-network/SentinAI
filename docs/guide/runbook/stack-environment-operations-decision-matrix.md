@@ -72,9 +72,9 @@
 
 ## 7. 관련 문서
 
-- `docs/guide/env-based-operations-profile-quick-decider.md`
-- `docs/guide/network-stack-dashboard-feature-differences.md`
-- `docs/guide/multistack-autonomous-ops-validation.md`
+- `docs/guide/runbook/env-based-operations-profile-quick-decider.md`
+- `docs/guide/runbook/network-stack-dashboard-feature-differences.md`
+- `docs/guide/runbook/multistack-autonomous-ops-validation.md`
 - `docs/guide/autonomy-cockpit-user-guide.md`
 - `docs/guide/api-reference.md`
 - `docs/guide/setup.md`

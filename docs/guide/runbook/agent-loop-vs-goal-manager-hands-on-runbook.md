@@ -142,6 +142,6 @@ Fail 조건:
 - `docs/guide/agent-loop-vs-goal-manager-demo-15min.md`
 - `docs/guide/agent-loop-vs-goal-manager-demo-speaker-script.md`
 - `docs/guide/autonomy-cockpit-user-guide.md`
-- `docs/guide/multistack-autonomous-ops-validation.md`
-- `docs/guide/stack-environment-operations-decision-matrix.md`
+- `docs/guide/runbook/multistack-autonomous-ops-validation.md`
+- `docs/guide/runbook/stack-environment-operations-decision-matrix.md`
 - `docs/spec/agent-loop-vs-goal-manager.md`

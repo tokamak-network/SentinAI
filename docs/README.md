@@ -19,16 +19,16 @@
 - [OP Stack example runbook](guide/opstack-example-runbook.md)
 
 ## 2) Operate in Production
-- [Daily operations runbook](guide/agentic-q1-operations-runbook.md)
+- [Daily operations runbook](guide/runbook/agentic-q1-operations-runbook.md)
 - [Autonomy cockpit user guide](guide/autonomy-cockpit-user-guide.md)
-- [Agent Loop vs Goal Manager hands-on runbook](guide/agent-loop-vs-goal-manager-hands-on-runbook.md)
-- [Network stack dashboard/feature differences](guide/network-stack-dashboard-feature-differences.md)
-- [Stack × environment operations decision matrix](guide/stack-environment-operations-decision-matrix.md)
-- [Env-based operations profile quick decider](guide/env-based-operations-profile-quick-decider.md)
+- [Agent Loop vs Goal Manager hands-on runbook](guide/runbook/agent-loop-vs-goal-manager-hands-on-runbook.md)
+- [Network stack dashboard/feature differences](guide/runbook/network-stack-dashboard-feature-differences.md)
+- [Stack × environment operations decision matrix](guide/runbook/stack-environment-operations-decision-matrix.md)
+- [Env-based operations profile quick decider](guide/runbook/env-based-operations-profile-quick-decider.md)
 
 ### Playbooks (by failure type)
-- [Minority client migration](guide/minority-client-migration-playbook.md)
-- [Partner diversity onboarding](guide/partner-diversity-onboarding.md)
+- [Minority client migration](guide/runbook/minority-client-migration-playbook.md)
+- [Partner diversity onboarding](guide/runbook/partner-diversity-onboarding.md)
 - [Redis setup/troubleshooting](guide/redis-setup.md)
 
 ## 3) Integrate & Extend
@@ -48,17 +48,17 @@
 - [Tier comparison: General vs Premium](spec/tier-comparison.md)
 
 ## 4) Evaluate & Verify
-- [**Algorithm effectiveness evaluation (DevOps audit)**](guide/algorithm-effectiveness-evaluation.md)
+- [**Algorithm effectiveness evaluation (DevOps audit)**](guide/testing/algorithm-effectiveness-evaluation.md)
 - [Testing guide](verification/testing-guide.md)
-- [Multi-stack autonomous ops validation](guide/multistack-autonomous-ops-validation.md)
+- [Multi-stack autonomous ops validation](guide/runbook/multistack-autonomous-ops-validation.md)
 - [Integration test report](verification/integration-test-report.md)
 - [Unit test coverage report](verification/unit-test-coverage-report.md)
 - [Daily report verification](verification/daily-report-verification.md)
 - [Dashboard UI testing guide](verification/dashboard-ui-testing-guide.md)
-- [Production load testing guide](guide/production-load-testing-guide.md)
-- [Scaling accuracy testing guide](guide/scaling-accuracy-testing-guide.md)
-- [Model benchmark guide](guide/MODEL_BENCHMARK_GUIDE.md)
-- [LLM stress test env guide](guide/LLM_STRESS_TEST_ENV_GUIDE.md)
+- [Production load testing guide](guide/testing/production-load-testing-guide.md)
+- [Scaling accuracy testing guide](guide/testing/scaling-accuracy-testing-guide.md)
+- [Model benchmark guide](guide/testing/MODEL_BENCHMARK_GUIDE.md)
+- [LLM stress test env guide](guide/testing/LLM_STRESS_TEST_ENV_GUIDE.md)
 - [LLM stress test framework spec](spec/LLM-STRESS-TEST-FRAMEWORK.md)
 
 ## 5) Governance & History
@@ -83,7 +83,7 @@
 3. [Redis setup/troubleshooting](guide/redis-setup.md)
 
 ### I need production operations guidance
-1. [Daily operations runbook](guide/agentic-q1-operations-runbook.md)
+1. [Daily operations runbook](guide/runbook/agentic-q1-operations-runbook.md)
 2. [Playbooks section](#playbooks-by-failure-type)
 
 ### I need API/MCP integration

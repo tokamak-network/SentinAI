@@ -102,8 +102,8 @@ bash scripts/check-ops-profile.sh --env-file=.env.staging --json
 
 ## 7. 관련 문서
 
-- `docs/guide/stack-environment-operations-decision-matrix.md`
-- `docs/guide/network-stack-dashboard-feature-differences.md`
-- `docs/guide/multistack-autonomous-ops-validation.md`
+- `docs/guide/runbook/stack-environment-operations-decision-matrix.md`
+- `docs/guide/runbook/network-stack-dashboard-feature-differences.md`
+- `docs/guide/runbook/multistack-autonomous-ops-validation.md`
 - `docs/guide/autonomy-cockpit-user-guide.md`
 - `docs/guide/setup.md`

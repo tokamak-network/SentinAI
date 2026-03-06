@@ -130,10 +130,10 @@ Autonomy Cockpit의 `Plan/Execute/Verify/Rollback` 및 기존 Demo 버튼은 공
 
 ## 7. 관련 문서
 
-- `docs/guide/env-based-operations-profile-quick-decider.md`
+- `docs/guide/runbook/env-based-operations-profile-quick-decider.md`
 - `docs/guide/autonomy-cockpit-user-guide.md`
-- `docs/guide/multistack-autonomous-ops-validation.md`
-- `docs/guide/stack-environment-operations-decision-matrix.md`
+- `docs/guide/runbook/multistack-autonomous-ops-validation.md`
+- `docs/guide/runbook/stack-environment-operations-decision-matrix.md`
 - `docs/guide/api-reference.md`
 - `docs/guide/architecture.md`
 - `docs/guide/setup.md`
