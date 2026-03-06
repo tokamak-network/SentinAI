@@ -5,8 +5,7 @@
  * verification-complete, remediation-complete and dispatches Slack Block Kit
  * notifications via ALERT_WEBHOOK_URL.
  *
- * This ensures V2 agent pipeline sends alerts independently of the browser
- * dashboard polling (which triggered alerts via V1's detection-pipeline.ts).
+ * Cooldown per event type prevents notification flooding.
  */
 
 import { createLogger } from '@/lib/logger';
@@ -22,6 +21,14 @@ const logger = createLogger('NotifierAgent');
 // ============================================================
 
 const WEBHOOK_TIMEOUT_MS = 5_000;
+
+/** Per-event-type cooldown in milliseconds */
+const COOLDOWN_MS: Record<string, number> = {
+  'cost-insight': 60 * 60 * 1000,          // 1 hour
+  'scaling-recommendation': 60 * 60 * 1000, // 1 hour
+  'verification-complete': 10 * 60 * 1000,  // 10 min
+  'remediation-complete': 10 * 60 * 1000,   // 10 min
+};
 
 // ============================================================
 // Slack Block Kit Helpers
@@ -72,6 +79,9 @@ export class NotifierAgent implements RoleAgent {
   private running = false;
   private notificationCount = 0;
   private lastActivityAt: string | null = null;
+
+  /** Last notification timestamp per event type for cooldown */
+  private lastNotifiedAt = new Map<string, number>();
 
   private readonly costHandler: AgentEventHandler;
   private readonly scalingRecommendationHandler: AgentEventHandler;
@@ -141,6 +151,28 @@ export class NotifierAgent implements RoleAgent {
   }
 
   // ============================================================
+  // Cooldown
+  // ============================================================
+
+  /**
+   * Returns true if the event type is in cooldown (should be suppressed).
+   * Updates the last notified timestamp on first call / after cooldown expires.
+   */
+  private isInCooldown(eventType: string): boolean {
+    const cooldownMs = COOLDOWN_MS[eventType] ?? 10 * 60 * 1000;
+    const lastSent = this.lastNotifiedAt.get(eventType);
+    const now = Date.now();
+
+    if (lastSent && now - lastSent < cooldownMs) {
+      logger.debug(`[NotifierAgent:${this.instanceId}] ${eventType} in cooldown, suppressing`);
+      return true;
+    }
+
+    this.lastNotifiedAt.set(eventType, now);
+    return false;
+  }
+
+  // ============================================================
   // Event handlers
   // ============================================================
 
@@ -153,13 +185,11 @@ export class NotifierAgent implements RoleAgent {
     const totalSavings = (event.payload['totalPotentialSavingsUsd'] as number) ?? 0;
 
     if (!insights || insights.length === 0) return;
+    if (this.isInCooldown('cost-insight')) return;
 
     const blocks = [
       header(':moneybag:', 'SentinAI Cost Insight'),
-      fields(
-        ['Instance', `\`${this.instanceId}\``],
-        ['Time', event.timestamp],
-      ),
+      fields(['Time', event.timestamp]),
       divider(),
       section(`*${insights.length} optimization opportunity(s) — potential savings: $${totalSavings.toFixed(2)}/mo*`),
       section(insights.map(i => `• ${i.detail} _(saves $${i.savingsUsd.toFixed(2)}/mo)_`).join('\n')),
@@ -193,6 +223,7 @@ export class NotifierAgent implements RoleAgent {
     } | undefined;
 
     if (!profile || !execution) return;
+    if (this.isInCooldown('scaling-recommendation')) return;
 
     const emoji = execution.executed ? ':chart_with_upwards_trend:' : ':clipboard:';
     const title = execution.executed ? 'Scaling Schedule Applied' : 'Scaling Schedule Created';
@@ -202,10 +233,7 @@ export class NotifierAgent implements RoleAgent {
 
     const blocks = [
       header(emoji, `SentinAI ${title}`),
-      fields(
-        ['Instance', `\`${this.instanceId}\``],
-        ['Time', event.timestamp],
-      ),
+      fields(['Time', event.timestamp]),
       divider(),
       fields(
         ['Avg vCPU/day', `${profile.avgDailyVcpu}`],
@@ -234,13 +262,11 @@ export class NotifierAgent implements RoleAgent {
 
     // Only notify on failures
     if (!record || !record.executed || record.passed) return;
+    if (this.isInCooldown('verification-complete')) return;
 
     const blocks = [
       header(':warning:', 'SentinAI Verification Failed'),
-      fields(
-        ['Instance', `\`${this.instanceId}\``],
-        ['Time', event.timestamp],
-      ),
+      fields(['Time', event.timestamp]),
       divider(),
       fields(
         ['Expected', `${record.expectedVcpu} vCPU`],
@@ -262,6 +288,7 @@ export class NotifierAgent implements RoleAgent {
     }> | undefined;
 
     if (!results || results.length === 0) return;
+    if (this.isInCooldown('remediation-complete')) return;
 
     const successCount = (event.payload['successCount'] as number) ?? 0;
     const failureCount = (event.payload['failureCount'] as number) ?? 0;
@@ -276,7 +303,6 @@ export class NotifierAgent implements RoleAgent {
     const blocks = [
       header(emoji, `SentinAI ${title}`),
       fields(
-        ['Instance', `\`${this.instanceId}\``],
         ['Trigger', trigger],
         ['Time', event.timestamp],
         ['Results', `${successCount} succeeded, ${failureCount} failed`],

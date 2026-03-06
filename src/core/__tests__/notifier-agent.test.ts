@@ -58,14 +58,14 @@ function emit(type: string, payload: Record<string, unknown>, instanceId = 'inst
 }
 
 /** Parse the fetch body and return { text, blocks } */
-function parseFetchBody(): { text: string; blocks: Array<Record<string, unknown>> } {
-  const [, options] = mockFetch.mock.calls[0];
+function parseFetchBody(callIndex = 0): { text: string; blocks: Array<Record<string, unknown>> } {
+  const [, options] = mockFetch.mock.calls[callIndex];
   return JSON.parse(options.body as string);
 }
 
 /** Stringify all blocks for easy searching */
-function blocksText(): string {
-  return JSON.stringify(parseFetchBody().blocks);
+function blocksText(callIndex = 0): string {
+  return JSON.stringify(parseFetchBody(callIndex).blocks);
 }
 
 // ============================================================
@@ -115,14 +115,13 @@ describe('NotifierAgent', () => {
     expect(url).toBe('https://hooks.slack.com/test');
 
     const body = parseFetchBody();
-    // Fallback text from header
     expect(body.text).toContain('Cost Insight');
-    // Block Kit blocks present
     expect(body.blocks).toBeDefined();
     expect(body.blocks.length).toBeGreaterThanOrEqual(3);
-    // Content in blocks
     expect(blocksText()).toContain('$10.50');
     expect(blocksText()).toContain('Consider downscaling');
+    // Instance field should NOT be present
+    expect(blocksText()).not.toContain('Instance');
     expect(agent.getNotificationCount()).toBe(1);
   });
 
@@ -223,6 +222,34 @@ describe('NotifierAgent', () => {
     expect(body.text).toContain('Remediation Complete');
     expect(blocksText()).toContain('eoa-refill');
     expect(blocksText()).toContain('security-alert');
+  });
+
+  it('should suppress duplicate notifications within cooldown window', async () => {
+    agent.start();
+
+    // First cost-insight → should send
+    emit('cost-insight', {
+      insights: [{ type: 'test', detail: 'first', savingsUsd: 1 }],
+      totalPotentialSavingsUsd: 1,
+    });
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
+
+    // Second cost-insight immediately → should be suppressed (1h cooldown)
+    emit('cost-insight', {
+      insights: [{ type: 'test', detail: 'second', savingsUsd: 2 }],
+      totalPotentialSavingsUsd: 2,
+    });
+    await new Promise(r => setTimeout(r, 50));
+    expect(mockFetch).toHaveBeenCalledTimes(1); // Still only 1 call
+
+    // Different event type → should send (independent cooldown)
+    emit('remediation-complete', {
+      trigger: 'test',
+      results: [{ action: 'test', success: true, detail: 'ok' }],
+      successCount: 1,
+      failureCount: 0,
+    });
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
   });
 
   it('should ignore events from other instances', async () => {
