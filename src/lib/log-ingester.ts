@@ -66,9 +66,12 @@ export async function getLiveLogs(namespace?: string, labelSelector?: string): P
     const ns = namespace || getNamespace();
     try {
         // 1. Find Running Pod Name (filter by phase=Running to skip initializing pods)
-        const { stdout: podName } = await runK8sCommand(
-            `get pods -n ${ns} -l ${label} --field-selector=status.phase=Running -o jsonpath="{.items[0].metadata.name}"`
+        // Use items[*] instead of items[0] to avoid jsonpath error on empty results
+        const { stdout: rawPodName } = await runK8sCommand(
+            `get pods -n ${ns} -l ${label} --field-selector=status.phase=Running -o jsonpath="{.items[*].metadata.name}"`
         );
+        // Take first pod name if multiple are returned (space-separated)
+        const podName = rawPodName?.split(' ')[0] || '';
 
         if (!podName || podName.trim() === '') {
             logger.warn(`No pods found for ${label}`);

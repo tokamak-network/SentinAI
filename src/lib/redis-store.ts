@@ -333,8 +333,12 @@ export class RedisStateStore implements IStateStore {
         enabled: process.env.SCALING_SIMULATION_MODE !== 'false',
       };
     }
+    // Env var SCALING_SIMULATION_MODE=true acts as a hard override:
+    // even if Redis stores enabled=false (from UI/API toggle),
+    // the env var forces simulation on to prevent accidental real scaling.
+    const envForceSimulation = process.env.SCALING_SIMULATION_MODE === 'true';
     return {
-      enabled: data.enabled !== 'false',
+      enabled: envForceSimulation || data.enabled !== 'false',
       mockCurrentVcpu: Number(data.mockCurrentVcpu) || DEFAULT_SIMULATION_CONFIG.mockCurrentVcpu,
     };
   }

@@ -10,6 +10,7 @@ import { resetPredictionState } from '@/lib/predictive-scaler';
 import { initVcpuProfile, clearVcpuProfile, getVcpuValuesForScenario } from '@/lib/seed-vcpu-manager';
 import { getStore } from '@/lib/redis-store';
 import { resetGoalManagerRuntimeState, tickGoalManager } from '@/lib/goal-manager';
+import { executeAgentCycle } from '@/lib/scheduler';
 import { MetricDataPoint } from '@/types/prediction';
 import logger from '@/lib/logger';
 
@@ -261,6 +262,11 @@ export async function POST(request: NextRequest) {
   } catch {
     // Goal Manager errors must not affect seed response
   }
+
+  // Trigger agent cycle immediately so scaling decisions reflect injected data
+  // Fire-and-forget: don't block the seed response (guarded by agentTaskRunning)
+  executeAgentCycle('seed').catch(() => {});
+  logger.info(`[Seed API] Triggered immediate agent cycle for scenario=${scenario}`);
 
   return NextResponse.json({
     success: true,
