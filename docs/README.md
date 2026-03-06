@@ -1,6 +1,6 @@
 # SentinAI Documentation
 
-> Journey-first docs index (aligned to `docs/brand/docs-ia.md`)
+> Journey-first docs index (aligned to `docs/archive/brand/docs-ia.md`)
 
 ## 0) Start Here
 - [What is SentinAI (project overview)](guide/overview.md)
