@@ -1,8 +1,9 @@
 /**
  * Notifier Agent — Sends Slack/Webhook notifications for domain agent events
  *
- * Event-reactive agent: subscribes to cost-insight, verification-complete,
- * remediation-complete and dispatches Slack notifications via ALERT_WEBHOOK_URL.
+ * Event-reactive agent: subscribes to cost-insight, scaling-recommendation,
+ * verification-complete, remediation-complete and dispatches Slack Block Kit
+ * notifications via ALERT_WEBHOOK_URL.
  *
  * This ensures V2 agent pipeline sends alerts independently of the browser
  * dashboard polling (which triggered alerts via V1's detection-pipeline.ts).
@@ -21,6 +22,45 @@ const logger = createLogger('NotifierAgent');
 // ============================================================
 
 const WEBHOOK_TIMEOUT_MS = 5_000;
+
+// ============================================================
+// Slack Block Kit Helpers
+// ============================================================
+
+function header(emoji: string, title: string) {
+  return {
+    type: 'header' as const,
+    text: { type: 'plain_text' as const, text: `${emoji} ${title}`, emoji: true },
+  };
+}
+
+function fields(...pairs: [string, string][]) {
+  return {
+    type: 'section' as const,
+    fields: pairs.map(([label, value]) => ({
+      type: 'mrkdwn' as const,
+      text: `*${label}:*\n${value}`,
+    })),
+  };
+}
+
+function section(text: string) {
+  return {
+    type: 'section' as const,
+    text: { type: 'mrkdwn' as const, text },
+  };
+}
+
+function divider() {
+  return { type: 'divider' as const };
+}
+
+function context(text: string) {
+  return {
+    type: 'context' as const,
+    elements: [{ type: 'mrkdwn' as const, text }],
+  };
+}
 
 // ============================================================
 // NotifierAgent
@@ -114,22 +154,24 @@ export class NotifierAgent implements RoleAgent {
 
     if (!insights || insights.length === 0) return;
 
-    const lines = [
-      ':moneybag: *SentinAI Cost Insight*',
-      `Instance: \`${this.instanceId}\``,
-      `Time: ${event.timestamp}`,
-      '',
-      `*${insights.length} optimization opportunity(s) — potential savings: $${totalSavings.toFixed(2)}/mo*`,
-      '',
-      ...insights.map(i => `- ${i.detail} (saves $${i.savingsUsd.toFixed(2)}/mo)`),
+    const blocks = [
+      header(':moneybag:', 'SentinAI Cost Insight'),
+      fields(
+        ['Instance', `\`${this.instanceId}\``],
+        ['Time', event.timestamp],
+      ),
+      divider(),
+      section(`*${insights.length} optimization opportunity(s) — potential savings: $${totalSavings.toFixed(2)}/mo*`),
+      section(insights.map(i => `• ${i.detail} _(saves $${i.savingsUsd.toFixed(2)}/mo)_`).join('\n')),
+      context('SentinAI Agent V2 • Cost Agent'),
     ];
 
-    await this.sendSlackNotification(lines.join('\n'));
+    await this.sendSlackBlocks(blocks);
   }
 
   private async handleScalingRecommendation(event: AgentEvent): Promise<void> {
     const source = event.payload['source'] as string | undefined;
-    if (source !== 'cost-insight') return; // Only handle schedule recommendations from CostAgent
+    if (source !== 'cost-insight') return;
 
     const profile = event.payload['profile'] as {
       id: string;
@@ -152,23 +194,33 @@ export class NotifierAgent implements RoleAgent {
 
     if (!profile || !execution) return;
 
-    const statusEmoji = execution.executed ? ':chart_with_upwards_trend:' : ':clipboard:';
+    const emoji = execution.executed ? ':chart_with_upwards_trend:' : ':clipboard:';
+    const title = execution.executed ? 'Scaling Schedule Applied' : 'Scaling Schedule Created';
     const statusText = execution.executed
-      ? `Scaling applied: ${execution.previousVcpu} -> ${execution.targetVcpu} vCPU`
-      : `Schedule ready (${execution.skippedReason ?? 'pending'})`;
+      ? `${execution.previousVcpu} → ${execution.targetVcpu} vCPU`
+      : execution.skippedReason ?? 'pending';
 
-    const lines = [
-      `${statusEmoji} *SentinAI Scaling Schedule ${execution.executed ? 'Applied' : 'Created'}*`,
-      `Instance: \`${this.instanceId}\``,
-      `Time: ${event.timestamp}`,
-      '',
-      `*Profile:* avg ${profile.avgDailyVcpu} vCPU/day, coverage ${profile.coveragePct}%`,
-      `*Estimated Savings:* $${profile.estimatedMonthlySavings.toFixed(2)}/mo`,
-      `*Status:* ${statusText}`,
-      ...(recommendation ? [`*Confidence:* ${(recommendation.confidence * 100).toFixed(0)}%`] : []),
+    const blocks = [
+      header(emoji, `SentinAI ${title}`),
+      fields(
+        ['Instance', `\`${this.instanceId}\``],
+        ['Time', event.timestamp],
+      ),
+      divider(),
+      fields(
+        ['Avg vCPU/day', `${profile.avgDailyVcpu}`],
+        ['Coverage', `${profile.coveragePct}%`],
+        ['Est. Savings', `$${profile.estimatedMonthlySavings.toFixed(2)}/mo`],
+        ['Status', statusText],
+      ),
+      ...(recommendation ? [
+        context(`Confidence: ${(recommendation.confidence * 100).toFixed(0)}% • SentinAI Agent V2 • Cost Agent → Scheduled Scaler`),
+      ] : [
+        context('SentinAI Agent V2 • Cost Agent → Scheduled Scaler'),
+      ]),
     ];
 
-    await this.sendSlackNotification(lines.join('\n'));
+    await this.sendSlackBlocks(blocks);
   }
 
   private async handleVerificationComplete(event: AgentEvent): Promise<void> {
@@ -183,17 +235,22 @@ export class NotifierAgent implements RoleAgent {
     // Only notify on failures
     if (!record || !record.executed || record.passed) return;
 
-    const lines = [
-      ':warning: *SentinAI Verification Failed*',
-      `Instance: \`${this.instanceId}\``,
-      `Time: ${event.timestamp}`,
-      '',
-      `*Expected:* ${record.expectedVcpu} vCPU`,
-      `*Observed:* ${record.observedVcpu} vCPU`,
-      `*Detail:* ${record.detail}`,
+    const blocks = [
+      header(':warning:', 'SentinAI Verification Failed'),
+      fields(
+        ['Instance', `\`${this.instanceId}\``],
+        ['Time', event.timestamp],
+      ),
+      divider(),
+      fields(
+        ['Expected', `${record.expectedVcpu} vCPU`],
+        ['Observed', `${record.observedVcpu} vCPU`],
+      ),
+      section(`*Detail:* ${record.detail}`),
+      context('SentinAI Agent V2 • Verifier Agent'),
     ];
 
-    await this.sendSlackNotification(lines.join('\n'));
+    await this.sendSlackBlocks(blocks);
   }
 
   private async handleRemediationComplete(event: AgentEvent): Promise<void> {
@@ -210,36 +267,47 @@ export class NotifierAgent implements RoleAgent {
     const failureCount = (event.payload['failureCount'] as number) ?? 0;
 
     const emoji = failureCount > 0 ? ':rotating_light:' : ':white_check_mark:';
-    const lines = [
-      `${emoji} *SentinAI Remediation ${failureCount > 0 ? 'Alert' : 'Complete'}*`,
-      `Instance: \`${this.instanceId}\``,
-      `Trigger: ${trigger}`,
-      `Time: ${event.timestamp}`,
-      '',
-      `*Results:* ${successCount} succeeded, ${failureCount} failed`,
-      '',
-      ...results.map(r => `${r.success ? ':white_check_mark:' : ':x:'} [${r.action}] ${r.detail}`),
+    const title = failureCount > 0 ? 'Remediation Alert' : 'Remediation Complete';
+
+    const resultLines = results
+      .map(r => `${r.success ? ':white_check_mark:' : ':x:'} \`${r.action}\` ${r.detail}`)
+      .join('\n');
+
+    const blocks = [
+      header(emoji, `SentinAI ${title}`),
+      fields(
+        ['Instance', `\`${this.instanceId}\``],
+        ['Trigger', trigger],
+        ['Time', event.timestamp],
+        ['Results', `${successCount} succeeded, ${failureCount} failed`],
+      ),
+      divider(),
+      section(resultLines),
+      context('SentinAI Agent V2 • Remediation Agent'),
     ];
 
-    await this.sendSlackNotification(lines.join('\n'));
+    await this.sendSlackBlocks(blocks);
   }
 
   // ============================================================
   // Webhook delivery
   // ============================================================
 
-  private async sendSlackNotification(text: string): Promise<void> {
+  private async sendSlackBlocks(blocks: object[]): Promise<void> {
     const webhookUrl = await this.getWebhookUrl();
     if (!webhookUrl) {
       logger.debug(`[NotifierAgent:${this.instanceId}] No webhook URL configured, skipping notification`);
       return;
     }
 
+    // Fallback text for clients that don't support blocks
+    const fallbackText = (blocks[0] as { text?: { text?: string } })?.text?.text ?? 'SentinAI Notification';
+
     try {
       const response = await fetch(webhookUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: fallbackText, blocks }),
         signal: AbortSignal.timeout(WEBHOOK_TIMEOUT_MS),
       });
 

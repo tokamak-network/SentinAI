@@ -57,6 +57,17 @@ function emit(type: string, payload: Record<string, unknown>, instanceId = 'inst
   }
 }
 
+/** Parse the fetch body and return { text, blocks } */
+function parseFetchBody(): { text: string; blocks: Array<Record<string, unknown>> } {
+  const [, options] = mockFetch.mock.calls[0];
+  return JSON.parse(options.body as string);
+}
+
+/** Stringify all blocks for easy searching */
+function blocksText(): string {
+  return JSON.stringify(parseFetchBody().blocks);
+}
+
 // ============================================================
 // Tests
 // ============================================================
@@ -74,9 +85,10 @@ describe('NotifierAgent', () => {
     agent.stop();
   });
 
-  it('should subscribe to 3 event types on start', () => {
+  it('should subscribe to 4 event types on start', () => {
     agent.start();
     expect(handlers['cost-insight']?.length).toBe(1);
+    expect(handlers['scaling-recommendation']?.length).toBe(1);
     expect(handlers['verification-complete']?.length).toBe(1);
     expect(handlers['remediation-complete']?.length).toBe(1);
   });
@@ -85,11 +97,12 @@ describe('NotifierAgent', () => {
     agent.start();
     agent.stop();
     expect(handlers['cost-insight']?.length).toBe(0);
+    expect(handlers['scaling-recommendation']?.length).toBe(0);
     expect(handlers['verification-complete']?.length).toBe(0);
     expect(handlers['remediation-complete']?.length).toBe(0);
   });
 
-  it('should send Slack notification on cost-insight', async () => {
+  it('should send Block Kit notification on cost-insight', async () => {
     agent.start();
     emit('cost-insight', {
       insights: [{ type: 'overprovision', detail: 'Consider downscaling', savingsUsd: 10.5 }],
@@ -98,15 +111,66 @@ describe('NotifierAgent', () => {
 
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
 
-    const [url, options] = mockFetch.mock.calls[0];
+    const [url] = mockFetch.mock.calls[0];
     expect(url).toBe('https://hooks.slack.com/test');
-    const body = JSON.parse(options.body as string);
+
+    const body = parseFetchBody();
+    // Fallback text from header
     expect(body.text).toContain('Cost Insight');
-    expect(body.text).toContain('$10.50');
+    // Block Kit blocks present
+    expect(body.blocks).toBeDefined();
+    expect(body.blocks.length).toBeGreaterThanOrEqual(3);
+    // Content in blocks
+    expect(blocksText()).toContain('$10.50');
+    expect(blocksText()).toContain('Consider downscaling');
     expect(agent.getNotificationCount()).toBe(1);
   });
 
-  it('should send Slack notification on verification failure', async () => {
+  it('should send Block Kit notification on scaling-recommendation', async () => {
+    agent.start();
+    emit('scaling-recommendation', {
+      source: 'cost-insight',
+      type: 'schedule',
+      profile: {
+        id: 'sched-1',
+        avgDailyVcpu: 1.5,
+        estimatedMonthlySavings: 10.29,
+        coveragePct: 85,
+      },
+      execution: {
+        executed: true,
+        previousVcpu: 2,
+        targetVcpu: 1,
+        message: 'Scheduled scaling applied: 2 → 1 vCPU',
+      },
+      recommendation: {
+        title: 'Time-Based Scheduling',
+        savings: 10.29,
+        confidence: 0.85,
+      },
+    });
+
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
+
+    const body = parseFetchBody();
+    expect(body.text).toContain('Applied');
+    expect(blocksText()).toContain('$10.29');
+    expect(blocksText()).toContain('85%');
+    expect(blocksText()).toContain('2 → 1 vCPU');
+  });
+
+  it('should NOT send scaling-recommendation from non-cost sources', async () => {
+    agent.start();
+    emit('scaling-recommendation', {
+      source: 'manual',
+      type: 'schedule',
+    });
+
+    await new Promise(r => setTimeout(r, 50));
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('should send Block Kit notification on verification failure', async () => {
     agent.start();
     emit('verification-complete', {
       operationRecord: {
@@ -120,9 +184,10 @@ describe('NotifierAgent', () => {
 
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
 
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+    const body = parseFetchBody();
     expect(body.text).toContain('Verification Failed');
-    expect(body.text).toContain('Expected');
+    expect(blocksText()).toContain('4 vCPU');
+    expect(blocksText()).toContain('1 vCPU');
   });
 
   it('should NOT notify on verification success', async () => {
@@ -141,7 +206,7 @@ describe('NotifierAgent', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('should send Slack notification on remediation-complete', async () => {
+  it('should send Block Kit notification on remediation-complete', async () => {
     agent.start();
     emit('remediation-complete', {
       trigger: 'security-alert',
@@ -154,9 +219,10 @@ describe('NotifierAgent', () => {
 
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
 
-    const body = JSON.parse(mockFetch.mock.calls[0][1].body as string);
+    const body = parseFetchBody();
     expect(body.text).toContain('Remediation Complete');
-    expect(body.text).toContain('eoa-refill');
+    expect(blocksText()).toContain('eoa-refill');
+    expect(blocksText()).toContain('security-alert');
   });
 
   it('should ignore events from other instances', async () => {
