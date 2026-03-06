@@ -57,13 +57,11 @@ function emit(type: string, payload: Record<string, unknown>, instanceId = 'inst
   }
 }
 
-/** Parse the fetch body and return { text, blocks } */
 function parseFetchBody(callIndex = 0): { text: string; blocks: Array<Record<string, unknown>> } {
   const [, options] = mockFetch.mock.calls[callIndex];
   return JSON.parse(options.body as string);
 }
 
-/** Stringify all blocks for easy searching */
 function blocksText(callIndex = 0): string {
   return JSON.stringify(parseFetchBody(callIndex).blocks);
 }
@@ -85,9 +83,13 @@ describe('NotifierAgent', () => {
     agent.stop();
   });
 
-  it('should subscribe to 4 event types on start', () => {
+  // ----------------------------------------------------------
+  // Subscription management
+  // ----------------------------------------------------------
+
+  it('should subscribe to 3 event types on start (no cost-insight)', () => {
     agent.start();
-    expect(handlers['cost-insight']?.length).toBe(1);
+    expect(handlers['cost-insight']).toBeUndefined();
     expect(handlers['scaling-recommendation']?.length).toBe(1);
     expect(handlers['verification-complete']?.length).toBe(1);
     expect(handlers['remediation-complete']?.length).toBe(1);
@@ -96,36 +98,16 @@ describe('NotifierAgent', () => {
   it('should unsubscribe on stop', () => {
     agent.start();
     agent.stop();
-    expect(handlers['cost-insight']?.length).toBe(0);
     expect(handlers['scaling-recommendation']?.length).toBe(0);
     expect(handlers['verification-complete']?.length).toBe(0);
     expect(handlers['remediation-complete']?.length).toBe(0);
   });
 
-  it('should send Block Kit notification on cost-insight', async () => {
-    agent.start();
-    emit('cost-insight', {
-      insights: [{ type: 'overprovision', detail: 'Consider downscaling', savingsUsd: 10.5 }],
-      totalPotentialSavingsUsd: 10.5,
-    });
+  // ----------------------------------------------------------
+  // Scaling recommendation — only notify on EXECUTED
+  // ----------------------------------------------------------
 
-    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
-
-    const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe('https://hooks.slack.com/test');
-
-    const body = parseFetchBody();
-    expect(body.text).toContain('Cost Insight');
-    expect(body.blocks).toBeDefined();
-    expect(body.blocks.length).toBeGreaterThanOrEqual(3);
-    expect(blocksText()).toContain('$10.50');
-    expect(blocksText()).toContain('Consider downscaling');
-    // Instance field should NOT be present
-    expect(blocksText()).not.toContain('Instance');
-    expect(agent.getNotificationCount()).toBe(1);
-  });
-
-  it('should send Block Kit notification on scaling-recommendation', async () => {
+  it('should notify when scaling schedule is actually executed', async () => {
     agent.start();
     emit('scaling-recommendation', {
       source: 'cost-insight',
@@ -142,34 +124,31 @@ describe('NotifierAgent', () => {
         targetVcpu: 1,
         message: 'Scheduled scaling applied: 2 → 1 vCPU',
       },
-      recommendation: {
-        title: 'Time-Based Scheduling',
-        savings: 10.29,
-        confidence: 0.85,
-      },
     });
 
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
-
-    const body = parseFetchBody();
-    expect(body.text).toContain('Applied');
-    expect(blocksText()).toContain('$10.29');
-    expect(blocksText()).toContain('85%');
     expect(blocksText()).toContain('2 → 1 vCPU');
+    expect(blocksText()).toContain('$10.29');
   });
 
-  it('should NOT send scaling-recommendation from non-cost sources', async () => {
+  it('should NOT notify when scaling schedule is created but not executed', async () => {
     agent.start();
     emit('scaling-recommendation', {
-      source: 'manual',
+      source: 'cost-insight',
       type: 'schedule',
+      profile: { id: 's', avgDailyVcpu: 1.5, estimatedMonthlySavings: 10, coveragePct: 85 },
+      execution: { executed: false, previousVcpu: 2, targetVcpu: 2, message: 'already at target', skippedReason: 'already-at-target' },
     });
 
     await new Promise(r => setTimeout(r, 50));
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('should send Block Kit notification on verification failure', async () => {
+  // ----------------------------------------------------------
+  // Verification — only notify on FAILURE
+  // ----------------------------------------------------------
+
+  it('should notify on verification failure', async () => {
     agent.start();
     emit('verification-complete', {
       operationRecord: {
@@ -182,30 +161,42 @@ describe('NotifierAgent', () => {
     });
 
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
-
-    const body = parseFetchBody();
-    expect(body.text).toContain('Verification Failed');
+    expect(parseFetchBody().text).toContain('Action Required');
     expect(blocksText()).toContain('4 vCPU');
-    expect(blocksText()).toContain('1 vCPU');
   });
 
   it('should NOT notify on verification success', async () => {
     agent.start();
     emit('verification-complete', {
-      operationRecord: {
-        executed: true,
-        passed: true,
-        detail: 'ok',
-        expectedVcpu: 4,
-        observedVcpu: 4,
-      },
+      operationRecord: { executed: true, passed: true, detail: 'ok', expectedVcpu: 4, observedVcpu: 4 },
     });
 
     await new Promise(r => setTimeout(r, 50));
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('should send Block Kit notification on remediation-complete', async () => {
+  // ----------------------------------------------------------
+  // Remediation — only notify on FAILURE
+  // ----------------------------------------------------------
+
+  it('should notify on remediation failure', async () => {
+    agent.start();
+    emit('remediation-complete', {
+      trigger: 'security-alert',
+      results: [
+        { action: 'eoa-refill', success: false, detail: 'insufficient treasury balance' },
+      ],
+      successCount: 0,
+      failureCount: 1,
+    });
+
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    expect(parseFetchBody().text).toContain('Action Required');
+    expect(blocksText()).toContain('eoa-refill');
+    expect(blocksText()).toContain('insufficient treasury');
+  });
+
+  it('should NOT notify on remediation success', async () => {
     agent.start();
     emit('remediation-complete', {
       trigger: 'security-alert',
@@ -216,47 +207,54 @@ describe('NotifierAgent', () => {
       failureCount: 0,
     });
 
-    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
-
-    const body = parseFetchBody();
-    expect(body.text).toContain('Remediation Complete');
-    expect(blocksText()).toContain('eoa-refill');
-    expect(blocksText()).toContain('security-alert');
+    await new Promise(r => setTimeout(r, 50));
+    expect(mockFetch).not.toHaveBeenCalled();
   });
+
+  // ----------------------------------------------------------
+  // Cooldown
+  // ----------------------------------------------------------
 
   it('should suppress duplicate notifications within cooldown window', async () => {
     agent.start();
 
-    // First cost-insight → should send
-    emit('cost-insight', {
-      insights: [{ type: 'test', detail: 'first', savingsUsd: 1 }],
-      totalPotentialSavingsUsd: 1,
+    // First failure → should send
+    emit('remediation-complete', {
+      trigger: 'test',
+      results: [{ action: 'test', success: false, detail: 'fail' }],
+      successCount: 0,
+      failureCount: 1,
     });
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1));
 
-    // Second cost-insight immediately → should be suppressed (1h cooldown)
-    emit('cost-insight', {
-      insights: [{ type: 'test', detail: 'second', savingsUsd: 2 }],
-      totalPotentialSavingsUsd: 2,
-    });
-    await new Promise(r => setTimeout(r, 50));
-    expect(mockFetch).toHaveBeenCalledTimes(1); // Still only 1 call
-
-    // Different event type → should send (independent cooldown)
+    // Second failure immediately → suppressed by cooldown
     emit('remediation-complete', {
       trigger: 'test',
-      results: [{ action: 'test', success: true, detail: 'ok' }],
-      successCount: 1,
-      failureCount: 0,
+      results: [{ action: 'test', success: false, detail: 'fail again' }],
+      successCount: 0,
+      failureCount: 1,
+    });
+    await new Promise(r => setTimeout(r, 50));
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    // Different event type → independent cooldown, should send
+    emit('verification-complete', {
+      operationRecord: { executed: true, passed: false, detail: 'mismatch', expectedVcpu: 4, observedVcpu: 1 },
     });
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2));
   });
 
+  // ----------------------------------------------------------
+  // Instance isolation
+  // ----------------------------------------------------------
+
   it('should ignore events from other instances', async () => {
     agent.start();
-    emit('cost-insight', {
-      insights: [{ type: 'test', detail: 'test', savingsUsd: 1 }],
-      totalPotentialSavingsUsd: 1,
+    emit('remediation-complete', {
+      trigger: 'test',
+      results: [{ action: 'test', success: false, detail: 'fail' }],
+      successCount: 0,
+      failureCount: 1,
     }, 'other-instance');
 
     await new Promise(r => setTimeout(r, 50));

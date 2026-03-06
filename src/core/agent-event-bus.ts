@@ -30,7 +30,7 @@ export type AgentEventType =
   | 'security-alert'         // SecurityAgent → RemediationAgent
   | 'reliability-issue'      // ReliabilityAgent → RemediationAgent
   | 'rca-result'             // RCAAgent → RemediationAgent
-  | 'cost-insight'           // CostAgent → CostAgent (schedule), NotifierAgent
+  | 'cost-insight'           // CostAgent → CostAgent (auto-apply schedule)
   | 'remediation-complete';  // RemediationAgent → NotifierAgent
 
 export interface AgentEvent {

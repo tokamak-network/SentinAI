@@ -1,11 +1,18 @@
 /**
- * Notifier Agent — Sends Slack/Webhook notifications for domain agent events
+ * Notifier Agent — Operator-facing Slack notifications
  *
- * Event-reactive agent: subscribes to cost-insight, scaling-recommendation,
- * verification-complete, remediation-complete and dispatches Slack Block Kit
- * notifications via ALERT_WEBHOOK_URL.
+ * Design principle: agents handle everything autonomously. The operator
+ * only receives notifications when:
+ *   1. An agent action FAILED and needs human attention
+ *   2. A significant state change was EXECUTED (scaling applied)
  *
- * Cooldown per event type prevents notification flooding.
+ * Suppressed (handled silently by agents):
+ *   - Cost insights (agent auto-applies schedule)
+ *   - Successful remediation (refill worked, failover worked)
+ *   - Scaling schedule creation without execution
+ *   - Verification success
+ *
+ * Cooldown per event type prevents duplicate alerts.
  */
 
 import { createLogger } from '@/lib/logger';
@@ -24,7 +31,6 @@ const WEBHOOK_TIMEOUT_MS = 5_000;
 
 /** Per-event-type cooldown in milliseconds */
 const COOLDOWN_MS: Record<string, number> = {
-  'cost-insight': 60 * 60 * 1000,          // 1 hour
   'scaling-recommendation': 60 * 60 * 1000, // 1 hour
   'verification-complete': 10 * 60 * 1000,  // 10 min
   'remediation-complete': 10 * 60 * 1000,   // 10 min
@@ -83,18 +89,12 @@ export class NotifierAgent implements RoleAgent {
   /** Last notification timestamp per event type for cooldown */
   private lastNotifiedAt = new Map<string, number>();
 
-  private readonly costHandler: AgentEventHandler;
   private readonly scalingRecommendationHandler: AgentEventHandler;
   private readonly verificationHandler: AgentEventHandler;
   private readonly remediationHandler: AgentEventHandler;
 
   constructor(config: { instanceId: string }) {
     this.instanceId = config.instanceId;
-
-    this.costHandler = (event: AgentEvent) => {
-      if (event.instanceId !== this.instanceId) return;
-      void this.handleCostInsight(event);
-    };
 
     this.scalingRecommendationHandler = (event: AgentEvent) => {
       if (event.instanceId !== this.instanceId) return;
@@ -120,18 +120,16 @@ export class NotifierAgent implements RoleAgent {
 
     this.running = true;
     const bus = getAgentEventBus();
-    bus.on('cost-insight', this.costHandler);
     bus.on('scaling-recommendation', this.scalingRecommendationHandler);
     bus.on('verification-complete', this.verificationHandler);
     bus.on('remediation-complete', this.remediationHandler);
-    logger.info(`[NotifierAgent:${this.instanceId}] Subscribed to cost-insight, scaling-recommendation, verification-complete, remediation-complete`);
+    logger.info(`[NotifierAgent:${this.instanceId}] Subscribed to scaling-recommendation, verification-complete, remediation-complete`);
   }
 
   stop(): void {
     if (!this.running) return;
     this.running = false;
     const bus = getAgentEventBus();
-    bus.off('cost-insight', this.costHandler);
     bus.off('scaling-recommendation', this.scalingRecommendationHandler);
     bus.off('verification-complete', this.verificationHandler);
     bus.off('remediation-complete', this.remediationHandler);
@@ -154,10 +152,6 @@ export class NotifierAgent implements RoleAgent {
   // Cooldown
   // ============================================================
 
-  /**
-   * Returns true if the event type is in cooldown (should be suppressed).
-   * Updates the last notified timestamp on first call / after cooldown expires.
-   */
   private isInCooldown(eventType: string): boolean {
     const cooldownMs = COOLDOWN_MS[eventType] ?? 10 * 60 * 1000;
     const lastSent = this.lastNotifiedAt.get(eventType);
@@ -176,39 +170,14 @@ export class NotifierAgent implements RoleAgent {
   // Event handlers
   // ============================================================
 
-  private async handleCostInsight(event: AgentEvent): Promise<void> {
-    const insights = event.payload['insights'] as Array<{
-      type: string;
-      detail: string;
-      savingsUsd: number;
-    }> | undefined;
-    const totalSavings = (event.payload['totalPotentialSavingsUsd'] as number) ?? 0;
-
-    if (!insights || insights.length === 0) return;
-    if (this.isInCooldown('cost-insight')) return;
-
-    const blocks = [
-      header(':moneybag:', 'SentinAI Cost Insight'),
-      fields(['Time', event.timestamp]),
-      divider(),
-      section(`*${insights.length} optimization opportunity(s) — potential savings: $${totalSavings.toFixed(2)}/mo*`),
-      section(insights.map(i => `• ${i.detail} _(saves $${i.savingsUsd.toFixed(2)}/mo)_`).join('\n')),
-      context('SentinAI Agent V2 • Cost Agent'),
-    ];
-
-    await this.sendSlackBlocks(blocks);
-  }
-
+  /**
+   * Scaling schedule: only notify when scaling was actually executed.
+   * Schedule creation without execution is silent — agent handled it.
+   */
   private async handleScalingRecommendation(event: AgentEvent): Promise<void> {
     const source = event.payload['source'] as string | undefined;
     if (source !== 'cost-insight') return;
 
-    const profile = event.payload['profile'] as {
-      id: string;
-      avgDailyVcpu: number;
-      estimatedMonthlySavings: number;
-      coveragePct: number;
-    } | undefined;
     const execution = event.payload['execution'] as {
       executed: boolean;
       previousVcpu: number;
@@ -216,41 +185,38 @@ export class NotifierAgent implements RoleAgent {
       message: string;
       skippedReason?: string;
     } | undefined;
-    const recommendation = event.payload['recommendation'] as {
-      title: string;
-      savings: number;
-      confidence: number;
-    } | undefined;
 
-    if (!profile || !execution) return;
+    // Only notify when scaling was actually applied
+    if (!execution?.executed) return;
     if (this.isInCooldown('scaling-recommendation')) return;
 
-    const emoji = execution.executed ? ':chart_with_upwards_trend:' : ':clipboard:';
-    const title = execution.executed ? 'Scaling Schedule Applied' : 'Scaling Schedule Created';
-    const statusText = execution.executed
-      ? `${execution.previousVcpu} → ${execution.targetVcpu} vCPU`
-      : execution.skippedReason ?? 'pending';
+    const profile = event.payload['profile'] as {
+      id: string;
+      avgDailyVcpu: number;
+      estimatedMonthlySavings: number;
+      coveragePct: number;
+    } | undefined;
 
     const blocks = [
-      header(emoji, `SentinAI ${title}`),
+      header(':chart_with_upwards_trend:', 'SentinAI Scaling Applied'),
       fields(['Time', event.timestamp]),
       divider(),
       fields(
-        ['Avg vCPU/day', `${profile.avgDailyVcpu}`],
-        ['Coverage', `${profile.coveragePct}%`],
-        ['Est. Savings', `$${profile.estimatedMonthlySavings.toFixed(2)}/mo`],
-        ['Status', statusText],
+        ['Change', `${execution.previousVcpu} → ${execution.targetVcpu} vCPU`],
+        ['Trigger', 'Cost-based schedule'],
+        ...(profile ? [
+          ['Est. Savings', `$${profile.estimatedMonthlySavings.toFixed(2)}/mo`] as [string, string],
+        ] : []),
       ),
-      ...(recommendation ? [
-        context(`Confidence: ${(recommendation.confidence * 100).toFixed(0)}% • SentinAI Agent V2 • Cost Agent → Scheduled Scaler`),
-      ] : [
-        context('SentinAI Agent V2 • Cost Agent → Scheduled Scaler'),
-      ]),
+      context('SentinAI Agent V2 • Auto-applied by Cost Agent'),
     ];
 
     await this.sendSlackBlocks(blocks);
   }
 
+  /**
+   * Verification: only notify on FAILURE — success means agent handled it.
+   */
   private async handleVerificationComplete(event: AgentEvent): Promise<void> {
     const record = event.payload['operationRecord'] as {
       executed: boolean;
@@ -260,12 +226,11 @@ export class NotifierAgent implements RoleAgent {
       observedVcpu: number;
     } | undefined;
 
-    // Only notify on failures
     if (!record || !record.executed || record.passed) return;
     if (this.isInCooldown('verification-complete')) return;
 
     const blocks = [
-      header(':warning:', 'SentinAI Verification Failed'),
+      header(':warning:', 'SentinAI Action Required — Verification Failed'),
       fields(['Time', event.timestamp]),
       divider(),
       fields(
@@ -273,12 +238,15 @@ export class NotifierAgent implements RoleAgent {
         ['Observed', `${record.observedVcpu} vCPU`],
       ),
       section(`*Detail:* ${record.detail}`),
-      context('SentinAI Agent V2 • Verifier Agent'),
+      context('Automatic scaling was attempted but the result does not match. Manual review recommended.'),
     ];
 
     await this.sendSlackBlocks(blocks);
   }
 
+  /**
+   * Remediation: only notify on FAILURE — success means agent resolved it.
+   */
   private async handleRemediationComplete(event: AgentEvent): Promise<void> {
     const trigger = event.payload['trigger'] as string ?? 'unknown';
     const results = event.payload['results'] as Array<{
@@ -288,28 +256,24 @@ export class NotifierAgent implements RoleAgent {
     }> | undefined;
 
     if (!results || results.length === 0) return;
-    if (this.isInCooldown('remediation-complete')) return;
 
-    const successCount = (event.payload['successCount'] as number) ?? 0;
     const failureCount = (event.payload['failureCount'] as number) ?? 0;
 
-    const emoji = failureCount > 0 ? ':rotating_light:' : ':white_check_mark:';
-    const title = failureCount > 0 ? 'Remediation Alert' : 'Remediation Complete';
+    // Only notify when there are failures — success is silent
+    if (failureCount === 0) return;
+    if (this.isInCooldown('remediation-complete')) return;
 
-    const resultLines = results
-      .map(r => `${r.success ? ':white_check_mark:' : ':x:'} \`${r.action}\` ${r.detail}`)
-      .join('\n');
+    const failedResults = results.filter(r => !r.success);
 
     const blocks = [
-      header(emoji, `SentinAI ${title}`),
+      header(':rotating_light:', 'SentinAI Action Required — Remediation Failed'),
       fields(
         ['Trigger', trigger],
         ['Time', event.timestamp],
-        ['Results', `${successCount} succeeded, ${failureCount} failed`],
       ),
       divider(),
-      section(resultLines),
-      context('SentinAI Agent V2 • Remediation Agent'),
+      section(failedResults.map(r => `:x: \`${r.action}\` ${r.detail}`).join('\n')),
+      context('Automatic remediation was attempted but failed. Manual intervention required.'),
     ];
 
     await this.sendSlackBlocks(blocks);
@@ -326,7 +290,6 @@ export class NotifierAgent implements RoleAgent {
       return;
     }
 
-    // Fallback text for clients that don't support blocks
     const fallbackText = (blocks[0] as { text?: { text?: string } })?.text?.text ?? 'SentinAI Notification';
 
     try {
