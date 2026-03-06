@@ -34,6 +34,7 @@ export class NotifierAgent implements RoleAgent {
   private lastActivityAt: string | null = null;
 
   private readonly costHandler: AgentEventHandler;
+  private readonly scalingRecommendationHandler: AgentEventHandler;
   private readonly verificationHandler: AgentEventHandler;
   private readonly remediationHandler: AgentEventHandler;
 
@@ -43,6 +44,11 @@ export class NotifierAgent implements RoleAgent {
     this.costHandler = (event: AgentEvent) => {
       if (event.instanceId !== this.instanceId) return;
       void this.handleCostInsight(event);
+    };
+
+    this.scalingRecommendationHandler = (event: AgentEvent) => {
+      if (event.instanceId !== this.instanceId) return;
+      void this.handleScalingRecommendation(event);
     };
 
     this.verificationHandler = (event: AgentEvent) => {
@@ -65,9 +71,10 @@ export class NotifierAgent implements RoleAgent {
     this.running = true;
     const bus = getAgentEventBus();
     bus.on('cost-insight', this.costHandler);
+    bus.on('scaling-recommendation', this.scalingRecommendationHandler);
     bus.on('verification-complete', this.verificationHandler);
     bus.on('remediation-complete', this.remediationHandler);
-    logger.info(`[NotifierAgent:${this.instanceId}] Subscribed to cost-insight, verification-complete, remediation-complete`);
+    logger.info(`[NotifierAgent:${this.instanceId}] Subscribed to cost-insight, scaling-recommendation, verification-complete, remediation-complete`);
   }
 
   stop(): void {
@@ -75,6 +82,7 @@ export class NotifierAgent implements RoleAgent {
     this.running = false;
     const bus = getAgentEventBus();
     bus.off('cost-insight', this.costHandler);
+    bus.off('scaling-recommendation', this.scalingRecommendationHandler);
     bus.off('verification-complete', this.verificationHandler);
     bus.off('remediation-complete', this.remediationHandler);
     logger.info(`[NotifierAgent:${this.instanceId}] Unsubscribed`);
@@ -114,6 +122,50 @@ export class NotifierAgent implements RoleAgent {
       `*${insights.length} optimization opportunity(s) — potential savings: $${totalSavings.toFixed(2)}/mo*`,
       '',
       ...insights.map(i => `- ${i.detail} (saves $${i.savingsUsd.toFixed(2)}/mo)`),
+    ];
+
+    await this.sendSlackNotification(lines.join('\n'));
+  }
+
+  private async handleScalingRecommendation(event: AgentEvent): Promise<void> {
+    const source = event.payload['source'] as string | undefined;
+    if (source !== 'cost-insight') return; // Only handle schedule recommendations from CostAgent
+
+    const profile = event.payload['profile'] as {
+      id: string;
+      avgDailyVcpu: number;
+      estimatedMonthlySavings: number;
+      coveragePct: number;
+    } | undefined;
+    const execution = event.payload['execution'] as {
+      executed: boolean;
+      previousVcpu: number;
+      targetVcpu: number;
+      message: string;
+      skippedReason?: string;
+    } | undefined;
+    const recommendation = event.payload['recommendation'] as {
+      title: string;
+      savings: number;
+      confidence: number;
+    } | undefined;
+
+    if (!profile || !execution) return;
+
+    const statusEmoji = execution.executed ? ':chart_with_upwards_trend:' : ':clipboard:';
+    const statusText = execution.executed
+      ? `Scaling applied: ${execution.previousVcpu} -> ${execution.targetVcpu} vCPU`
+      : `Schedule ready (${execution.skippedReason ?? 'pending'})`;
+
+    const lines = [
+      `${statusEmoji} *SentinAI Scaling Schedule ${execution.executed ? 'Applied' : 'Created'}*`,
+      `Instance: \`${this.instanceId}\``,
+      `Time: ${event.timestamp}`,
+      '',
+      `*Profile:* avg ${profile.avgDailyVcpu} vCPU/day, coverage ${profile.coveragePct}%`,
+      `*Estimated Savings:* $${profile.estimatedMonthlySavings.toFixed(2)}/mo`,
+      `*Status:* ${statusText}`,
+      ...(recommendation ? [`*Confidence:* ${(recommendation.confidence * 100).toFixed(0)}%`] : []),
     ];
 
     await this.sendSlackNotification(lines.join('\n'));

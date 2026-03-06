@@ -26,11 +26,11 @@ export type AgentEventType =
   | 'execution-complete'     // ExecutorAgent → VerifierAgent
   | 'verification-complete'  // VerifierAgent → logs
   // Domain agent events
-  | 'scaling-recommendation' // ScalingAgent → dashboards, ExecutorAgent
+  | 'scaling-recommendation' // ScalingAgent/CostAgent → NotifierAgent, ExecutorAgent
   | 'security-alert'         // SecurityAgent → RemediationAgent
   | 'reliability-issue'      // ReliabilityAgent → RemediationAgent
   | 'rca-result'             // RCAAgent → RemediationAgent
-  | 'cost-insight'           // CostAgent → NotifierAgent
+  | 'cost-insight'           // CostAgent → CostAgent (schedule), NotifierAgent
   | 'remediation-complete';  // RemediationAgent → NotifierAgent
 
 export interface AgentEvent {

@@ -18,6 +18,7 @@ import { recordUsage, getUsageSummary } from '@/lib/usage-tracker';
 import { getCurrentVcpu } from '@/lib/k8s-scaler';
 import { DomainAgent } from '@/core/agents/domain-agent';
 import type { DomainAgentType } from '@/core/agents/domain-agent';
+import type { CostRecommendation } from '@/types/cost';
 
 const logger = createLogger('CostAgent');
 
@@ -106,10 +107,76 @@ export class CostAgent extends DomainAgent {
         logger.info(
           `[CostAgent:${this.instanceId}] ${insights.length} cost insight(s), potential savings: $${totalSavings.toFixed(2)}/mo`
         );
+
+        // Auto-apply scheduling if a 'schedule' recommendation exists
+        const scheduleRec = report.recommendations?.find(
+          (r: CostRecommendation) => r.type === 'schedule' && r.confidence >= 0.5
+        );
+        if (scheduleRec) {
+          await this.applyScheduleFromInsight(scheduleRec);
+        }
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logger.debug(`[CostAgent:${this.instanceId}] Cost analysis skipped: ${message}`);
+    }
+  }
+
+  /**
+   * Build a schedule profile from usage data and apply it.
+   * Emits 'scaling-recommendation' so NotifierAgent can report the result.
+   */
+  private async applyScheduleFromInsight(rec: CostRecommendation): Promise<void> {
+    try {
+      // Dynamic import to avoid circular dependency
+      const { buildScheduleProfile, applyScheduledScaling } = await import('@/lib/scheduled-scaler');
+
+      const profile = await buildScheduleProfile(7, { enabled: true });
+      if (!profile) {
+        logger.info(`[CostAgent:${this.instanceId}] Schedule profile: insufficient data, skipping`);
+        return;
+      }
+
+      const result = await applyScheduledScaling({ enabled: true });
+
+      const bus = getAgentEventBus();
+      bus.emit({
+        type: 'scaling-recommendation',
+        instanceId: this.instanceId,
+        payload: {
+          source: 'cost-insight',
+          type: 'schedule',
+          profile: {
+            id: profile.id,
+            generatedAt: profile.generatedAt,
+            avgDailyVcpu: profile.metadata.avgDailyVcpu,
+            estimatedMonthlySavings: profile.metadata.estimatedMonthlySavings,
+            coveragePct: profile.metadata.coveragePct,
+            slotCount: profile.slots.length,
+          },
+          execution: {
+            executed: result.executed,
+            previousVcpu: result.previousVcpu,
+            targetVcpu: result.targetVcpu,
+            message: result.message,
+            skippedReason: result.skippedReason,
+          },
+          recommendation: {
+            title: rec.title,
+            savings: rec.currentCost - rec.projectedCost,
+            confidence: rec.confidence,
+          },
+        },
+        timestamp: new Date().toISOString(),
+        correlationId: randomUUID(),
+      });
+
+      logger.info(
+        `[CostAgent:${this.instanceId}] Schedule applied: ${result.message} (savings: $${profile.metadata.estimatedMonthlySavings.toFixed(2)}/mo)`
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.error(`[CostAgent:${this.instanceId}] Schedule application failed: ${message}`);
     }
   }
 }
