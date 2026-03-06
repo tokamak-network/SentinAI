@@ -267,7 +267,8 @@ interface AgentFleetData {
   };
   roles: Record<
     | 'collector' | 'detector' | 'analyzer' | 'executor' | 'verifier'
-    | 'scaling' | 'security' | 'reliability' | 'rca' | 'cost',
+    | 'scaling' | 'security' | 'reliability' | 'rca' | 'cost'
+    | 'remediation' | 'notifier',
     AgentFleetRoleSummary
   >;
   updatedAt: string;
@@ -1515,7 +1516,7 @@ export default function Dashboard() {
               })}
             </div>
             <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Domain Specialists</p>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
               {(['scaling', 'security', 'reliability', 'rca', 'cost'] as const).map((role) => {
                 const roleData = agentFleet.roles[role];
                 const isRoleStale = roleData.stale > 0;
@@ -1527,6 +1528,27 @@ export default function Dashboard() {
                     }`}
                   >
                     <p className="text-[10px] text-indigo-500 uppercase font-semibold">{role}</p>
+                    <p className="text-sm font-bold text-gray-900 font-mono">{roleData.running}/{roleData.total}</p>
+                    <p className={`text-[10px] font-semibold ${isRoleStale ? 'text-amber-700' : 'text-gray-400'}`}>
+                      stale {roleData.stale}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Action Agents</p>
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+              {(['remediation', 'notifier'] as const).map((role) => {
+                const roleData = agentFleet.roles[role];
+                const isRoleStale = roleData.stale > 0;
+                return (
+                  <div
+                    key={role}
+                    className={`rounded-lg border px-2 py-2 ${
+                      isRoleStale ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'
+                    }`}
+                  >
+                    <p className="text-[10px] text-emerald-600 uppercase font-semibold">{role}</p>
                     <p className="text-sm font-bold text-gray-900 font-mono">{roleData.running}/{roleData.total}</p>
                     <p className={`text-[10px] font-semibold ${isRoleStale ? 'text-amber-700' : 'text-gray-400'}`}>
                       stale {roleData.stale}
