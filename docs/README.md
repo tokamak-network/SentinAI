@@ -4,7 +4,7 @@
 
 ## 0) Start Here
 - [What is SentinAI (project overview)](guide/overview.md)
-- [📄 Whitepaper](whitepaper.md)
+- [📄 Whitepaper](archive/whitepaper.md)
 - [**⚡ Quick Start (5 minutes)**](guide/quickstart.md)
 - [10-min local quickstart (OP Stack)](guide/optimism-l2-sentinai-local-setup.md)
 - [10-min local quickstart (Arbitrum Orbit)](guide/arbitrum-orbit-local-setup.md)
@@ -22,8 +22,6 @@
 - [Daily operations runbook](guide/agentic-q1-operations-runbook.md)
 - [Autonomy cockpit user guide](guide/autonomy-cockpit-user-guide.md)
 - [Agent Loop vs Goal Manager hands-on runbook](guide/agent-loop-vs-goal-manager-hands-on-runbook.md)
-- [Agent Loop vs Goal Manager 15-minute demo](guide/agent-loop-vs-goal-manager-demo-15min.md)
-- [Agent Loop vs Goal Manager speaker script](guide/agent-loop-vs-goal-manager-demo-speaker-script.md)
 - [Network stack dashboard/feature differences](guide/network-stack-dashboard-feature-differences.md)
 - [Stack × environment operations decision matrix](guide/stack-environment-operations-decision-matrix.md)
 - [Env-based operations profile quick decider](guide/env-based-operations-profile-quick-decider.md)
