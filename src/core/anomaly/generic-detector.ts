@@ -30,6 +30,38 @@ export interface DetectionResult {
 }
 
 const DEFAULT_Z_THRESHOLD = parseFloat(process.env.ANOMALY_Z_SCORE_THRESHOLD ?? '3.0')
+const DEFAULT_SUSTAINED_COUNT = parseInt(process.env.ANOMALY_SUSTAINED_COUNT ?? '3', 10)
+
+// ============================================================
+// Sustained Anomaly Tracker (per instanceId:fieldName)
+// ============================================================
+
+const globalForTracker = globalThis as unknown as {
+  __sentinai_v2_zscore_streak?: Map<string, number>
+}
+
+function getStreakMap(): Map<string, number> {
+  if (!globalForTracker.__sentinai_v2_zscore_streak) {
+    globalForTracker.__sentinai_v2_zscore_streak = new Map()
+  }
+  return globalForTracker.__sentinai_v2_zscore_streak
+}
+
+function incrementStreak(key: string, threshold: number): boolean {
+  const map = getStreakMap()
+  const current = (map.get(key) ?? 0) + 1
+  map.set(key, current)
+  return current >= threshold
+}
+
+function resetStreak(key: string): void {
+  getStreakMap().delete(key)
+}
+
+/** Export for testing */
+export function resetAllStreaks(): void {
+  globalForTracker.__sentinai_v2_zscore_streak = undefined
+}
 
 function calculateZScore(value: number, mean: number, stdDev: number): number {
   if (stdDev === 0) return 0
@@ -50,13 +82,15 @@ function severityFromZ(z: number): AnomalySeverity {
  * @param anomalyConfig - Per-field detection config
  * @param currentValue - The current metric value
  * @param history - Recent values for statistical methods (newest last)
+ * @param instanceId - Instance ID for sustained anomaly tracking (optional, default: '_')
  * @returns FieldAnomaly if detected, null otherwise
  */
 export function detectFieldAnomaly(
   fieldDef: MetricFieldDefinition,
   anomalyConfig: FieldAnomalyConfig,
   currentValue: number,
-  history: number[]
+  history: number[],
+  instanceId?: string
 ): FieldAnomaly | null {
   if (!anomalyConfig.enabled || history.length < 3) return null
 
@@ -68,7 +102,14 @@ export function detectFieldAnomaly(
     case 'z-score': {
       const zThreshold = anomalyConfig.zScoreThreshold ?? DEFAULT_Z_THRESHOLD
       const z = calculateZScore(currentValue, mean, stdDev)
-      if (z < zThreshold) return null
+      const streakKey = `${instanceId ?? '_'}:${fieldDef.fieldName}`
+      if (z < zThreshold) {
+        resetStreak(streakKey)
+        return null
+      }
+      const sustained = incrementStreak(streakKey, DEFAULT_SUSTAINED_COUNT)
+      if (!sustained) return null
+      const streakCount = getStreakMap().get(streakKey) ?? 1
       return {
         fieldName: fieldDef.fieldName,
         displayName: fieldDef.displayName,
@@ -76,7 +117,7 @@ export function detectFieldAnomaly(
         currentValue,
         zScore: z,
         severity: severityFromZ(z),
-        message: `${fieldDef.displayName} 이상 감지 (Z-Score: ${z.toFixed(2)}, 평균: ${mean.toFixed(1)})`,
+        message: `${fieldDef.displayName} 이상 감지 (Z-Score: ${z.toFixed(2)}, 평균: ${mean.toFixed(1)}, 지속 ${streakCount}회)`,
       }
     }
 
@@ -154,7 +195,13 @@ export function detectFieldAnomaly(
       const changeRate = Math.abs((currentValue - prev) / prev)
       const z = calculateZScore(changeRate, mean, stdDev)
       const zThreshold = anomalyConfig.zScoreThreshold ?? DEFAULT_Z_THRESHOLD
-      if (z < zThreshold) return null
+      const rocStreakKey = `${instanceId ?? '_'}:roc:${fieldDef.fieldName}`
+      if (z < zThreshold) {
+        resetStreak(rocStreakKey)
+        return null
+      }
+      const rocSustained = incrementStreak(rocStreakKey, DEFAULT_SUSTAINED_COUNT)
+      if (!rocSustained) return null
       return {
         fieldName: fieldDef.fieldName,
         displayName: fieldDef.displayName,
@@ -194,7 +241,7 @@ export function detectAnomalies(
     if (currentValue === null || currentValue === undefined) continue
 
     const history = fieldHistory[fieldDef.fieldName] ?? []
-    const anomaly = detectFieldAnomaly(fieldDef, config, currentValue, history)
+    const anomaly = detectFieldAnomaly(fieldDef, config, currentValue, history, instanceId)
     if (anomaly) anomalies.push(anomaly)
   }
 

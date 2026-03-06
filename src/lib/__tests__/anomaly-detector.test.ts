@@ -5,11 +5,12 @@
  * and their integration in the main detectAnomalies() function.
  */
 
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   calculateZScore,
   detectAnomalies,
   getDetectorConfig,
+  resetAllStreaks,
 } from '@/lib/anomaly-detector';
 import type { MetricDataPoint } from '@/types/prediction';
 
@@ -81,7 +82,27 @@ function generateHistory(
 // Test Suites
 // ============================================================================
 
+/**
+ * Helper: call detectAnomalies N times with the same inputs to build
+ * a sustained streak, then return the anomalies from the final call.
+ */
+function detectWithSustained(
+  current: MetricDataPoint,
+  history: MetricDataPoint[],
+  cycles: number = 3,
+  balances?: { batcherBalanceEth?: number; proposerBalanceEth?: number; challengerBalanceEth?: number }
+): ReturnType<typeof detectAnomalies> {
+  for (let i = 0; i < cycles - 1; i++) {
+    detectAnomalies(current, history, balances);
+  }
+  return detectAnomalies(current, history, balances);
+}
+
 describe('anomaly-detector', () => {
+  beforeEach(() => {
+    resetAllStreaks();
+  });
+
   // ========================================================================
   // Test Suite 1: Z-Score Calculation
   // ========================================================================
@@ -133,19 +154,31 @@ describe('anomaly-detector', () => {
   // ========================================================================
 
   describe('Z-Score Spike Detection (CPU)', () => {
-    it('should detect CPU spike when Z-Score > 3.0', () => {
+    it('should detect CPU spike when Z-Score > 3.0 (sustained)', () => {
       // Create stable history: 10, 11, 12, 13, 14, 15, 16, 17, 18, 19
       // Mean = 14.5, StdDev ≈ 3.03
       const history = generateHistory(10, { cpuUsage: 14 });
       // Spike to 28 → Z = (28 - 14.5) / 3.03 ≈ 4.5 (> 3.0)
       const current = createMetric({ cpuUsage: 28 });
 
-      const anomalies = detectAnomalies(current, history);
+      // Sustained: requires 3 consecutive cycles (default)
+      const anomalies = detectWithSustained(current, history, 3);
       const cpuAnomaly = anomalies.find(a => a.metric === 'cpuUsage');
 
       expect(cpuAnomaly).toBeDefined();
       expect(cpuAnomaly?.direction).toBe('spike');
       expect(cpuAnomaly?.isAnomaly).toBe(true);
+    });
+
+    it('should NOT detect CPU spike on a single transient cycle', () => {
+      const history = generateHistory(10, { cpuUsage: 14 });
+      const current = createMetric({ cpuUsage: 28 });
+
+      // Only 1 cycle — below sustained threshold (3)
+      const anomalies = detectAnomalies(current, history);
+      const cpuAnomaly = anomalies.find(a => a.metric === 'cpuUsage' && a.rule === 'z-score');
+
+      expect(cpuAnomaly).toBeUndefined();
     });
 
     it('should not detect anomaly when Z-Score is within threshold', () => {
@@ -164,14 +197,14 @@ describe('anomaly-detector', () => {
   });
 
   describe('Z-Score Drop Detection (CPU)', () => {
-    it('should detect CPU drop when Z-Score < -3.0', () => {
+    it('should detect CPU drop when Z-Score < -3.0 (sustained)', () => {
       // Create stable history around 50: 45, 46, 47, 48, 49, 50, 51, 52, 53, 54
       // Mean = 49.5, StdDev ≈ 3.03
       const history = generateHistory(10, { cpuUsage: 49 });
       // Drop to 20 → Z = (20 - 49.5) / 3.03 ≈ -9.7 (< -2.5)
       const current = createMetric({ cpuUsage: 20 });
 
-      const anomalies = detectAnomalies(current, history);
+      const anomalies = detectWithSustained(current, history, 3);
       const cpuAnomaly = anomalies.find(a => a.metric === 'cpuUsage');
 
       expect(cpuAnomaly).toBeDefined();
@@ -180,7 +213,7 @@ describe('anomaly-detector', () => {
   });
 
   describe('Z-Score Detection (Other Metrics)', () => {
-    it('should detect TxPool spike', () => {
+    it('should detect TxPool spike (sustained)', () => {
       // Deterministic history with known stdDev > 5 (minStdDev threshold)
       // Values spread around 100 with stdDev ≈ 14
       const txValues = [85, 90, 95, 100, 105, 110, 115, 90, 95, 105];
@@ -192,14 +225,14 @@ describe('anomaly-detector', () => {
       // Spike to 200 (extreme value, Z > 3)
       const current = createMetric({ txPoolPending: 200 });
 
-      const anomalies = detectAnomalies(current, history);
+      const anomalies = detectWithSustained(current, history, 3);
       const txAnomaly = anomalies.find(a => a.metric === 'txPoolPending');
 
       expect(txAnomaly).toBeDefined();
       expect(txAnomaly?.isAnomaly).toBe(true);
     });
 
-    it('should detect gas ratio spike', () => {
+    it('should detect gas ratio spike (sustained)', () => {
       // Deterministic history with known stdDev > 0.01 (minStdDev threshold)
       // Values: 0.45, 0.47, 0.49, 0.51, 0.53, 0.55, 0.47, 0.49, 0.51, 0.53
       // Mean ≈ 0.50, StdDev ≈ 0.03
@@ -212,14 +245,15 @@ describe('anomaly-detector', () => {
       // Spike to 0.9 (extreme value, Z > 3)
       const current = createMetric({ gasUsedRatio: 0.9 });
 
-      const anomalies = detectAnomalies(current, history);
+      // gasUsedRatio sustained count = 2
+      const anomalies = detectWithSustained(current, history, 2);
       const gasAnomaly = anomalies.find(a => a.metric === 'gasUsedRatio');
 
       expect(gasAnomaly).toBeDefined();
       expect(gasAnomaly?.isAnomaly).toBe(true);
     });
 
-    it('should detect block interval spike', () => {
+    it('should detect block interval spike (sustained)', () => {
       // Deterministic history with known stdDev > 0.3 (minStdDev threshold)
       // Values spread around 6.0 with stdDev ≈ 0.71
       const intervalValues = [5.0, 5.5, 6.0, 6.5, 7.0, 5.0, 5.5, 6.0, 6.5, 7.0];
@@ -231,7 +265,7 @@ describe('anomaly-detector', () => {
       // Spike to 15 (extreme value — 2.5x normal, Z > 3)
       const current = createMetric({ blockInterval: 15 });
 
-      const anomalies = detectAnomalies(current, history);
+      const anomalies = detectWithSustained(current, history, 3);
       const intervalAnomaly = anomalies.find(a => a.metric === 'l2BlockInterval');
 
       expect(intervalAnomaly).toBeDefined();
@@ -467,7 +501,8 @@ describe('anomaly-detector', () => {
         blockInterval: 5.0, // Large spike
       });
 
-      const anomalies = detectAnomalies(current, history);
+      // Sustained: need 3 cycles for CPU/interval, 2 for gas
+      const anomalies = detectWithSustained(current, history, 3);
 
       // Should detect multiple anomalies
       expect(anomalies.length).toBeGreaterThanOrEqual(2);

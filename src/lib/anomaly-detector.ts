@@ -26,6 +26,23 @@ const TXPOOL_MONOTONIC_SECONDS = parseInt(process.env.ANOMALY_TXPOOL_MONOTONIC_S
 const MIN_HISTORY_POINTS = 5;
 
 /**
+ * Sustained anomaly: Z-Score anomaly must persist for N consecutive detection
+ * cycles before being confirmed. Filters transient spikes (e.g., GC pauses,
+ * single large tx) that resolve within seconds.
+ *
+ * Per-metric overrides via env: ANOMALY_SUSTAINED_COUNT_<METRIC>=N
+ * Default: 3 consecutive cycles (V1@60s = 3min, V2@5s = 15s)
+ */
+const DEFAULT_SUSTAINED_COUNT = parseInt(process.env.ANOMALY_SUSTAINED_COUNT || '3', 10);
+
+const SUSTAINED_COUNT: Record<string, number> = {
+  cpuUsage: parseInt(process.env.ANOMALY_SUSTAINED_COUNT_CPU || String(DEFAULT_SUSTAINED_COUNT), 10),
+  gasUsedRatio: parseInt(process.env.ANOMALY_SUSTAINED_COUNT_GAS || '2', 10),
+  txPoolPending: parseInt(process.env.ANOMALY_SUSTAINED_COUNT_TXPOOL || String(DEFAULT_SUSTAINED_COUNT), 10),
+  l2BlockInterval: parseInt(process.env.ANOMALY_SUSTAINED_COUNT_BLOCK_INTERVAL || String(DEFAULT_SUSTAINED_COUNT), 10),
+};
+
+/**
  * Minimum standard deviation thresholds per metric.
  * When stdDev is below these values, the metric is considered stable
  * and Z-Score detection is skipped to prevent false positives from
@@ -37,6 +54,43 @@ const MIN_STD_DEV: Partial<Record<string, number>> = {
   txPoolPending: parseFloat(process.env.ANOMALY_MIN_STD_DEV_TXPOOL || '5'),
   l2BlockInterval: parseFloat(process.env.ANOMALY_MIN_STD_DEV_BLOCK_INTERVAL || '0.3'),
 };
+
+// ============================================================================
+// Sustained Anomaly Tracker (globalThis singleton)
+// ============================================================================
+
+const globalForTracker = globalThis as unknown as {
+  __sentinai_zscore_streak?: Map<string, number>;
+};
+
+function getStreakMap(): Map<string, number> {
+  if (!globalForTracker.__sentinai_zscore_streak) {
+    globalForTracker.__sentinai_zscore_streak = new Map();
+  }
+  return globalForTracker.__sentinai_zscore_streak;
+}
+
+/**
+ * Increment consecutive anomaly count for a metric.
+ * Returns true if the streak has reached the sustained threshold.
+ */
+function incrementStreak(metric: string): boolean {
+  const map = getStreakMap();
+  const current = (map.get(metric) ?? 0) + 1;
+  map.set(metric, current);
+  const threshold = SUSTAINED_COUNT[metric] ?? DEFAULT_SUSTAINED_COUNT;
+  return current >= threshold;
+}
+
+/** Reset consecutive count when a metric returns to normal. */
+function resetStreak(metric: string): void {
+  getStreakMap().delete(metric);
+}
+
+/** Export for testing */
+export function resetAllStreaks(): void {
+  globalForTracker.__sentinai_zscore_streak = undefined;
+}
 
 // ============================================================================
 // Core Functions
@@ -107,18 +161,27 @@ function detectZScoreAnomaly(
     : Math.abs(zScore) > Z_SCORE_THRESHOLD;
 
   if (exceedsThreshold) {
+    const sustained = incrementStreak(metric);
+    if (!sustained) {
+      // Z-Score exceeded but not yet sustained — suppress until consecutive threshold met
+      return null;
+    }
+
     const direction: AnomalyDirection = zScore > 0 ? 'spike' : 'drop';
+    const streakCount = getStreakMap().get(metric) ?? 1;
     return {
       isAnomaly: true,
       metric,
       value: currentValue,
       zScore,
       direction,
-      description: `${metric} ${direction === 'spike' ? 'spike' : 'drop'}: current ${currentValue.toFixed(2)}, mean ${mean.toFixed(2)}, Z-Score ${zScore.toFixed(2)}`,
+      description: `${metric} ${direction === 'spike' ? 'spike' : 'drop'}: current ${currentValue.toFixed(2)}, mean ${mean.toFixed(2)}, Z-Score ${zScore.toFixed(2)} (sustained ${streakCount} cycles)`,
       rule: 'z-score',
     };
   }
 
+  // Value returned to normal — reset streak
+  resetStreak(metric);
   return null;
 }
 
@@ -389,5 +452,7 @@ export function getDetectorConfig() {
     blockPlateauSeconds: BLOCK_PLATEAU_SECONDS,
     txPoolMonotonicSeconds: TXPOOL_MONOTONIC_SECONDS,
     minHistoryPoints: MIN_HISTORY_POINTS,
+    sustainedCounts: { ...SUSTAINED_COUNT },
+    defaultSustainedCount: DEFAULT_SUSTAINED_COUNT,
   };
 }
