@@ -1,6 +1,6 @@
 # TODO: SentinAI Implementation
 
-> Last Updated: 2026-03-05
+> Last Updated: 2026-03-06
 
 ## Scope Policy (Hot vs Cold)
 
@@ -25,6 +25,8 @@
 - [ ] Keep `verify-e2e` phase checks aligned with active runtime APIs.
 
 ### 5) Docs Context Hygiene
+- [x] Audit repository file hygiene and separate source-of-truth paths from regenerable artifacts.
+- [x] Remove stale script entries and unreferenced diagnostic scripts from `scripts/`.
 - [ ] Keep this file under ~200 lines.
 - [ ] Keep `rules/` files focused on reusable rules.
 - [ ] Archive monthly snapshots under `docs/archive/`.
@@ -33,3 +35,8 @@
 
 - Full historical TODO snapshot: `docs/archive/todo-2026-03.md`
 - Older archived docs: `docs/archive/`
+
+## Review (2026-03-06)
+
+- Repository hygiene audit completed: documented keep/archive/remove paths, restored `docs/lessons.md`, and removed tracked junk artifacts.
+- Scripts cleanup completed: removed dead `prod:gate:tier2` entry and deleted unused provider-diagnostic utilities.
