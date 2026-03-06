@@ -465,6 +465,8 @@ export default function Dashboard() {
   const [costAnalysisExpanded, setCostAnalysisExpanded] = useState(false);
   const [costAnalysisData, setCostAnalysisData] = useState<CostReport | null>(null);
   const [costAnalysisLoading, setCostAnalysisLoading] = useState(false);
+  const [aiInsightExpanded, setAiInsightExpanded] = useState(false);
+  const [patternsExpanded, setPatternsExpanded] = useState(false);
 
   // --- Agent Experience State ---
   const [experience, setExperience] = useState<ExperienceData | null>(null);
@@ -926,10 +928,10 @@ export default function Dashboard() {
       )}
 
       {/* ── Main Dashboard ── */}
-    <div className="min-h-screen bg-[#F8F9FA] text-gray-800 font-sans p-6 md:p-10 pb-16 max-w-[1600px] mx-auto">
+    <div className="min-h-screen bg-[#F8F9FA] text-gray-800 font-sans p-4 sm:p-6 md:p-10 pb-16 max-w-[1600px] mx-auto overflow-x-hidden">
 
       {/* 1. Header (Clean & Functional) */}
-      <header className="flex items-center gap-4 mb-8">
+      <header className="flex flex-wrap items-center gap-4 mb-8">
         <div className="bg-slate-900 p-3 rounded-2xl shadow-xl shadow-slate-200 text-white flex items-center justify-center">
           <Shield size={32} strokeWidth={2.5} />
         </div>
@@ -968,8 +970,8 @@ export default function Dashboard() {
       )}
 
       {/* Network Stats Bar */}
-      <div className="bg-white rounded-2xl px-6 py-4 mb-8 shadow-sm border border-gray-200/60">
-        <div className="flex items-center gap-8">
+      <div className="bg-white rounded-2xl px-6 py-4 mb-8 shadow-sm border border-gray-200/60 overflow-x-auto">
+        <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
           <div className="flex items-center gap-3">
             <div className="w-2 h-2 rounded-full animate-pulse bg-blue-500"></div>
             <div>
@@ -977,7 +979,7 @@ export default function Dashboard() {
               <p className="text-lg font-bold text-gray-900 font-mono">{current?.metrics.l1BlockHeight?.toLocaleString() || '—'}</p>
             </div>
           </div>
-          <div className="h-8 w-px bg-gray-200"></div>
+          <div className="hidden sm:block h-8 w-px bg-gray-200"></div>
           <div className="flex items-center gap-3" data-testid="l2-block-number">
             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
             <div>
@@ -985,7 +987,7 @@ export default function Dashboard() {
               <p className="text-lg font-bold text-gray-900 font-mono">{current?.metrics.blockHeight?.toLocaleString() || '—'}</p>
             </div>
           </div>
-          <div className="h-8 w-px bg-gray-200"></div>
+          <div className="hidden sm:block h-8 w-px bg-gray-200"></div>
           <div>
             <p className="text-[10px] text-gray-400 font-semibold uppercase">TxPool Pending</p>
             <p className="text-lg font-bold text-gray-900 font-mono">{current?.metrics.txPoolCount || 0}</p>
@@ -1005,7 +1007,7 @@ export default function Dashboard() {
 
             return (
               <div key={role} className="contents">
-                <div className="h-8 w-px bg-gray-200"></div>
+                <div className="hidden sm:block h-8 w-px bg-gray-200"></div>
                 <div className="flex items-center gap-3">
                   <div className={`w-2 h-2 rounded-full ${statusColor}`}></div>
                   <div>
@@ -1018,7 +1020,7 @@ export default function Dashboard() {
           })}
           {current?.metrics.syncLagReliable !== false && (
             <>
-              <div className="h-8 w-px bg-gray-200"></div>
+              <div className="hidden sm:block h-8 w-px bg-gray-200"></div>
               <div>
                 <p className="text-[10px] text-gray-400 font-semibold uppercase">Sync Status</p>
                 <p className="text-lg font-bold text-green-600 flex items-center gap-1">
@@ -1033,9 +1035,9 @@ export default function Dashboard() {
 
       {/* L1 RPC Failover Status */}
       {showL1Failover && l1Failover && (
-        <div className="bg-white rounded-2xl px-6 py-4 mb-8 shadow-sm border border-gray-200/60">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+        <div className="bg-white rounded-2xl px-6 py-4 mb-8 shadow-sm border border-gray-200/60 overflow-x-auto">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="flex flex-wrap items-center gap-4">
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 rounded-full ${l1Failover.healthy ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`}></div>
                 <div>
@@ -1045,12 +1047,12 @@ export default function Dashboard() {
                   </p>
                 </div>
               </div>
-              <div className="h-6 w-px bg-gray-200"></div>
+              <div className="hidden sm:block h-6 w-px bg-gray-200"></div>
               <div>
                 <p className="text-[10px] text-gray-400 font-semibold uppercase">Failover Pool</p>
                 <p className="text-sm font-bold text-gray-900">{l1Failover.failoverCount} endpoints</p>
               </div>
-              <div className="h-6 w-px bg-gray-200"></div>
+              <div className="hidden sm:block h-6 w-px bg-gray-200"></div>
               <div>
                 <p className="text-[10px] text-gray-400 font-semibold uppercase">Spare URLs</p>
                 <p className="text-sm font-bold text-gray-900">{l1Failover.spareUrlCount} ready</p>
@@ -1268,7 +1270,17 @@ export default function Dashboard() {
                     {costAnalysisData.aiInsight && (
                       <div className="bg-blue-50 rounded-lg p-3 border border-blue-100">
                         <p className="text-xs text-blue-700 font-semibold">AI Insight</p>
-                        <p className="text-xs text-blue-700 mt-1 leading-relaxed">{costAnalysisData.aiInsight}</p>
+                        <p className={`text-xs text-blue-700 mt-1 leading-relaxed ${!aiInsightExpanded ? 'line-clamp-3' : ''}`}>
+                          {costAnalysisData.aiInsight}
+                        </p>
+                        {costAnalysisData.aiInsight.length > 150 && (
+                          <button
+                            onClick={() => setAiInsightExpanded(!aiInsightExpanded)}
+                            className="text-[10px] text-blue-600 font-semibold mt-1 hover:underline"
+                          >
+                            {aiInsightExpanded ? 'Show less' : 'Show more'}
+                          </button>
+                        )}
                       </div>
                     )}
 
@@ -1484,9 +1496,29 @@ export default function Dashboard() {
                 <p className="text-[10px] text-blue-500 uppercase font-semibold">Throughput</p>
                 <p className="text-lg font-bold text-blue-700 font-mono mt-1">{agentFleet.kpi.throughputPerMin.toFixed(2)} tasks/min</p>
               </div>
-              <div className="bg-amber-50 rounded-xl p-3 border border-amber-100">
-                <p className="text-[10px] text-amber-600 uppercase font-semibold">Stale Agents</p>
-                <p className="text-lg font-bold text-amber-700 font-mono mt-1">{agentFleet.summary.staleAgents}</p>
+              <div className={`rounded-xl p-3 border ${
+                agentFleet.summary.staleAgents > agentFleet.summary.totalAgents / 2
+                  ? 'bg-red-50 border-red-200'
+                  : agentFleet.summary.staleAgents > 0
+                    ? 'bg-amber-50 border-amber-100'
+                    : 'bg-green-50 border-green-100'
+              }`}>
+                <p className={`text-[10px] uppercase font-semibold ${
+                  agentFleet.summary.staleAgents > agentFleet.summary.totalAgents / 2 ? 'text-red-600' : 'text-amber-600'
+                }`}>Stale Agents</p>
+                <div className="flex items-center gap-1.5 mt-1">
+                  {agentFleet.summary.staleAgents > agentFleet.summary.totalAgents / 2 && (
+                    <AlertTriangle size={14} className="text-red-500 shrink-0" />
+                  )}
+                  <p className={`text-lg font-bold font-mono ${
+                    agentFleet.summary.staleAgents > agentFleet.summary.totalAgents / 2
+                      ? 'text-red-600'
+                      : agentFleet.summary.staleAgents > 0
+                        ? 'text-amber-700'
+                        : 'text-green-600'
+                  }`}>{agentFleet.summary.staleAgents}</p>
+                  <span className="text-[10px] text-gray-400">/ {agentFleet.summary.totalAgents}</span>
+                </div>
               </div>
               <div className="bg-purple-50 rounded-xl p-3 border border-purple-100">
                 <p className="text-[10px] text-purple-600 uppercase font-semibold">Critical Path</p>
@@ -1614,28 +1646,63 @@ export default function Dashboard() {
               })}
             </div>
 
-            {/* Learned Patterns */}
-            {experience.patterns.length > 0 && (
-              <>
-                <p className="text-[10px] text-gray-400 uppercase font-semibold mb-1">Learned Patterns</p>
-                <div className="space-y-1.5">
-                  {experience.patterns.map((pattern) => (
-                    <div key={pattern.id} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs text-gray-700 truncate">{pattern.description}</p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="text-[10px] text-gray-400 font-mono">{pattern.occurrences}x</span>
-                        <span className="text-[10px] text-green-600 font-mono font-bold">{(pattern.successRate * 100).toFixed(0)}%</span>
-                        <span className="w-8 h-1.5 rounded-full bg-gray-200 overflow-hidden">
-                          <span className="block h-full rounded-full bg-blue-500" style={{ width: `${pattern.confidence * 100}%` }} />
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
+            {/* Learned Patterns (collapsible, grouped) */}
+            {experience.patterns.length > 0 && (() => {
+              // Group patterns by their type prefix (e.g., "eoa-balance on proposer_balance")
+              const grouped = new Map<string, typeof experience.patterns>();
+              for (const p of experience.patterns) {
+                const match = p.description.match(/^When (.+?) reaches/);
+                const key = match ? match[1] : 'other';
+                if (!grouped.has(key)) grouped.set(key, []);
+                grouped.get(key)!.push(p);
+              }
+              const totalOccurrences = experience.patterns.reduce((s, p) => s + p.occurrences, 0);
+              const groupEntries = [...grouped.entries()];
+              const displayGroups = patternsExpanded ? groupEntries : groupEntries.slice(0, 2);
+
+              return (
+                <>
+                  <button
+                    onClick={() => setPatternsExpanded(!patternsExpanded)}
+                    className="flex items-center justify-between w-full text-left mb-1"
+                  >
+                    <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                      Learned Patterns
+                      <span className="ml-1 text-gray-300">({experience.patterns.length} patterns, {totalOccurrences} total occurrences)</span>
+                    </p>
+                    <ChevronDown size={12} className={`text-gray-400 transition-transform ${patternsExpanded ? 'rotate-180' : ''}`} />
+                  </button>
+                  <div className="space-y-1.5">
+                    {displayGroups.map(([groupKey, patterns]) => {
+                      const topPattern = patterns[0];
+                      const totalGroupOccurrences = patterns.reduce((s, p) => s + p.occurrences, 0);
+                      const avgSuccess = patterns.reduce((s, p) => s + p.successRate, 0) / patterns.length;
+                      return (
+                        <div key={groupKey} className="flex items-center gap-3 bg-gray-50 rounded-lg px-3 py-2 border border-gray-100">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs text-gray-700 truncate">
+                              {patterns.length > 1
+                                ? `${groupKey} — ${patterns.length} variants`
+                                : topPattern.description}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-[10px] text-gray-400 font-mono">{totalGroupOccurrences}x</span>
+                            <span className="text-[10px] text-green-600 font-mono font-bold">{(avgSuccess * 100).toFixed(0)}%</span>
+                            <span className="w-8 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                              <span className="block h-full rounded-full bg-blue-500" style={{ width: `${topPattern.confidence * 100}%` }} />
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {!patternsExpanded && groupEntries.length > 2 && (
+                      <p className="text-[10px] text-gray-400 text-center">+{groupEntries.length - 2} more groups</p>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
           </>
         ) : (
           <div className="flex items-center justify-center gap-2 py-6 text-gray-400">
@@ -1646,7 +1713,7 @@ export default function Dashboard() {
       </div>
 
       {/* Row 2: Operations */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-4 lg:auto-rows-fr">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-4 lg:auto-rows-fr overflow-x-hidden">
 
         {/* Activity Log */}
         {isAgentV2 ? (() => {
@@ -1685,6 +1752,20 @@ export default function Dashboard() {
             catCounts.set(a.category, (catCounts.get(a.category) ?? 0) + 1);
           }
 
+          // Group consecutive identical events (same category + action)
+          type GroupedEntry = { entries: typeof v2Activities; count: number; first: (typeof v2Activities)[0]; last: (typeof v2Activities)[0] };
+          const groupedActivities: GroupedEntry[] = [];
+          for (const entry of v2Activities) {
+            const prev = groupedActivities[groupedActivities.length - 1];
+            if (prev && prev.first.category === entry.category && prev.first.action === entry.action) {
+              prev.entries.push(entry);
+              prev.count++;
+              prev.last = entry;
+            } else {
+              groupedActivities.push({ entries: [entry], count: 1, first: entry, last: entry });
+            }
+          }
+
           return (
           <div className="lg:col-span-7 bg-[#1A1D21] rounded-3xl shadow-xl overflow-hidden border border-gray-800 flex flex-col h-[34rem] lg:h-[38rem]">
             {/* Terminal Header */}
@@ -1718,7 +1799,8 @@ export default function Dashboard() {
             <div className="flex-1 bg-[#0D1117] p-6 overflow-y-auto font-mono text-xs custom-scrollbar relative">
               <div className="absolute top-0 left-0 right-0 h-4 bg-gradient-to-b from-[#0D1117] to-transparent pointer-events-none z-10"></div>
               <div className="space-y-1">
-                {v2Activities.length > 0 ? v2Activities.map((entry) => {
+                {groupedActivities.length > 0 ? groupedActivities.map((group) => {
+                  const entry = group.first;
                   const d = new Date(entry.timestamp);
                   const date = `${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getDate()).padStart(2,'0')}`;
                   const time = `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;
@@ -1735,6 +1817,11 @@ export default function Dashboard() {
                         </span>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded border border-current/20 bg-black/10 font-bold text-[10px] tracking-wide shrink-0 ${color}`}>{label}</span>
                         <span className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] font-bold shrink-0 ${outcomeStyle}`}>{entry.outcome}</span>
+                        {group.count > 1 && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-gray-700/50 border border-gray-600 text-gray-300 text-[10px] font-bold shrink-0">
+                            ×{group.count}
+                          </span>
+                        )}
                         <span className="text-gray-400 text-[11px] break-words min-w-0">{entry.action}</span>
                       </div>
                     </div>
@@ -2309,7 +2396,7 @@ export default function Dashboard() {
                   {chatMessages.length}
                 </span>
               )}
-              <button data-testid="chat-close" onClick={(e) => { e.stopPropagation(); setChatOpen(false); }} className="text-gray-400 hover:text-white transition-colors p-1">
+              <button data-testid="chat-close" onClick={(e) => { e.stopPropagation(); setChatOpen(false); }} className="text-gray-400 hover:text-white transition-colors p-1" aria-label="Toggle chat panel">
                 <ChevronDown size={18} className={`transition-transform ${chatOpen ? '' : 'rotate-180'}`} />
               </button>
             </div>
@@ -2319,7 +2406,7 @@ export default function Dashboard() {
 
       {/* Chat Panel */}
       {chatOpen && (
-        <div data-testid="chat-panel" className="fixed bottom-[52px] right-6 w-[480px] bg-white rounded-t-2xl shadow-2xl border border-gray-200 z-50 flex flex-col max-h-[500px]">
+        <div data-testid="chat-panel" className="fixed bottom-[52px] right-2 sm:right-6 w-[calc(100vw-1rem)] sm:w-[480px] bg-white rounded-t-2xl shadow-2xl border border-gray-200 z-50 flex flex-col max-h-[500px]">
 
           {/* Messages */}
           <div data-testid="chat-messages" className="flex-1 overflow-y-auto p-4 space-y-4 min-h-[300px] max-h-[400px] bg-gray-50">
