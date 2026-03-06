@@ -69,6 +69,8 @@ function makeRoleSummary(): Record<FleetRole, FleetRoleSummary> {
     reliability: { total: 0, running: 0, stale: 0 },
     rca: { total: 0, running: 0, stale: 0 },
     cost: { total: 0, running: 0, stale: 0 },
+    remediation: { total: 0, running: 0, stale: 0 },
+    notifier: { total: 0, running: 0, stale: 0 },
   };
 }
 

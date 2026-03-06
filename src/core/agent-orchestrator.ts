@@ -4,11 +4,13 @@
  * Replaces the serial agent-loop.ts pipeline with concurrent event-driven agents.
  *
  * Per-instance agent set:
- *   CollectorAgent  — 5s interval, collects metrics
- *   DetectorAgent   — 10s interval, detects anomalies, emits events
- *   AnalyzerAgent   — reacts to anomaly-detected, runs AI deep analysis (async)
- *   ExecutorAgent   — reacts to anomaly-detected, executes scaling immediately (parallel with AI)
- *   VerifierAgent   — reacts to execution-complete, verifies post-conditions
+ *   CollectorAgent    — 5s interval, collects metrics
+ *   DetectorAgent     — 10s interval, detects anomalies, emits events
+ *   AnalyzerAgent     — reacts to anomaly-detected, runs AI deep analysis (async)
+ *   ExecutorAgent     — reacts to anomaly-detected, executes scaling immediately (parallel with AI)
+ *   VerifierAgent     — reacts to execution-complete, verifies post-conditions
+ *   RemediationAgent  — reacts to security-alert/reliability-issue/rca-result, executes remediation
+ *   NotifierAgent     — reacts to cost-insight/verification-complete/remediation-complete, sends Slack
  *
  * Critical path: anomaly-detected → ExecutorAgent → 2s (vs. 10s serial pipeline)
  */
@@ -24,6 +26,8 @@ import { SecurityAgent } from '@/core/agents/security-agent';
 import { ReliabilityAgent } from '@/core/agents/reliability-agent';
 import { RCADomainAgent } from '@/core/agents/rca-agent';
 import { CostAgent } from '@/core/agents/cost-agent';
+import { RemediationAgent } from '@/core/agents/remediation-agent';
+import { NotifierAgent } from '@/core/agents/notifier-agent';
 import type { DomainAgent } from '@/core/agents/domain-agent';
 
 const logger = createLogger('AgentOrchestrator');
@@ -34,7 +38,8 @@ const logger = createLogger('AgentOrchestrator');
 
 export type AgentRole =
   | 'collector' | 'detector' | 'analyzer' | 'executor' | 'verifier'  // pipeline
-  | 'scaling' | 'security' | 'reliability' | 'rca' | 'cost';         // domain
+  | 'scaling' | 'security' | 'reliability' | 'rca' | 'cost'          // domain
+  | 'remediation' | 'notifier';                                       // action
 
 export interface AgentStatus {
   role: AgentRole;
@@ -153,6 +158,13 @@ export class AgentOrchestrator {
 
     const cost = new CostAgent({ instanceId, protocolId });
     agents.set('cost', cost);
+
+    // Action agents — consume domain events and execute remediation / notifications
+    const remediation = new RemediationAgent({ instanceId });
+    agents.set('remediation', remediation);
+
+    const notifier = new NotifierAgent({ instanceId });
+    agents.set('notifier', notifier);
 
     // Start all agents
     for (const [role, agent] of agents) {
