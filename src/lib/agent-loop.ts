@@ -32,6 +32,9 @@ import { addAgentMemoryEntry, addDecisionTraceEntry, queryAgentMemory } from '@/
 import { verifyOperationOutcome } from '@/lib/operation-verifier';
 import { buildRollbackPlan, runRollbackPlan } from '@/lib/rollback-runner';
 import { tickGoalManager, dispatchTopGoal } from '@/lib/goal-manager';
+import { checkAndTrackClientVersion } from '@/lib/client-version-tracker';
+import { detectExecutionClient } from '@/lib/client-detector';
+import { getCoreRedis } from '@/core/redis';
 import { DEFAULT_SCALING_CONFIG, type TargetVcpu, type TargetMemoryGiB, type ScalingDecision } from '@/types/scaling';
 import { DEFAULT_PREDICTION_CONFIG } from '@/types/prediction';
 import type { MetricDataPoint } from '@/types/prediction';
@@ -652,6 +655,20 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
       endPhase(observePhase, false, fallbackMessage);
     } else {
       endPhase(observePhase, true);
+
+      // Non-blocking: detect client version and check for changes
+      const rpcUrl = resolveL2RpcUrl();
+      if (rpcUrl) {
+        detectExecutionClient({ rpcUrl }).then((detected) => {
+          const instanceId = process.env.SENTINAI_INSTANCE_ID ?? 'default';
+          const keyPrefix = `inst:${instanceId}`;
+          checkAndTrackClientVersion(getCoreRedis(), keyPrefix, detected.version).catch(
+            (err) => logger.warn({ err }, '[AgentLoop] Client version check failed')
+          );
+        }).catch(() => {
+          // Ignore detectClient errors — version tracking is best-effort
+        });
+      }
     }
 
     const { dataPoint, l1BlockHeight, failover, batcherBalanceEth, proposerBalanceEth, challengerBalanceEth } = collected;
