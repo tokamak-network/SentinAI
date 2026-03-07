@@ -15,6 +15,8 @@
     "prod:gate:tier1": "bash scripts/prod-gate-tier1.sh",
     "prod:gate:tier3": "bash scripts/prod-gate-tier3.sh",
     "verify": "bash scripts/verify-e2e.sh",
+    "verify:client-profile": "bash scripts/verify-client-profile.sh",
+    "verify:client-profile:live": "bash scripts/verify-client-profile.sh --phase 4",
     "smoke:runtime:core": "bash scripts/smoke-runtime-core.sh",
     "probe:zk:settlement": "node scripts/zk-settlement-probe.mjs",
     "benchmark": "npx tsx scripts/benchmark-models.ts",
