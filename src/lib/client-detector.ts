@@ -36,6 +36,8 @@ export interface DetectedClient {
   supportsL2SyncStatus: boolean;
   /** The RPC method used for L2 sync status, or null if not applicable */
   l2SyncMethod: string | null;
+  /** Which txpool namespace is supported: 'txpool' (standard), 'parity' (nethermind), or null */
+  txpoolNamespace: 'txpool' | 'parity' | null;
   /** Which probes were supported */
   probes: Record<string, boolean>;
   /** Raw responses (for debugging) */
@@ -183,13 +185,30 @@ export async function detectExecutionClient(
     probes.admin_peers = false;
   }
 
-  // Optional txpool probe (best effort)
+  // txpool probe with parity_* fallback for nethermind
+  let txpoolNamespace: 'txpool' | 'parity' | null = null;
+
   try {
     const res = await rpcCall(config.rpcUrl, 'txpool_status', [], config.authToken, timeoutMs);
-    probes.txpool_status = typeof res === 'object' && res !== null;
+    const ok = typeof res === 'object' && res !== null;
+    probes.txpool_status = ok;
     raw.txpool_status = res;
+    if (ok) txpoolNamespace = 'txpool';
   } catch {
     probes.txpool_status = false;
+  }
+
+  if (txpoolNamespace === null) {
+    // Nethermind fallback: parity_pendingTransactions
+    try {
+      const res = await rpcCall(config.rpcUrl, 'parity_pendingTransactions', [], config.authToken, timeoutMs);
+      const ok = Array.isArray(res);
+      probes.parity_pendingTransactions = ok;
+      raw.parity_pendingTransactions = res;
+      if (ok) txpoolNamespace = 'parity';
+    } catch {
+      probes.parity_pendingTransactions = false;
+    }
   }
 
   // L2 fingerprint probes — run AFTER base probes to override family.
@@ -239,6 +258,7 @@ export async function detectExecutionClient(
     peerCount,
     supportsL2SyncStatus,
     l2SyncMethod,
+    txpoolNamespace,
     probes,
     raw,
   };
@@ -297,6 +317,7 @@ export async function detectConsensusClient(
     peerCount,
     supportsL2SyncStatus: false,
     l2SyncMethod: null,
+    txpoolNamespace: null,
     probes,
     raw,
   };

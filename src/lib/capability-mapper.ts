@@ -4,6 +4,8 @@ import type { DetectedClient } from './client-detector';
 export interface CapabilityMapping {
   capabilities: ProtocolCapability[];
   supportsTxPool: boolean;
+  /** Which txpool namespace is active: 'txpool' (standard), 'parity' (nethermind), or null */
+  txpoolNamespace: 'txpool' | 'parity' | null;
   supportsPeerCount: boolean;
   supportsValidatorDuty: boolean;
 }
@@ -16,7 +18,11 @@ export function mapDetectedClientToCapabilities(
   detected: DetectedClient,
   protocolId: NodeType
 ): CapabilityMapping {
-  const supportsTxPool = detected.layer === 'execution' && !!detected.probes.txpool_status;
+  const txpoolNamespace: 'txpool' | 'parity' | null =
+    detected.layer === 'execution' ? (detected.txpoolNamespace ?? null) : null;
+  const supportsTxPool =
+    detected.layer === 'execution' &&
+    (!!detected.probes.txpool_status || !!detected.probes.parity_pendingTransactions);
   const supportsPeerCount =
     detected.layer === 'execution'
       ? !!detected.probes.net_peerCount || !!detected.probes.admin_peers
@@ -56,6 +62,7 @@ export function mapDetectedClientToCapabilities(
   return {
     capabilities: uniq(caps),
     supportsTxPool,
+    txpoolNamespace,
     supportsPeerCount,
     supportsValidatorDuty,
   };

@@ -104,6 +104,41 @@ describe('client-detector', () => {
     expect(detected.l2SyncMethod).toBe('arb_getL1BlockNumber');
   });
 
+  it('detectExecutionClient: nethermind — parity_pendingTransactions fallback when txpool_status fails', async () => {
+    const fetchMock = mockRpcFetch({
+      web3_clientVersion: 'Nethermind/v1.26.0',
+      eth_chainId: '0x1',
+      eth_syncing: false,
+      net_peerCount: '0x4',
+      // txpool_status intentionally absent → will return "Method not found" error
+      parity_pendingTransactions: [], // nethermind fallback
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detected = await detectExecutionClient({ rpcUrl: 'http://mock' });
+
+    expect(detected.family).toBe('nethermind');
+    expect(detected.txpoolNamespace).toBe('parity');
+    expect(detected.probes.txpool_status).toBe(false);
+    expect(detected.probes.parity_pendingTransactions).toBe(true);
+  });
+
+  it('detectExecutionClient: txpoolNamespace=null when both txpool probes fail', async () => {
+    const fetchMock = mockRpcFetch({
+      web3_clientVersion: 'Geth/v1.14.0',
+      eth_chainId: '0x1',
+      // neither txpool_status nor parity_pendingTransactions present
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detected = await detectExecutionClient({ rpcUrl: 'http://mock' });
+
+    expect(detected.txpoolNamespace).toBeNull();
+    expect(detected.probes.txpool_status).toBe(false);
+  });
+
   it('detectConsensusClient: parses version + peer_count, L2 fields are false/null', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url.endsWith('/eth/v1/node/version')) {
