@@ -42,6 +42,8 @@ describe('client-detector', () => {
     expect(detected.chainId).toBe(1);
     expect(detected.syncing).toBe(false);
     expect(detected.peerCount).toBe(2);
+    expect(detected.supportsL2SyncStatus).toBe(false);
+    expect(detected.l2SyncMethod).toBeNull();
     expect(detected.probes.web3_clientVersion).toBe(true);
     expect(detected.probes.eth_chainId).toBe(true);
     expect(detected.probes.eth_syncing).toBe(true);
@@ -49,7 +51,60 @@ describe('client-detector', () => {
     expect(detected.probes.txpool_status).toBe(true);
   });
 
-  it('detectConsensusClient: parses version + peer_count', async () => {
+  it('detectExecutionClient: nitro-node — arb_blockNumber overrides geth family', async () => {
+    const fetchMock = mockRpcFetch({
+      web3_clientVersion: 'Geth/v1.11.0-stable', // looks like geth
+      eth_chainId: '0xa4b1',
+      eth_syncing: false,
+      net_peerCount: '0x5',
+      arb_blockNumber: '0x1234', // fingerprint: nitro
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detected = await detectExecutionClient({ rpcUrl: 'http://mock' });
+
+    expect(detected.family).toBe('nitro-node');
+    expect(detected.supportsL2SyncStatus).toBe(true);
+    expect(detected.l2SyncMethod).toBe('arb_getL1BlockNumber');
+    expect(detected.probes.arb_blockNumber).toBe(true);
+  });
+
+  it('detectExecutionClient: op-geth — optimism_syncStatus overrides family', async () => {
+    const fetchMock = mockRpcFetch({
+      web3_clientVersion: 'op-geth/v1.101315.3-stable',
+      eth_chainId: '0xa',
+      eth_syncing: false,
+      net_peerCount: '0x3',
+      optimism_syncStatus: { current_l1: { number: 100 }, head_l1: { number: 105 } },
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detected = await detectExecutionClient({ rpcUrl: 'http://mock' });
+
+    expect(detected.family).toBe('op-geth');
+    expect(detected.supportsL2SyncStatus).toBe(true);
+    expect(detected.l2SyncMethod).toBe('optimism_syncStatus');
+    expect(detected.probes.optimism_syncStatus).toBe(true);
+  });
+
+  it('detectExecutionClient: nitro takes priority over op-geth when both probes succeed', async () => {
+    const fetchMock = mockRpcFetch({
+      web3_clientVersion: 'Geth/v1.11.0',
+      arb_blockNumber: '0x100',
+      optimism_syncStatus: { current_l1: { number: 50 } },
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detected = await detectExecutionClient({ rpcUrl: 'http://mock' });
+
+    expect(detected.family).toBe('nitro-node');
+    expect(detected.l2SyncMethod).toBe('arb_getL1BlockNumber');
+  });
+
+  it('detectConsensusClient: parses version + peer_count, L2 fields are false/null', async () => {
     const fetchMock = vi.fn(async (url: string) => {
       if (url.endsWith('/eth/v1/node/version')) {
         return new Response(JSON.stringify({ data: { version: 'Lighthouse/v5.2.0' } }), { status: 200 });
@@ -71,6 +126,8 @@ describe('client-detector', () => {
     expect(detected.family).toBe('lighthouse');
     expect(detected.syncing).toBe(false);
     expect(detected.peerCount).toBe(12);
+    expect(detected.supportsL2SyncStatus).toBe(false);
+    expect(detected.l2SyncMethod).toBeNull();
     expect(detected.probes['/eth/v1/node/version']).toBe(true);
     expect(detected.probes['/eth/v1/node/peer_count']).toBe(true);
   });

@@ -8,6 +8,8 @@ export type ExecutionClientFamily =
   | 'nethermind'
   | 'besu'
   | 'erigon'
+  | 'op-geth'
+  | 'nitro-node'
   | 'unknown';
 
 export type ConsensusClientFamily =
@@ -30,6 +32,10 @@ export interface DetectedClient {
   syncing?: boolean;
   /** Best-effort peer count */
   peerCount?: number;
+  /** Whether L2-specific sync status is available (op-geth / nitro-node) */
+  supportsL2SyncStatus: boolean;
+  /** The RPC method used for L2 sync status, or null if not applicable */
+  l2SyncMethod: string | null;
   /** Which probes were supported */
   probes: Record<string, boolean>;
   /** Raw responses (for debugging) */
@@ -186,13 +192,53 @@ export async function detectExecutionClient(
     probes.txpool_status = false;
   }
 
+  // L2 fingerprint probes — run AFTER base probes to override family.
+  // Order matters: check nitro first (also responds like geth in web3_clientVersion).
+  let family: ExecutionClientFamily = normalizeExecutionFamily(version);
+  let supportsL2SyncStatus = false;
+  let l2SyncMethod: string | null = null;
+
+  try {
+    const res = await rpcCall(config.rpcUrl, 'arb_blockNumber', [], config.authToken, timeoutMs);
+    if (res !== undefined && res !== null) {
+      family = 'nitro-node';
+      supportsL2SyncStatus = true;
+      l2SyncMethod = 'arb_getL1BlockNumber';
+      probes.arb_blockNumber = true;
+      raw.arb_blockNumber = res;
+    } else {
+      probes.arb_blockNumber = false;
+    }
+  } catch {
+    probes.arb_blockNumber = false;
+  }
+
+  if (!supportsL2SyncStatus) {
+    try {
+      const res = await rpcCall(config.rpcUrl, 'optimism_syncStatus', [], config.authToken, timeoutMs);
+      if (res !== undefined && res !== null) {
+        family = 'op-geth';
+        supportsL2SyncStatus = true;
+        l2SyncMethod = 'optimism_syncStatus';
+        probes.optimism_syncStatus = true;
+        raw.optimism_syncStatus = res;
+      } else {
+        probes.optimism_syncStatus = false;
+      }
+    } catch {
+      probes.optimism_syncStatus = false;
+    }
+  }
+
   return {
     layer: 'execution',
-    family: normalizeExecutionFamily(version),
+    family,
     version,
     chainId,
     syncing,
     peerCount,
+    supportsL2SyncStatus,
+    l2SyncMethod,
     probes,
     raw,
   };
@@ -249,6 +295,8 @@ export async function detectConsensusClient(
     version,
     syncing,
     peerCount,
+    supportsL2SyncStatus: false,
+    l2SyncMethod: null,
     probes,
     raw,
   };
