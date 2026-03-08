@@ -60,7 +60,7 @@ type OnboardingResponse = {
 const NODE_CONFIGS: NodeConfig[] = [
   {
     type: "ethereum-el",
-    label: "L1 실행 클라이언트",
+    label: "L1 Execution Client",
     clients: "Geth · Reth · Nethermind · Besu",
     Icon: Server,
     iconColor: "text-blue-400",
@@ -71,7 +71,7 @@ const NODE_CONFIGS: NodeConfig[] = [
   },
   {
     type: "opstack-l2",
-    label: "L2 시퀀서 (OP Stack)",
+    label: "L2 Sequencer (OP Stack)",
     clients: "OP Stack · Optimism · Thanos",
     Icon: Activity,
     iconColor: "text-cyan-400",
@@ -82,7 +82,7 @@ const NODE_CONFIGS: NodeConfig[] = [
   },
   {
     type: "arbitrum-nitro",
-    label: "L2 시퀀서 (Arbitrum Nitro)",
+    label: "L2 Sequencer (Arbitrum Nitro)",
     clients: "Arbitrum Nitro · Arbitrum Orbit",
     Icon: Activity,
     iconColor: "text-emerald-400",
@@ -94,7 +94,7 @@ const NODE_CONFIGS: NodeConfig[] = [
 ];
 
 const AI_OPTIONS: { value: AiProvider; label: string; keyVar: string; placeholder: string }[] = [
-  { value: "none", label: "없음 (나중에 설정)", keyVar: "", placeholder: "" },
+  { value: "none", label: "None (Set Later)", keyVar: "", placeholder: "" },
   { value: "qwen", label: "Qwen (DashScope)", keyVar: "QWEN_API_KEY", placeholder: "sk-..." },
   { value: "anthropic", label: "Anthropic (Claude)", keyVar: "ANTHROPIC_API_KEY", placeholder: "sk-ant-..." },
   { value: "openai", label: "OpenAI", keyVar: "OPENAI_API_KEY", placeholder: "sk-..." },
@@ -252,12 +252,12 @@ function CodeBlock({
           {isCopied ? (
             <>
               <Check className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-emerald-400">복사됨</span>
+              <span className="text-emerald-400">Copied</span>
             </>
           ) : (
             <>
               <Copy className="h-3.5 w-3.5" />
-              복사
+              Copy
             </>
           )}
         </button>
@@ -371,7 +371,7 @@ export default function ConnectPage() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.toLowerCase().includes("syntaxerror") || msg.toLowerCase().includes("not valid json")) {
-        setTestError("서버에 연결할 수 없습니다. RPC URL을 확인하거나 SentinAI 백엔드가 실행 중인지 확인하세요.");
+        setTestError("Cannot connect to server. Check the RPC URL or verify the SentinAI backend is running.");
       } else {
         setTestError(msg);
       }
@@ -390,7 +390,7 @@ export default function ConnectPage() {
           className="mb-8 inline-flex items-center gap-2 text-sm text-slate-500 transition-colors hover:text-slate-300"
         >
           <ArrowLeft className="h-4 w-4" />
-          홈으로
+          Home
         </a>
 
         <div className="mb-12">
@@ -402,11 +402,11 @@ export default function ConnectPage() {
             Connect Your Node
           </h1>
           <p className="max-w-2xl text-slate-400">
-            노드 정보를 입력하면 바로 실행 가능한{" "}
+            Enter your node details to generate a ready-to-run{" "}
             <code className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-xs text-cyan-300">docker run</code>{" "}
             /{" "}
             <code className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-xs text-cyan-300">.env.local</code>{" "}
-            설정을 생성합니다.
+            configuration.
           </p>
         </div>
 
@@ -416,12 +416,12 @@ export default function ConnectPage() {
 
             {/* Node settings */}
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-              <h2 className="mb-6 font-semibold text-slate-100">① 노드 설정</h2>
+              <h2 className="mb-6 font-semibold text-slate-100">① Node Settings</h2>
 
               {/* Node type */}
               <div className="mb-5">
                 <label className="mb-2 block text-sm font-medium text-slate-300">
-                  노드 타입
+                  Node Type
                 </label>
                 <div className="space-y-2">
                   {NODE_CONFIGS.map((config) => {
@@ -479,25 +479,25 @@ export default function ConnectPage() {
                   className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 font-mono text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                 />
                 <p className="mt-1.5 text-xs text-slate-500">
-                  연결 테스트 시에만 서버로 전송됩니다.
+                  Sent to server only during connection test.
                 </p>
               </div>
 
               {/* Network name */}
               <div className="mb-4">
                 <label htmlFor="network-name" className="mb-2 block text-sm font-medium text-slate-300">
-                  네트워크 이름 <span className="text-slate-500">(선택)</span>
+                  Network Name <span className="text-slate-500">(Optional)</span>
                 </label>
                 <input
                   id="network-name"
                   type="text"
                   value={networkName}
                   onChange={(e) => { setNetworkName(e.target.value); resetOutput(); }}
-                  placeholder="예: Thanos Sepolia"
+                  placeholder="e.g. Thanos Sepolia"
                   className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                 />
                 <p className="mt-1.5 text-xs text-slate-500">
-                  대시보드 헤더에 표시됩니다 (<code className="font-mono">NEXT_PUBLIC_NETWORK_NAME</code>).
+                  Shown in the dashboard header (<code className="font-mono">NEXT_PUBLIC_NETWORK_NAME</code>).
                 </p>
               </div>
 
@@ -505,14 +505,14 @@ export default function ConnectPage() {
               {currentConfig.supportsAuthToken && (
                 <div className="mb-5">
                   <label htmlFor="auth-token" className="mb-2 block text-sm font-medium text-slate-300">
-                    Auth Token <span className="text-slate-500">(선택)</span>
+                    Auth Token <span className="text-slate-500">(Optional)</span>
                   </label>
                   <input
                     id="auth-token"
                     type="password"
                     value={authToken}
                     onChange={(e) => { setAuthToken(e.target.value); resetOutput(); }}
-                    placeholder="Bearer 토큰 또는 Basic 자격증명"
+                    placeholder="Bearer token or Basic credentials"
                     className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 font-mono text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                   />
                 </div>
@@ -522,17 +522,17 @@ export default function ConnectPage() {
             {/* AI settings */}
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
               <h2 className="mb-5 font-semibold text-slate-100">
-                ② AI 제공자{" "}
-                <span className="text-sm font-normal text-rose-400">*필수</span>
+                ② AI Provider{" "}
+                <span className="text-sm font-normal text-rose-400">*Required</span>
               </h2>
               <p className="mb-4 text-xs text-slate-500">
-                이상 감지, NLOps, RCA, 예측 스케일링에 필요합니다.
+                Required for anomaly detection, NLOps, RCA, and predictive scaling.
               </p>
 
               {/* Provider select */}
               <div className="mb-4">
                 <label htmlFor="ai-provider" className="mb-2 block text-sm font-medium text-slate-300">
-                  제공자
+                  Provider
                 </label>
                 <div className="relative">
                   <select
@@ -568,7 +568,7 @@ export default function ConnectPage() {
                     className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 font-mono text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                   />
                   <p className="mt-1.5 text-xs text-slate-500">
-                    스크립트에만 포함되며 서버로 전송되지 않습니다.
+                    Included in script only — never sent to any server.
                   </p>
                 </div>
               )}
@@ -581,7 +581,7 @@ export default function ConnectPage() {
                 onClick={() => setAdvancedOpen((v) => !v)}
                 className="flex w-full items-center justify-between px-6 py-4 text-sm font-medium text-slate-400 transition-colors hover:text-slate-200"
               >
-                <span>③ 고급 설정 (선택)</span>
+                <span>③ Advanced Settings (Optional)</span>
                 {advancedOpen
                   ? <ChevronUp className="h-4 w-4" />
                   : <ChevronDown className="h-4 w-4" />}
@@ -603,7 +603,7 @@ export default function ConnectPage() {
                       className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 font-mono text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                     />
                     <p className="mt-1.5 text-xs text-slate-500">
-                      K8s 자동 스케일링 및 Pod 모니터링에 필요합니다 (<code className="font-mono">AWS_CLUSTER_NAME</code>).
+                      Required for K8s auto-scaling and pod monitoring (<code className="font-mono">AWS_CLUSTER_NAME</code>).
                     </p>
                   </div>
 
@@ -621,7 +621,7 @@ export default function ConnectPage() {
                       className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 font-mono text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                     />
                     <p className="mt-1.5 text-xs text-slate-500">
-                      이상 감지 시 Slack/Webhook 알림 (<code className="font-mono">ALERT_WEBHOOK_URL</code>).
+                      Slack/Webhook alert on anomaly detection (<code className="font-mono">ALERT_WEBHOOK_URL</code>).
                     </p>
                   </div>
                 </div>
@@ -637,7 +637,7 @@ export default function ConnectPage() {
                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-100 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
-                연결 테스트
+                Test Connection
               </button>
 
               <button
@@ -646,7 +646,7 @@ export default function ConnectPage() {
                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-opacity hover:opacity-90"
               >
                 <Sparkles className="h-4 w-4" />
-                설정 생성
+                Generate Config
                 <ArrowRight className="h-4 w-4" />
               </button>
             </div>
@@ -654,9 +654,9 @@ export default function ConnectPage() {
             <div className="flex gap-3 rounded-lg border border-slate-800 bg-slate-900/30 p-4">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
               <p className="text-xs text-slate-500 leading-relaxed">
-                연결 테스트는{" "}
-                <code className="font-mono">/api/v2/onboarding/complete</code>를 호출하며,
-                성공 시 인스턴스를 생성(또는 재사용)하고 자동 감지 결과를 저장합니다.
+                Connection test calls{" "}
+                <code className="font-mono">/api/v2/onboarding/complete</code>,
+                which creates (or reuses) an instance and stores auto-detected results on success.
               </p>
             </div>
           </div>
@@ -673,7 +673,7 @@ export default function ConnectPage() {
               <div className="mb-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
                 <div className="flex items-center gap-2 text-sm text-emerald-300">
                   <Check className="h-4 w-4" />
-                  연결 성공 — instanceId:{" "}
+                  Connection successful — instanceId:{" "}
                   <span className="font-mono">{testResult.data.instanceId}</span>
                 </div>
                 {testResult.data.warnings?.length ? (
@@ -705,7 +705,7 @@ export default function ConnectPage() {
                       href={testResult.data.dashboardUrl}
                       className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-500"
                     >
-                      대시보드로 이동
+                      Go to Dashboard
                       <ArrowRight className="h-4 w-4" />
                     </a>
                   </div>
@@ -718,10 +718,10 @@ export default function ConnectPage() {
                 <div className="text-center">
                   <Terminal className="mx-auto mb-3 h-8 w-8 text-slate-700" />
                   <p className="text-sm text-slate-600">
-                    노드 타입과 URL을 입력하고
+                    Enter node type and URL, then run
                     <br />
-                    <span className="text-slate-500">연결 테스트</span> 또는{" "}
-                    <span className="text-slate-500">설정 생성</span>을 실행하세요
+                    <span className="text-slate-500">Test Connection</span> or{" "}
+                    <span className="text-slate-500">Generate Config</span>
                   </p>
                 </div>
               </div>
@@ -729,7 +729,7 @@ export default function ConnectPage() {
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-sm text-emerald-400">
                   <Check className="h-4 w-4" />
-                  설정이 생성되었습니다
+                  Configuration generated
                 </div>
 
                 <CodeBlock
