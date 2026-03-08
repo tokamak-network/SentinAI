@@ -14,6 +14,8 @@ import {
   ExternalLink,
   Shield,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 
 const GITHUB_URL = "https://github.com/tokamak-network/SentinAI";
 const EXAMPLE_DASHBOARD_URL = "https://sentinai.tokamak.network/thanos-sepolia";
@@ -24,7 +26,7 @@ const EXAMPLE_DASHBOARD_URL = "https://sentinai.tokamak.network/thanos-sepolia";
 
 function Navbar() {
   return (
-    <header className="sticky top-0 z-50 border-b border-slate-800 bg-slate-950/80 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         {/* Logo */}
         <div className="flex items-center gap-3">
@@ -37,35 +39,34 @@ function Navbar() {
         </div>
 
         {/* Links */}
-        <nav className="hidden items-center gap-6 text-sm text-slate-400 sm:flex">
+        <nav className="hidden items-center gap-6 text-sm text-muted-foreground sm:flex">
           <a
             href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 transition-colors hover:text-slate-100"
+            className="flex items-center gap-1 transition-colors hover:text-foreground"
           >
             <Github className="h-4 w-4" />
             GitHub
           </a>
           <a
             href="/docs"
-            className="transition-colors hover:text-slate-100"
+            className="transition-colors hover:text-foreground"
           >
             Docs
           </a>
-          <a href="/setup" className="transition-colors hover:text-slate-100">
+          <a href="/setup" className="transition-colors hover:text-foreground">
             Deploy
           </a>
         </nav>
 
         {/* CTA */}
-        <a
-          href="/connect"
-          className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-cyan-500/20 transition-opacity hover:opacity-90"
-        >
-          Connect Your Node
-          <ArrowRight className="h-4 w-4" />
-        </a>
+        <Button asChild size="sm" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-primary/20 hover:opacity-90 hover:bg-primary">
+          <a href="/connect">
+            Connect Your Node
+            <ArrowRight className="h-4 w-4" />
+          </a>
+        </Button>
       </div>
     </header>
   );
@@ -95,7 +96,7 @@ function Hero() {
           </div>
 
           {/* Heading */}
-          <h1 className="mb-6 max-w-3xl text-4xl font-bold tracking-tight text-slate-100 sm:text-5xl lg:text-6xl">
+          <h1 className="mb-6 max-w-3xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
             L1 & L2 Node 인프라{" "}
             <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
               자율 운영
@@ -103,42 +104,37 @@ function Hero() {
           </h1>
 
           {/* Subheading */}
-          <p className="mb-10 max-w-2xl text-lg text-slate-400">
+          <p className="mb-10 max-w-2xl text-lg text-muted-foreground">
             Geth, Reth, OP Stack, Arbitrum — 모든 EVM 노드를 AI가 24/7 자율 운영.
             장애 감지, 정책 기반 플래닝, 승인 게이트 자동화로 팀의 운영 부담을 줄입니다.
           </p>
 
           {/* CTAs */}
           <div className="mb-16 flex flex-wrap items-center justify-center gap-4">
-            <a
-              href="/connect"
-              className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-opacity hover:opacity-90"
-            >
-              <Terminal className="h-4 w-4" />
-              Connect Your Node
-            </a>
-            <a
-              href={EXAMPLE_DASHBOARD_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/50 px-6 py-3 text-sm font-semibold text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100"
-            >
-              <ExternalLink className="h-4 w-4" />
-              View Example Dashboard
-            </a>
-            <a
-              href="/docs"
-              className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/50 px-6 py-3 text-sm font-semibold text-slate-300 transition-colors hover:border-slate-600 hover:text-slate-100"
-            >
-              Read Docs
-              <ExternalLink className="h-4 w-4" />
-            </a>
+            <Button asChild size="lg" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-primary/20 hover:opacity-90 hover:bg-primary">
+              <a href="/connect">
+                <Terminal className="h-4 w-4" />
+                Connect Your Node
+              </a>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="border-border bg-card/50 text-foreground hover:border-border/70 hover:text-foreground">
+              <a href={EXAMPLE_DASHBOARD_URL} target="_blank" rel="noopener noreferrer">
+                <ExternalLink className="h-4 w-4" />
+                View Example Dashboard
+              </a>
+            </Button>
+            <Button asChild size="lg" variant="outline" className="border-border bg-card/50 text-foreground hover:border-border/70 hover:text-foreground">
+              <a href="/docs">
+                Read Docs
+                <ExternalLink className="h-4 w-4" />
+              </a>
+            </Button>
           </div>
 
           {/* Terminal code block */}
-          <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-slate-800 bg-slate-900/80 text-left shadow-2xl shadow-slate-950">
+          <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-border bg-card/80 text-left shadow-2xl shadow-background">
             {/* Title bar */}
-            <div className="flex items-center gap-2 border-b border-slate-800 px-4 py-3">
+            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
               <span className="h-3 w-3 rounded-full bg-rose-500/80" />
               <span className="h-3 w-3 rounded-full bg-amber-500/80" />
               <span className="h-3 w-3 rounded-full bg-emerald-500/80" />
@@ -203,10 +199,10 @@ function SupportedClients() {
     <section className="py-16">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="mb-8 text-center">
-          <h2 className="mb-2 text-xl font-semibold text-slate-300">
+          <h2 className="mb-2 text-xl font-semibold text-foreground/80">
             지원 클라이언트
           </h2>
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-muted-foreground">
             모든 주요 EVM 실행·합의·L2 클라이언트와 호환
           </p>
         </div>
@@ -224,7 +220,7 @@ function SupportedClients() {
                 {group.clients.map((client) => (
                   <span
                     key={client}
-                    className="rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1 text-xs font-medium text-slate-300"
+                    className="rounded-md border border-border bg-muted/60 px-2.5 py-1 text-xs font-medium text-foreground/80"
                   >
                     {client}
                   </span>
@@ -298,10 +294,10 @@ function WhatItDoes() {
     <section className="py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="mb-12 text-center">
-          <h2 className="mb-4 text-3xl font-bold text-slate-100">
+          <h2 className="mb-4 text-3xl font-bold text-foreground">
             What it does
           </h2>
-          <p className="mx-auto max-w-xl text-slate-400">
+          <p className="mx-auto max-w-xl text-muted-foreground">
             Five capabilities working together to reduce MTTR and operator
             burden for L2 infrastructure teams.
           </p>
@@ -311,20 +307,22 @@ function WhatItDoes() {
           {capabilities.map((cap) => {
             const Icon = cap.icon;
             return (
-              <div
+              <Card
                 key={cap.title}
-                className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 transition-colors hover:border-slate-700"
+                className="transition-colors hover:border-border/70"
               >
-                <div
-                  className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg ${cap.bg}`}
-                >
-                  <Icon className={`h-5 w-5 ${cap.color}`} />
-                </div>
-                <h3 className="mb-2 font-semibold text-slate-100">
-                  {cap.title}
-                </h3>
-                <p className="text-sm text-slate-400">{cap.description}</p>
-              </div>
+                <CardContent className="p-6">
+                  <div
+                    className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg ${cap.bg}`}
+                  >
+                    <Icon className={`h-5 w-5 ${cap.color}`} />
+                  </div>
+                  <h3 className="mb-2 font-semibold text-foreground">
+                    {cap.title}
+                  </h3>
+                  <p className="text-sm text-muted-foreground">{cap.description}</p>
+                </CardContent>
+              </Card>
             );
           })}
         </div>
@@ -366,10 +364,10 @@ function HowItWorks() {
     <section className="py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="mb-12 text-center">
-          <h2 className="mb-4 text-3xl font-bold text-slate-100">
+          <h2 className="mb-4 text-3xl font-bold text-foreground">
             How it works
           </h2>
-          <p className="mx-auto max-w-xl text-slate-400">
+          <p className="mx-auto max-w-xl text-muted-foreground">
             A simple three-phase loop that runs every 30 seconds on your
             infrastructure.
           </p>
@@ -392,10 +390,10 @@ function HowItWorks() {
                 </div>
               )}
 
-              <h3 className="mb-3 text-xl font-semibold text-slate-100">
+              <h3 className="mb-3 text-xl font-semibold text-foreground">
                 {step.title}
               </h3>
-              <p className="max-w-xs text-sm text-slate-400">
+              <p className="max-w-xs text-sm text-muted-foreground">
                 {step.description}
               </p>
             </div>
@@ -415,27 +413,27 @@ function Deployment() {
     <section className="py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="mb-12 text-center">
-          <h2 className="mb-4 text-3xl font-bold text-slate-100">
+          <h2 className="mb-4 text-3xl font-bold text-foreground">
             Deployment Options
           </h2>
-          <p className="text-slate-400">
+          <p className="text-muted-foreground">
             Start locally in minutes. Scale to production when ready.
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
           {/* Docker Compose */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-8">
+          <div className="rounded-xl border border-border bg-card/50 p-8">
             <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
               <Terminal className="h-5 w-5 text-emerald-400" />
             </div>
-            <h3 className="mb-2 text-xl font-semibold text-slate-100">
+            <h3 className="mb-2 text-xl font-semibold text-foreground">
               Docker Compose
             </h3>
-            <p className="mb-4 text-sm text-slate-400">
+            <p className="mb-4 text-sm text-muted-foreground">
               Local development and demo. Up in under 10 minutes.
             </p>
-            <div className="rounded-lg border border-slate-800 bg-slate-950 p-4 font-mono text-sm">
+            <div className="rounded-lg border border-border bg-background p-4 font-mono text-sm">
               <p className="text-slate-500">
                 <span className="text-slate-600">$</span>{" "}
                 <span className="text-slate-300">
@@ -443,7 +441,7 @@ function Deployment() {
                 </span>
               </p>
             </div>
-            <ul className="mt-4 space-y-2 text-sm text-slate-400">
+            <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
               {["Next.js dashboard on :3002", "Redis state store", "Caddy HTTPS proxy (optional)"].map((item) => (
                 <li key={item} className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
@@ -451,27 +449,26 @@ function Deployment() {
                 </li>
               ))}
             </ul>
-            <a
-              href="/setup"
-              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-emerald-500/20 transition-opacity hover:opacity-90"
-            >
-              <Terminal className="h-4 w-4" />
-              설치 스크립트 생성
-            </a>
+            <Button asChild className="mt-6 w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg hover:opacity-90 hover:bg-primary">
+              <a href="/setup">
+                <Terminal className="h-4 w-4" />
+                설치 스크립트 생성
+              </a>
+            </Button>
           </div>
 
           {/* Kubernetes */}
-          <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-8">
+          <div className="rounded-xl border border-border bg-card/50 p-8">
             <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-500/10">
               <Cloud className="h-5 w-5 text-cyan-400" />
             </div>
-            <h3 className="mb-2 text-xl font-semibold text-slate-100">
+            <h3 className="mb-2 text-xl font-semibold text-foreground">
               Kubernetes (EKS)
             </h3>
-            <p className="mb-4 text-sm text-slate-400">
+            <p className="mb-4 text-sm text-muted-foreground">
               Production-grade deployment with real K8s scaling integration.
             </p>
-            <div className="rounded-lg border border-slate-800 bg-slate-950 p-4 font-mono text-sm">
+            <div className="rounded-lg border border-border bg-background p-4 font-mono text-sm">
               <p className="text-slate-500">
                 <span className="text-slate-600">$</span>{" "}
                 <span className="text-slate-300">
@@ -479,7 +476,7 @@ function Deployment() {
                 </span>
               </p>
             </div>
-            <ul className="mt-4 space-y-2 text-sm text-slate-400">
+            <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
               {["Auto-detects EKS region & API endpoint", "Real pod scaling (kubectl integration)", "L1 RPC failover with auto-switch"].map((item) => (
                 <li key={item} className="flex items-center gap-2">
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-cyan-400" />
@@ -538,10 +535,10 @@ function SafetyControl() {
     <section className="py-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="mb-12 text-center">
-          <h2 className="mb-4 text-3xl font-bold text-slate-100">
+          <h2 className="mb-4 text-3xl font-bold text-foreground">
             Safety & Control
           </h2>
-          <p className="mx-auto max-w-xl text-slate-400">
+          <p className="mx-auto max-w-xl text-muted-foreground">
             Autonomous doesn&apos;t mean uncontrolled. Every action is
             governed by policy, risk score, and human approval gates.
           </p>
@@ -551,22 +548,24 @@ function SafetyControl() {
           {safetyItems.map((item) => {
             const Icon = item.icon;
             return (
-              <div
+              <Card
                 key={item.title}
-                className="flex gap-4 rounded-xl border border-slate-800 bg-slate-900/50 p-6 transition-colors hover:border-slate-700"
+                className="transition-colors hover:border-border/70"
               >
-                <div
-                  className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${item.bg}`}
-                >
-                  <Icon className={`h-5 w-5 ${item.color}`} />
-                </div>
-                <div>
-                  <h3 className="mb-1 font-semibold text-slate-100">
-                    {item.title}
-                  </h3>
-                  <p className="text-sm text-slate-400">{item.description}</p>
-                </div>
-              </div>
+                <CardContent className="flex gap-4 p-6">
+                  <div
+                    className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${item.bg}`}
+                  >
+                    <Icon className={`h-5 w-5 ${item.color}`} />
+                  </div>
+                  <div>
+                    <h3 className="mb-1 font-semibold text-foreground">
+                      {item.title}
+                    </h3>
+                    <p className="text-sm text-muted-foreground">{item.description}</p>
+                  </div>
+                </CardContent>
+              </Card>
             );
           })}
         </div>
@@ -581,15 +580,15 @@ function SafetyControl() {
 
 function Footer() {
   return (
-    <footer className="border-t border-slate-800 bg-slate-900/30">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-4 py-12 text-sm text-slate-500 sm:flex-row sm:px-6 lg:px-8">
+    <footer className="border-t border-border bg-card/30">
+      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-4 py-12 text-sm text-muted-foreground sm:flex-row sm:px-6 lg:px-8">
         {/* Brand */}
         <div className="flex flex-col items-center gap-3 sm:items-start">
           <div className="flex items-center gap-2">
             <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-cyan-500 to-blue-600">
               <ShieldCheck className="h-3.5 w-3.5 text-white" />
             </div>
-            <span className="font-semibold text-slate-400">SentinAI</span>
+            <span className="font-semibold text-foreground/70">SentinAI</span>
           </div>
           <p className="max-w-xs text-center text-xs sm:text-left">
             Autonomous Node Guardian for L2 & Rollup Infrastructure.
@@ -598,7 +597,7 @@ function Footer() {
               href="https://tokamak.network"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-slate-400 hover:text-slate-300"
+              className="text-muted-foreground hover:text-foreground"
             >
               Tokamak Network
             </a>
@@ -610,7 +609,7 @@ function Footer() {
         <nav className="flex items-center gap-6">
           <a
             href="/docs"
-            className="hover:text-slate-300"
+            className="hover:text-foreground"
           >
             Docs
           </a>
@@ -618,7 +617,7 @@ function Footer() {
             href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
-            className="flex items-center gap-1 hover:text-slate-300"
+            className="flex items-center gap-1 hover:text-foreground"
           >
             <Github className="h-4 w-4" />
             GitHub
@@ -627,7 +626,7 @@ function Footer() {
             href="https://x.com/tokamak_network"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-slate-300"
+            className="hover:text-foreground"
           >
             X
           </a>
@@ -643,7 +642,7 @@ function Footer() {
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-background text-foreground">
       <Navbar />
       <main>
         <Hero />
