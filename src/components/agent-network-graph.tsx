@@ -2,7 +2,7 @@
 
 import { useRef, useMemo, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { Text, OrbitControls } from '@react-three/drei';
+import { Text, OrbitControls, Billboard } from '@react-three/drei';
 import * as THREE from 'three';
 
 export type NodeState = 'normal' | 'anomaly' | 'critical' | 'inactive';
@@ -65,15 +65,17 @@ function NodeMesh({ node }: { node: NetworkNode }) {
           side={THREE.BackSide}
         />
       </mesh>
-      <Text
-        position={[0, -0.35, 0]}
-        fontSize={0.14}
-        color="#E8F4FF"
-        anchorX="center"
-        anchorY="top"
-      >
-        {node.label}
-      </Text>
+      <Billboard>
+        <Text
+          position={[0, -0.35, 0]}
+          fontSize={0.14}
+          color="#E8F4FF"
+          anchorX="center"
+          anchorY="top"
+        >
+          {node.label}
+        </Text>
+      </Billboard>
     </group>
   );
 }
