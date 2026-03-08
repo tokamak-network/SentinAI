@@ -5,61 +5,108 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { Text, OrbitControls, Billboard, Line } from '@react-three/drei';
 import * as THREE from 'three';
 
+// ─── Public types (unchanged — page.tsx depends on these) ─────────────────────
 export type NodeState = 'normal' | 'anomaly' | 'critical' | 'inactive';
-
-interface NetworkNode {
-  id: string;
-  label: string;
-  position: [number, number, number];
-  state: NodeState;
-}
-
-interface NetworkEdge {
-  from: string;
-  to: string;
-}
 
 interface AgentNetworkGraphProps {
   componentStates: Record<string, NodeState>;
   agentPhase?: string;
 }
 
+// ─── Agent pipeline nodes ─────────────────────────────────────────────────────
+type AgentId = 'collector' | 'detector' | 'analyzer' | 'executor' | 'verifier';
+
+interface AgentNode {
+  id: AgentId;
+  label: string;
+  position: [number, number, number];
+}
+
+const AGENT_NODES: AgentNode[] = [
+  { id: 'collector', label: 'Collector', position: [-3.5, 0, 0] },
+  { id: 'detector',  label: 'Detector',  position: [-1,   0, 0] },
+  { id: 'analyzer',  label: 'Analyzer',  position: [ 1.5, 2, 0] },
+  { id: 'executor',  label: 'Executor',  position: [ 1.5,-2, 0] },
+  { id: 'verifier',  label: 'Verifier',  position: [ 3.5, 0, 0] },
+];
+
+// ─── Agent role colors (fixed per role) ──────────────────────────────────────
+const AGENT_COLORS: Record<AgentId, string> = {
+  collector: '#3B82F6', // blue
+  detector:  '#F59E0B', // amber
+  analyzer:  '#A78BFA', // purple
+  executor:  '#10FFAA', // green
+  verifier:  '#22D3EE', // cyan
+};
+
+// ─── Phase → which agents are active ─────────────────────────────────────────
+const PHASE_ACTIVE: Record<string, AgentId[]> = {
+  observe:  ['collector'],
+  detect:   ['collector', 'detector'],
+  analyze:  ['detector', 'analyzer', 'executor'],
+  plan:     ['analyzer'],
+  act:      ['executor'],
+  verify:   ['verifier'],
+  complete: [],
+  idle:     [],
+  error:    [],
+};
+
+// ─── Pipeline edges ───────────────────────────────────────────────────────────
+interface PipelineEdge {
+  from: AgentId;
+  to: AgentId;
+  activePhases: string[];
+  packetPhases: string[];
+}
+
+const PIPELINE_EDGES: PipelineEdge[] = [
+  {
+    from: 'collector', to: 'detector',
+    activePhases: ['observe', 'detect', 'analyze', 'plan', 'act', 'verify'],
+    packetPhases: ['detect', 'analyze'],
+  },
+  {
+    from: 'detector', to: 'analyzer',
+    activePhases: ['detect', 'analyze', 'plan', 'verify', 'complete'],
+    packetPhases: ['analyze', 'plan'],
+  },
+  {
+    from: 'detector', to: 'executor',
+    activePhases: ['detect', 'analyze', 'act', 'verify', 'complete'],
+    packetPhases: ['analyze', 'act'],
+  },
+  {
+    from: 'analyzer', to: 'verifier',
+    activePhases: ['plan', 'verify', 'complete'],
+    packetPhases: ['verify'],
+  },
+  {
+    from: 'executor', to: 'verifier',
+    activePhases: ['act', 'verify', 'complete'],
+    packetPhases: ['verify'],
+  },
+];
+
+// ─── Infra mini-cluster ───────────────────────────────────────────────────────
+const INFRA_IDS = ['l1', 'op-node', 'op-geth', 'op-batcher', 'op-proposer'];
+
+const INFRA_POSITIONS: [number, number, number][] = [
+  [-5.6,  0.5, 0],
+  [-5.6, -0.5, 0],
+  [-5.2,  0.8, 0],
+  [-5.2,  0,   0],
+  [-5.2, -0.8, 0],
+];
+
+const INFRA_CONNECTOR: [number, number, number] = [-5.4, 0, 0];
+
 const STATE_COLORS: Record<NodeState, string> = {
-  normal:   '#3B82F6',
+  normal:   '#2A4A6A',
   anomaly:  '#F59E0B',
   critical: '#EF4444',
-  inactive: '#4A7FA5',
+  inactive: '#2A4A6A',
 };
-
-const AGENT_PHASE_COLORS: Record<string, string> = {
-  idle:    '#3B82F6',
-  observe: '#10FFAA',
-  detect:  '#F59E0B',
-  analyze: '#A78BFA',
-  plan:    '#22D3EE',
-  act:     '#10FFAA',
-  verify:  '#E8F4FF',
-  error:   '#EF4444',
-};
-
-// Pentagon layout: SentinAI at center, 5 components at radius 2.8
-const R = 2.8;
-const DEFAULT_NODES: NetworkNode[] = [
-  { id: 'sentinai',    label: 'SentinAI',    position: [0, 0, 0],                                                                     state: 'normal' },
-  { id: 'l1',          label: 'L1 RPC',      position: [0, R, 0],                                                                     state: 'normal' },
-  { id: 'op-node',     label: 'op-node',     position: [-R * Math.sin(72 * Math.PI / 180), R * Math.cos(72 * Math.PI / 180), 0],      state: 'normal' },
-  { id: 'op-geth',     label: 'op-geth',     position: [-R * Math.sin(36 * Math.PI / 180), -R * Math.cos(36 * Math.PI / 180), 0],     state: 'normal' },
-  { id: 'op-batcher',  label: 'op-batcher',  position: [R * Math.sin(36 * Math.PI / 180), -R * Math.cos(36 * Math.PI / 180), 0],      state: 'normal' },
-  { id: 'op-proposer', label: 'op-proposer', position: [R * Math.sin(72 * Math.PI / 180), R * Math.cos(72 * Math.PI / 180), 0],       state: 'normal' },
-];
-
-const DEFAULT_EDGES: NetworkEdge[] = [
-  { from: 'sentinai', to: 'l1' },
-  { from: 'sentinai', to: 'op-node' },
-  { from: 'sentinai', to: 'op-geth' },
-  { from: 'sentinai', to: 'op-batcher' },
-  { from: 'sentinai', to: 'op-proposer' },
-];
 
 /** Sonar pulse ring expanding from SentinAI center during observe phase */
 function PulseRing({ color, initialOffset = 0 }: { color: string; initialOffset?: number }) {
