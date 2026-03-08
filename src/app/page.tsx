@@ -21,12 +21,9 @@ import { ScalingPanel } from '@/components/scaling-panel';
 import { NLOpsBar } from '@/components/nlops-bar';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import type { NodeState } from '@/components/agent-network-graph';
+import { AgentSequenceDiagram } from '@/components/agent-sequence-diagram';
 
-const AgentNetworkGraph = dynamic(
-  () => import('@/components/agent-network-graph').then((m) => m.AgentNetworkGraph),
-  { ssr: false, loading: () => <div className="w-full h-full bg-card animate-pulse rounded-lg" /> }
-);
+type NodeState = 'normal' | 'anomaly' | 'critical' | 'inactive';
 
 // --- Interfaces ---
 interface MetricData {
@@ -976,11 +973,21 @@ export default function Dashboard() {
 
       {/* Main content */}
       <div className="flex flex-1 min-h-0">
-        {/* Left: 3D Agent Graph (65%) */}
+        {/* Left: Agent Sequence Diagram */}
         <div className="flex-1 min-h-0 p-3">
-          <AgentNetworkGraph
-            componentStates={componentStates}
+          <AgentSequenceDiagram
             agentPhase={graphAgentPhase}
+            metrics={current?.metrics ? {
+              cpuUsage: current.metrics.cpuUsage,
+              txPoolPending: current.metrics.txPoolCount,
+            } : undefined}
+            anomalyEvents={anomalyEvents.map((e) => ({
+              severity: e.deepAnalysis?.severity,
+              message: e.deepAnalysis?.anomalyType,
+            }))}
+            scalingScore={agentLoop?.lastCycle?.scaling?.score}
+            currentVcpu={scalerState?.currentVcpu ?? agentLoop?.lastCycle?.scaling?.currentVcpu}
+            targetVcpu={agentLoop?.lastCycle?.scaling?.targetVcpu ?? scalerState?.currentVcpu}
           />
         </div>
 
