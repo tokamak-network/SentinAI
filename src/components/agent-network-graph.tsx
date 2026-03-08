@@ -88,22 +88,21 @@ function AgentCenterNode({
 
   return (
     <group position={node.position}>
-      <mesh ref={meshRef}>
+      <mesh ref={meshRef} renderOrder={2}>
         <sphereGeometry args={[0.28, 32, 32]} />
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={isActive ? 0.9 : 0.5}
-          transparent
-          opacity={0.95}
+          emissiveIntensity={isActive ? 1.0 : 0.7}
         />
       </mesh>
-      <mesh ref={haloRef}>
+      <mesh ref={haloRef} renderOrder={1}>
         <sphereGeometry args={[0.44, 16, 16]} />
         <meshStandardMaterial
           color={color}
           transparent
-          opacity={0.07}
+          opacity={0.1}
+          depthWrite={false}
           side={THREE.BackSide}
         />
       </mesh>
