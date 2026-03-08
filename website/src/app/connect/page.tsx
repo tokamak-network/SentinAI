@@ -286,6 +286,7 @@ export default function ConnectPage() {
     setTesting(true);
     setTestError(null);
     setTestResult(null);
+    setGenerated(false);
 
     try {
       const connectionConfig: Record<string, unknown> =
@@ -319,7 +320,13 @@ export default function ConnectPage() {
         // (Do not auto-navigate to avoid surprises)
       }
     } catch (e) {
-      setTestError(String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      // Show a user-friendly error instead of raw exception text
+      if (msg.toLowerCase().includes('syntaxerror') || msg.toLowerCase().includes('not valid json')) {
+        setTestError('서버에 연결할 수 없습니다. RPC URL을 확인하거나 SentinAI 백엔드가 실행 중인지 확인하세요.');
+      } else {
+        setTestError(msg);
+      }
     } finally {
       setTesting(false);
     }
