@@ -183,9 +183,30 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
       logger.info(`[AgentLoop] Using seed metrics (${activeSeedScenario}): CPU=${seedMetric.cpuUsage.toFixed(1)}%, TxPool=${seedMetric.txPoolPending}, vCPU=${seedMetric.currentVcpu}`);
       return {
         dataPoint: seedMetric,
-        l1BlockHeight: 0, // Seed metrics don't include L1
+        l1BlockHeight: 0,
       };
     }
+
+    // Cross-worker fallback: MetricsStore is in-memory and may be empty on this worker.
+    // Generate a representative data point from the scenario name so scoring still works.
+    const SCENARIO_DEFAULTS: Record<string, Partial<MetricDataPoint>> = {
+      spike:  { cpuUsage: 95, txPoolPending: 8000, gasUsedRatio: 0.95, blockInterval: 6.0, currentVcpu: 2 },
+      rising: { cpuUsage: 55, txPoolPending: 200,  gasUsedRatio: 0.45, blockInterval: 2.8, currentVcpu: 2 },
+      stable: { cpuUsage: 20, txPoolPending: 20,   gasUsedRatio: 0.15, blockInterval: 2.0, currentVcpu: 1 },
+    };
+    const defaults = SCENARIO_DEFAULTS[activeSeedScenario] ?? SCENARIO_DEFAULTS.stable;
+    const fallbackPoint: MetricDataPoint = {
+      timestamp: new Date().toISOString(),
+      blockHeight: 0,
+      blockInterval: defaults.blockInterval ?? 2.0,
+      txPoolPending: defaults.txPoolPending ?? 20,
+      gasUsedRatio: defaults.gasUsedRatio ?? 0.15,
+      cpuUsage: defaults.cpuUsage ?? 20,
+      currentVcpu: defaults.currentVcpu ?? 1,
+    };
+    await pushMetric(fallbackPoint);
+    logger.info(`[AgentLoop] Cross-worker seed fallback (${activeSeedScenario}): CPU=${fallbackPoint.cpuUsage}%, TxPool=${fallbackPoint.txPoolPending}`);
+    return { dataPoint: fallbackPoint, l1BlockHeight: 0 };
   }
 
   const l2Client = createPublicClient({ chain: getChainPlugin().l2Chain, transport: http(rpcUrl, { timeout: RPC_TIMEOUT_MS }) });
