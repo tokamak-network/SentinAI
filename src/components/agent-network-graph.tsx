@@ -31,6 +31,114 @@ const STATE_COLORS: Record<NodeState, string> = {
   inactive: '#4A7FA5',
 };
 
+const AGENT_PHASE_COLORS: Record<string, string> = {
+  idle:    '#3B82F6',
+  observe: '#10FFAA',
+  detect:  '#F59E0B',
+  analyze: '#A78BFA',
+  plan:    '#22D3EE',
+  act:     '#10FFAA',
+  verify:  '#E8F4FF',
+  error:   '#EF4444',
+};
+
+// Pentagon layout: SentinAI at center, 5 components at radius 2.8
+// Angles (CCW from top): L1=90°, op-node=162°, op-geth=234°, op-batcher=306°, op-proposer=18°
+const R = 2.8;
+const DEFAULT_NODES: NetworkNode[] = [
+  { id: 'sentinai',    label: 'SentinAI',    position: [0, 0, 0],                                        state: 'normal' },
+  { id: 'l1',          label: 'L1 RPC',      position: [0, R, 0],                                        state: 'normal' },
+  { id: 'op-node',     label: 'op-node',     position: [-R * Math.sin(72 * Math.PI / 180), R * Math.cos(72 * Math.PI / 180), 0],  state: 'normal' },
+  { id: 'op-geth',     label: 'op-geth',     position: [-R * Math.sin(36 * Math.PI / 180), -R * Math.cos(36 * Math.PI / 180), 0], state: 'normal' },
+  { id: 'op-batcher',  label: 'op-batcher',  position: [R * Math.sin(36 * Math.PI / 180), -R * Math.cos(36 * Math.PI / 180), 0],  state: 'normal' },
+  { id: 'op-proposer', label: 'op-proposer', position: [R * Math.sin(72 * Math.PI / 180), R * Math.cos(72 * Math.PI / 180), 0],   state: 'normal' },
+];
+
+const DEFAULT_EDGES: NetworkEdge[] = [
+  { from: 'sentinai', to: 'l1' },
+  { from: 'sentinai', to: 'op-node' },
+  { from: 'sentinai', to: 'op-geth' },
+  { from: 'sentinai', to: 'op-batcher' },
+  { from: 'sentinai', to: 'op-proposer' },
+];
+
+function AgentCenterNode({
+  node,
+  agentPhase,
+}: {
+  node: NetworkNode;
+  agentPhase?: string;
+}) {
+  const meshRef = useRef<THREE.Mesh>(null!);
+  const haloRef = useRef<THREE.Mesh>(null!);
+  const ringRef = useRef<THREE.Mesh>(null!);
+  const phase = agentPhase ?? 'idle';
+  const color = AGENT_PHASE_COLORS[phase] ?? AGENT_PHASE_COLORS.idle;
+  const isActive = phase !== 'idle' && phase !== 'error';
+
+  useFrame(() => {
+    if (!meshRef.current) return;
+    const scale = 1 + Math.sin(Date.now() * 0.004) * (isActive ? 0.12 : 0.04);
+    meshRef.current.scale.setScalar(scale);
+    if (haloRef.current) haloRef.current.scale.setScalar(scale);
+    if (ringRef.current) {
+      ringRef.current.rotation.z += 0.02;
+    }
+  });
+
+  return (
+    <group position={node.position}>
+      <mesh ref={meshRef}>
+        <sphereGeometry args={[0.28, 32, 32]} />
+        <meshStandardMaterial
+          color={color}
+          emissive={color}
+          emissiveIntensity={isActive ? 0.9 : 0.5}
+          transparent
+          opacity={0.95}
+        />
+      </mesh>
+      <mesh ref={haloRef}>
+        <sphereGeometry args={[0.44, 16, 16]} />
+        <meshStandardMaterial
+          color={color}
+          transparent
+          opacity={0.07}
+          side={THREE.BackSide}
+        />
+      </mesh>
+      {isActive && (
+        <mesh ref={ringRef}>
+          <torusGeometry args={[0.38, 0.015, 8, 64]} />
+          <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1} />
+        </mesh>
+      )}
+      <Billboard>
+        <Text
+          position={[0, -0.62, 0]}
+          fontSize={0.16}
+          color="#E8F4FF"
+          anchorX="center"
+          anchorY="top"
+        >
+          {node.label}
+        </Text>
+        {phase !== 'idle' && (
+          <Text
+            position={[0, -0.88, 0]}
+            fontSize={0.11}
+            color={color}
+            anchorX="center"
+            anchorY="top"
+          >
+            {phase}
+          </Text>
+        )}
+      </Billboard>
+    </group>
+  );
+}
+
 function NodeMesh({ node }: { node: NetworkNode }) {
   const meshRef = useRef<THREE.Mesh>(null!);
   const haloRef = useRef<THREE.Mesh>(null!);
@@ -91,6 +199,7 @@ function PacketParticle({
 }) {
   const meshRef = useRef<THREE.Mesh>(null!);
   const progress = useRef(0);
+
   useEffect(() => {
     progress.current = Math.random();
   }, []);
@@ -143,23 +252,6 @@ function EdgeLine({
   return <primitive object={line} />;
 }
 
-const DEFAULT_NODES: NetworkNode[] = [
-  { id: 'l1',          label: 'L1 RPC',      position: [-3, 0, 0],   state: 'normal' },
-  { id: 'op-node',     label: 'op-node',     position: [-1, 0, 0],   state: 'normal' },
-  { id: 'op-geth',     label: 'op-geth',     position: [1, 1, 0],    state: 'normal' },
-  { id: 'op-batcher',  label: 'op-batcher',  position: [1, -1, 0],   state: 'normal' },
-  { id: 'op-proposer', label: 'op-proposer', position: [3, -1, 0],   state: 'normal' },
-];
-
-const DEFAULT_EDGES: NetworkEdge[] = [
-  { from: 'l1', to: 'op-node' },
-  { from: 'op-node', to: 'op-geth' },
-  { from: 'op-node', to: 'op-batcher' },
-  { from: 'op-node', to: 'op-proposer' },
-  { from: 'op-batcher', to: 'l1' },
-  { from: 'op-proposer', to: 'l1' },
-];
-
 function Scene({
   nodes,
   edges,
@@ -173,8 +265,13 @@ function Scene({
     () => Object.fromEntries(nodes.map((n) => [n.id, n])),
     [nodes],
   );
-  const isAnimating =
-    agentPhase && agentPhase !== 'idle' && agentPhase !== 'error';
+
+  const phase = agentPhase ?? 'idle';
+  const isAnimating = phase !== 'idle' && phase !== 'error';
+
+  // observe / detect / analyze: data flows inward (component → sentinai)
+  // plan / act / verify: commands flow outward (sentinai → component)
+  const packetInward = phase === 'observe' || phase === 'detect' || phase === 'analyze';
 
   return (
     <>
@@ -186,23 +283,27 @@ function Scene({
         const fromNode = nodeMap[edge.from];
         const toNode = nodeMap[edge.to];
         if (!fromNode || !toNode) return null;
+
+        const particleFrom = packetInward ? toNode.position : fromNode.position;
+        const particleTo   = packetInward ? fromNode.position : toNode.position;
+
         return (
           <group key={`${edge.from}-${edge.to}`}>
             <EdgeLine from={fromNode.position} to={toNode.position} />
             {isAnimating && (
-              <PacketParticle
-                from={fromNode.position}
-                to={toNode.position}
-                speed={0.8}
-              />
+              <PacketParticle from={particleFrom} to={particleTo} speed={0.8} />
             )}
           </group>
         );
       })}
 
-      {nodes.map((node) => (
-        <NodeMesh key={node.id} node={node} />
-      ))}
+      {nodes.map((node) =>
+        node.id === 'sentinai' ? (
+          <AgentCenterNode key={node.id} node={node} agentPhase={agentPhase} />
+        ) : (
+          <NodeMesh key={node.id} node={node} />
+        ),
+      )}
 
       <OrbitControls
         enableZoom={false}
@@ -222,7 +323,7 @@ export function AgentNetworkGraph({
     () =>
       DEFAULT_NODES.map((n) => ({
         ...n,
-        state: componentStates[n.id] ?? n.state,
+        state: n.id === 'sentinai' ? 'normal' as NodeState : (componentStates[n.id] ?? n.state),
       })),
     [componentStates],
   );
@@ -230,7 +331,7 @@ export function AgentNetworkGraph({
   return (
     <div className="w-full h-full min-h-[400px]">
       <Canvas
-        camera={{ position: [0, 0, 6], fov: 55 }}
+        camera={{ position: [0, 0, 7.5], fov: 55 }}
         gl={{ antialias: true, alpha: true }}
         style={{ background: 'transparent' }}
       >
