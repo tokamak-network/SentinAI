@@ -59,6 +59,19 @@
   .agent-glow-red   { box-shadow: 0 0 16px rgba(248, 113, 113, 0.6); }
 }
 
+/* Agent sequence diagram animations */
+@keyframes sdDrawLine {
+  to { stroke-dashoffset: 0; }
+}
+@keyframes sdFadeIn {
+  to { opacity: 1; }
+}
+@keyframes sdPulseRing {
+  0%  { r: 0;  stroke-opacity: 0.8; }
+  60% { r: 18; stroke-opacity: 0.4; }
+  100%{ r: 24; stroke-opacity: 0; }
+}
+
 @keyframes loading-bar {
   0%   { width: 0%;   transform: translateX(0); }
   50%  { width: 100%; transform: translateX(0); }

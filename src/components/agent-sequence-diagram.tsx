@@ -60,6 +60,8 @@ const ROW_STEP   = 60;
 const VB_HEIGHT  = 560;
 const VB_WIDTH   = 1000;
 
+const MAX_MESSAGES = 30; // prevent unbounded accumulation
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function readAgentNames(): Partial<Record<AgentDomain, string>> {
@@ -70,6 +72,9 @@ function readAgentNames(): Partial<Record<AgentDomain, string>> {
     return {};
   }
 }
+
+// Module-level constant (env var is build-time inlined, no need to re-read)
+const AGENT_NAMES = readAgentNames();
 
 function buildMessages(
   phase: string,
@@ -166,18 +171,6 @@ function ArrowMsg({
 
   return (
     <g>
-      <defs>
-        <marker
-          id={markerId}
-          markerWidth="6"
-          markerHeight="6"
-          refX="5"
-          refY="3"
-          orient="auto"
-        >
-          <path d="M0,0 L6,3 L0,6 Z" fill={color} opacity={0.8} />
-        </marker>
-      </defs>
       <line
         x1={x1}
         y1={y}
@@ -260,7 +253,7 @@ export function AgentSequenceDiagram({
   const [messages, setMessages] = useState<DiagramMessage[]>([]);
   const prevPhaseRef = useRef<string>('idle');
   const fadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const agentNames = readAgentNames();
+  const agentNames = AGENT_NAMES;
 
   useEffect(() => {
     const prev = prevPhaseRef.current;
@@ -288,9 +281,16 @@ export function AgentSequenceDiagram({
       setMessages((m) => [
         ...m,
         ...newMsgs.map((msg) => ({ ...msg, fading: false })),
-      ]);
+      ].slice(-MAX_MESSAGES));
     }
-  }, [agentPhase]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    return () => {
+      if (fadeTimerRef.current) clearTimeout(fadeTimerRef.current);
+    };
+  // Intentional: messages are pushed only on phase transitions, not on metric value changes.
+  // Metrics/anomalies are read from closure at the moment of phase change — this is correct.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agentPhase]);
 
   const msgY = (index: number) =>
     Math.min(FIRST_Y + index * ROW_STEP, VB_HEIGHT - 40);
@@ -299,25 +299,27 @@ export function AgentSequenceDiagram({
 
   return (
     <div className="w-full h-full glass-panel rounded-xl overflow-hidden relative">
-      <style>{`
-        @keyframes sdDrawLine {
-          to { stroke-dashoffset: 0; }
-        }
-        @keyframes sdFadeIn {
-          to { opacity: 1; }
-        }
-        @keyframes sdPulseRing {
-          0%  { r: 0;  stroke-opacity: 0.8; }
-          60% { r: 18; stroke-opacity: 0.4; }
-          100%{ r: 24; stroke-opacity: 0; }
-        }
-      `}</style>
-
       <svg
         viewBox={`0 0 ${VB_WIDTH} ${VB_HEIGHT}`}
         className="w-full h-full"
         preserveAspectRatio="xMidYMid meet"
       >
+        <defs>
+          {DOMAINS.map((d) => (
+            <marker
+              key={d}
+              id={`arrowhead-${d}`}
+              markerWidth="6"
+              markerHeight="6"
+              refX="5"
+              refY="3"
+              orient="auto"
+            >
+              <path d="M0,0 L6,3 L0,6 Z" fill={DOMAIN_COLOR[d]} opacity={0.8} />
+            </marker>
+          ))}
+        </defs>
+
         {DOMAINS.map((domain) => {
           const cx = COL_X[domain];
           const color = DOMAIN_COLOR[domain];
