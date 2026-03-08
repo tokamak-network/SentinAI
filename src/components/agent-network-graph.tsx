@@ -33,6 +33,7 @@ const STATE_COLORS: Record<NodeState, string> = {
 
 function NodeMesh({ node }: { node: NetworkNode }) {
   const meshRef = useRef<THREE.Mesh>(null!);
+  const haloRef = useRef<THREE.Mesh>(null!);
   const color = STATE_COLORS[node.state];
   const isActive = node.state !== 'inactive';
 
@@ -40,6 +41,7 @@ function NodeMesh({ node }: { node: NetworkNode }) {
     if (!isActive || !meshRef.current) return;
     const scale = 1 + Math.sin(Date.now() * 0.003) * (node.state === 'critical' ? 0.15 : 0.05);
     meshRef.current.scale.setScalar(scale);
+    if (haloRef.current) haloRef.current.scale.setScalar(scale);
   });
 
   return (
@@ -54,7 +56,7 @@ function NodeMesh({ node }: { node: NetworkNode }) {
           opacity={0.9}
         />
       </mesh>
-      <mesh>
+      <mesh ref={haloRef}>
         <sphereGeometry args={[0.28, 16, 16]} />
         <meshStandardMaterial
           color={color}
@@ -127,7 +129,16 @@ function EdgeLine({
     [],
   );
 
-  return <primitive object={new THREE.Line(geometry, material)} />;
+  const line = useMemo(() => new THREE.Line(geometry, material), [geometry, material]);
+
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+      material.dispose();
+    };
+  }, [geometry, material]);
+
+  return <primitive object={line} />;
 }
 
 const DEFAULT_NODES: NetworkNode[] = [
