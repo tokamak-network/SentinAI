@@ -38,11 +38,11 @@ const CLIENT_OPTIONS: { value: ClientFamily; label: string }[] = [
   { value: "op-geth", label: "OP Geth (OP Stack)" },
   { value: "nitro-node", label: "Nitro Node (Arbitrum)" },
   { value: "ethrex", label: "Ethrex" },
-  { value: "other", label: "기타 (자동 감지)" },
+  { value: "other", label: "Other (Auto Detect)" },
 ];
 
 const AI_OPTIONS: { value: AiProvider; label: string }[] = [
-  { value: "none", label: "없음 (나중에 설정)" },
+  { value: "none", label: "None (Set Later)" },
   { value: "qwen", label: "Qwen (DashScope)" },
   { value: "anthropic", label: "Anthropic (Claude)" },
   { value: "openai", label: "OpenAI" },
@@ -82,14 +82,14 @@ function CustomClientSection({
         | { data: DetectResult }
         | { error: string; detail?: string };
       if (!res.ok || "error" in json) {
-        const msg = "error" in json ? json.error : "감지 실패";
+        const msg = "error" in json ? json.error : "Detection failed";
         setError(msg);
         onDetectResult(null);
       } else {
         onDetectResult(json.data);
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : "네트워크 오류");
+      setError(e instanceof Error ? e.message : "Network error");
       onDetectResult(null);
     } finally {
       setLoading(false);
@@ -99,7 +99,7 @@ function CustomClientSection({
   return (
     <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6">
       <h2 className="mb-5 text-sm font-semibold uppercase tracking-wider text-amber-400">
-        커스텀 클라이언트 설정
+        Custom Client Configuration
       </h2>
 
       {/* Client name */}
@@ -108,14 +108,14 @@ function CustomClientSection({
           htmlFor="custom-name"
           className="mb-1.5 block text-sm font-medium text-slate-300"
         >
-          클라이언트 이름
+          Client Name
         </label>
         <input
           id="custom-name"
           type="text"
           value={customName}
           onChange={(e) => onCustomNameChange(e.target.value)}
-          placeholder="예: ethrex"
+          placeholder="e.g. ethrex"
           className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
         />
       </div>
@@ -131,7 +131,7 @@ function CustomClientSection({
         ) : (
           "🔍"
         )}
-        자동 감지
+        Auto Detect
       </button>
 
       {/* Error */}
@@ -144,22 +144,22 @@ function CustomClientSection({
       {/* Detection result */}
       {detectResult && (
         <div className="mt-4 space-y-2 rounded-lg border border-slate-700 bg-slate-800/60 p-4">
-          <p className="text-xs font-medium text-slate-300">감지 결과</p>
+          <p className="text-xs font-medium text-slate-300">Detection Result</p>
           <dl className="space-y-1 text-xs text-slate-400">
             <div className="flex gap-2">
-              <dt className="w-32 shrink-0 text-slate-500">클라이언트:</dt>
-              <dd className="font-mono text-slate-200">{detectResult.clientVersion ?? "알 수 없음"}</dd>
+              <dt className="w-32 shrink-0 text-slate-500">Client:</dt>
+              <dd className="font-mono text-slate-200">{detectResult.clientVersion ?? "Unknown"}</dd>
             </div>
             <div className="flex gap-2">
-              <dt className="w-32 shrink-0 text-slate-500">TxPool 네임스페이스:</dt>
-              <dd className="font-mono text-slate-200">{detectResult.txpoolNamespace ?? "없음"}</dd>
+              <dt className="w-32 shrink-0 text-slate-500">TxPool Namespace:</dt>
+              <dd className="font-mono text-slate-200">{detectResult.txpoolNamespace ?? "None"}</dd>
             </div>
             <div className="flex gap-2">
-              <dt className="w-32 shrink-0 text-slate-500">L2 Sync 지원:</dt>
+              <dt className="w-32 shrink-0 text-slate-500">L2 Sync Support:</dt>
               <dd className="font-mono text-slate-200">
                 {detectResult.supportsL2SyncStatus
                   ? `✓ ${detectResult.l2SyncMethod ?? ""}`
-                  : "✗ 미지원"}
+                  : "✗ Not supported"}
               </dd>
             </div>
           </dl>
@@ -262,12 +262,12 @@ function CodeBlock({ content, disabled }: { content: string; disabled: boolean }
           {copied ? (
             <>
               <Check className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-emerald-400">복사됨</span>
+              <span className="text-emerald-400">Copied</span>
             </>
           ) : (
             <>
               <Copy className="h-3.5 w-3.5" />
-              복사
+              Copy
             </>
           )}
         </button>
@@ -319,7 +319,7 @@ export default function SetupPage() {
           className="mb-8 inline-flex items-center gap-2 text-sm text-slate-400 transition-colors hover:text-slate-200"
         >
           <ArrowLeft className="h-4 w-4" />
-          랜딩으로
+          Back to Landing
         </a>
 
         {/* Header */}
@@ -328,10 +328,10 @@ export default function SetupPage() {
             <Terminal className="h-5 w-5 text-emerald-400" />
           </div>
           <h1 className="mb-2 text-3xl font-bold text-slate-100">
-            30초 배포
+            30-Second Deploy
           </h1>
           <p className="text-slate-400">
-            노드 정보를 입력하면 실행 가능한 설치 스크립트를 생성합니다.
+            Enter your node details to generate a ready-to-run install script.
           </p>
         </div>
 
@@ -341,13 +341,13 @@ export default function SetupPage() {
           <div className="space-y-6">
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
               <h2 className="mb-5 text-sm font-semibold uppercase tracking-wider text-slate-400">
-                ① 노드 설정
+                ① Node Settings
               </h2>
 
               {/* Client Family */}
               <div className="mb-4">
                 <label htmlFor="client-family" className="mb-1.5 block text-sm font-medium text-slate-300">
-                  EVM 클라이언트
+                  EVM Client
                 </label>
                 <div className="relative">
                   <select
@@ -384,7 +384,7 @@ export default function SetupPage() {
               {/* Network Name */}
               <div>
                 <label htmlFor="network-name" className="mb-1.5 block text-sm font-medium text-slate-300">
-                  네트워크 이름 <span className="text-slate-500">(선택)</span>
+                  Network Name <span className="text-slate-500">(Optional)</span>
                 </label>
                 <input
                   id="network-name"
@@ -411,12 +411,12 @@ export default function SetupPage() {
             {/* AI Provider */}
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
               <h2 className="mb-5 text-sm font-semibold uppercase tracking-wider text-slate-400">
-                AI 제공자 <span className="font-normal normal-case text-slate-500">(선택)</span>
+                AI Provider <span className="font-normal normal-case text-slate-500">(Optional)</span>
               </h2>
 
               <div className="mb-4">
                 <label htmlFor="ai-provider" className="sr-only">
-                  AI 제공자
+                  AI Provider
                 </label>
                 <div className="relative">
                   <select
@@ -452,7 +452,7 @@ export default function SetupPage() {
                     className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 font-mono text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
                   />
                   <p className="mt-1.5 text-xs text-slate-500">
-                    스크립트에만 포함되며 서버로 전송되지 않습니다.
+                    Included in script only — never sent to any server.
                   </p>
                 </div>
               )}
@@ -463,11 +463,11 @@ export default function SetupPage() {
           <div className="flex flex-col gap-4">
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
               <h2 className="mb-5 text-sm font-semibold uppercase tracking-wider text-slate-400">
-                ② 터미널에 붙여넣기
+                ② Paste into Terminal
               </h2>
               {!isReady && (
                 <p className="mb-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-400">
-                  RPC URL을 입력하면 스크립트가 활성화됩니다.
+                  Enter an RPC URL to activate the script.
                 </p>
               )}
               <CodeBlock content={script} disabled={!isReady} />
@@ -475,14 +475,14 @@ export default function SetupPage() {
 
             {/* What happens next */}
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-              <h3 className="mb-3 text-sm font-semibold text-slate-300">실행 후</h3>
+              <h3 className="mb-3 text-sm font-semibold text-slate-300">After Running</h3>
               <ol className="space-y-2 text-sm text-slate-400">
                 {[
-                  "sentinai/ 폴더 생성 및 이동",
-                  "docker-compose.yml 다운로드 (GitHub)",
-                  ".env.local 파일 생성",
-                  "docker compose up -d 실행",
-                  "http://localhost:3002 에서 대시보드 열기",
+                  "Create and navigate to sentinai/ folder",
+                  "Download docker-compose.yml (GitHub)",
+                  "Create .env.local file",
+                  "Run docker compose up -d",
+                  "Open dashboard at http://localhost:3002",
                 ].map((step, i) => (
                   <li key={i} className="flex items-start gap-2">
                     <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-800 text-xs font-medium text-slate-400">
