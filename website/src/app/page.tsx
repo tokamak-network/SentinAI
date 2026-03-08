@@ -1,3 +1,5 @@
+'use client';
+
 import {
   Eye,
   Brain,
@@ -16,6 +18,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { HeroMiniature } from "@/components/hero-miniature";
 
 const GITHUB_URL = "https://github.com/tokamak-network/SentinAI";
 const EXAMPLE_DASHBOARD_URL = "https://sentinai.tokamak.network/thanos-sepolia";
@@ -85,80 +88,88 @@ function Hero() {
       </div>
 
       <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col items-center text-center">
-          {/* Badge */}
-          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-1.5 text-sm text-cyan-400">
-            <span className="relative flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-400" />
-            </span>
-            Autonomous Node Guardian
+        <div className="flex items-center gap-12 lg:gap-16">
+          {/* Hero text content */}
+          <div className="flex-1 flex flex-col items-center text-center lg:items-start lg:text-left">
+            {/* Badge */}
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-1.5 text-sm text-cyan-400">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-400" />
+              </span>
+              Autonomous Node Guardian
+            </div>
+
+            {/* Heading */}
+            <h1 className="mb-6 max-w-3xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
+              L1 & L2 Node 인프라{" "}
+              <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+                자율 운영
+              </span>
+            </h1>
+
+            {/* Subheading */}
+            <p className="mb-10 max-w-2xl text-lg text-muted-foreground">
+              Geth, Reth, OP Stack, Arbitrum — 모든 EVM 노드를 AI가 24/7 자율 운영.
+              장애 감지, 정책 기반 플래닝, 승인 게이트 자동화로 팀의 운영 부담을 줄입니다.
+            </p>
+
+            {/* CTAs */}
+            <div className="mb-16 flex flex-wrap items-center justify-center lg:justify-start gap-4">
+              <Button asChild size="lg" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-primary/20 hover:opacity-90 hover:bg-primary">
+                <a href="/connect">
+                  <Terminal className="h-4 w-4" />
+                  Connect Your Node
+                </a>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="border-border bg-card/50 text-foreground hover:border-border/70 hover:text-foreground">
+                <a href={EXAMPLE_DASHBOARD_URL} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4" />
+                  View Example Dashboard
+                </a>
+              </Button>
+              <Button asChild size="lg" variant="outline" className="border-border bg-card/50 text-foreground hover:border-border/70 hover:text-foreground">
+                <a href="/docs">
+                  Read Docs
+                  <ExternalLink className="h-4 w-4" />
+                </a>
+              </Button>
+            </div>
+
+            {/* Terminal code block */}
+            <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-border bg-card/80 text-left shadow-2xl shadow-background">
+              {/* Title bar */}
+              <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+                <span className="h-3 w-3 rounded-full bg-rose-500/80" />
+                <span className="h-3 w-3 rounded-full bg-amber-500/80" />
+                <span className="h-3 w-3 rounded-full bg-emerald-500/80" />
+                <span className="ml-2 text-xs text-slate-500">terminal</span>
+              </div>
+              {/* Code */}
+              <div className="p-4 font-mono text-sm">
+                <p className="text-slate-500">
+                  <span className="text-slate-600">$</span>{" "}
+                  <span className="text-slate-300">
+                    cp .env.local.sample .env.local
+                  </span>
+                </p>
+                <p className="mt-1 text-slate-500">
+                  <span className="text-slate-600">$</span>{" "}
+                  <span className="text-slate-300">docker compose up -d</span>
+                </p>
+                <p className="mt-2 text-emerald-400">
+                  ✓ sentinai started on port 3002
+                </p>
+                <p className="text-cyan-400">
+                  ✓ agent loop active — observing L2 metrics
+                </p>
+              </div>
+            </div>
           </div>
 
-          {/* Heading */}
-          <h1 className="mb-6 max-w-3xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-            L1 & L2 Node 인프라{" "}
-            <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-              자율 운영
-            </span>
-          </h1>
-
-          {/* Subheading */}
-          <p className="mb-10 max-w-2xl text-lg text-muted-foreground">
-            Geth, Reth, OP Stack, Arbitrum — 모든 EVM 노드를 AI가 24/7 자율 운영.
-            장애 감지, 정책 기반 플래닝, 승인 게이트 자동화로 팀의 운영 부담을 줄입니다.
-          </p>
-
-          {/* CTAs */}
-          <div className="mb-16 flex flex-wrap items-center justify-center gap-4">
-            <Button asChild size="lg" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-primary/20 hover:opacity-90 hover:bg-primary">
-              <a href="/connect">
-                <Terminal className="h-4 w-4" />
-                Connect Your Node
-              </a>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="border-border bg-card/50 text-foreground hover:border-border/70 hover:text-foreground">
-              <a href={EXAMPLE_DASHBOARD_URL} target="_blank" rel="noopener noreferrer">
-                <ExternalLink className="h-4 w-4" />
-                View Example Dashboard
-              </a>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="border-border bg-card/50 text-foreground hover:border-border/70 hover:text-foreground">
-              <a href="/docs">
-                Read Docs
-                <ExternalLink className="h-4 w-4" />
-              </a>
-            </Button>
-          </div>
-
-          {/* Terminal code block */}
-          <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-border bg-card/80 text-left shadow-2xl shadow-background">
-            {/* Title bar */}
-            <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-              <span className="h-3 w-3 rounded-full bg-rose-500/80" />
-              <span className="h-3 w-3 rounded-full bg-amber-500/80" />
-              <span className="h-3 w-3 rounded-full bg-emerald-500/80" />
-              <span className="ml-2 text-xs text-slate-500">terminal</span>
-            </div>
-            {/* Code */}
-            <div className="p-4 font-mono text-sm">
-              <p className="text-slate-500">
-                <span className="text-slate-600">$</span>{" "}
-                <span className="text-slate-300">
-                  cp .env.local.sample .env.local
-                </span>
-              </p>
-              <p className="mt-1 text-slate-500">
-                <span className="text-slate-600">$</span>{" "}
-                <span className="text-slate-300">docker compose up -d</span>
-              </p>
-              <p className="mt-2 text-emerald-400">
-                ✓ sentinai started on port 3002
-              </p>
-              <p className="text-cyan-400">
-                ✓ agent loop active — observing L2 metrics
-              </p>
-            </div>
+          {/* Hero miniature */}
+          <div className="shrink-0 hidden lg:block">
+            <HeroMiniature />
           </div>
         </div>
       </div>
@@ -338,23 +349,23 @@ function WhatItDoes() {
 const steps = [
   {
     number: "01",
-    title: "Observe",
+    title: "Observe & Detect",
     description:
-      "Continuously ingests L1/L2 metrics, RPC responses, pod health, and logs from the chain infrastructure.",
+      "L1/L2 메트릭 수집 후 4-Layer 이상 탐지 파이프라인 실행 (Z-Score + AI 분석)",
     accent: "border-cyan-500/50 text-cyan-400",
   },
   {
     number: "02",
-    title: "Decide",
+    title: "Analyze & Plan",
     description:
-      "AI analyzes anomalies, scores severity, selects remediation playbook, and assigns a risk level.",
+      "AI RCA로 근본 원인 추적, Goal Manager가 우선순위에 따라 대응 계획 수립",
     accent: "border-blue-500/50 text-blue-400",
   },
   {
     number: "03",
-    title: "Act",
+    title: "Act & Verify",
     description:
-      "Executes low-risk actions automatically. Routes high-risk actions to on-call approval before acting.",
+      "스케일링 또는 복구 실행 후 결과 검증. 실패 시 자동 롤백",
     accent: "border-violet-500/50 text-violet-400",
   },
 ];
@@ -368,8 +379,7 @@ function HowItWorks() {
             How it works
           </h2>
           <p className="mx-auto max-w-xl text-muted-foreground">
-            A simple three-phase loop that runs every 30 seconds on your
-            infrastructure.
+            30초마다 실행되는 에이전트 루프 — 관찰, 분석, 실행의 3단계로 인프라를 자율 운영합니다.
           </p>
         </div>
 
