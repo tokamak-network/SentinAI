@@ -50,3 +50,4 @@ scripts/ralph/
 # Local dev memory and IDE config
 memory/dev/
 website/.claude/
+.worktrees/
