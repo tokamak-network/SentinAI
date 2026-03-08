@@ -282,7 +282,7 @@ Full env guide: `ENV_GUIDE.md`
   - `production-load-testing-guide.md`: EKS cluster verification
 - `docs/done/`: Completed proposals (1–10, implementation details)
 - `docs/spec/`: Implementation specs for AI agent consumption
-- `docs/todo/`: Unimplemented proposals
+- `docs/plans/proposals/`: Unimplemented proposals
 - `docs/verification/`: Test and verification reports
 - `FEATURES.md`: Complete feature inventory
 - `ARCHITECTURE.md`: System architecture with diagrams
