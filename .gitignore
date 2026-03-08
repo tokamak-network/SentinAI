@@ -43,3 +43,6 @@ website/.next
 website/out
 website/next-env.d.ts
 website/*.tsbuildinfo
+
+# Ralph agent workspace
+scripts/ralph/
