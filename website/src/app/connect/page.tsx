@@ -9,13 +9,14 @@ import {
   Check,
   Server,
   Activity,
-
   ArrowLeft,
   ArrowRight,
   Sparkles,
   Info,
   Plug,
   Loader2,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 
 const GITHUB_URL = "https://github.com/tokamak-network/SentinAI";
@@ -26,6 +27,7 @@ const DOCKER_IMAGE = "ghcr.io/tokamak-network/sentinai:latest";
 // ============================================================================
 
 type NodeType = "ethereum-el" | "opstack-l2" | "arbitrum-nitro";
+type AiProvider = "none" | "qwen" | "anthropic" | "openai" | "gemini";
 
 interface NodeConfig {
   type: NodeType;
@@ -91,6 +93,14 @@ const NODE_CONFIGS: NodeConfig[] = [
   },
 ];
 
+const AI_OPTIONS: { value: AiProvider; label: string; keyVar: string; placeholder: string }[] = [
+  { value: "none", label: "없음 (나중에 설정)", keyVar: "", placeholder: "" },
+  { value: "qwen", label: "Qwen (DashScope)", keyVar: "QWEN_API_KEY", placeholder: "sk-..." },
+  { value: "anthropic", label: "Anthropic (Claude)", keyVar: "ANTHROPIC_API_KEY", placeholder: "sk-ant-..." },
+  { value: "openai", label: "OpenAI", keyVar: "OPENAI_API_KEY", placeholder: "sk-..." },
+  { value: "gemini", label: "Google Gemini", keyVar: "GEMINI_API_KEY", placeholder: "AIza..." },
+];
+
 // ============================================================================
 // Output generators
 // ============================================================================
@@ -101,31 +111,72 @@ const ENV_MAP: Record<NodeType, { primary: string; optional?: string }> = {
   "arbitrum-nitro": { primary: "L2_RPC_URL", optional: "SENTINAI_L1_RPC_URL" },
 };
 
-function buildDockerRun(nodeType: NodeType, url: string, authToken?: string): string {
-  const { primary, optional } = ENV_MAP[nodeType];
-  const u = url.trim() || "<your-url>";
+interface BuildConfig {
+  nodeType: NodeType;
+  url: string;
+  authToken: string;
+  networkName: string;
+  aiProvider: AiProvider;
+  aiApiKey: string;
+  awsClusterName: string;
+  alertWebhookUrl: string;
+}
+
+function buildDockerRun(cfg: BuildConfig): string {
+  const { primary, optional } = ENV_MAP[cfg.nodeType];
+  const u = cfg.url.trim() || "<your-url>";
   const lines: string[] = [];
 
+  if (cfg.networkName.trim())
+    lines.push(`  -e NEXT_PUBLIC_NETWORK_NAME="${cfg.networkName.trim()}" \\\n`);
   lines.push(`  -e ${primary}=${u} \\\n`);
   if (optional) lines.push(`  -e ${optional}=<optional-l1-rpc-url> \\\n`);
-  if (authToken?.trim()) lines.push(`  -e SENTINAI_RPC_AUTH_TOKEN=${authToken.trim()} \\\n`);
+  if (cfg.authToken.trim())
+    lines.push(`  -e SENTINAI_RPC_AUTH_TOKEN=${cfg.authToken.trim()} \\\n`);
 
-  lines.push(`  -e ANTHROPIC_API_KEY=<your-anthropic-key> \\\n`);
+  const aiOpt = AI_OPTIONS.find((o) => o.value === cfg.aiProvider);
+  if (aiOpt && aiOpt.keyVar) {
+    const key = cfg.aiApiKey.trim() || `<your-${cfg.aiProvider}-key>`;
+    lines.push(`  -e ${aiOpt.keyVar}=${key} \\\n`);
+  } else {
+    lines.push(`  -e ANTHROPIC_API_KEY=<your-anthropic-key> \\\n`);
+  }
+
+  if (cfg.awsClusterName.trim())
+    lines.push(`  -e AWS_CLUSTER_NAME=${cfg.awsClusterName.trim()} \\\n`);
+  if (cfg.alertWebhookUrl.trim())
+    lines.push(`  -e ALERT_WEBHOOK_URL=${cfg.alertWebhookUrl.trim()} \\\n`);
+
   lines.push(`  -p 3002:3002 \\\n`);
   lines.push(`  ${DOCKER_IMAGE}`);
 
   return `docker run \\\n${lines.join("")}`.trimEnd();
 }
 
-function buildEnvLocal(nodeType: NodeType, url: string, authToken?: string): string {
-  const { primary, optional } = ENV_MAP[nodeType];
-  const u = url.trim() || "<your-url>";
+function buildEnvLocal(cfg: BuildConfig): string {
+  const { primary, optional } = ENV_MAP[cfg.nodeType];
+  const u = cfg.url.trim() || "<your-url>";
   const lines: string[] = [];
 
+  if (cfg.networkName.trim())
+    lines.push(`NEXT_PUBLIC_NETWORK_NAME=${cfg.networkName.trim()}`);
   lines.push(`${primary}=${u}`);
   if (optional) lines.push(`${optional}=<optional-l1-rpc-url>`);
-  if (authToken?.trim()) lines.push(`SENTINAI_RPC_AUTH_TOKEN=${authToken.trim()}`);
-  lines.push(`ANTHROPIC_API_KEY=<your-anthropic-key>`);
+  if (cfg.authToken.trim())
+    lines.push(`SENTINAI_RPC_AUTH_TOKEN=${cfg.authToken.trim()}`);
+
+  const aiOpt = AI_OPTIONS.find((o) => o.value === cfg.aiProvider);
+  if (aiOpt && aiOpt.keyVar) {
+    const key = cfg.aiApiKey.trim() || `<your-${cfg.aiProvider}-key>`;
+    lines.push(`${aiOpt.keyVar}=${key}`);
+  } else {
+    lines.push(`ANTHROPIC_API_KEY=<your-anthropic-key>`);
+  }
+
+  if (cfg.awsClusterName.trim())
+    lines.push(`AWS_CLUSTER_NAME=${cfg.awsClusterName.trim()}`);
+  if (cfg.alertWebhookUrl.trim())
+    lines.push(`ALERT_WEBHOOK_URL=${cfg.alertWebhookUrl.trim()}`);
 
   return lines.join("\n");
 }
@@ -227,23 +278,32 @@ export default function ConnectPage() {
   const [nodeType, setNodeType] = useState<NodeType>("ethereum-el");
   const [url, setUrl] = useState("");
   const [authToken, setAuthToken] = useState("");
+  const [networkName, setNetworkName] = useState("");
+  const [aiProvider, setAiProvider] = useState<AiProvider>("none");
+  const [aiApiKey, setAiApiKey] = useState("");
+  const [awsClusterName, setAwsClusterName] = useState("");
+  const [alertWebhookUrl, setAlertWebhookUrl] = useState("");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+
   const [generated, setGenerated] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<OnboardingResponse | null>(null);
   const [testError, setTestError] = useState<string | null>(null);
 
   const currentConfig = NODE_CONFIGS.find((c) => c.type === nodeType)!;
+  const selectedAi = AI_OPTIONS.find((o) => o.value === aiProvider)!;
 
-  const dockerCommand = useMemo(
-    () => buildDockerRun(nodeType, url, authToken),
-    [nodeType, url, authToken]
-  );
-  const envLocal = useMemo(
-    () => buildEnvLocal(nodeType, url, authToken),
-    [nodeType, url, authToken]
-  );
+  const buildCfg: BuildConfig = {
+    nodeType, url, authToken, networkName, aiProvider, aiApiKey, awsClusterName, alertWebhookUrl,
+  };
+
+  const dockerCommand = useMemo(() => buildDockerRun(buildCfg), [
+    nodeType, url, authToken, networkName, aiProvider, aiApiKey, awsClusterName, alertWebhookUrl,
+  ]);
+  const envLocal = useMemo(() => buildEnvLocal(buildCfg), [
+    nodeType, url, authToken, networkName, aiProvider, aiApiKey, awsClusterName, alertWebhookUrl,
+  ]);
 
   useEffect(() => {
     if (!testResult?.data?.dashboardUrl) return;
@@ -252,6 +312,12 @@ export default function ConnectPage() {
     }, 900);
     return () => window.clearTimeout(t);
   }, [testResult?.data?.dashboardUrl]);
+
+  function resetOutput() {
+    setGenerated(false);
+    setTestResult(null);
+    setTestError(null);
+  }
 
   function handleGenerate() {
     setGenerated(true);
@@ -302,16 +368,10 @@ export default function ConnectPage() {
 
       setTestResult(json);
       setGenerated(true);
-
-      if (json.data?.dashboardUrl) {
-        // Provide a quick redirect option
-        // (Do not auto-navigate to avoid surprises)
-      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      // Show a user-friendly error instead of raw exception text
-      if (msg.toLowerCase().includes('syntaxerror') || msg.toLowerCase().includes('not valid json')) {
-        setTestError('서버에 연결할 수 없습니다. RPC URL을 확인하거나 SentinAI 백엔드가 실행 중인지 확인하세요.');
+      if (msg.toLowerCase().includes("syntaxerror") || msg.toLowerCase().includes("not valid json")) {
+        setTestError("서버에 연결할 수 없습니다. RPC URL을 확인하거나 SentinAI 백엔드가 실행 중인지 확인하세요.");
       } else {
         setTestError(msg);
       }
@@ -342,16 +402,23 @@ export default function ConnectPage() {
             Connect Your Node
           </h1>
           <p className="max-w-2xl text-slate-400">
-            URL(+옵션 Auth)을 입력하면 연결 테스트를 수행하고, 자동 감지 결과를 표시하며,
-            바로 실행 가능한 <code className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-xs text-cyan-300">docker run</code> / <code className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-xs text-cyan-300">.env.local</code> 블록을 생성합니다.
+            노드 정보를 입력하면 바로 실행 가능한{" "}
+            <code className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-xs text-cyan-300">docker run</code>{" "}
+            /{" "}
+            <code className="rounded bg-slate-800 px-1.5 py-0.5 font-mono text-xs text-cyan-300">.env.local</code>{" "}
+            설정을 생성합니다.
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-5">
-          <div className="lg:col-span-2">
-            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-              <h2 className="mb-6 font-semibold text-slate-100">노드 정보 입력</h2>
+          {/* ── Left: Form ── */}
+          <div className="lg:col-span-2 space-y-4">
 
+            {/* Node settings */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+              <h2 className="mb-6 font-semibold text-slate-100">① 노드 설정</h2>
+
+              {/* Node type */}
               <div className="mb-5">
                 <label className="mb-2 block text-sm font-medium text-slate-300">
                   노드 타입
@@ -366,9 +433,7 @@ export default function ConnectPage() {
                         type="button"
                         onClick={() => {
                           setNodeType(config.type);
-                          setGenerated(false);
-                          setTestResult(null);
-                          setTestError(null);
+                          resetOutput();
                         }}
                         className={`w-full rounded-lg border p-3 text-left transition-all ${
                           isSelected
@@ -383,26 +448,16 @@ export default function ConnectPage() {
                             }`}
                           >
                             <Icon
-                              className={`h-4 w-4 ${
-                                isSelected ? config.iconColor : "text-slate-400"
-                              }`}
+                              className={`h-4 w-4 ${isSelected ? config.iconColor : "text-slate-400"}`}
                             />
                           </div>
                           <div className="min-w-0">
-                            <p
-                              className={`text-sm font-medium ${
-                                isSelected ? "text-slate-100" : "text-slate-300"
-                              }`}
-                            >
+                            <p className={`text-sm font-medium ${isSelected ? "text-slate-100" : "text-slate-300"}`}>
                               {config.label}
                             </p>
-                            <p className="truncate text-xs text-slate-500">
-                              {config.clients}
-                            </p>
+                            <p className="truncate text-xs text-slate-500">{config.clients}</p>
                           </div>
-                          {isSelected && (
-                            <Check className="ml-auto h-4 w-4 shrink-0 text-cyan-400" />
-                          )}
+                          {isSelected && <Check className="ml-auto h-4 w-4 shrink-0 text-cyan-400" />}
                         </div>
                       </button>
                     );
@@ -410,89 +465,203 @@ export default function ConnectPage() {
                 </div>
               </div>
 
+              {/* RPC URL */}
               <div className="mb-4">
-                <label
-                  htmlFor="node-url"
-                  className="mb-2 block text-sm font-medium text-slate-300"
-                >
+                <label htmlFor="node-url" className="mb-2 block text-sm font-medium text-slate-300">
                   {currentConfig.urlLabel}
                 </label>
                 <input
                   id="node-url"
                   type="url"
                   value={url}
-                  onChange={(e) => {
-                    setUrl(e.target.value);
-                    setGenerated(false);
-                    setTestResult(null);
-                    setTestError(null);
-                  }}
+                  onChange={(e) => { setUrl(e.target.value); resetOutput(); }}
                   placeholder={currentConfig.urlPlaceholder}
                   className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 font-mono text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                 />
                 <p className="mt-1.5 text-xs text-slate-500">
-                  테스트 시에만 서버로 전송됩니다.
+                  연결 테스트 시에만 서버로 전송됩니다.
                 </p>
               </div>
 
+              {/* Network name */}
+              <div className="mb-4">
+                <label htmlFor="network-name" className="mb-2 block text-sm font-medium text-slate-300">
+                  네트워크 이름 <span className="text-slate-500">(선택)</span>
+                </label>
+                <input
+                  id="network-name"
+                  type="text"
+                  value={networkName}
+                  onChange={(e) => { setNetworkName(e.target.value); resetOutput(); }}
+                  placeholder="예: Thanos Sepolia"
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                />
+                <p className="mt-1.5 text-xs text-slate-500">
+                  대시보드 헤더에 표시됩니다 (<code className="font-mono">NEXT_PUBLIC_NETWORK_NAME</code>).
+                </p>
+              </div>
+
+              {/* Auth Token */}
               {currentConfig.supportsAuthToken && (
-                <div className="mb-6">
-                  <label
-                    htmlFor="auth-token"
-                    className="mb-2 block text-sm font-medium text-slate-300"
-                  >
-                    Auth Token (optional)
+                <div className="mb-5">
+                  <label htmlFor="auth-token" className="mb-2 block text-sm font-medium text-slate-300">
+                    Auth Token <span className="text-slate-500">(선택)</span>
                   </label>
                   <input
                     id="auth-token"
                     type="password"
                     value={authToken}
-                    onChange={(e) => {
-                      setAuthToken(e.target.value);
-                      setGenerated(false);
-                    }}
+                    onChange={(e) => { setAuthToken(e.target.value); resetOutput(); }}
                     placeholder="Bearer 토큰 또는 Basic 자격증명"
                     className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 font-mono text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
                   />
                 </div>
               )}
-
-              <div className="grid grid-cols-1 gap-3">
-                <button
-                  type="button"
-                  onClick={handleTestConnection}
-                  disabled={testing || !url.trim()}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-100 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {testing ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Plug className="h-4 w-4" />
-                  )}
-                  연결 테스트
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleGenerate}
-                  className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-opacity hover:opacity-90"
-                >
-                  <Sparkles className="h-4 w-4" />
-                  설정 생성
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-              </div>
             </div>
 
-            <div className="mt-4 flex gap-3 rounded-lg border border-slate-800 bg-slate-900/30 p-4">
+            {/* AI settings */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+              <h2 className="mb-5 font-semibold text-slate-100">
+                ② AI 제공자{" "}
+                <span className="text-sm font-normal text-rose-400">*필수</span>
+              </h2>
+              <p className="mb-4 text-xs text-slate-500">
+                이상 감지, NLOps, RCA, 예측 스케일링에 필요합니다.
+              </p>
+
+              {/* Provider select */}
+              <div className="mb-4">
+                <label htmlFor="ai-provider" className="mb-2 block text-sm font-medium text-slate-300">
+                  제공자
+                </label>
+                <div className="relative">
+                  <select
+                    id="ai-provider"
+                    value={aiProvider}
+                    onChange={(e) => {
+                      setAiProvider(e.target.value as AiProvider);
+                      setAiApiKey("");
+                      resetOutput();
+                    }}
+                    className="w-full appearance-none rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 pr-8 text-sm text-slate-200 focus:border-cyan-500 focus:outline-none"
+                  >
+                    {AI_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                </div>
+              </div>
+
+              {/* API Key */}
+              {aiProvider !== "none" && (
+                <div>
+                  <label htmlFor="ai-api-key" className="mb-2 block text-sm font-medium text-slate-300">
+                    API Key
+                  </label>
+                  <input
+                    id="ai-api-key"
+                    type="password"
+                    value={aiApiKey}
+                    onChange={(e) => { setAiApiKey(e.target.value); resetOutput(); }}
+                    placeholder={selectedAi.placeholder}
+                    className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 font-mono text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                  />
+                  <p className="mt-1.5 text-xs text-slate-500">
+                    스크립트에만 포함되며 서버로 전송되지 않습니다.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Advanced settings (collapsible) */}
+            <div className="rounded-xl border border-slate-800 bg-slate-900/50">
+              <button
+                type="button"
+                onClick={() => setAdvancedOpen((v) => !v)}
+                className="flex w-full items-center justify-between px-6 py-4 text-sm font-medium text-slate-400 transition-colors hover:text-slate-200"
+              >
+                <span>③ 고급 설정 (선택)</span>
+                {advancedOpen
+                  ? <ChevronUp className="h-4 w-4" />
+                  : <ChevronDown className="h-4 w-4" />}
+              </button>
+
+              {advancedOpen && (
+                <div className="border-t border-slate-800 px-6 pb-6 pt-4 space-y-4">
+                  {/* AWS Cluster Name */}
+                  <div>
+                    <label htmlFor="aws-cluster" className="mb-2 block text-sm font-medium text-slate-300">
+                      AWS Cluster Name
+                    </label>
+                    <input
+                      id="aws-cluster"
+                      type="text"
+                      value={awsClusterName}
+                      onChange={(e) => { setAwsClusterName(e.target.value); resetOutput(); }}
+                      placeholder="my-eks-cluster"
+                      className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 font-mono text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    />
+                    <p className="mt-1.5 text-xs text-slate-500">
+                      K8s 자동 스케일링 및 Pod 모니터링에 필요합니다 (<code className="font-mono">AWS_CLUSTER_NAME</code>).
+                    </p>
+                  </div>
+
+                  {/* Alert Webhook */}
+                  <div>
+                    <label htmlFor="alert-webhook" className="mb-2 block text-sm font-medium text-slate-300">
+                      Alert Webhook URL
+                    </label>
+                    <input
+                      id="alert-webhook"
+                      type="url"
+                      value={alertWebhookUrl}
+                      onChange={(e) => { setAlertWebhookUrl(e.target.value); resetOutput(); }}
+                      placeholder="https://hooks.slack.com/services/..."
+                      className="w-full rounded-lg border border-slate-700 bg-slate-800 px-4 py-2.5 font-mono text-sm text-slate-200 placeholder-slate-600 transition-colors focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
+                    />
+                    <p className="mt-1.5 text-xs text-slate-500">
+                      이상 감지 시 Slack/Webhook 알림 (<code className="font-mono">ALERT_WEBHOOK_URL</code>).
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Buttons */}
+            <div className="grid grid-cols-1 gap-3">
+              <button
+                type="button"
+                onClick={handleTestConnection}
+                disabled={testing || !url.trim()}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-100 transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plug className="h-4 w-4" />}
+                연결 테스트
+              </button>
+
+              <button
+                type="button"
+                onClick={handleGenerate}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-cyan-500/20 transition-opacity hover:opacity-90"
+              >
+                <Sparkles className="h-4 w-4" />
+                설정 생성
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex gap-3 rounded-lg border border-slate-800 bg-slate-900/30 p-4">
               <Info className="mt-0.5 h-4 w-4 shrink-0 text-slate-500" />
               <p className="text-xs text-slate-500 leading-relaxed">
-                연결 테스트는 <code className="font-mono">/api/v2/onboarding/complete</code> 를 호출하며,
+                연결 테스트는{" "}
+                <code className="font-mono">/api/v2/onboarding/complete</code>를 호출하며,
                 성공 시 인스턴스를 생성(또는 재사용)하고 자동 감지 결과를 저장합니다.
               </p>
             </div>
           </div>
 
+          {/* ── Right: Output ── */}
           <div className="lg:col-span-3">
             {testError && (
               <div className="mb-4 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-200">
@@ -504,13 +673,12 @@ export default function ConnectPage() {
               <div className="mb-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4">
                 <div className="flex items-center gap-2 text-sm text-emerald-300">
                   <Check className="h-4 w-4" />
-                  연결 성공 — instanceId: <span className="font-mono">{testResult.data.instanceId}</span>
+                  연결 성공 — instanceId:{" "}
+                  <span className="font-mono">{testResult.data.instanceId}</span>
                 </div>
                 {testResult.data.warnings?.length ? (
                   <ul className="mt-3 list-disc pl-5 text-xs text-amber-200">
-                    {testResult.data.warnings.map((w, i) => (
-                      <li key={i}>{w}</li>
-                    ))}
+                    {testResult.data.warnings.map((w, i) => <li key={i}>{w}</li>)}
                   </ul>
                 ) : null}
 
@@ -531,7 +699,7 @@ export default function ConnectPage() {
                   />
                 </div>
 
-                {testResult.data.dashboardUrl ? (
+                {testResult.data.dashboardUrl && (
                   <div className="mt-4">
                     <a
                       href={testResult.data.dashboardUrl}
@@ -541,7 +709,7 @@ export default function ConnectPage() {
                       <ArrowRight className="h-4 w-4" />
                     </a>
                   </div>
-                ) : null}
+                )}
               </div>
             )}
 
@@ -552,7 +720,8 @@ export default function ConnectPage() {
                   <p className="text-sm text-slate-600">
                     노드 타입과 URL을 입력하고
                     <br />
-                    <span className="text-slate-500">연결 테스트</span> 또는 <span className="text-slate-500">설정 생성</span>을 실행하세요
+                    <span className="text-slate-500">연결 테스트</span> 또는{" "}
+                    <span className="text-slate-500">설정 생성</span>을 실행하세요
                   </p>
                 </div>
               </div>
