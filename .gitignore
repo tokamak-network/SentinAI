@@ -46,3 +46,7 @@ website/*.tsbuildinfo
 
 # Ralph agent workspace
 scripts/ralph/
+
+# Local dev memory and IDE config
+memory/dev/
+website/.claude/
