@@ -1,14 +1,14 @@
 const COMPOSE_RAW_URL =
   'https://raw.githubusercontent.com/tokamak-network/SentinAI/main/docker-compose.yml';
 
-const AI_KEY_VAR: Record<string, string> = {
+export type AiProvider = 'none' | 'qwen' | 'anthropic' | 'openai' | 'gemini';
+
+const AI_KEY_VAR: Record<Exclude<AiProvider, 'none'>, string> = {
   qwen: 'QWEN_API_KEY',
   anthropic: 'ANTHROPIC_API_KEY',
   openai: 'OPENAI_API_KEY',
   gemini: 'GEMINI_API_KEY',
 };
-
-export type AiProvider = 'none' | 'qwen' | 'anthropic' | 'openai' | 'gemini';
 
 export type ClientFamily =
   | 'geth'
@@ -29,9 +29,15 @@ export interface SetupConfig {
   aiApiKey: string;
 }
 
+function sanitizeForHeredoc(value: string): string {
+  return value
+    .replace(/\r?\n|\r/g, ' ')    // collapse newlines
+    .replace(/SENTINAI_EOF/g, ''); // prevent delimiter escape
+}
+
 export function generateSetupScript(config: SetupConfig): string {
-  const rpcUrl = config.rpcUrl.trim() || '<your-rpc-url>';
-  const networkName = config.networkName.trim() || 'My Network';
+  const rpcUrl = sanitizeForHeredoc(config.rpcUrl.trim() || '<your-rpc-url>');
+  const networkName = sanitizeForHeredoc(config.networkName.trim() || 'My Network');
 
   // ethrex uses geth-compatible API
   const clientFamily = config.clientFamily === 'ethrex' ? 'geth' : config.clientFamily;
@@ -48,10 +54,12 @@ export function generateSetupScript(config: SetupConfig): string {
   envLines.push('SCALING_SIMULATION_MODE=true');
 
   if (config.aiProvider !== 'none' && config.aiApiKey.trim()) {
-    envLines.push(`${AI_KEY_VAR[config.aiProvider]}=${config.aiApiKey.trim()}`);
+    const sanitizedKey = sanitizeForHeredoc(config.aiApiKey.trim());
+    envLines.push(`${AI_KEY_VAR[config.aiProvider]}=${sanitizedKey}`);
   }
 
   return `#!/bin/bash
+# SECURITY: keep this script private
 set -e
 mkdir -p sentinai && cd sentinai
 curl -sSL ${COMPOSE_RAW_URL} -o docker-compose.yml
