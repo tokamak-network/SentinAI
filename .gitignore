@@ -51,3 +51,4 @@ scripts/ralph/
 memory/dev/
 website/.claude/
 .worktrees/
+*.png
