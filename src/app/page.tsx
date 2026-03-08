@@ -960,7 +960,7 @@ export default function Dashboard() {
   const chainName = publicStatus?.chain.name ?? process.env.NEXT_PUBLIC_NETWORK_NAME ?? networkName ?? 'Thanos Sepolia';
 
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
+    <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden dashboard-bg">
       {/* Top status bar */}
       <StatusBar
         l1BlockHeight={current?.metrics?.l1BlockHeight ?? 0}
@@ -985,7 +985,7 @@ export default function Dashboard() {
         </div>
 
         {/* Right panels (35%, max 320px) */}
-        <div className="w-80 flex flex-col gap-2 p-3 pl-0 min-h-0">
+        <div className="w-80 flex flex-col gap-3 p-3 pl-0 min-h-0">
           <div className="flex-1 min-h-0">
             <EventStream events={streamEvents} />
           </div>
