@@ -9,7 +9,7 @@ import {
   Check,
   Server,
   Activity,
-  Cpu,
+
   ArrowLeft,
   ArrowRight,
   Sparkles,
@@ -25,7 +25,7 @@ const DOCKER_IMAGE = "ghcr.io/tokamak-network/sentinai:latest";
 // Types
 // ============================================================================
 
-type NodeType = "ethereum-el" | "opstack-l2" | "arbitrum-nitro" | "ethereum-cl";
+type NodeType = "ethereum-el" | "opstack-l2" | "arbitrum-nitro";
 
 interface NodeConfig {
   type: NodeType;
@@ -89,17 +89,6 @@ const NODE_CONFIGS: NodeConfig[] = [
     urlPlaceholder: "https://rpc.your-arbitrum-node.io",
     supportsAuthToken: true,
   },
-  {
-    type: "ethereum-cl",
-    label: "L1 합의 클라이언트",
-    clients: "Lighthouse · Prysm · Teku",
-    Icon: Cpu,
-    iconColor: "text-violet-400",
-    iconBg: "bg-violet-500/10",
-    urlLabel: "Beacon API URL",
-    urlPlaceholder: "http://localhost:5052",
-    supportsAuthToken: false,
-  },
 ];
 
 // ============================================================================
@@ -110,7 +99,6 @@ const ENV_MAP: Record<NodeType, { primary: string; optional?: string }> = {
   "ethereum-el": { primary: "SENTINAI_L1_RPC_URL" },
   "opstack-l2": { primary: "L2_RPC_URL", optional: "SENTINAI_L1_RPC_URL" },
   "arbitrum-nitro": { primary: "L2_RPC_URL", optional: "SENTINAI_L1_RPC_URL" },
-  "ethereum-cl": { primary: "CL_BEACON_URL" },
 };
 
 function buildDockerRun(nodeType: NodeType, url: string, authToken?: string): string {
@@ -289,10 +277,10 @@ export default function ConnectPage() {
     setGenerated(false);
 
     try {
-      const connectionConfig: Record<string, unknown> =
-        nodeType === "ethereum-cl"
-          ? { rpcUrl: url.trim(), beaconApiUrl: url.trim() }
-          : { rpcUrl: url.trim(), ...(authToken.trim() ? { authToken: authToken.trim() } : {}) };
+      const connectionConfig: Record<string, unknown> = {
+        rpcUrl: url.trim(),
+        ...(authToken.trim() ? { authToken: authToken.trim() } : {}),
+      };
 
       const res = await fetch("/api/v2/onboarding/complete", {
         method: "POST",
