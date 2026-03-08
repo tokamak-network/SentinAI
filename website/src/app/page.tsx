@@ -53,6 +53,9 @@ function Navbar() {
           >
             Docs
           </a>
+          <a href="/setup" className="transition-colors hover:text-slate-100">
+            Deploy
+          </a>
         </nav>
 
         {/* CTA */}
@@ -448,6 +451,13 @@ function Deployment() {
                 </li>
               ))}
             </ul>
+            <a
+              href="/setup"
+              className="mt-6 inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-2.5 text-sm font-medium text-white shadow-lg shadow-emerald-500/20 transition-opacity hover:opacity-90"
+            >
+              <Terminal className="h-4 w-4" />
+              설치 스크립트 생성
+            </a>
           </div>
 
           {/* Kubernetes */}
