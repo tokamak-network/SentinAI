@@ -213,15 +213,15 @@ function AgentNodeMesh({
 }) {
   const meshRef = useRef<THREE.Mesh>(null!);
   const haloRef = useRef<THREE.Mesh>(null!);
-  const ringRef = useRef<THREE.Mesh>(null!);
+  const ringRef = useRef<THREE.Mesh | null>(null);
   const color = AGENT_COLORS[node.id];
   const hasRing = node.id === 'analyzer' && isActive;
 
-  useFrame(() => {
+  useFrame((state) => {
     if (!meshRef.current) return;
     const amplitude = isActive ? 0.1 : 0.02;
-    const freq = isActive ? 0.004 : 0.002;
-    const scale = 1 + Math.sin(Date.now() * freq) * amplitude;
+    const freq = isActive ? 4 : 2; // Hz (elapsedTime is in seconds)
+    const scale = 1 + Math.sin(state.clock.elapsedTime * freq) * amplitude;
     meshRef.current.scale.setScalar(scale);
     if (haloRef.current) haloRef.current.scale.setScalar(scale);
     if (ringRef.current) ringRef.current.rotation.z += 0.025;
@@ -281,7 +281,7 @@ function Scene({
   agentPhase?: string;
 }) {
   const phase = agentPhase ?? 'idle';
-  const activeAgents = new Set(PHASE_ACTIVE[phase] ?? []);
+  const activeAgents = useMemo(() => new Set(PHASE_ACTIVE[phase] ?? []), [phase]);
 
   const posMap = useMemo(
     () => Object.fromEntries(AGENT_NODES.map((n) => [n.id, n.position])) as Record<AgentId, [number, number, number]>,
