@@ -819,7 +819,7 @@ export default function Dashboard() {
             if (latest) {
               const component = latest.deepAnalysis?.relatedComponents?.[0] ?? 'unknown';
               const description = latest.deepAnalysis?.anomalyType ?? '';
-              toast.warning(`이상 감지: ${component}`, {
+              toast.warning(`Anomaly detected: ${component}`, {
                 description,
               });
             }
@@ -895,14 +895,14 @@ export default function Dashboard() {
         headers: writeHeaders(),
         body: JSON.stringify({}),
       });
-      toast.info('RCA 실행 중...', { description: '근본 원인 분석을 시작했습니다.' });
+      toast.info('Running RCA...', { description: 'Root cause analysis started.' });
     } catch {
-      toast.error('RCA 실행 실패');
+      toast.error('RCA failed');
     }
   }, []);
 
   const handleRemediate = useCallback(() => {
-    toast.info('복구 명령 전송', { description: 'NLOps를 통해 복구를 요청하세요.' });
+    toast.info('Remediation triggered', { description: 'Use NLOps to request remediation.' });
   }, []);
 
   const handleNLOpsSend = useCallback((message: string) => {

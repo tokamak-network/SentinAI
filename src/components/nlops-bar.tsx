@@ -30,7 +30,7 @@ export function NLOpsBar({ onSend, onRunRca, onRemediate, isLoading }: NLOpsBarP
         onClick={onRunRca}
       >
         <Stethoscope className="size-3" />
-        RCA 실행
+        Run RCA
       </Button>
       <Button
         variant="outline"
@@ -39,7 +39,7 @@ export function NLOpsBar({ onSend, onRunRca, onRemediate, isLoading }: NLOpsBarP
         onClick={onRemediate}
       >
         <Wrench className="size-3" />
-        복구
+        Remediate
       </Button>
 
       {/* NLOps input */}
@@ -49,7 +49,7 @@ export function NLOpsBar({ onSend, onRunRca, onRemediate, isLoading }: NLOpsBarP
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="메시지를 입력하세요..."
+          placeholder="Type a message..."
           className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
           data-testid="nlops-input"
         />

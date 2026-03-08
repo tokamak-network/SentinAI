@@ -102,16 +102,16 @@ function Hero() {
 
             {/* Heading */}
             <h1 className="mb-6 max-w-3xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-              L1 & L2 Node 인프라{" "}
+              L1 & L2 Node Infrastructure{" "}
               <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                자율 운영
+                Autonomous Operations
               </span>
             </h1>
 
             {/* Subheading */}
             <p className="mb-10 max-w-2xl text-lg text-muted-foreground">
-              Geth, Reth, OP Stack, Arbitrum — 모든 EVM 노드를 AI가 24/7 자율 운영.
-              장애 감지, 정책 기반 플래닝, 승인 게이트 자동화로 팀의 운영 부담을 줄입니다.
+              Geth, Reth, OP Stack, Arbitrum — AI-powered 24/7 autonomous operations for every EVM node.
+              Reduce operator burden with anomaly detection, policy-based planning, and approval gate automation.
             </p>
 
             {/* CTAs */}
@@ -183,7 +183,7 @@ function Hero() {
 
 const clientGroups = [
   {
-    label: "L1 실행",
+    label: "L1 Execution",
     color: "text-blue-400",
     borderColor: "border-blue-500/30",
     bgColor: "bg-blue-500/5",
@@ -197,7 +197,7 @@ const clientGroups = [
     clients: ["OP Stack", "Arbitrum Nitro", "ZK Stack"],
   },
   {
-    label: "L1 합의",
+    label: "L1 Consensus",
     color: "text-violet-400",
     borderColor: "border-violet-500/30",
     bgColor: "bg-violet-500/5",
@@ -211,10 +211,10 @@ function SupportedClients() {
       <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
         <div className="mb-8 text-center">
           <h2 className="mb-2 text-xl font-semibold text-foreground/80">
-            지원 클라이언트
+            Supported Clients
           </h2>
           <p className="text-sm text-muted-foreground">
-            모든 주요 EVM 실행·합의·L2 클라이언트와 호환
+            Compatible with all major EVM execution, consensus, and L2 clients
           </p>
         </div>
 
@@ -294,9 +294,9 @@ const capabilities = [
     icon: Shield,
     color: "text-rose-400",
     bg: "bg-rose-500/10",
-    title: "L1 검증자 모니터링",
+    title: "L1 Validator Monitoring",
     description:
-      "finality 지연, 피어 격리, sync 상태를 실시간 감지. L1 합의 레이어 이상을 L2 운영 전에 차단합니다.",
+      "Real-time detection of finality delays, peer isolation, and sync issues. Block L1 consensus anomalies before they impact L2 operations.",
   },
 ];
 
@@ -351,21 +351,21 @@ const steps = [
     number: "01",
     title: "Observe & Detect",
     description:
-      "L1/L2 메트릭 수집 후 4-Layer 이상 탐지 파이프라인 실행 (Z-Score + AI 분석)",
+      "Collect L1/L2 metrics and run the 4-layer anomaly detection pipeline (Z-Score + AI analysis).",
     accent: "border-cyan-500/50 text-cyan-400",
   },
   {
     number: "02",
     title: "Analyze & Plan",
     description:
-      "AI RCA로 근본 원인 추적, Goal Manager가 우선순위에 따라 대응 계획 수립",
+      "Trace root causes with AI RCA. The Goal Manager prioritizes and plans the response.",
     accent: "border-blue-500/50 text-blue-400",
   },
   {
     number: "03",
     title: "Act & Verify",
     description:
-      "스케일링 또는 복구 실행 후 결과 검증. 실패 시 자동 롤백",
+      "Execute scaling or remediation, then verify the outcome. Automatic rollback on failure.",
     accent: "border-violet-500/50 text-violet-400",
   },
 ];
@@ -379,7 +379,7 @@ function HowItWorks() {
             How it works
           </h2>
           <p className="mx-auto max-w-xl text-muted-foreground">
-            30초마다 실행되는 에이전트 루프 — 관찰, 분석, 실행의 3단계로 인프라를 자율 운영합니다.
+            An agent loop running every 30 seconds — observe, analyze, and act to autonomously manage your infrastructure.
           </p>
         </div>
 
@@ -462,7 +462,7 @@ function Deployment() {
             <Button asChild className="mt-6 w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg hover:opacity-90 hover:bg-primary">
               <a href="/setup">
                 <Terminal className="h-4 w-4" />
-                설치 스크립트 생성
+                Generate Setup Script
               </a>
             </Button>
           </div>

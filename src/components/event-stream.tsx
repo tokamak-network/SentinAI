@@ -76,7 +76,7 @@ export function EventStream({ events }: EventStreamProps) {
               </div>
             ))}
             {events.length === 0 && (
-              <p className="text-muted-foreground text-xs text-center py-4">이벤트 없음</p>
+              <p className="text-muted-foreground text-xs text-center py-4">No events</p>
             )}
           </div>
         </ScrollArea>
