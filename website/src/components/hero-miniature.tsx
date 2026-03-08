@@ -82,7 +82,7 @@ export function HeroMiniature() {
               initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
               className="text-[11px] text-muted-foreground text-center py-2"
             >
-              모든 노드 정상 동작 중
+              All nodes operating normally
             </motion.div>
           )}
           {stage === 'anomaly' && (
@@ -91,7 +91,7 @@ export function HeroMiniature() {
               className="flex items-center gap-1.5 bg-warning/10 border border-warning/30 rounded-lg px-3 py-2"
             >
               <AlertTriangle className="size-3 text-warning shrink-0" />
-              <span className="text-[11px] text-warning">이상 감지: op-geth</span>
+              <span className="text-[11px] text-warning">Anomaly detected: op-geth</span>
             </motion.div>
           )}
           {stage === 'rca' && (
@@ -100,7 +100,7 @@ export function HeroMiniature() {
               className="flex items-center gap-1.5 bg-primary/10 border border-primary/30 rounded-lg px-3 py-2"
             >
               <Brain className="size-3 text-primary shrink-0" />
-              <span className="text-[11px] text-primary">RCA: L1 RPC 레이트 리밋</span>
+              <span className="text-[11px] text-primary">RCA: L1 RPC Rate Limit</span>
             </motion.div>
           )}
           {stage === 'resolved' && (
@@ -109,7 +109,7 @@ export function HeroMiniature() {
               className="flex items-center gap-1.5 bg-accent/10 border border-accent/30 rounded-lg px-3 py-2"
             >
               <CheckCircle2 className="size-3 text-accent shrink-0" />
-              <span className="text-[11px] text-accent">복구 완료</span>
+              <span className="text-[11px] text-accent">Recovery complete</span>
             </motion.div>
           )}
         </AnimatePresence>
