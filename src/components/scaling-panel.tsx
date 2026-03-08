@@ -13,8 +13,6 @@ interface ScalingPanelProps {
   predictionConfidence?: number;
   lastDecision?: string;
   autoScalingEnabled: boolean;
-  onRunRca: () => void;
-  onRemediate: () => void;
 }
 
 const TIER_LABEL: Record<number, { label: string; color: string }> = {
@@ -27,6 +25,7 @@ const TIER_LABEL: Record<number, { label: string; color: string }> = {
 export function ScalingPanel({
   score,
   currentVcpu,
+  targetVcpu,
   predictionTier,
   predictionConfidence,
   lastDecision,
@@ -67,6 +66,14 @@ export function ScalingPanel({
             </Badge>
           </div>
         </div>
+
+        {/* Target vCPU (shown when different from current) */}
+        {targetVcpu !== currentVcpu && (
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-muted-foreground">Target</span>
+            <span className="font-mono text-accent">{targetVcpu} vCPU</span>
+          </div>
+        )}
 
         {/* Auto-scaling badge */}
         <div className="flex items-center justify-between text-xs">
