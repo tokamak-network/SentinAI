@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from 'react';
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import dynamic from 'next/dynamic';
 import {
   Activity, Server, Zap,
   CheckCircle2, Shield, Globe, AlertTriangle, XCircle,
@@ -13,6 +14,19 @@ import type { ExperienceStats } from '@/types/experience';
 import type { ExperienceTier } from '@/types/agent-resume';
 import { DOMAIN_CATEGORY_MAP } from '@/types/experience';
 import { AutonomyPipeline } from '@/components/autonomy';
+import { StatusBar } from '@/components/status-bar';
+import { EventStream } from '@/components/event-stream';
+import type { StreamEvent } from '@/components/event-stream';
+import { ScalingPanel } from '@/components/scaling-panel';
+import { NLOpsBar } from '@/components/nlops-bar';
+import { Toaster } from '@/components/ui/sonner';
+import { toast } from 'sonner';
+import type { NodeState } from '@/components/agent-network-graph';
+
+const AgentNetworkGraph = dynamic(
+  () => import('@/components/agent-network-graph').then((m) => m.AgentNetworkGraph),
+  { ssr: false, loading: () => <div className="w-full h-full bg-card animate-pulse rounded-lg" /> }
+);
 
 // --- Interfaces ---
 interface MetricData {
@@ -430,6 +444,10 @@ export default function Dashboard() {
 
   const [, setPrediction] = useState<PredictionInfo | null>(null);
   const [, setPredictionMeta] = useState<PredictionMeta | null>(null);
+  const [scalerState, setScalerState] = useState<ScalerState | null>(null);
+
+  // --- Anomaly toast ref ---
+  const prevAnomaliesRef = useRef<AnomalyEventData[] | null>(null);
 
   // --- L1 RPC Failover State ---
   const [l1Failover, setL1Failover] = useState<L1FailoverStatus | null>(null);
@@ -669,6 +687,7 @@ export default function Dashboard() {
               const scalerData: ScalerState = await scalerRes.json();
               setPrediction(scalerData.prediction);
               setPredictionMeta(scalerData.predictionMeta);
+              setScalerState(scalerData);
             }
           } catch {
             // Ignore scaler fetch errors
@@ -791,7 +810,21 @@ export default function Dashboard() {
         const res = await fetch(`${BASE_PATH}/api/anomalies`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json();
-          setAnomalyEvents(data.events || []);
+          const newAnomalies: AnomalyEventData[] = data.events || [];
+          setAnomalyEvents(newAnomalies);
+
+          // Notify on new anomalies
+          if (newAnomalies.length > (prevAnomaliesRef.current?.length ?? 0)) {
+            const latest = newAnomalies[0];
+            if (latest) {
+              const component = latest.deepAnalysis?.relatedComponents?.[0] ?? 'unknown';
+              const description = latest.deepAnalysis?.anomalyType ?? '';
+              toast.warning(`이상 감지: ${component}`, {
+                description,
+              });
+            }
+          }
+          prevAnomaliesRef.current = newAnomalies;
         }
       } catch { /* ignore */ }
     };
@@ -817,6 +850,65 @@ export default function Dashboard() {
   }, []);
 
 
+  // --- Derived state for new layout components ---
+
+  // Derive componentStates for 3D graph from anomaly events
+  const componentStates = useMemo<Record<string, NodeState>>(() => {
+    const states: Record<string, NodeState> = {};
+    (anomalyEvents ?? []).forEach((a) => {
+      const severity = a.deepAnalysis?.severity;
+      const components = a.deepAnalysis?.relatedComponents ?? [];
+      components.forEach((comp) => {
+        if (severity === 'critical') {
+          states[comp] = 'critical';
+        } else if (severity === 'high' && states[comp] !== 'critical') {
+          states[comp] = 'anomaly';
+        }
+      });
+    });
+    return states;
+  }, [anomalyEvents]);
+
+  // Derive StreamEvents from anomaly events
+  const streamEvents = useMemo<StreamEvent[]>(() => {
+    const events: StreamEvent[] = [];
+    (anomalyEvents ?? []).slice(0, 15).forEach((a) => {
+      const component = a.deepAnalysis?.relatedComponents?.[0] ?? '';
+      const description = a.deepAnalysis?.anomalyType ?? '';
+      const severity = a.deepAnalysis?.severity as 'low' | 'medium' | 'high' | 'critical' | undefined;
+      events.push({
+        id: a.id,
+        time: new Date(a.timestamp).toLocaleTimeString(),
+        type: 'anomaly',
+        message: component ? `${component}: ${description}` : description,
+        severity,
+      });
+    });
+    return events.slice(0, 20);
+  }, [anomalyEvents]);
+
+  // --- Handler stubs for new layout ---
+  const handleRunRca = useCallback(async () => {
+    try {
+      await fetch(`${BASE_PATH}/api/rca`, {
+        method: 'POST',
+        headers: writeHeaders(),
+        body: JSON.stringify({}),
+      });
+      toast.info('RCA 실행 중...', { description: '근본 원인 분석을 시작했습니다.' });
+    } catch {
+      toast.error('RCA 실행 실패');
+    }
+  }, []);
+
+  const handleRemediate = useCallback(() => {
+    toast.info('복구 명령 전송', { description: 'NLOps를 통해 복구를 요청하세요.' });
+  }, []);
+
+  const handleNLOpsSend = useCallback((message: string) => {
+    sendChatMessage(message);
+  }, [sendChatMessage]);
+
   if (isLoading) return (
     <div className="flex h-screen w-full items-center justify-center bg-gray-50 text-blue-600">
       <div className="flex flex-col items-center gap-4">
@@ -838,9 +930,60 @@ export default function Dashboard() {
   const chainName = publicStatus?.chain.name ?? process.env.NEXT_PUBLIC_NETWORK_NAME ?? networkName ?? 'Thanos Sepolia';
 
   return (
-    <>
-      {/* ── Showcase Banner ── */}
-      <div className="bg-white border-b border-gray-200 sticky top-0 z-20">
+    <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden">
+      {/* Top status bar */}
+      <StatusBar
+        l1BlockHeight={current?.metrics?.l1BlockHeight ?? 0}
+        l2BlockHeight={current?.metrics?.blockHeight ?? 0}
+        l1BlockDelta={0}
+        l2BlockDelta={0}
+        txPoolPending={current?.metrics?.txPoolCount ?? 0}
+        agentScore={agentLoop?.lastCycle?.scaling?.score ?? scalerState?.currentVcpu ?? 0}
+        agentPhase={agentLoop?.lastCycle?.phase ?? 'idle'}
+        isSyncing={false}
+        networkName={process.env.NEXT_PUBLIC_NETWORK_NAME ?? current?.chain?.displayName}
+      />
+
+      {/* Main content */}
+      <div className="flex flex-1 min-h-0">
+        {/* Left: 3D Agent Graph (65%) */}
+        <div className="flex-1 min-h-0 p-3">
+          <AgentNetworkGraph
+            componentStates={componentStates}
+            agentPhase={agentLoop?.lastCycle?.phase}
+          />
+        </div>
+
+        {/* Right panels (35%, max 320px) */}
+        <div className="w-80 flex flex-col gap-2 p-3 pl-0 min-h-0">
+          <div className="flex-1 min-h-0">
+            <EventStream events={streamEvents} />
+          </div>
+          <ScalingPanel
+            score={agentLoop?.lastCycle?.scaling?.score ?? 0}
+            currentVcpu={scalerState?.currentVcpu ?? agentLoop?.lastCycle?.scaling?.currentVcpu ?? 2}
+            targetVcpu={agentLoop?.lastCycle?.scaling?.targetVcpu ?? scalerState?.currentVcpu ?? 2}
+            autoScalingEnabled={scalerState?.autoScalingEnabled ?? agentLoop?.config?.autoScalingEnabled ?? false}
+            predictionTier={scalerState?.prediction ? String(scalerState.prediction.predictedVcpu) + ' vCPU' : undefined}
+            predictionConfidence={scalerState?.prediction?.confidence}
+            lastDecision={agentLoop?.lastCycle?.scaling?.reason}
+          />
+        </div>
+      </div>
+
+      {/* Bottom: NLOps bar */}
+      <NLOpsBar
+        onSend={handleNLOpsSend}
+        onRunRca={handleRunRca}
+        onRemediate={handleRemediate}
+        isLoading={isSending}
+      />
+
+      {/* Sonner toast container */}
+      <Toaster position="top-right" theme="dark" />
+
+      {/* ── Showcase Banner (kept for compatibility) ── */}
+      <div className="hidden bg-white border-b border-gray-200 sticky top-0 z-20">
         <div className="mx-auto max-w-[1600px] px-6 md:px-10 py-3">
           <div className="flex flex-wrap items-center justify-between gap-4">
             {/* Left: Chain + status */}
@@ -2498,7 +2641,7 @@ export default function Dashboard() {
 
 
     </div>
-    </>
+    </div>
   );
 }
 

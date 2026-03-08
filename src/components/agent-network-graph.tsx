@@ -5,7 +5,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { Text, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 
-type NodeState = 'normal' | 'anomaly' | 'critical' | 'inactive';
+export type NodeState = 'normal' | 'anomaly' | 'critical' | 'inactive';
 
 interface NetworkNode {
   id: string;
