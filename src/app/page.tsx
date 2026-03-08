@@ -855,7 +855,7 @@ export default function Dashboard() {
   // Derive componentStates for 3D graph from anomaly events
   const componentStates = useMemo<Record<string, NodeState>>(() => {
     const states: Record<string, NodeState> = {};
-    (anomalyEvents ?? []).forEach((a) => {
+    (anomalyEvents ?? []).filter((a) => a.status === 'active').forEach((a) => {
       const severity = a.deepAnalysis?.severity;
       const components = a.deepAnalysis?.relatedComponents ?? [];
       components.forEach((comp) => {
