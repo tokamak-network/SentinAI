@@ -24,7 +24,7 @@ interface StatusConfig {
   color: string;
   bgColor: string;
   borderColor: string;
-  Icon: React.ElementType;
+  Icon: React.ComponentType<{ className?: string }>;
   description: string;
 }
 

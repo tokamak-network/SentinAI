@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Text, OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -86,7 +86,10 @@ function PacketParticle({
   speed?: number;
 }) {
   const meshRef = useRef<THREE.Mesh>(null!);
-  const progress = useRef(Math.random());
+  const progress = useRef(0);
+  useEffect(() => {
+    progress.current = Math.random();
+  }, []);
 
   useFrame((_, delta) => {
     if (!meshRef.current) return;
