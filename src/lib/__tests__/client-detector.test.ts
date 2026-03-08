@@ -1,4 +1,8 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
+
+vi.mock('fs');
+import * as fs from 'fs';
+
 import { detectExecutionClient, detectConsensusClient } from '@/lib/client-detector';
 
 function mockRpcFetch(handlers: Record<string, unknown>) {
@@ -17,6 +21,10 @@ function mockRpcFetch(handlers: Record<string, unknown>) {
 describe('client-detector', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    // Default: no custom profiles file
+    vi.mocked(fs.readFileSync).mockImplementation(() => {
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    });
   });
 
   afterEach(() => {
@@ -137,6 +145,42 @@ describe('client-detector', () => {
 
     expect(detected.txpoolNamespace).toBeNull();
     expect(detected.probes.txpool_status).toBe(false);
+  });
+
+  it('detectExecutionClient: custom profile detectPattern matches ethrex version string', async () => {
+    // Simulate client-profiles.json with ethrex entry
+    vi.mocked(fs.readFileSync).mockReturnValue(
+      JSON.stringify([
+        {
+          clientFamily: 'ethrex',
+          detectPattern: 'ethrex',
+          methods: { txPool: null, l2SyncStatus: null },
+          capabilities: { supportsTxPool: false, supportsL2SyncStatus: false },
+        },
+      ]) as unknown as Buffer,
+    );
+
+    const fetchMock = mockRpcFetch({
+      web3_clientVersion: 'ethrex/1.0.0-stable',
+      eth_chainId: '0x1',
+      eth_syncing: false,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detected = await detectExecutionClient({ rpcUrl: 'http://mock' });
+    expect(detected.family).toBe('ethrex');
+  });
+
+  it('detectExecutionClient: falls back to unknown when no custom profile matches', async () => {
+    const fetchMock = mockRpcFetch({
+      web3_clientVersion: 'some-unknown-client/1.0.0',
+      eth_chainId: '0x1',
+      eth_syncing: false,
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const detected = await detectExecutionClient({ rpcUrl: 'http://mock' });
+    expect(detected.family).toBe('unknown');
   });
 
   it('detectConsensusClient: parses version + peer_count, L2 fields are false/null', async () => {

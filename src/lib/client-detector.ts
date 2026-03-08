@@ -1,4 +1,5 @@
 import type { ConnectionConfig, NodeType } from '@/core/types';
+import { loadCustomProfiles } from './client-profile/custom-profiles';
 
 export type ClientLayer = 'execution' | 'consensus';
 
@@ -89,6 +90,15 @@ function normalizeExecutionFamily(version?: string): ExecutionClientFamily {
   if (v.includes('nethermind')) return 'nethermind';
   if (v.includes('besu')) return 'besu';
   if (v.includes('erigon')) return 'erigon';
+
+  // Check custom profiles loaded from client-profiles.json
+  const customProfiles = loadCustomProfiles();
+  for (const profile of customProfiles) {
+    if (v.includes(profile.detectPattern.toLowerCase())) {
+      return profile.clientFamily as ExecutionClientFamily;
+    }
+  }
+
   return 'unknown';
 }
 

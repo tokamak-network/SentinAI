@@ -9,13 +9,23 @@ import {
   Check,
   ArrowLeft,
   ChevronDown,
+  Loader2,
 } from "lucide-react";
 import {
   generateSetupScript,
   type SetupConfig,
   type ClientFamily,
   type AiProvider,
+  type CustomProfile,
 } from "@/lib/generate-setup-script";
+
+interface DetectResult {
+  family: string;
+  txpoolNamespace: "txpool" | "parity" | null;
+  supportsL2SyncStatus: boolean;
+  l2SyncMethod: string | null;
+  clientVersion: string | null;
+}
 
 const GITHUB_URL = "https://github.com/tokamak-network/SentinAI";
 
@@ -38,6 +48,126 @@ const AI_OPTIONS: { value: AiProvider; label: string }[] = [
   { value: "openai", label: "OpenAI" },
   { value: "gemini", label: "Google Gemini" },
 ];
+
+// ── Custom Client Section ────────────────────────────────────────────────────
+
+interface CustomClientSectionProps {
+  rpcUrl: string;
+  customName: string;
+  onCustomNameChange: (v: string) => void;
+  detectResult: DetectResult | null;
+  onDetectResult: (r: DetectResult | null) => void;
+}
+
+function CustomClientSection({
+  rpcUrl,
+  customName,
+  onCustomNameChange,
+  detectResult,
+  onDetectResult,
+}: CustomClientSectionProps) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleDetect() {
+    setError(null);
+    setLoading(true);
+    try {
+      const res = await fetch("/api/v2/client-detect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rpcUrl }),
+      });
+      const json = (await res.json()) as
+        | { data: DetectResult }
+        | { error: string; detail?: string };
+      if (!res.ok || "error" in json) {
+        const msg = "error" in json ? json.error : "감지 실패";
+        setError(msg);
+        onDetectResult(null);
+      } else {
+        onDetectResult(json.data);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "네트워크 오류");
+      onDetectResult(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-6">
+      <h2 className="mb-5 text-sm font-semibold uppercase tracking-wider text-amber-400">
+        커스텀 클라이언트 설정
+      </h2>
+
+      {/* Client name */}
+      <div className="mb-4">
+        <label
+          htmlFor="custom-name"
+          className="mb-1.5 block text-sm font-medium text-slate-300"
+        >
+          클라이언트 이름
+        </label>
+        <input
+          id="custom-name"
+          type="text"
+          value={customName}
+          onChange={(e) => onCustomNameChange(e.target.value)}
+          placeholder="예: ethrex"
+          className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 text-sm text-slate-100 placeholder-slate-500 focus:border-cyan-500 focus:outline-none"
+        />
+      </div>
+
+      {/* Auto-detect button */}
+      <button
+        onClick={handleDetect}
+        disabled={!rpcUrl.trim() || loading}
+        className="flex items-center gap-2 rounded-lg bg-amber-500/20 px-4 py-2 text-sm font-medium text-amber-300 transition-colors hover:bg-amber-500/30 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {loading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          "🔍"
+        )}
+        자동 감지
+      </button>
+
+      {/* Error */}
+      {error && (
+        <p className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-xs text-rose-400">
+          {error}
+        </p>
+      )}
+
+      {/* Detection result */}
+      {detectResult && (
+        <div className="mt-4 space-y-2 rounded-lg border border-slate-700 bg-slate-800/60 p-4">
+          <p className="text-xs font-medium text-slate-300">감지 결과</p>
+          <dl className="space-y-1 text-xs text-slate-400">
+            <div className="flex gap-2">
+              <dt className="w-32 shrink-0 text-slate-500">클라이언트:</dt>
+              <dd className="font-mono text-slate-200">{detectResult.clientVersion ?? "알 수 없음"}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-32 shrink-0 text-slate-500">TxPool 네임스페이스:</dt>
+              <dd className="font-mono text-slate-200">{detectResult.txpoolNamespace ?? "없음"}</dd>
+            </div>
+            <div className="flex gap-2">
+              <dt className="w-32 shrink-0 text-slate-500">L2 Sync 지원:</dt>
+              <dd className="font-mono text-slate-200">
+                {detectResult.supportsL2SyncStatus
+                  ? `✓ ${detectResult.l2SyncMethod ?? ""}`
+                  : "✗ 미지원"}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Navbar ──────────────────────────────────────────────────────────────────
 
@@ -157,8 +287,24 @@ export default function SetupPage() {
   const [networkName, setNetworkName] = useState("");
   const [aiProvider, setAiProvider] = useState<AiProvider>("none");
   const [aiApiKey, setAiApiKey] = useState("");
+  const [customName, setCustomName] = useState("");
+  const [detectResult, setDetectResult] = useState<DetectResult | null>(null);
 
-  const config: SetupConfig = { clientFamily, rpcUrl, networkName, aiProvider, aiApiKey };
+  const customProfile: CustomProfile | undefined =
+    clientFamily === "other" && customName.trim() && detectResult
+      ? {
+          clientFamily: customName.trim(),
+          detectPattern: customName.trim(),
+          txPoolMethod: detectResult.txpoolNamespace
+            ? detectResult.txpoolNamespace === "txpool"
+              ? "txpool_status"
+              : "parity_pendingTransactions"
+            : null,
+          l2SyncMethod: detectResult.l2SyncMethod,
+        }
+      : undefined;
+
+  const config: SetupConfig = { clientFamily, rpcUrl, networkName, aiProvider, aiApiKey, customProfile };
   const script = generateSetupScript(config);
   const isReady = rpcUrl.trim().length > 0;
 
@@ -250,6 +396,17 @@ export default function SetupPage() {
                 />
               </div>
             </div>
+
+            {/* Custom client section — only when "other" is selected */}
+            {clientFamily === "other" && (
+              <CustomClientSection
+                rpcUrl={rpcUrl}
+                customName={customName}
+                onCustomNameChange={setCustomName}
+                detectResult={detectResult}
+                onDetectResult={setDetectResult}
+              />
+            )}
 
             {/* AI Provider */}
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">

@@ -1,5 +1,6 @@
 import type { ClientProfile, CustomMetricConfig, SyncStatusParser } from './types';
 import { BUILTIN_PROFILES } from './builtin-profiles';
+import { mergeWithBuiltins } from './custom-profiles';
 
 /** Returns SENTINAI_CLIENT_FAMILY env var value, or null if not set */
 export function getClientFamilyFromEnv(): string | null {
@@ -222,6 +223,7 @@ export function parseK8sLabelsFromEnv(): Record<string, string> {
 export function resolveClientProfile(family?: string): ClientProfile {
   const envFamily = getClientFamilyFromEnv();
   const resolvedFamily = envFamily ?? family;
-  const base = resolvedFamily ? (BUILTIN_PROFILES[resolvedFamily] ?? undefined) : undefined;
+  const allProfiles = mergeWithBuiltins(BUILTIN_PROFILES);
+  const base = resolvedFamily ? (allProfiles[resolvedFamily] ?? undefined) : undefined;
   return buildClientProfileFromEnv(base);
 }
