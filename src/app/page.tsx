@@ -909,6 +909,20 @@ export default function Dashboard() {
     sendChatMessage(message);
   }, [sendChatMessage]);
 
+  const handleInjectScenario = useCallback(async (scenario: string) => {
+    try {
+      await fetch(`${BASE_PATH}/api/metrics/seed?scenario=${scenario}`, {
+        method: 'POST',
+        headers: writeHeaders(),
+      });
+      setIsSeedActive(scenario !== 'live');
+      setSeedTrigger(Date.now());
+      toast.success(`Scenario: ${scenario}`, { description: scenario === 'live' ? 'Switched to live RPC data.' : 'Injected. Agent loop will detect anomalies within 30s.' });
+    } catch {
+      toast.error('Scenario injection failed');
+    }
+  }, []);
+
   if (isLoading) return (
     <div className="flex h-screen w-full items-center justify-center bg-background text-foreground">
       <div className="flex flex-col items-center gap-4">
@@ -976,6 +990,7 @@ export default function Dashboard() {
         onSend={handleNLOpsSend}
         onRunRca={handleRunRca}
         onRemediate={handleRemediate}
+        onInjectScenario={handleInjectScenario}
         isLoading={isSending}
       />
 
