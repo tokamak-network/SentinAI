@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   ShieldCheck,
   Github,
@@ -76,19 +76,43 @@ function Navbar() {
 
 function CodeBlock({ content, disabled }: { content: string; disabled: boolean }) {
   const [copied, setCopied] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(() => () => clearTimeout(timerRef.current), []);
 
   function handleCopy() {
     if (disabled) return;
-    navigator.clipboard.writeText(content).catch(() => {
-      const el = document.createElement("textarea");
-      el.value = content;
-      document.body.appendChild(el);
-      el.select();
-      document.execCommand("copy");
-      document.body.removeChild(el);
-    });
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+
+    const fallback = (): boolean => {
+      try {
+        const el = document.createElement("textarea");
+        el.value = content;
+        el.style.position = "fixed";
+        el.style.opacity = "0";
+        document.body.appendChild(el);
+        el.select();
+        const ok = document.execCommand("copy");
+        document.body.removeChild(el);
+        return ok;
+      } catch {
+        return false;
+      }
+    };
+
+    navigator.clipboard
+      .writeText(content)
+      .then(() => {
+        setCopied(true);
+        clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {
+        if (fallback()) {
+          setCopied(true);
+          clearTimeout(timerRef.current);
+          timerRef.current = setTimeout(() => setCopied(false), 2000);
+        }
+      });
   }
 
   return (
@@ -176,11 +200,12 @@ export default function SetupPage() {
 
               {/* Client Family */}
               <div className="mb-4">
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                <label htmlFor="client-family" className="mb-1.5 block text-sm font-medium text-slate-300">
                   EVM 클라이언트
                 </label>
                 <div className="relative">
                   <select
+                    id="client-family"
                     value={clientFamily}
                     onChange={(e) => setClientFamily(e.target.value as ClientFamily)}
                     className="w-full appearance-none rounded-lg border border-slate-700 bg-slate-800 px-3 py-2.5 pr-8 text-sm text-slate-100 focus:border-cyan-500 focus:outline-none"
@@ -197,10 +222,11 @@ export default function SetupPage() {
 
               {/* RPC URL */}
               <div className="mb-4">
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                <label htmlFor="rpc-url" className="mb-1.5 block text-sm font-medium text-slate-300">
                   RPC URL <span className="text-rose-400">*</span>
                 </label>
                 <input
+                  id="rpc-url"
                   type="text"
                   value={rpcUrl}
                   onChange={(e) => setRpcUrl(e.target.value)}
@@ -211,10 +237,11 @@ export default function SetupPage() {
 
               {/* Network Name */}
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                <label htmlFor="network-name" className="mb-1.5 block text-sm font-medium text-slate-300">
                   네트워크 이름 <span className="text-slate-500">(선택)</span>
                 </label>
                 <input
+                  id="network-name"
                   type="text"
                   value={networkName}
                   onChange={(e) => setNetworkName(e.target.value)}
@@ -231,8 +258,12 @@ export default function SetupPage() {
               </h2>
 
               <div className="mb-4">
+                <label htmlFor="ai-provider" className="sr-only">
+                  AI 제공자
+                </label>
                 <div className="relative">
                   <select
+                    id="ai-provider"
                     value={aiProvider}
                     onChange={(e) => {
                       setAiProvider(e.target.value as AiProvider);
@@ -252,10 +283,11 @@ export default function SetupPage() {
 
               {aiProvider !== "none" && (
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-slate-300">
+                  <label htmlFor="ai-api-key" className="mb-1.5 block text-sm font-medium text-slate-300">
                     API Key
                   </label>
                   <input
+                    id="ai-api-key"
                     type="password"
                     value={aiApiKey}
                     onChange={(e) => setAiApiKey(e.target.value)}
