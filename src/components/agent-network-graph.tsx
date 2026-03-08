@@ -35,7 +35,7 @@ const AGENT_COLORS: Record<AgentId, string> = {
   collector: '#3B82F6', // blue
   detector:  '#F59E0B', // amber
   analyzer:  '#A78BFA', // purple
-  executor:  '#10FFAA', // green
+  executor:  '#10FFAA', // mint
   verifier:  '#22D3EE', // cyan
 };
 
@@ -43,7 +43,7 @@ const AGENT_COLORS: Record<AgentId, string> = {
 const PHASE_ACTIVE: Record<string, AgentId[]> = {
   observe:  ['collector'],
   detect:   ['collector', 'detector'],
-  analyze:  ['detector', 'analyzer', 'executor'],
+  analyze:  ['detector', 'analyzer'],
   plan:     ['analyzer'],
   act:      ['executor'],
   verify:   ['verifier'],
@@ -89,14 +89,12 @@ const PIPELINE_EDGES: PipelineEdge[] = [
 ];
 
 // ─── Infra mini-cluster ───────────────────────────────────────────────────────
-const INFRA_IDS = ['l1', 'op-node', 'op-geth', 'op-batcher', 'op-proposer'];
-
-const INFRA_POSITIONS: [number, number, number][] = [
-  [-5.6,  0.5, 0],
-  [-5.6, -0.5, 0],
-  [-5.2,  0.8, 0],
-  [-5.2,  0,   0],
-  [-5.2, -0.8, 0],
+const INFRA_NODES: { id: string; position: [number, number, number] }[] = [
+  { id: 'l1',          position: [-5.6,  0.5, 0] },
+  { id: 'op-node',     position: [-5.6, -0.5, 0] },
+  { id: 'op-geth',     position: [-5.2,  0.8, 0] },
+  { id: 'op-batcher',  position: [-5.2,  0,   0] },
+  { id: 'op-proposer', position: [-5.2, -0.8, 0] },
 ];
 
 const INFRA_CONNECTOR: [number, number, number] = [-5.4, 0, 0];
@@ -105,7 +103,7 @@ const STATE_COLORS: Record<NodeState, string> = {
   normal:   '#2A4A6A',
   anomaly:  '#F59E0B',
   critical: '#EF4444',
-  inactive: '#2A4A6A',
+  inactive: '#2A4A6A', // intentionally same as normal — infra shows no distinction when inactive
 };
 
 /** Sonar pulse ring expanding from SentinAI center during observe phase */
