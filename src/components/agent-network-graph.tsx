@@ -106,8 +106,16 @@ const STATE_COLORS: Record<NodeState, string> = {
   inactive: '#2A4A6A', // intentionally same as normal — infra shows no distinction when inactive
 };
 
-/** Sonar pulse ring expanding from SentinAI center during observe phase */
-function PulseRing({ color, initialOffset = 0 }: { color: string; initialOffset?: number }) {
+/** Sonar pulse ring — rendered at a given world position */
+function PulseRing({
+  position,
+  color,
+  initialOffset = 0,
+}: {
+  position: [number, number, number];
+  color: string;
+  initialOffset?: number;
+}) {
   const meshRef = useRef<THREE.Mesh>(null!);
   const t = useRef(initialOffset);
 
@@ -115,20 +123,20 @@ function PulseRing({ color, initialOffset = 0 }: { color: string; initialOffset?
     t.current = (t.current + delta * 0.5) % 1;
     const s = t.current;
     if (!meshRef.current) return;
-    meshRef.current.scale.setScalar(0.5 + s * 5);
+    meshRef.current.scale.setScalar(0.5 + s * 4);
     const mat = meshRef.current.material as THREE.MeshBasicMaterial;
     mat.opacity = 0.6 * (1 - s);
   });
 
   return (
-    <mesh ref={meshRef}>
+    <mesh ref={meshRef} position={position}>
       <torusGeometry args={[0.5, 0.018, 8, 64]} />
       <meshBasicMaterial color={color} transparent depthWrite={false} />
     </mesh>
   );
 }
 
-/** Packet traveling along an edge, colored by the interaction type */
+/** Packet traveling along an edge */
 function PacketParticle({
   from,
   to,
@@ -164,75 +172,56 @@ function PacketParticle({
   );
 }
 
-/** Node for infrastructure components, color driven by anomaly state */
-function NodeMesh({ node }: { node: NetworkNode }) {
-  const meshRef = useRef<THREE.Mesh>(null!);
-  const haloRef = useRef<THREE.Mesh>(null!);
-  const color = STATE_COLORS[node.state];
-  const isAnomaly = node.state === 'anomaly' || node.state === 'critical';
-
-  useFrame(() => {
-    if (!meshRef.current) return;
-    const amplitude = node.state === 'critical' ? 0.18 : node.state === 'anomaly' ? 0.09 : 0.04;
-    const freq = node.state === 'critical' ? 0.006 : 0.003;
-    const scale = 1 + Math.sin(Date.now() * freq) * amplitude;
-    meshRef.current.scale.setScalar(scale);
-    if (haloRef.current) haloRef.current.scale.setScalar(scale);
-  });
-
+/** 5 tiny infra spheres near Collector. Color from componentStates anomaly state. */
+function InfraCluster({ componentStates }: { componentStates: Record<string, NodeState> }) {
   return (
-    <group position={node.position}>
-      <mesh ref={meshRef}>
-        <sphereGeometry args={[0.2, 32, 32]} />
-        <meshStandardMaterial
-          color={color}
-          emissive={color}
-          emissiveIntensity={isAnomaly ? 1.0 : 0.4}
-        />
-      </mesh>
-      <mesh ref={haloRef}>
-        <sphereGeometry args={[0.32, 16, 16]} />
-        <meshStandardMaterial
-          color={color}
-          transparent
-          opacity={isAnomaly ? 0.14 : 0.06}
-          depthWrite={false}
-          side={THREE.BackSide}
-        />
-      </mesh>
-      <Billboard>
-        <Text
-          position={[0, -0.42, 0]}
-          fontSize={0.14}
-          color="#E8F4FF"
-          anchorX="center"
-          anchorY="top"
-        >
-          {node.label}
-        </Text>
-      </Billboard>
+    <group>
+      {INFRA_NODES.map((node) => {
+        const state = componentStates[node.id] ?? 'normal';
+        const color = STATE_COLORS[state];
+        const isAnomaly = state === 'anomaly' || state === 'critical';
+        return (
+          <mesh key={node.id} position={node.position}>
+            <sphereGeometry args={[0.1, 12, 12]} />
+            <meshStandardMaterial
+              color={color}
+              emissive={color}
+              emissiveIntensity={isAnomaly ? 1.2 : 0.3}
+            />
+          </mesh>
+        );
+      })}
+      {/* Connector line from cluster to Collector */}
+      <Line
+        points={[INFRA_CONNECTOR, AGENT_NODES[0].position]}
+        color="#1A2B4A"
+        lineWidth={1}
+        transparent
+        opacity={0.4}
+      />
     </group>
   );
 }
 
-/** Central SentinAI agent node — phase-driven color + rotating ring */
-function AgentCenterNode({
+/** Single agent pipeline node. Glows and pulses when active. */
+function AgentNodeMesh({
   node,
-  agentPhase,
+  isActive,
 }: {
-  node: NetworkNode;
-  agentPhase?: string;
+  node: AgentNode;
+  isActive: boolean;
 }) {
-  const meshRef  = useRef<THREE.Mesh>(null!);
-  const haloRef  = useRef<THREE.Mesh>(null!);
-  const ringRef  = useRef<THREE.Mesh>(null!);
-  const phase    = agentPhase ?? 'idle';
-  const color    = AGENT_PHASE_COLORS[phase] ?? AGENT_PHASE_COLORS.idle;
-  const isActive = phase !== 'idle' && phase !== 'error';
+  const meshRef = useRef<THREE.Mesh>(null!);
+  const haloRef = useRef<THREE.Mesh>(null!);
+  const ringRef = useRef<THREE.Mesh>(null!);
+  const color = AGENT_COLORS[node.id];
+  const hasRing = node.id === 'analyzer' && isActive;
 
   useFrame(() => {
     if (!meshRef.current) return;
-    const scale = 1 + Math.sin(Date.now() * 0.004) * (isActive ? 0.12 : 0.04);
+    const amplitude = isActive ? 0.1 : 0.02;
+    const freq = isActive ? 0.004 : 0.002;
+    const scale = 1 + Math.sin(Date.now() * freq) * amplitude;
     meshRef.current.scale.setScalar(scale);
     if (haloRef.current) haloRef.current.scale.setScalar(scale);
     if (ringRef.current) ringRef.current.rotation.z += 0.025;
@@ -240,142 +229,124 @@ function AgentCenterNode({
 
   return (
     <group position={node.position}>
-      {/* Inner sphere — fully opaque so no depth-sort issues */}
+      {/* Opaque inner sphere */}
       <mesh ref={meshRef} renderOrder={2}>
-        <sphereGeometry args={[0.3, 32, 32]} />
+        <sphereGeometry args={[0.22, 32, 32]} />
         <meshStandardMaterial
           color={color}
           emissive={color}
-          emissiveIntensity={isActive ? 1.1 : 0.7}
+          emissiveIntensity={isActive ? 1.0 : 0.25}
+          opacity={isActive ? 1 : 0.5}
+          transparent
         />
       </mesh>
-      {/* Halo glow — depthWrite=false to avoid occluding the inner sphere */}
+      {/* Halo glow */}
       <mesh ref={haloRef} renderOrder={1}>
-        <sphereGeometry args={[0.48, 16, 16]} />
+        <sphereGeometry args={[0.36, 16, 16]} />
         <meshStandardMaterial
           color={color}
           transparent
-          opacity={0.1}
+          opacity={isActive ? 0.12 : 0.03}
           depthWrite={false}
           side={THREE.BackSide}
         />
       </mesh>
-      {/* Rotating orbit ring while active */}
-      {isActive && (
+      {/* Rotating ring on Analyzer during AI processing */}
+      {hasRing && (
         <mesh ref={ringRef}>
-          <torusGeometry args={[0.42, 0.016, 8, 64]} />
+          <torusGeometry args={[0.34, 0.014, 8, 64]} />
           <meshStandardMaterial color={color} emissive={color} emissiveIntensity={1} />
         </mesh>
       )}
       <Billboard>
         <Text
-          position={[0, -0.66, 0]}
-          fontSize={0.16}
-          color="#E8F4FF"
+          position={[0, -0.48, 0]}
+          fontSize={0.13}
+          color={isActive ? '#E8F4FF' : '#4A6A8A'}
           anchorX="center"
           anchorY="top"
         >
           {node.label}
         </Text>
-        {phase !== 'idle' && (
-          <Text
-            position={[0, -0.92, 0]}
-            fontSize={0.12}
-            color={color}
-            anchorX="center"
-            anchorY="top"
-          >
-            {phase}
-          </Text>
-        )}
       </Billboard>
     </group>
   );
 }
 
 function Scene({
-  nodes,
-  edges,
+  componentStates,
   agentPhase,
 }: {
-  nodes: NetworkNode[];
-  edges: NetworkEdge[];
+  componentStates: Record<string, NodeState>;
   agentPhase?: string;
 }) {
-  const nodeMap = useMemo(
-    () => Object.fromEntries(nodes.map((n) => [n.id, n])),
-    [nodes],
+  const phase = agentPhase ?? 'idle';
+  const activeAgents = new Set(PHASE_ACTIVE[phase] ?? []);
+
+  const posMap = useMemo(
+    () => Object.fromEntries(AGENT_NODES.map((n) => [n.id, n.position])) as Record<AgentId, [number, number, number]>,
+    [],
   );
 
-  const phase = agentPhase ?? 'idle';
-  const isActive = phase !== 'idle' && phase !== 'error';
-  const packetInward = phase === 'observe' || phase === 'detect' || phase === 'analyze';
-  const phaseColor = AGENT_PHASE_COLORS[phase] ?? AGENT_PHASE_COLORS.idle;
-
-  // Pulse rings: 2 staggered rings during observe/detect
-  const showPulse = phase === 'observe' || phase === 'detect';
+  const showPulse = phase === 'detect' || phase === 'analyze';
+  const detectorPos = posMap['detector'];
+  const showInfraPacket = phase === 'observe';
 
   return (
     <>
       <ambientLight intensity={0.3} />
-      <pointLight position={[0, 5, 5]} intensity={1} color="#3B82F6" />
-      <pointLight position={[0, -5, -5]} intensity={0.5} color="#10FFAA" />
+      <pointLight position={[0, 5, 5]} intensity={0.8} color="#3B82F6" />
+      <pointLight position={[0, -5, -5]} intensity={0.4} color="#10FFAA" />
 
-      {/* Sonar pulse rings — staggered by 0.5 offset */}
-      {showPulse && <PulseRing color={phaseColor} initialOffset={0} />}
-      {showPulse && <PulseRing color={phaseColor} initialOffset={0.5} />}
+      <InfraCluster componentStates={componentStates} />
 
-      {edges.map((edge) => {
-        const fromNode = nodeMap[edge.from];
-        const toNode = nodeMap[edge.to];
-        if (!fromNode || !toNode) return null;
+      {showInfraPacket && (
+        <PacketParticle
+          from={INFRA_CONNECTOR}
+          to={AGENT_NODES[0].position}
+          color={AGENT_COLORS.collector}
+          speed={0.8}
+        />
+      )}
 
-        // Edge color: component state wins over phase color when anomalous
-        const targetNode = edge.to === 'sentinai' ? fromNode : toNode;
-        const hasAnomaly = targetNode.state === 'anomaly' || targetNode.state === 'critical';
-        const edgeColor = hasAnomaly
-          ? STATE_COLORS[targetNode.state]
-          : isActive
-          ? phaseColor
-          : '#1A2B4A';
-        const edgeWidth = hasAnomaly ? 2.5 : isActive ? 1.5 : 1;
+      {showPulse && <PulseRing position={detectorPos} color={AGENT_COLORS.detector} initialOffset={0} />}
+      {showPulse && <PulseRing position={detectorPos} color={AGENT_COLORS.detector} initialOffset={0.5} />}
 
-        // Show packets: always on anomaly edges, only active-phase edges when no anomaly
-        const showPacket = isActive && (hasAnomaly || true);
-        const packetColor = hasAnomaly ? STATE_COLORS[targetNode.state] : phaseColor;
-
-        const particleFrom = packetInward ? toNode.position : fromNode.position;
-        const particleTo   = packetInward ? fromNode.position : toNode.position;
+      {PIPELINE_EDGES.map((edge) => {
+        const fromPos = posMap[edge.from];
+        const toPos = posMap[edge.to];
+        const isLit = edge.activePhases.includes(phase);
+        const showPacket = edge.packetPhases.includes(phase);
+        const color = AGENT_COLORS[edge.to];
 
         return (
           <group key={`${edge.from}-${edge.to}`}>
             <Line
-              points={[fromNode.position, toNode.position]}
-              color={edgeColor}
-              lineWidth={edgeWidth}
+              points={[fromPos, toPos]}
+              color={isLit ? color : '#1A2B4A'}
+              lineWidth={isLit ? 1.5 : 0.8}
               transparent
-              opacity={hasAnomaly ? 0.9 : isActive ? 0.6 : 0.25}
+              opacity={isLit ? 0.55 : 0.15}
             />
             {showPacket && (
               <PacketParticle
-                from={particleFrom}
-                to={particleTo}
-                color={packetColor}
-                speed={hasAnomaly ? 1.2 : 0.8}
-                offset={0}
+                from={fromPos}
+                to={toPos}
+                color={color}
+                speed={0.9}
               />
             )}
           </group>
         );
       })}
 
-      {nodes.map((node) =>
-        node.id === 'sentinai' ? (
-          <AgentCenterNode key={node.id} node={node} agentPhase={agentPhase} />
-        ) : (
-          <NodeMesh key={node.id} node={node} />
-        ),
-      )}
+      {AGENT_NODES.map((node) => (
+        <AgentNodeMesh
+          key={node.id}
+          node={node}
+          isActive={activeAgents.has(node.id)}
+        />
+      ))}
 
       <OrbitControls
         enableZoom={false}
@@ -391,23 +362,14 @@ export function AgentNetworkGraph({
   componentStates,
   agentPhase,
 }: AgentNetworkGraphProps) {
-  const nodes = useMemo(
-    () =>
-      DEFAULT_NODES.map((n) => ({
-        ...n,
-        state: n.id === 'sentinai' ? ('normal' as NodeState) : (componentStates[n.id] ?? n.state),
-      })),
-    [componentStates],
-  );
-
   return (
     <div className="w-full h-full min-h-[400px]">
       <Canvas
-        camera={{ position: [0, 0, 7.5], fov: 55 }}
+        camera={{ position: [0, 0, 11], fov: 60 }}
         gl={{ antialias: true, alpha: true }}
         style={{ background: 'transparent' }}
       >
-        <Scene nodes={nodes} edges={DEFAULT_EDGES} agentPhase={agentPhase} />
+        <Scene componentStates={componentStates} agentPhase={agentPhase} />
       </Canvas>
     </div>
   );
