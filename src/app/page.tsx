@@ -869,6 +869,22 @@ export default function Dashboard() {
     return states;
   }, [anomalyEvents]);
 
+  // Derive agentPhase for 3D graph:
+  // lastCycle.phase is always 'complete' by the time UI polls (cycle finishes in ~2s).
+  // Instead, derive a meaningful phase from anomaly event state.
+  const graphAgentPhase = useMemo(() => {
+    const rawPhase = agentLoop?.lastCycle?.phase;
+    const activeAnomalies = (anomalyEvents ?? []).filter((a) => a.status === 'active');
+    // If there are active anomalies with deep analysis → show 'analyze'
+    if (activeAnomalies.some((a) => a.deepAnalysis)) return 'analyze';
+    // If there are active anomalies without deep analysis yet → show 'detect'
+    if (activeAnomalies.length > 0) return 'detect';
+    // If seed is active (non-live) → show 'observe' to indicate monitoring
+    if (isSeedActive) return 'observe';
+    // Fall back to raw phase (may be 'complete', 'error', etc.)
+    return rawPhase ?? 'idle';
+  }, [agentLoop?.lastCycle?.phase, anomalyEvents, isSeedActive]);
+
   // Derive StreamEvents from anomaly events
   const streamEvents = useMemo<StreamEvent[]>(() => {
     const events: StreamEvent[] = [];
@@ -953,7 +969,7 @@ export default function Dashboard() {
         l2BlockDelta={0}
         txPoolPending={current?.metrics?.txPoolCount ?? 0}
         agentScore={agentLoop?.lastCycle?.scaling?.score ?? scalerState?.currentVcpu ?? 0}
-        agentPhase={agentLoop?.lastCycle?.phase ?? 'idle'}
+        agentPhase={graphAgentPhase}
         isSyncing={false}
         networkName={process.env.NEXT_PUBLIC_NETWORK_NAME ?? current?.chain?.displayName}
       />
@@ -964,7 +980,7 @@ export default function Dashboard() {
         <div className="flex-1 min-h-0 p-3">
           <AgentNetworkGraph
             componentStates={componentStates}
-            agentPhase={agentLoop?.lastCycle?.phase}
+            agentPhase={graphAgentPhase}
           />
         </div>
 
