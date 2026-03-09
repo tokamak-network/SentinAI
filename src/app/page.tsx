@@ -824,7 +824,7 @@ export default function Dashboard() {
         {/* Left: Agent Roster */}
         <AgentRosterPanel
           agentFleet={agentFleet ? {
-            kpi: agentFleet.kpi,
+            kpi: { successRate: agentFleet.kpi.successRate, criticalPathPhase: agentFleet.kpi.criticalPathPhase },
             roles: agentFleet.roles,
             summary: agentFleet.summary,
           } : null}
@@ -838,7 +838,7 @@ export default function Dashboard() {
         {/* Center: Interaction Graph */}
         <AgentInteractionGraph
           agentFleet={agentFleet ? {
-            kpi: agentFleet.kpi,
+            kpi: { throughputPerMin: agentFleet.kpi.throughputPerMin, successRate: agentFleet.kpi.successRate, p95CycleMs: agentFleet.kpi.p95CycleMs },
             roles: agentFleet.roles,
           } : null}
           anomalyEvents={anomalyEvents}
@@ -849,7 +849,7 @@ export default function Dashboard() {
         <OperationsPanel
           metrics={current}
           scalerState={scalerState}
-          agentFleet={agentFleet ? { kpi: agentFleet.kpi } : null}
+          agentFleet={agentFleet ? { kpi: { throughputPerMin: agentFleet.kpi.throughputPerMin } } : null}
           l1Failover={l1Failover}
           scalingScore={scalingScore}
         />

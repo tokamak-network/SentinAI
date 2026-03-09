@@ -8,6 +8,7 @@ interface MetricData {
     blockHeight: number;
     cpuUsage: number;
     gethVcpu: number;
+    txPoolPending?: number;
   };
   cost: { monthlyEstimated: number; hourlyRate: number };
   eoaBalances?: {
@@ -24,7 +25,7 @@ interface ScalerState {
 }
 
 interface AgentFleetData {
-  kpi: { throughputPerMin: number; successRate: number; p95CycleMs: number };
+  kpi: { throughputPerMin: number };
 }
 
 interface L1FailoverStatus {
@@ -117,8 +118,6 @@ function MetricRow({ label, pct, value, color }: { label: string; pct: number; v
 export function OperationsPanel({ metrics, scalerState, agentFleet, l1Failover, scalingScore }: OperationsPanelProps) {
   const vcpu = scalerState?.currentVcpu ?? 2;
   const tierIdx = currentTierIndex(vcpu);
-  const successRate = agentFleet?.kpi.successRate ?? 1;
-  const p95 = agentFleet?.kpi.p95CycleMs ?? 0;
   const txMin = agentFleet?.kpi.throughputPerMin ?? 0;
   const costHourly = metrics?.cost.hourlyRate ?? 0;
   const costDaily = costHourly * 24;
@@ -145,23 +144,25 @@ export function OperationsPanel({ metrics, scalerState, agentFleet, l1Failover, 
         {/* KPI strip */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #D0D0D0' }}>
           <div style={{ padding: '8px 10px', borderRight: '1px solid #D0D0D0' }}>
-            <div style={{ fontFamily: FONT, fontSize: 9, color: '#707070', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>SUCCESS</div>
-            <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: '#007A00', lineHeight: 1 }}>
-              {successRate.toFixed(1)}%
+            <div style={{ fontFamily: FONT, fontSize: 9, color: '#707070', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>TX POOL</div>
+            <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: txMin > 50 ? '#CC6600' : '#0055AA', lineHeight: 1 }}>
+              {metrics?.metrics?.txPoolPending != null ? metrics.metrics.txPoolPending.toLocaleString() : '—'}
             </div>
+            <div style={{ fontFamily: FONT, fontSize: 9, color: '#A0A0A0', marginTop: 2 }}>pending tx</div>
           </div>
           <div style={{ padding: '8px 10px' }}>
-            <div style={{ fontFamily: FONT, fontSize: 9, color: '#707070', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>P95 CYCLE</div>
-            <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: '#0055AA', lineHeight: 1 }}>
-              {p95 >= 1000 ? `${(p95 / 1000).toFixed(1)}s` : `${p95}ms`}
+            <div style={{ fontFamily: FONT, fontSize: 9, color: '#707070', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>COST/DAY</div>
+            <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: '#0A0A0A', lineHeight: 1 }}>
+              ${costDaily.toFixed(2)}
             </div>
+            <div style={{ fontFamily: FONT, fontSize: 9, color: '#A0A0A0', marginTop: 2 }}>compute est.</div>
           </div>
         </div>
 
         {/* Throughput sparkline */}
         <div style={{ padding: '8px 10px', borderBottom: '1px solid #D0D0D0' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#707070', marginBottom: 4 }}>
-            <span>AGENT CYCLES/MIN</span>
+            <span>CYCLES/MIN</span>
             <span style={{ color: '#007A00' }}>{txMin.toFixed(2)}/min</span>
           </div>
           <svg width="100%" height="36" viewBox="0 0 260 36" style={{ display: 'block' }}>
@@ -291,15 +292,6 @@ export function OperationsPanel({ metrics, scalerState, agentFleet, l1Failover, 
           </>
         )}
 
-        {/* Cost today */}
-        <SectionLabel>COST TODAY</SectionLabel>
-        <MetricRow label="Compute" pct={(costDaily / 50) * 100} value={`$${costDaily.toFixed(2)}`} color="#0055AA" />
-        <div style={{ padding: '5px 10px', display: 'flex', gap: 8, alignItems: 'center' }}>
-          <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: '#0A0A0A', flex: 1 }}>Total Est.</span>
-          <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: '#0A0A0A' }}>
-            ${(costDaily * 1.35).toFixed(2)}
-          </span>
-        </div>
       </div>
     </div>
   );
