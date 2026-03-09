@@ -86,6 +86,33 @@ export async function zeroDowntimeScale(
     };
   }
 
+  // Preflight: verify StatefulSet updateStrategy is OnDelete.
+  // If it is RollingUpdate, K8s will auto-replace the pod when the spec changes
+  // (Phase 5 syncStatefulSet), which conflicts with the Parallel Pod Swap approach.
+  try {
+    const { stdout: strategy } = await runK8sCommand(
+      `get statefulset ${config.statefulSetName} -n ${config.namespace} -o jsonpath='{.spec.updateStrategy.type}'`,
+      { timeout: 10000 }
+    );
+    const strategyValue = strategy.replace(/'/g, '').trim();
+    if (strategyValue && strategyValue !== 'OnDelete') {
+      logger.error(`[ZeroDowntime] Preflight failed: updateStrategy=${strategyValue}, expected OnDelete`);
+      return {
+        success: false,
+        totalDurationMs: 0,
+        phaseDurations: {},
+        finalPhase: 'idle',
+        error: `StatefulSet '${config.statefulSetName}' updateStrategy is '${strategyValue}'. ` +
+               `Zero-downtime scaling requires OnDelete. ` +
+               `Fix: kubectl patch statefulset ${config.statefulSetName} -n ${config.namespace} ` +
+               `-p '{"spec":{"updateStrategy":{"type":"OnDelete"}}}'`,
+      };
+    }
+    logger.info(`[ZeroDowntime] Preflight passed: updateStrategy=${strategyValue || 'OnDelete'}`);
+  } catch (err) {
+    logger.warn('[ZeroDowntime] Could not verify updateStrategy (proceeding anyway):', err);
+  }
+
   const startTime = Date.now();
   let phaseStart = startTime;
 
@@ -194,8 +221,12 @@ function recordPhaseDuration(phase: SwapPhase, startTime: number): void {
 /**
  * Phase 1: Create standby Pod with target resources
  *
- * Creates an independent Pod based on the existing StatefulSet Pod spec with only resources changed.
- * PVCs are replaced with emptyDir (snap sync).
+ * Creates an independent Pod based on the existing StatefulSet Pod spec.
+ * PVCs are cloned via CSI DataSource so the standby starts with existing chain data.
+ * Requires the CSI driver to support volume cloning (e.g. EBS CSI driver >= 1.x).
+ *
+ * Clone PVC names: "<original-pvc-name>-standby-<timestamp>"
+ * Cloned PVCs are deleted in rollback / cleanup (Phase 4).
  */
 async function createStandbyPod(
   targetVcpu: number,
@@ -211,10 +242,52 @@ async function createStandbyPod(
   );
   const podSpec = JSON.parse(podJson);
 
-  // 2. Generate standby Pod name
-  const standbyPodName = `${statefulSetName}-standby-${Date.now()}`;
+  // 2. Generate standby Pod name and timestamp suffix
+  const suffix = Date.now();
+  const standbyPodName = `${statefulSetName}-standby-${suffix}`;
 
-  // 3. Assemble Pod manifest
+  // 3. Clone each PVC (CSI volume clone via dataSource)
+  const clonedPvcNames: string[] = [];
+  const pvcVolumes = (podSpec.spec.volumes || []).filter((v: Record<string, unknown>) => v.persistentVolumeClaim);
+
+  for (const vol of pvcVolumes) {
+    const srcPvcName = (vol.persistentVolumeClaim as { claimName: string }).claimName;
+
+    // Fetch original PVC spec to inherit storageClass and size
+    const { stdout: srcPvcJson } = await runK8sCommand(
+      `get pvc ${srcPvcName} -n ${namespace} -o json`,
+      { timeout: 10000 }
+    );
+    const srcPvc = JSON.parse(srcPvcJson);
+    const storageClass: string = srcPvc.spec.storageClassName;
+    const storage: string = srcPvc.spec.resources?.requests?.storage ?? '10Gi';
+
+    const clonePvcName = `${srcPvcName}-standby-${suffix}`;
+    clonedPvcNames.push(clonePvcName);
+
+    const clonePvcManifest = {
+      apiVersion: 'v1',
+      kind: 'PersistentVolumeClaim',
+      metadata: { name: clonePvcName, namespace, labels: { role: 'standby', sourcePvc: srcPvcName } },
+      spec: {
+        accessModes: srcPvc.spec.accessModes,
+        storageClassName: storageClass,
+        resources: { requests: { storage } },
+        dataSource: { name: srcPvcName, kind: 'PersistentVolumeClaim', apiGroup: '' },
+      },
+    };
+    await runK8sCommand(
+      `apply -f - -n ${namespace}`,
+      { stdin: JSON.stringify(clonePvcManifest), timeout: 30000 }
+    );
+    logger.info(`[ZeroDowntime] Cloned PVC ${srcPvcName} → ${clonePvcName}`);
+  }
+
+  // Track cloned PVCs for cleanup/rollback
+  swapState.clonedPvcNames = clonedPvcNames;
+
+  // 4. Assemble Pod manifest — map cloned PVC names onto volumes
+  let cloneIdx = 0;
   const manifest = {
     apiVersion: 'v1',
     kind: 'Pod',
@@ -245,21 +318,20 @@ async function createStandbyPod(
         }
         return c;
       }),
-      // PVC → emptyDir (snap sync)
       volumes: (podSpec.spec.volumes || []).map((v: Record<string, unknown>) => {
         if (v.persistentVolumeClaim) {
-          return { name: v.name, emptyDir: {} };
+          const clonedName = clonedPvcNames[cloneIdx++];
+          return { name: v.name, persistentVolumeClaim: { claimName: clonedName } };
         }
         return v;
       }),
     },
   };
 
-  // 4. kubectl apply
-  const manifestStr = JSON.stringify(manifest);
+  // 5. kubectl apply
   await runK8sCommand(
     `apply -f - -n ${namespace}`,
-    { stdin: manifestStr, timeout: 30000 }
+    { stdin: JSON.stringify(manifest), timeout: 30000 }
   );
 
   return standbyPodName;
@@ -405,12 +477,14 @@ async function switchTraffic(
 }
 
 /**
- * Phase 4: Gracefully terminate old Pod
+ * Phase 4: Gracefully terminate old Pod + delete its original PVCs
  *
- * Wait 30 seconds for drain, then delete.
+ * Wait 30 seconds for drain, then delete the pod.
+ * After the pod is gone, delete the PVCs that were associated with it
+ * (the standby pod now owns its own cloned PVCs).
  */
 async function cleanupOldPod(podName: string, config: ScalingConfig): Promise<void> {
-  const { namespace } = config;
+  const { namespace, statefulSetName } = config;
 
   // Wait for drain
   await _testHooks.sleep(parseInt(process.env.ZERO_DOWNTIME_POD_CLEANUP_SLEEP_MS || '30000', 10));
@@ -424,6 +498,26 @@ async function cleanupOldPod(podName: string, config: ScalingConfig): Promise<vo
     `wait --for=delete pod/${podName} -n ${namespace} --timeout=120s`,
     { timeout: 130000 }
   );
+
+  // Delete the old pod's PVCs (StatefulSet VolumeClaimTemplates → "<claim>-<pod>")
+  // These are no longer needed; the standby pod uses cloned PVCs.
+  try {
+    const { stdout: pvcList } = await runK8sCommand(
+      `get pvc -n ${namespace} -l app=${statefulSetName} -o jsonpath='{.items[*].metadata.name}'`,
+      { timeout: 10000 }
+    );
+    const pvcs = pvcList.replace(/'/g, '').trim().split(/\s+/).filter(Boolean);
+    // Only delete PVCs that belong to the old pod (not cloned ones)
+    const oldPodPvcs = pvcs.filter(name =>
+      !swapState.clonedPvcNames.includes(name) && name.endsWith(`-${podName}`)
+    );
+    for (const pvcName of oldPodPvcs) {
+      await runK8sCommand(`delete pvc ${pvcName} -n ${namespace}`, { timeout: 30000 });
+      logger.info(`[ZeroDowntime] Deleted old PVC: ${pvcName}`);
+    }
+  } catch (err) {
+    logger.warn('[ZeroDowntime] Failed to delete old pod PVCs (may need manual cleanup):', err);
+  }
 }
 
 /**
@@ -453,7 +547,7 @@ async function syncStatefulSet(
 }
 
 /**
- * Rollback: delete standby Pod + restore old Pod labels
+ * Rollback: delete standby Pod + cloned PVCs, restore old Pod labels
  *
  * If failure occurs before traffic switch, the old Pod is unaffected.
  */
@@ -469,6 +563,16 @@ async function rollback(config: ScalingConfig): Promise<void> {
       );
     } catch (error) {
       logger.warn('[ZeroDowntime] Failed to delete standby pod during rollback:', error);
+    }
+  }
+
+  // Delete cloned PVCs (they were only for the standby pod)
+  for (const pvcName of swapState.clonedPvcNames) {
+    try {
+      await runK8sCommand(`delete pvc ${pvcName} -n ${namespace}`, { timeout: 30000 });
+      logger.info(`[ZeroDowntime] Rollback: deleted cloned PVC ${pvcName}`);
+    } catch (error) {
+      logger.warn(`[ZeroDowntime] Rollback: failed to delete cloned PVC ${pvcName}:`, error);
     }
   }
 

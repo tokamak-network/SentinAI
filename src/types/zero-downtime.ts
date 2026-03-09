@@ -25,6 +25,8 @@ export interface SwapState {
   completedAt: string | null;
   /** Standby Pod name */
   standbyPodName: string | null;
+  /** Cloned PVC names created for the standby pod (deleted on cleanup/rollback) */
+  clonedPvcNames: string[];
   /** Target vCPU */
   targetVcpu: number;
   /** Target Memory GiB */
@@ -70,6 +72,7 @@ export const INITIAL_SWAP_STATE: SwapState = {
   startedAt: null,
   completedAt: null,
   standbyPodName: null,
+  clonedPvcNames: [],
   targetVcpu: 0,
   targetMemoryGiB: 0,
   error: null,
