@@ -150,7 +150,7 @@ function HEdge({ x1, y, x2, color, active, label }: {
       {active && label && (
         <g>
           <rect x={mid - 23} y={y - 17} width={46} height={13} rx={2}
-            fill="white" stroke={color} strokeWidth={0.8} opacity={0.95} />
+            fill="white" stroke="none" />
           <text x={mid} y={y - 7} textAnchor="middle"
             fontFamily={FONT} fontSize={8} fontWeight={700} fill={color}>
             {label}
@@ -180,7 +180,7 @@ function CurvedEdge({ x1, y1, x2, y2, color, active, label }: {
       {active && label && (
         <g>
           <rect x={mx - 23} y={my - 7} width={46} height={13} rx={2}
-            fill="white" stroke={color} strokeWidth={0.8} opacity={0.95} />
+            fill="white" stroke="none" />
           <text x={mx} y={my + 3} textAnchor="middle"
             fontFamily={FONT} fontSize={8} fontWeight={700} fill={color}>
             {label}
