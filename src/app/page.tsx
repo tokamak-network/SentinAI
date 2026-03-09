@@ -588,10 +588,11 @@ export default function Dashboard() {
     };
   }, [isSeedActive, seedTrigger]);
 
-  // --- Agent Loop polling (every 60s) — skipped when Agent V2 is active ---
+  // --- Agent Loop polling (every 30s) ---
+  // V2 mode: /api/agent-loop returns a synthetic snapshot via v2-cycle-adapter
+  // (reads from MetricsStore → includes seeded data, computes real scalingScore)
   const isAgentV2 = agentFleet?.agentV2 === true;
   useEffect(() => {
-    if (isAgentV2) return; // Agent V2 uses Goal Manager, not agent loop
     const fetchAgentLoop = async () => {
       try {
         const limit = 50;
@@ -607,7 +608,7 @@ export default function Dashboard() {
     const agentInterval = isSeedActive ? SEED_ACTIVE_REFRESH_INTERVAL_MS : AGENT_LOOP_REFRESH_INTERVAL_MS;
     const interval = setInterval(fetchAgentLoop, agentInterval);
     return () => clearInterval(interval);
-  }, [isSeedActive, isAgentV2]);
+  }, [isSeedActive]);
 
   // --- V2 Activity polling (every 30s) — only when Agent V2 is active ---
   useEffect(() => {
