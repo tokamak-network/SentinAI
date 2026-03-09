@@ -150,7 +150,8 @@ const OPTIONAL_FEATURES: FeatureDef[] = [
     description: "Persist metrics and anomaly history across restarts",
     snippet:
       "# Redis connection (default: in-memory, resets on restart)\n" +
-      "REDIS_URL=redis://localhost:6379",
+      "# docker compose: service name is 'redis'\n" +
+      "REDIS_URL=redis://redis:6379",
   },
   {
     id: "mcp-auth",
@@ -214,38 +215,6 @@ interface BuildConfig {
   alertWebhookUrl: string;
   gatewayUrl: string;
   gatewayApiKey: string;
-}
-
-function buildDockerRun(cfg: BuildConfig): string {
-  const { primary, optional } = ENV_MAP[cfg.nodeType];
-  const u = cfg.url.trim() || "<your-url>";
-  const lines: string[] = [];
-
-  if (cfg.networkName.trim()) lines.push(`  -e NEXT_PUBLIC_NETWORK_NAME="${cfg.networkName.trim()}" \\\n`);
-  lines.push(`  -e ${primary}=${u} \\\n`);
-  if (optional) lines.push(`  -e ${optional}=<optional-l1-rpc-url> \\\n`);
-  if (cfg.authToken.trim()) lines.push(`  -e SENTINAI_RPC_AUTH_TOKEN=${cfg.authToken.trim()} \\\n`);
-
-  if (cfg.aiProvider === "gateway") {
-    lines.push(`  -e AI_GATEWAY_URL=${cfg.gatewayUrl.trim() || "<your-gateway-url>"} \\\n`);
-    if (cfg.gatewayApiKey.trim()) lines.push(`  -e AI_GATEWAY_KEY=${cfg.gatewayApiKey.trim()} \\\n`);
-  } else {
-    const aiOpt = AI_OPTIONS.find((o) => o.value === cfg.aiProvider);
-    if (aiOpt?.keyVar) {
-      const key = cfg.aiApiKey.trim() || `<your-${cfg.aiProvider}-key>`;
-      lines.push(`  -e ${aiOpt.keyVar}=${key} \\\n`);
-    } else {
-      lines.push(`  -e ANTHROPIC_API_KEY=<your-anthropic-key> \\\n`);
-    }
-  }
-
-  if (cfg.awsClusterName.trim()) lines.push(`  -e AWS_CLUSTER_NAME=${cfg.awsClusterName.trim()} \\\n`);
-  if (cfg.alertWebhookUrl.trim()) lines.push(`  -e ALERT_WEBHOOK_URL=${cfg.alertWebhookUrl.trim()} \\\n`);
-
-  lines.push(`  -p 3002:3002 \\\n`);
-  lines.push(`  ${DOCKER_IMAGE}`);
-
-  return `docker run \\\n${lines.join("")}`.trimEnd();
 }
 
 function buildEnvLocal(cfg: BuildConfig): string {
@@ -324,6 +293,47 @@ function Navbar() {
         </nav>
       </div>
     </header>
+  );
+}
+
+// ============================================================================
+// Deploy step
+// ============================================================================
+
+function DeployStep({
+  number, title, font, colors, children, last,
+}: {
+  number: number; title: string; font: string;
+  colors: typeof C; children: React.ReactNode; last?: boolean;
+}) {
+  return (
+    <div style={{ display: "flex", gap: 16, paddingBottom: last ? 0 : 24 }}>
+      {/* Left: number + line */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+        <div style={{
+          width: 28, height: 28, background: colors.fg,
+          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+        }}>
+          <span style={{ fontFamily: font, fontSize: 11, fontWeight: 700, color: "#fff" }}>
+            {number}
+          </span>
+        </div>
+        {!last && (
+          <div style={{ flex: 1, width: 1, background: colors.border, marginTop: 4 }} />
+        )}
+      </div>
+
+      {/* Right: content */}
+      <div style={{ flex: 1, paddingBottom: last ? 0 : 8 }}>
+        <div style={{
+          fontFamily: font, fontSize: 9, fontWeight: 700, letterSpacing: "0.15em",
+          color: colors.muted, marginBottom: 10, paddingTop: 6,
+        }}>
+          {title}
+        </div>
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -419,9 +429,6 @@ export default function ConnectPage() {
     awsClusterName, alertWebhookUrl, gatewayUrl, gatewayApiKey,
   };
 
-  const dockerCommand = useMemo(() => buildDockerRun(buildCfg), [
-    nodeType, url, authToken, networkName, aiProvider, aiApiKey, awsClusterName, alertWebhookUrl, gatewayUrl, gatewayApiKey,
-  ]);
   const envLocal = useMemo(() => buildEnvLocal(buildCfg), [
     nodeType, url, authToken, networkName, aiProvider, aiApiKey, awsClusterName, alertWebhookUrl, gatewayUrl, gatewayApiKey,
   ]);
@@ -541,11 +548,11 @@ export default function ConnectPage() {
             Connect Your Node to SentinAI
           </h1>
           <p style={{ fontFamily: FONT, fontSize: 12, color: C.muted, margin: 0 }}>
-            Enter your node details to generate a ready-to-run{" "}
-            <code style={{ background: C.secondary, padding: "1px 5px", fontSize: 11 }}>docker run</code>
-            {" "}or{" "}
+            Enter your node details to generate a{" "}
             <code style={{ background: C.secondary, padding: "1px 5px", fontSize: 11 }}>.env.local</code>
-            {" "}configuration.
+            {" "}file and deploy with{" "}
+            <code style={{ background: C.secondary, padding: "1px 5px", fontSize: 11 }}>docker compose</code>
+            {" "}— includes Redis and Caddy by default.
           </p>
         </div>
 
@@ -909,7 +916,7 @@ export default function ConnectPage() {
                     fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: "0.15em",
                     color: C.border, marginBottom: 8,
                   }}>
-                    ▮ TERMINAL
+                    ▮ DEPLOY GUIDE
                   </div>
                   <p style={{ fontFamily: FONT, fontSize: 11, color: C.muted, margin: 0 }}>
                     Enter node type and URL, then run<br />
@@ -919,32 +926,79 @@ export default function ConnectPage() {
                 </div>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                <div style={{ fontFamily: FONT, fontSize: 10, color: "#007A00", fontWeight: 700 }}>
-                  ● Configuration generated
+              <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+                <div style={{ fontFamily: FONT, fontSize: 10, color: "#007A00", fontWeight: 700, marginBottom: 20 }}>
+                  ● Configuration generated — follow the steps below
                 </div>
-                <CodeBlock
-                  title="docker run"
-                  content={dockerCommand}
-                  copyId="docker"
-                  copiedId={copiedId}
-                  onCopy={copyToClipboard}
-                />
-                <CodeBlock
-                  title=".env.local"
-                  content={envLocal}
-                  copyId="env"
-                  copiedId={copiedId}
-                  onCopy={copyToClipboard}
-                />
+
+                {/* Step 1 */}
+                <DeployStep number={1} title="CREATE .ENV.LOCAL" font={FONT} colors={C}>
+                  <CodeBlock
+                    title=".env.local"
+                    content={envLocal}
+                    copyId="env"
+                    copiedId={copiedId}
+                    onCopy={copyToClipboard}
+                  />
+                  <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "8px 0 0" }}>
+                    Save this as <code style={{ background: C.secondary, padding: "1px 4px" }}>.env.local</code>{" "}
+                    in the same directory as your <code style={{ background: C.secondary, padding: "1px 4px" }}>docker-compose.yml</code>.
+                  </p>
+                </DeployStep>
+
+                {/* Step 2 */}
+                <DeployStep number={2} title="START WITH DOCKER COMPOSE" font={FONT} colors={C}>
+                  <CodeBlock
+                    title="terminal"
+                    content={`docker compose up -d`}
+                    copyId="compose"
+                    copiedId={copiedId}
+                    onCopy={copyToClipboard}
+                  />
+                  <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "8px 0 0" }}>
+                    Starts SentinAI with Redis (state persistence) and Caddy (reverse proxy) by default.{" "}
+                    <a
+                      href={`${GITHUB_URL}/blob/main/docker-compose.yml`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ color: C.accent, textDecoration: "none", fontWeight: 700 }}
+                    >
+                      View docker-compose.yml →
+                    </a>
+                  </p>
+                </DeployStep>
+
+                {/* Step 3 */}
+                <DeployStep number={3} title="OPEN DASHBOARD" font={FONT} colors={C} last>
+                  <div style={{ display: "flex", gap: 0, border: `1px solid ${C.border}` }}>
+                    <span style={{
+                      flex: 1, fontFamily: FONT, fontSize: 11, color: C.accent,
+                      padding: "10px 12px", background: C.secondary,
+                    }}>
+                      http://localhost:3002
+                    </span>
+                    <a
+                      href="http://localhost:3002"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em",
+                        padding: "10px 16px", background: C.accent, color: "#fff",
+                        textDecoration: "none", whiteSpace: "nowrap",
+                      }}
+                    >
+                      OPEN →
+                    </a>
+                  </div>
+                </DeployStep>
 
                 {/* Optional Features */}
-                <div style={{ borderTop: `2px solid ${C.fg}`, paddingTop: 16, marginTop: 4 }}>
+                <div style={{ borderTop: `2px solid ${C.fg}`, paddingTop: 16, marginTop: 8 }}>
                   <div style={{
                     fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: "0.15em",
                     color: C.fg, marginBottom: 12,
                   }}>
-                    OPTIONAL FEATURES — click to add env vars
+                    OPTIONAL FEATURES — add to .env.local
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 12 }}>
                     {visibleFeatures.map(f => {
