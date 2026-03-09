@@ -783,6 +783,27 @@ export default function ConnectPage() {
               {advancedOpen && (
                 <div style={{ borderTop: `1px solid ${C.border}`, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
 
+                  {/* Prerequisites notice */}
+                  <div style={{
+                    background: "#FFFBEA", border: `1px solid #E0C800`,
+                    padding: "10px 12px",
+                  }}>
+                    <p style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: "#7A6000", margin: "0 0 6px", letterSpacing: "0.1em" }}>
+                      ⚠ PREREQUISITES FOR K8S INTEGRATION
+                    </p>
+                    <p style={{ fontFamily: FONT, fontSize: 9, color: "#5A4800", margin: "0 0 4px" }}>
+                      SentinAI auto-detects K8s API URL and auth token via AWS CLI. The Docker container must have:
+                    </p>
+                    <ul style={{ fontFamily: FONT, fontSize: 9, color: "#5A4800", margin: "0 0 6px", paddingLeft: 14 }}>
+                      <li><code style={{ background: "#FFF3A0", padding: "0 3px" }}>aws</code> CLI installed + IAM credentials configured (via IAM role, env vars, or profile)</li>
+                      <li><code style={{ background: "#FFF3A0", padding: "0 3px" }}>kubectl</code> CLI installed</li>
+                    </ul>
+                    <p style={{ fontFamily: FONT, fontSize: 9, color: "#5A4800", margin: 0 }}>
+                      Without these, K8s features (scaling, pod monitoring, RCA) will not function even if cluster name is set.
+                      Alternatively, set <code style={{ background: "#FFF3A0", padding: "0 3px" }}>K8S_API_URL</code> + <code style={{ background: "#FFF3A0", padding: "0 3px" }}>K8S_TOKEN</code> directly to skip CLI dependency.
+                    </p>
+                  </div>
+
                   <div>
                     <label style={labelStyle}>AWS Cluster Name</label>
                     <input
@@ -794,7 +815,7 @@ export default function ConnectPage() {
                       style={inputStyle}
                     />
                     <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
-                      Required for K8s auto-scaling and pod monitoring (AWS_CLUSTER_NAME).
+                      EKS cluster name for K8s auto-scaling and pod monitoring (AWS_CLUSTER_NAME).
                     </p>
                   </div>
                   <div>
