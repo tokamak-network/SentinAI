@@ -40,3 +40,13 @@
 
 - Repository hygiene audit completed: documented keep/archive/remove paths, restored `docs/lessons.md`, and removed tracked junk artifacts.
 - Scripts cleanup completed: removed dead `prod:gate:tier2` entry and deleted unused provider-diagnostic utilities.
+
+## Session Checklist (2026-03-09)
+
+### Comprehensive Codebase Analysis Report
+
+- [x] Inventory current docs, app routes, and runtime entry points.
+- [x] Analyze landing page, dashboard surfaces, and shared UI components.
+- [x] Analyze API routes plus `src/lib` and `src/core` agent/detection/autonomy flows.
+- [x] Write a code-based report under `docs/`.
+- [x] Review the resulting diff for documentation-only changes.

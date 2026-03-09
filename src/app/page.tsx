@@ -2,28 +2,16 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import {
-  Activity, Server, Zap,
-  CheckCircle2, Shield, Globe, AlertTriangle, XCircle,
-  ChevronDown, X,
-  Send, Bot, User, RefreshCw, Pause
-} from 'lucide-react';
+import { Activity } from 'lucide-react';
 import type { ChatMessage, NLOpsResponse, NLOpsIntent } from '@/types/nlops';
-import type { CostReport } from '@/types/cost';
 import type { ExperienceStats } from '@/types/experience';
 import type { ExperienceTier } from '@/types/agent-resume';
-import { DOMAIN_CATEGORY_MAP } from '@/types/experience';
-import { AutonomyPipeline } from '@/components/autonomy';
-import { StatusBar } from '@/components/status-bar';
-import { EventStream } from '@/components/event-stream';
-import type { StreamEvent } from '@/components/event-stream';
-import { ScalingPanel } from '@/components/scaling-panel';
 import { NLOpsBar } from '@/components/nlops-bar';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { AgentSequenceDiagram } from '@/components/agent-sequence-diagram';
-
-type NodeState = 'normal' | 'anomaly' | 'critical' | 'inactive';
+import { AgentInteractionGraph } from '@/components/agent-interaction-graph';
+import { AgentRosterPanel } from '@/components/agent-roster-panel';
+import { OperationsPanel } from '@/components/operations-panel';
 
 // --- Interfaces ---
 interface MetricData {
@@ -305,46 +293,6 @@ interface ExperienceData {
   total: number;
 }
 
-interface DecisionTraceData {
-  decisionId: string;
-  timestamp: string;
-  chainType: string;
-  reasoningSummary: string;
-  chosenAction: string;
-  alternatives: string[];
-  evidence: Array<{
-    type: string;
-    key: string;
-    value: string;
-    source?: string;
-  }>;
-  phaseTrace: Array<{
-    phase: string;
-    startedAt: string;
-    endedAt: string;
-    ok: boolean;
-    error?: string;
-  }>;
-  verification: {
-    expected: string;
-    observed: string;
-    passed: boolean;
-    details?: string;
-  };
-}
-
-// --- Public Status Types ---
-type ChainOperationalStatus = 'operational' | 'degraded' | 'major_outage' | 'unknown';
-
-interface PublicStatus {
-  chain: { name: string; type: string };
-  status: ChainOperationalStatus;
-  metrics: { blockHeight: number; lastUpdatedAt: string };
-  uptime: { h24: number; d7: number };
-  incidents: { active: number; last24h: number };
-  agent: { running: boolean; totalCycles: number; lastCycleAt?: string; totalOps?: number; lastActivityAt?: string };
-}
-
 // --- Configuration Constants ---
 /** Base path for API fetch calls (must match next.config.ts basePath) */
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || '';
@@ -357,71 +305,6 @@ function writeHeaders(extra?: Record<string, string>): Record<string, string> {
   return headers;
 }
 
-/** Component role descriptions for dashboard display */
-const COMPONENT_ROLES: Record<string, string> = {
-  'Execution Client': 'L2 block execution & state',
-  'L2 Client': 'L2 block execution & state',
-  'Consensus Node': 'L1 derivation & sequencing',
-  'Batcher': 'L2 tx batch submission to L1',
-  'Proposer': 'L2 state root proposal to L1',
-  'Challenger': 'Fault proof dispute participation',
-  'Prover': 'Proof generation and verification pipeline',
-};
-
-/** Parse "Fargate (1.0 vCPU / 1792Mi)" into structured resource data */
-function parseResourceSpec(current: string): { platform: string; vcpu: number; memory: string; memoryMiB: number } | null {
-  const match = current.match(/^(.+?)\s*\((\d+\.?\d*)\s*vCPU\s*\/\s*(\d+\.?\d*)(Mi|Gi)\)$/);
-  if (!match) return null;
-  const platform = match[1].trim();
-  const vcpu = parseFloat(match[2]);
-  const memVal = parseFloat(match[3]);
-  const memUnit = match[4];
-  const memoryMiB = memUnit === 'Gi' ? memVal * 1024 : memVal;
-  return { platform, vcpu, memory: `${match[3]}${memUnit}`, memoryMiB };
-}
-
-const TOAST_DISMISSED_KEY = 'sentinai_showcase_toast_dismissed';
-
-function formatRelativeTime(isoString?: string): string {
-  if (!isoString) return '—';
-  const diffMs = Date.now() - new Date(isoString).getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return `${diffSec}s ago`;
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin}m ago`;
-  const diffHour = Math.floor(diffMin / 60);
-  return `${diffHour}h ago`;
-}
-
-function tierColor(tier: ExperienceTier): string {
-  switch (tier) {
-    case 'expert': return 'text-purple-600';
-    case 'senior': return 'text-green-600';
-    case 'junior': return 'text-blue-600';
-    case 'trainee': return 'text-gray-500';
-  }
-}
-
-function StatusBadgeIcon({ status }: { status: ChainOperationalStatus }) {
-  if (status === 'operational') return <CheckCircle2 size={14} className="text-green-500" />;
-  if (status === 'degraded') return <AlertTriangle size={14} className="text-amber-500" />;
-  if (status === 'major_outage') return <XCircle size={14} className="text-red-500" />;
-  return <Activity size={14} className="text-gray-400" />;
-}
-
-function chainStatusLabel(status: ChainOperationalStatus): string {
-  if (status === 'operational') return 'Operational';
-  if (status === 'degraded') return 'Degraded';
-  if (status === 'major_outage') return 'Major Outage';
-  return 'Unknown';
-}
-
-function chainStatusColor(status: ChainOperationalStatus): string {
-  if (status === 'operational') return 'text-green-600';
-  if (status === 'degraded') return 'text-amber-600';
-  if (status === 'major_outage') return 'text-red-600';
-  return 'text-gray-400';
-}
 
 
 /** Metrics API polling interval (ms). Adjusted to reduce L1 RPC load (1s → 60s). */
@@ -471,24 +354,9 @@ export default function Dashboard() {
   const [agentLoop, setAgentLoop] = useState<AgentLoopStatus | null>(null);
   const [agentFleet, setAgentFleet] = useState<AgentFleetData | null>(null);
   const [v2Activities, setV2Activities] = useState<ExperienceData['entries']>([]);
-  const [showFullHistory, setShowFullHistory] = useState(false);
-  const [selectedDecisionTrace, setSelectedDecisionTrace] = useState<DecisionTraceData | null>(null);
-  const [decisionTraceLoading, setDecisionTraceLoading] = useState(false);
-  const [decisionTraceError, setDecisionTraceError] = useState<string | null>(null);
-
-  // --- Cost Analysis State ---
-  const [costAnalysisExpanded, setCostAnalysisExpanded] = useState(false);
-  const [costAnalysisData, setCostAnalysisData] = useState<CostReport | null>(null);
-  const [costAnalysisLoading, setCostAnalysisLoading] = useState(false);
-  const [aiInsightExpanded, setAiInsightExpanded] = useState(false);
-  const [patternsExpanded, setPatternsExpanded] = useState(false);
 
   // --- Agent Experience State ---
   const [experience, setExperience] = useState<ExperienceData | null>(null);
-
-  // --- Public Status / Showcase Banner State ---
-  const [publicStatus, setPublicStatus] = useState<PublicStatus | null>(null);
-  const [toastDismissed, setToastDismissed] = useState(true);
 
   // --- Seed Injection Trigger (forces immediate metrics re-fetch) ---
   const [seedTrigger, setSeedTrigger] = useState(0);
@@ -595,48 +463,6 @@ export default function Dashboard() {
     }
   };
 
-  const openDecisionTrace = async (decisionId: string) => {
-    setDecisionTraceLoading(true);
-    setDecisionTraceError(null);
-    try {
-      const response = await fetch(
-        `${BASE_PATH}/api/agent-decisions?decisionId=${encodeURIComponent(decisionId)}`,
-        { cache: 'no-store' }
-      );
-      const data = await response.json();
-      if (!response.ok || !data.trace) {
-        throw new Error(data?.error || 'Failed to load decision trace.');
-      }
-      setSelectedDecisionTrace(data.trace as DecisionTraceData);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to load decision trace.';
-      setDecisionTraceError(message);
-      setSelectedDecisionTrace(null);
-    } finally {
-      setDecisionTraceLoading(false);
-    }
-  };
-
-  const closeDecisionTrace = () => {
-    setSelectedDecisionTrace(null);
-    setDecisionTraceError(null);
-    setDecisionTraceLoading(false);
-  };
-
-  const refreshPublicStatus = async () => {
-    try {
-      const res = await fetch(`${BASE_PATH}/api/public/status`, { cache: 'no-store' });
-      if (res.ok) setPublicStatus(await res.json() as PublicStatus);
-    } catch {
-      // ignore
-    }
-  };
-
-  const dismissToast = () => {
-    setToastDismissed(true);
-    try { localStorage.setItem(TOAST_DISMISSED_KEY, 'true'); } catch { /* ignore */ }
-  };
-
   // Track active abort controller to cancel pending requests
   const abortControllerRef = useRef<AbortController | null>(null);
 
@@ -729,26 +555,13 @@ export default function Dashboard() {
     };
   }, [isSeedActive, seedTrigger]);
 
-  // --- Public Status polling (every 30s) ---
-  useEffect(() => {
-    try {
-      const dismissed = localStorage.getItem(TOAST_DISMISSED_KEY);
-      setToastDismissed(dismissed === 'true');
-    } catch {
-      setToastDismissed(false);
-    }
-    refreshPublicStatus();
-    const interval = setInterval(refreshPublicStatus, 30_000);
-    return () => clearInterval(interval);
-  }, []);
-
   // --- Agent Loop polling (every 60s) — skipped when Agent V2 is active ---
   const isAgentV2 = agentFleet?.agentV2 === true;
   useEffect(() => {
     if (isAgentV2) return; // Agent V2 uses Goal Manager, not agent loop
     const fetchAgentLoop = async () => {
       try {
-        const limit = showFullHistory ? 500 : 50;
+        const limit = 50;
         const res = await fetch(`${BASE_PATH}/api/agent-loop?limit=${limit}`, { cache: 'no-store' });
         if (res.ok) {
           setAgentLoop(await res.json());
@@ -761,14 +574,14 @@ export default function Dashboard() {
     const agentInterval = isSeedActive ? SEED_ACTIVE_REFRESH_INTERVAL_MS : AGENT_LOOP_REFRESH_INTERVAL_MS;
     const interval = setInterval(fetchAgentLoop, agentInterval);
     return () => clearInterval(interval);
-  }, [showFullHistory, isSeedActive, isAgentV2]);
+  }, [isSeedActive, isAgentV2]);
 
   // --- V2 Activity polling (every 30s) — only when Agent V2 is active ---
   useEffect(() => {
     if (!isAgentV2) return;
     const fetchV2Activities = async () => {
       try {
-        const limit = showFullHistory ? 200 : 50;
+        const limit = 50;
         const res = await fetch(`${BASE_PATH}/api/experience?limit=${limit}`, { cache: 'no-store' });
         if (res.ok) {
           const data = await res.json() as ExperienceData;
@@ -781,7 +594,7 @@ export default function Dashboard() {
     fetchV2Activities();
     const interval = setInterval(fetchV2Activities, AGENT_LOOP_REFRESH_INTERVAL_MS);
     return () => clearInterval(interval);
-  }, [isAgentV2, showFullHistory]);
+  }, [isAgentV2]);
 
   // --- Parallel Agent Fleet polling (every 30s) ---
   useEffect(() => {
@@ -850,8 +663,8 @@ export default function Dashboard() {
   // --- Derived state for new layout components ---
 
   // Derive componentStates for 3D graph from anomaly events
-  const componentStates = useMemo<Record<string, NodeState>>(() => {
-    const states: Record<string, NodeState> = {};
+  const componentStates = useMemo<Record<string, 'normal' | 'anomaly' | 'critical' | 'inactive'>>(() => {
+    const states: Record<string, 'normal' | 'anomaly' | 'critical' | 'inactive'> = {};
     (anomalyEvents ?? []).filter((a) => a.status === 'active').forEach((a) => {
       const severity = a.deepAnalysis?.severity;
       const components = a.deepAnalysis?.relatedComponents ?? [];
@@ -882,23 +695,6 @@ export default function Dashboard() {
     return rawPhase ?? 'idle';
   }, [agentLoop?.lastCycle?.phase, anomalyEvents, isSeedActive]);
 
-  // Derive StreamEvents from anomaly events
-  const streamEvents = useMemo<StreamEvent[]>(() => {
-    const events: StreamEvent[] = [];
-    (anomalyEvents ?? []).slice(0, 15).forEach((a) => {
-      const component = a.deepAnalysis?.relatedComponents?.[0] ?? '';
-      const description = a.deepAnalysis?.anomalyType ?? '';
-      const severity = a.deepAnalysis?.severity as 'low' | 'medium' | 'high' | 'critical' | undefined;
-      events.push({
-        id: a.id,
-        time: new Date(a.timestamp).toLocaleTimeString(),
-        type: 'anomaly',
-        message: component ? `${component}: ${description}` : description,
-        severity,
-      });
-    });
-    return events.slice(0, 20);
-  }, [anomalyEvents]);
 
   // --- Handler stubs for new layout ---
   const handleRunRca = useCallback(async () => {
@@ -936,79 +732,130 @@ export default function Dashboard() {
     }
   }, []);
 
+  const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
+  const networkName = process.env.NEXT_PUBLIC_NETWORK_NAME || current?.chain?.displayName;
+  const chainName = networkName ?? 'Thanos Sepolia';
+  const scalingScore = agentLoop?.lastCycle?.scaling?.score ?? 0;
+  const l1Block = current?.metrics?.l1BlockHeight ?? 0;
+  const l2Block = current?.metrics?.blockHeight ?? 0;
+  const txPool = current?.metrics?.txPoolCount ?? 0;
+  const gasUsed = agentLoop?.lastCycle?.metrics?.gasUsedRatio ?? 0;
+  const successRate = agentFleet?.kpi.successRate ?? 1;
+  const vcpu = scalerState?.currentVcpu ?? agentLoop?.lastCycle?.scaling?.currentVcpu ?? 2;
+  const p95 = agentFleet?.kpi.p95CycleMs ?? 0;
+  const p95Str = p95 >= 1000 ? `${(p95 / 1000).toFixed(1)}s` : `${p95}ms`;
+
+  // Ticker items (duplicated for seamless scroll)
+  const tickerItems = [
+    { label: 'L2 BLOCK', value: l2Block.toLocaleString() },
+    { label: 'L1 BLOCK', value: l1Block.toLocaleString() },
+    { label: 'GAS RATIO', value: `${(gasUsed * 100).toFixed(0)}%` },
+    { label: 'CYCLES/MIN', value: agentFleet?.kpi.throughputPerMin.toFixed(2) ?? '—' },
+    { label: 'SUCCESS', value: `${(successRate * 100).toFixed(1)}%` },
+    { label: 'P95', value: p95Str },
+    { label: 'vCPU', value: `${vcpu} ACTIVE`, warn: vcpu >= 4 },
+    { label: 'ANOMALIES', value: `${anomalyEvents.filter(e => e.status === 'active').length} OPEN`, neg: anomalyEvents.filter(e => e.status === 'active').length > 0 },
+    { label: 'SCORE', value: String(scalingScore) },
+  ];
+  const tickerAll = [...tickerItems, ...tickerItems]; // duplicate for seamless loop
+
   if (isLoading) return (
-    <div className="flex h-screen w-full items-center justify-center bg-background text-foreground">
-      <div className="flex flex-col items-center gap-4">
-        <Activity className="animate-spin w-10 h-10" />
-        <span className="font-medium font-sans">Connecting to Cluster...</span>
+    <div style={{ display: 'flex', height: '100vh', width: '100%', alignItems: 'center', justifyContent: 'center', background: '#FFFFFF', color: '#0A0A0A', fontFamily: FONT }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 28, height: 28, border: '3px solid #D40000', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+        <span style={{ fontSize: 12, letterSpacing: '0.1em' }}>CONNECTING TO CLUSTER...</span>
       </div>
     </div>
   );
 
-  const isReadOnlyMode = process.env.NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE === 'true';
-  const networkName = process.env.NEXT_PUBLIC_NETWORK_NAME || current?.chain?.displayName;
-  const eoaRoleEntries = Object.entries(current?.eoaBalances?.roles || {}).filter(([, value]) => value !== null);
-  const showL1Failover = Boolean(l1Failover && current?.chain?.capabilities?.l1Failover !== false);
-  const showFaultProof = Boolean(current?.chain?.capabilities?.disputeGameMonitoring && current?.disputeGames?.enabled);
-  const showProof = Boolean(current?.chain?.capabilities?.proofMonitoring && current?.proof?.enabled);
-  const showSettlement = Boolean(current?.chain?.capabilities?.settlementMonitoring && current?.settlement?.enabled);
-
-  // --- Render ---
-  const chainName = publicStatus?.chain.name ?? process.env.NEXT_PUBLIC_NETWORK_NAME ?? networkName ?? 'Thanos Sepolia';
-
   return (
-    <div className="flex flex-col h-screen bg-background text-foreground overflow-hidden dashboard-bg">
-      {/* Top status bar */}
-      <StatusBar
-        l1BlockHeight={current?.metrics?.l1BlockHeight ?? 0}
-        l2BlockHeight={current?.metrics?.blockHeight ?? 0}
-        l1BlockDelta={0}
-        l2BlockDelta={0}
-        txPoolPending={current?.metrics?.txPoolCount ?? 0}
-        agentScore={agentLoop?.lastCycle?.scaling?.score ?? scalerState?.currentVcpu ?? 0}
-        agentPhase={graphAgentPhase}
-        isSyncing={false}
-        networkName={process.env.NEXT_PUBLIC_NETWORK_NAME ?? current?.chain?.displayName}
-      />
-
-      {/* Main content */}
-      <div className="flex flex-1 min-h-0">
-        {/* Left: Agent Sequence Diagram */}
-        <div className="flex-1 min-h-0 p-3">
-          <AgentSequenceDiagram
-            agentPhase={graphAgentPhase}
-            metrics={current?.metrics ? {
-              cpuUsage: current.metrics.cpuUsage,
-              txPoolPending: current.metrics.txPoolCount,
-            } : undefined}
-            anomalyEvents={anomalyEvents.map((e) => ({
-              severity: e.deepAnalysis?.severity,
-              message: e.deepAnalysis?.anomalyType,
-            }))}
-            scalingScore={agentLoop?.lastCycle?.scaling?.score}
-            currentVcpu={scalerState?.currentVcpu ?? agentLoop?.lastCycle?.scaling?.currentVcpu}
-            targetVcpu={agentLoop?.lastCycle?.scaling?.targetVcpu ?? scalerState?.currentVcpu}
-          />
+    <div style={{
+      display: 'flex', flexDirection: 'column', height: '100vh',
+      background: '#FFFFFF', color: '#0A0A0A', overflow: 'hidden',
+      fontFamily: FONT,
+    }}>
+      {/* ── Top Bar ── */}
+      <div style={{
+        background: '#D40000', color: 'white', height: 28, display: 'flex',
+        alignItems: 'center', flexShrink: 0, borderBottom: '2px solid #8B0000',
+      }}>
+        <div style={{ background: '#8B0000', padding: '0 14px', height: '100%', display: 'flex', alignItems: 'center', borderRight: '2px solid #6B0000', flexShrink: 0 }}>
+          <span style={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.05em' }}>SENTINAI</span>
         </div>
-
-        {/* Right panels (35%, max 320px) */}
-        <div className="w-80 flex flex-col gap-3 p-3 pl-0 min-h-0">
-          <div className="flex-1 min-h-0">
-            <EventStream events={streamEvents} />
+        {[
+          { dot: graphAgentPhase !== 'error' && graphAgentPhase !== 'idle', label: 'CLUSTER ONLINE' },
+          { dot: true, label: 'L2 SYNC' },
+        ].map(({ dot, label }) => (
+          <div key={label} style={{ padding: '0 14px', height: '100%', display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', borderRight: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer' }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', background: dot ? '#00FF88' : '#FF6060', boxShadow: `0 0 4px ${dot ? '#00FF88' : '#FF6060'}` }} />
+            {label}
           </div>
-          <ScalingPanel
-            score={agentLoop?.lastCycle?.scaling?.score ?? 0}
-            currentVcpu={scalerState?.currentVcpu ?? agentLoop?.lastCycle?.scaling?.currentVcpu ?? 2}
-            targetVcpu={agentLoop?.lastCycle?.scaling?.targetVcpu ?? scalerState?.currentVcpu ?? 2}
-            autoScalingEnabled={scalerState?.autoScalingEnabled ?? agentLoop?.config?.autoScalingEnabled ?? false}
-            predictionTier={scalerState?.prediction ? String(scalerState.prediction.predictedVcpu) + ' vCPU' : undefined}
-            predictionConfidence={scalerState?.prediction?.confidence}
-            lastDecision={agentLoop?.lastCycle?.scaling?.reason}
-          />
+        ))}
+        <div style={{ padding: '0 14px', height: '100%', display: 'flex', alignItems: 'center', fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', borderRight: '1px solid rgba(255,255,255,0.2)' }}>
+          {chainName.toUpperCase()}
+        </div>
+        {scalerState?.simulationMode && (
+          <div style={{ padding: '0 14px', height: '100%', display: 'flex', alignItems: 'center', fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', borderRight: '1px solid rgba(255,255,255,0.2)' }}>
+            SIMULATION MODE
+          </div>
+        )}
+        <div style={{ marginLeft: 'auto', padding: '0 14px', fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.9)' }}>
+          {new Date().toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).toUpperCase()} UTC
         </div>
       </div>
 
-      {/* Bottom: NLOps bar */}
+      {/* ── Ticker ── */}
+      <div style={{ background: '#0A0A0A', color: 'white', height: 22, display: 'flex', alignItems: 'center', overflow: 'hidden', flexShrink: 0, fontSize: 11, fontWeight: 500, letterSpacing: '0.04em' }}>
+        <div style={{ background: '#0055AA', padding: '0 10px', height: '100%', display: 'flex', alignItems: 'center', fontSize: 10, fontWeight: 700, letterSpacing: '0.1em', flexShrink: 0 }}>
+          LIVE
+        </div>
+        <div style={{ display: 'flex', animation: 'tickerScroll 28s linear infinite', whiteSpace: 'nowrap' }}>
+          {tickerAll.map((item, i) => (
+            <div key={i} style={{ padding: '0 18px', borderRight: '1px solid #333', display: 'flex', gap: 8 }}>
+              <span style={{ color: '#888' }}>{item.label}</span>
+              <span style={{ color: item.neg ? '#FF6060' : item.warn ? '#FFD700' : '#00FF88' }}>{item.value}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* ── Main 3-column ── */}
+      <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr 280px', flex: 1, overflow: 'hidden', borderTop: '1px solid #D0D0D0' }}>
+        {/* Left: Agent Roster */}
+        <AgentRosterPanel
+          agentFleet={agentFleet ? {
+            kpi: agentFleet.kpi,
+            roles: agentFleet.roles,
+            summary: agentFleet.summary,
+          } : null}
+          experience={experience ? {
+            tier: experience.tier,
+            stats: { successRate: experience.stats.successRate ?? 1, totalOps: experience.stats.totalOperations ?? 0 },
+            total: experience.total,
+          } : null}
+        />
+
+        {/* Center: Interaction Graph */}
+        <AgentInteractionGraph
+          agentFleet={agentFleet ? {
+            kpi: agentFleet.kpi,
+            roles: agentFleet.roles,
+          } : null}
+          anomalyEvents={anomalyEvents}
+          agentPhase={graphAgentPhase}
+        />
+
+        {/* Right: Operations */}
+        <OperationsPanel
+          metrics={current}
+          scalerState={scalerState}
+          agentFleet={agentFleet ? { kpi: agentFleet.kpi } : null}
+          l1Failover={l1Failover}
+          scalingScore={scalingScore}
+        />
+      </div>
+
+      {/* ── NLOps Bar ── */}
       <NLOpsBar
         onSend={handleNLOpsSend}
         onRunRca={handleRunRca}
@@ -1017,9 +864,7 @@ export default function Dashboard() {
         isLoading={isSending}
       />
 
-      {/* Sonner toast container */}
-      <Toaster position="top-right" theme="dark" />
-
+      <Toaster position="top-right" theme="light" />
     </div>
   );
 }

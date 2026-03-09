@@ -9,3 +9,4 @@
 - Before deleting a path during cleanup, classify it as `source-of-truth`, `reference/history`, or `regenerable artifact` to avoid removing valid project evidence.
 - Keep `package.json` script entries synchronized with actual files under `scripts/`; a dead script alias is a broken contract.
 - One-off provider diagnostics in `scripts/` must be either documented and wired into a workflow or removed when they become unreferenced.
+- When writing repository analysis, separate code-backed runtime behavior from mock or transitional surfaces so the report reflects actual product readiness.

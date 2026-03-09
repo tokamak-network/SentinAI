@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Send, Stethoscope, Wrench, FlaskConical } from 'lucide-react';
+
+const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
 const SCENARIOS = [
-  { id: 'spike',  label: 'Spike',  color: 'text-[#F87171]' },
-  { id: 'rising', label: 'Rising', color: 'text-[#FB923C]' },
-  { id: 'stable', label: 'Stable', color: 'text-[#4ADE80]' },
-  { id: 'live',   label: 'Live',   color: 'text-[#6EE7F7]' },
+  { id: 'spike',  label: 'SPIKE',  color: '#D40000' },
+  { id: 'rising', label: 'RISING', color: '#CC6600' },
+  { id: 'stable', label: 'STABLE', color: '#007A00' },
+  { id: 'live',   label: 'LIVE',   color: '#0055AA' },
 ] as const;
 
 interface NLOpsBarProps {
@@ -34,75 +35,93 @@ export function NLOpsBar({ onSend, onRunRca, onRemediate, onInjectScenario, isLo
   };
 
   return (
-    <div className="relative flex items-center gap-2 px-4 h-12 border-t border-white/[0.06] bg-black/40 backdrop-blur-xl shrink-0">
-      {/* Scenario picker popover */}
+    <div style={{
+      position: 'relative',
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '0 10px',
+      height: 36, flexShrink: 0,
+      borderTop: '2px solid #A0A0A0',
+      background: '#F7F7F7',
+    }}>
+      {/* Scenario picker */}
       {showScenarios && (
-        <div className="absolute bottom-full left-4 mb-2 flex gap-1 p-1.5 rounded-xl border border-white/[0.08] glass-panel shadow-xl">
-          {SCENARIOS.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => handleScenario(s.id)}
-              className={`px-3 py-1 text-[10px] rounded-lg font-mono hover:bg-white/[0.06] transition-colors ${s.color}`}
-            >
+        <div style={{
+          position: 'absolute', bottom: '100%', left: 10, marginBottom: 4,
+          display: 'flex', gap: 2, padding: 4,
+          background: '#FFFFFF', border: '1px solid #A0A0A0',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
+        }}>
+          {SCENARIOS.map(s => (
+            <button key={s.id} onClick={() => handleScenario(s.id)} style={{
+              fontFamily: FONT, fontSize: 10, fontWeight: 700,
+              padding: '2px 8px', background: 'transparent', border: `1px solid ${s.color}`,
+              color: s.color, cursor: 'pointer', borderRadius: 2,
+            }}>
               {s.label}
             </button>
           ))}
         </div>
       )}
 
-      {/* Quick action buttons */}
-      <button
-        onClick={onRunRca}
-        className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-mono text-white/50 hover:text-white/80 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] transition-all"
-      >
-        <Stethoscope className="size-3" />
-        Run RCA
-      </button>
-      <button
-        onClick={onRemediate}
-        className="flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-mono text-white/50 hover:text-white/80 bg-white/[0.05] hover:bg-white/[0.08] border border-white/[0.08] transition-all"
-      >
-        <Wrench className="size-3" />
-        Remediate
-      </button>
+      {/* Prompt prefix */}
+      <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, color: '#D40000', flexShrink: 0 }}>&gt;&nbsp;</span>
+
+      {/* Input */}
+      <input
+        type="text"
+        value={input}
+        onChange={e => setInput(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
+        placeholder="scale to 4 vCPU · run rca on op-batcher · show cost report · switch l1 rpc ..."
+        style={{
+          flex: 1, background: 'transparent', border: 'none', outline: 'none',
+          fontFamily: FONT, fontSize: 11, color: '#0A0A0A',
+        }}
+        data-testid="nlops-input"
+      />
+
+      {/* Quick actions */}
+      <span style={{ fontFamily: FONT, fontSize: 10, color: '#A0A0A0', flexShrink: 0 }}>
+        ⌘K
+      </span>
+      <QuickBtn label="RCA" onClick={onRunRca} color="#D40000" />
+      <QuickBtn label="REM" onClick={onRemediate} color="#CC6600" />
       {onInjectScenario && (
-        <button
-          onClick={() => setShowScenarios((v) => !v)}
-          className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-mono bg-white/[0.05] hover:bg-white/[0.08] border transition-all ${
-            showScenarios
-              ? 'text-[#FB923C] border-[#FB923C]/30 bg-[#FB923C]/[0.06]'
-              : 'text-white/50 hover:text-white/80 border-white/[0.08]'
-          }`}
-        >
-          <FlaskConical className="size-3" />
-          Simulate
-        </button>
+        <QuickBtn label="SIM" onClick={() => setShowScenarios(v => !v)} color="#0055AA" active={showScenarios} />
       )}
 
-      {/* NLOps input */}
-      <div className="flex-1 flex items-center gap-2 bg-white/[0.04] border border-white/[0.10] focus-within:border-white/[0.20] focus-within:shadow-[0_0_12px_rgba(110,231,247,0.08)] rounded-xl px-3 h-8 transition-all">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-          placeholder="Type a command..."
-          className="flex-1 bg-transparent text-xs text-white/80 placeholder:text-white/25 font-mono outline-none"
-          data-testid="nlops-input"
-        />
-        <button
-          onClick={handleSend}
-          disabled={isLoading || !input.trim()}
-          className={`size-5 flex items-center justify-center rounded-md transition-all ${
-            input.trim()
-              ? 'text-[#6EE7F7] hover:bg-[#6EE7F7]/10'
-              : 'text-white/20 pointer-events-none'
-          }`}
-          data-testid="nlops-send"
-        >
-          <Send className="size-3" />
-        </button>
-      </div>
+      {/* Submit button */}
+      <button
+        onClick={handleSend}
+        disabled={isLoading || !input.trim()}
+        data-testid="nlops-send"
+        style={{
+          fontFamily: FONT, fontSize: 10, fontWeight: 700,
+          padding: '3px 10px', borderRadius: 2,
+          background: input.trim() && !isLoading ? '#0055AA' : '#EFEFEF',
+          color: input.trim() && !isLoading ? 'white' : '#A0A0A0',
+          border: 'none', cursor: input.trim() && !isLoading ? 'pointer' : 'default',
+          letterSpacing: '0.05em', flexShrink: 0,
+        }}
+      >
+        EXEC
+      </button>
     </div>
+  );
+}
+
+function QuickBtn({ label, onClick, color, active }: { label: string; onClick: () => void; color: string; active?: boolean }) {
+  return (
+    <button onClick={onClick} style={{
+      fontFamily: FONT, fontSize: 9, fontWeight: 700,
+      padding: '2px 6px', borderRadius: 2,
+      background: active ? color : 'transparent',
+      color: active ? 'white' : color,
+      border: `1px solid ${color}`,
+      cursor: 'pointer', flexShrink: 0,
+      letterSpacing: '0.05em',
+    }}>
+      {label}
+    </button>
   );
 }
