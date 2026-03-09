@@ -750,7 +750,6 @@ export default function Dashboard() {
     { label: 'L2 BLOCK', value: l2Block.toLocaleString() },
     { label: 'L1 BLOCK', value: l1Block.toLocaleString() },
     { label: 'GAS RATIO', value: `${(gasUsed * 100).toFixed(0)}%` },
-    { label: 'CYCLES/MIN', value: agentFleet?.kpi.throughputPerMin.toFixed(2) ?? '—' },
     { label: 'SUCCESS', value: `${successRate.toFixed(1)}%` },
     { label: 'P95', value: p95Str },
     { label: 'vCPU', value: `${vcpu} ACTIVE`, warn: vcpu >= 4 },

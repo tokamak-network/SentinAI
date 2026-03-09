@@ -269,7 +269,7 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase }:
         </div>
         {traceRows.length === 0 ? (
           <div style={{ padding: '8px 10px', fontFamily: FONT, fontSize: 10, color: '#A0A0A0' }}>
-            이상 이벤트 없음 — 정상 운영 중
+            No anomaly events — all systems nominal
           </div>
         ) : traceRows.map((row, i) => (
           <div key={i} style={{
