@@ -120,31 +120,61 @@ function AgentNode({ cx, cy, label, sub, status, stat, layer }: {
   );
 }
 
-function HEdge({ x1, y, x2, color, active }: { x1: number; y: number; x2: number; color: string; active?: boolean }) {
+function HEdge({ x1, y, x2, color, active, label }: {
+  x1: number; y: number; x2: number; color: string; active?: boolean; label?: string;
+}) {
   const markerId = `arr-${color.replace('#', '')}`;
+  const mid = (x1 + x2) / 2;
   return (
-    <line x1={x1} y1={y} x2={x2} y2={y}
-      stroke={color} strokeWidth={1.5} strokeOpacity={active ? 0.9 : 0.5}
-      strokeDasharray={active ? '6 3' : undefined}
-      strokeDashoffset={active ? 0 : undefined}
-      markerEnd={`url(#${markerId})`}
-      style={active ? { animation: 'dashFlow 0.8s linear infinite' } : undefined}
-    />
+    <g>
+      <line x1={x1} y1={y} x2={x2} y2={y}
+        stroke={color} strokeWidth={1.5} strokeOpacity={active ? 0.9 : 0.5}
+        strokeDasharray={active ? '6 3' : undefined}
+        strokeDashoffset={active ? 0 : undefined}
+        markerEnd={`url(#${markerId})`}
+        style={active ? { animation: 'dashFlow 0.8s linear infinite' } : undefined}
+      />
+      {active && label && (
+        <g>
+          <rect x={mid - 23} y={y - 17} width={46} height={13} rx={2}
+            fill="white" stroke={color} strokeWidth={0.8} opacity={0.95} />
+          <text x={mid} y={y - 7} textAnchor="middle"
+            fontFamily={FONT} fontSize={8} fontWeight={700} fill={color}>
+            {label}
+          </text>
+        </g>
+      )}
+    </g>
   );
 }
 
-function CurvedEdge({ x1, y1, x2, y2, color, active }: {
-  x1: number; y1: number; x2: number; y2: number; color: string; active?: boolean;
+function CurvedEdge({ x1, y1, x2, y2, color, active, label }: {
+  x1: number; y1: number; x2: number; y2: number; color: string; active?: boolean; label?: string;
 }) {
   const mid = (y1 + y2) / 2;
+  // Midpoint of cubic bezier M(x1,y1) C(x1,mid) (x2,mid) (x2,y2) at t=0.5
+  const mx = (x1 + x2) / 2;
+  const my = (y1 + y2) / 2;
   return (
-    <path
-      d={`M${x1},${y1} C${x1},${mid} ${x2},${mid} ${x2},${y2}`}
-      fill="none" stroke={color} strokeWidth={1.5} strokeOpacity={active ? 0.8 : 0.45}
-      strokeDasharray={active ? '6 3' : undefined}
-      markerEnd={`url(#arr-${color.replace('#', '')})`}
-      style={active ? { animation: 'dashFlow 0.8s linear infinite' } : undefined}
-    />
+    <g>
+      <path
+        d={`M${x1},${y1} C${x1},${mid} ${x2},${mid} ${x2},${y2}`}
+        fill="none" stroke={color} strokeWidth={1.5} strokeOpacity={active ? 0.8 : 0.45}
+        strokeDasharray={active ? '6 3' : undefined}
+        markerEnd={`url(#arr-${color.replace('#', '')})`}
+        style={active ? { animation: 'dashFlow 0.8s linear infinite' } : undefined}
+      />
+      {active && label && (
+        <g>
+          <rect x={mx - 23} y={my - 7} width={46} height={13} rx={2}
+            fill="white" stroke={color} strokeWidth={0.8} opacity={0.95} />
+          <text x={mx} y={my + 3} textAnchor="middle"
+            fontFamily={FONT} fontSize={8} fontWeight={700} fill={color}>
+            {label}
+          </text>
+        </g>
+      )}
+    </g>
   );
 }
 
@@ -177,6 +207,21 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase }:
     if (layer === 'action') return `${r.running} actions`;
     if (key === 'cost') return `$${(agentFleet?.kpi.throughputPerMin ?? 0).toFixed(0)}/day`;
     return `${r.running.toLocaleString()} cycles`;
+  };
+
+  // Data label shown on active edges
+  const throughput = agentFleet?.kpi.throughputPerMin ?? 0;
+  const anomalyType = activeAnomalies[0]?.deepAnalysis?.anomalyType;
+  const edgeLabel = (from: string, to: string): string | undefined => {
+    if (from === 'collector'  && to === 'detector')    return `${throughput.toFixed(1)}/min`;
+    if (from === 'detector'   && to === 'analyzer')    return anomalyType ? anomalyType.slice(0, 8) : `${activeAnomalies.length} hit`;
+    if (from === 'detector'   && to === 'security')    return 'eoa·rpc';
+    if (from === 'analyzer'   && to === 'executor')    return 'act·k8s';
+    if (from === 'executor'   && to === 'verifier')    return 'verify';
+    if (from === 'scaling'    && to === 'remediation') return 'scale·up';
+    if (from === 'security'   && to === 'notifier')    return 'alert';
+    if (from === 'security'   && to === 'remediation') return 'patch';
+    return undefined;
   };
 
   const ph = NODE_H / 2;
@@ -222,23 +267,23 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase }:
           ))}
 
           {/* ── Pipeline horizontal edges ── */}
-          <HEdge x1={75 + NODE_W/2} y={58} x2={227 - NODE_W/2} color="#0055AA" active={isEdgeActive(agentPhase, 'collector', 'detector')} />
-          <HEdge x1={227 + NODE_W/2} y={58} x2={380 - NODE_W/2} color="#0055AA" active={isEdgeActive(agentPhase, 'detector', 'analyzer')} />
-          <HEdge x1={380 + NODE_W/2} y={58} x2={532 - NODE_W/2} color="#0055AA" active={isEdgeActive(agentPhase, 'analyzer', 'executor')} />
-          <HEdge x1={532 + NODE_W/2} y={58} x2={685 - NODE_W/2} color="#0055AA" active={isEdgeActive(agentPhase, 'executor', 'verifier')} />
+          <HEdge x1={75 + NODE_W/2} y={58} x2={227 - NODE_W/2} color="#0055AA" active={isEdgeActive(agentPhase, 'collector', 'detector')} label={isEdgeActive(agentPhase, 'collector', 'detector') ? edgeLabel('collector', 'detector') : undefined} />
+          <HEdge x1={227 + NODE_W/2} y={58} x2={380 - NODE_W/2} color="#0055AA" active={isEdgeActive(agentPhase, 'detector', 'analyzer')} label={isEdgeActive(agentPhase, 'detector', 'analyzer') ? edgeLabel('detector', 'analyzer') : undefined} />
+          <HEdge x1={380 + NODE_W/2} y={58} x2={532 - NODE_W/2} color="#0055AA" active={isEdgeActive(agentPhase, 'analyzer', 'executor')} label={isEdgeActive(agentPhase, 'analyzer', 'executor') ? edgeLabel('analyzer', 'executor') : undefined} />
+          <HEdge x1={532 + NODE_W/2} y={58} x2={685 - NODE_W/2} color="#0055AA" active={isEdgeActive(agentPhase, 'executor', 'verifier')} label={isEdgeActive(agentPhase, 'executor', 'verifier') ? edgeLabel('executor', 'verifier') : undefined} />
 
           {/* ── Pipeline → Domain cross edges ── */}
-          <CurvedEdge x1={227} y1={58 + ph} x2={227} y2={195 - ph} color="#007A00" active={isEdgeActive(agentPhase, 'detector', 'security')} />
+          <CurvedEdge x1={227} y1={58 + ph} x2={227} y2={195 - ph} color="#007A00" active={isEdgeActive(agentPhase, 'detector', 'security')} label={isEdgeActive(agentPhase, 'detector', 'security') ? edgeLabel('detector', 'security') : undefined} />
           <CurvedEdge x1={227} y1={58 + ph} x2={75}  y2={195 - ph} color="#007A00" />
           <CurvedEdge x1={380} y1={58 + ph} x2={380} y2={195 - ph} color="#007A00" />
-          <CurvedEdge x1={380} y1={58 + ph} x2={532} y2={195 - ph} color="#007A00" active={hasActive} />
+          <CurvedEdge x1={380} y1={58 + ph} x2={532} y2={195 - ph} color="#007A00" active={hasActive} label={hasActive ? edgeLabel('analyzer', 'rca') : undefined} />
 
           {/* ── Domain → Action cross edges ── */}
           <CurvedEdge x1={75}  y1={195 + ph} x2={258} y2={320 - ph} color="#CC6600" />
-          <CurvedEdge x1={227} y1={195 + ph} x2={258} y2={320 - ph} color="#D40000" active={hasActive} />
-          <CurvedEdge x1={532} y1={195 + ph} x2={258} y2={320 - ph} color="#CC6600" />
+          <CurvedEdge x1={227} y1={195 + ph} x2={258} y2={320 - ph} color="#D40000" active={hasActive} label={hasActive ? edgeLabel('security', 'remediation') : undefined} />
+          <CurvedEdge x1={532} y1={195 + ph} x2={258} y2={320 - ph} color="#CC6600" active={hasActive} label={hasActive ? edgeLabel('scaling', 'remediation') : undefined} />
           <CurvedEdge x1={380} y1={195 + ph} x2={503} y2={320 - ph} color="#007A00" />
-          <CurvedEdge x1={227} y1={195 + ph} x2={503} y2={320 - ph} color="#CC6600" active={hasActive} />
+          <CurvedEdge x1={227} y1={195 + ph} x2={503} y2={320 - ph} color="#CC6600" active={hasActive} label={hasActive ? edgeLabel('security', 'notifier') : undefined} />
 
           {/* ── Agent nodes ── */}
           {PIPELINE.map(a => (
