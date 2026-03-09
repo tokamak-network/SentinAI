@@ -413,7 +413,7 @@ export default function ConnectPage() {
   const [gatewayUrl, setGatewayUrl] = useState("");
   const [gatewayApiKey, setGatewayApiKey] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [enabledFeatures, setEnabledFeatures] = useState<Set<string>>(new Set());
+  const [enabledFeatures, setEnabledFeatures] = useState<Set<string>>(new Set(["redis", "auto-remediation"]));
 
   const [generated, setGenerated] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -445,7 +445,7 @@ export default function ConnectPage() {
     setGenerated(false);
     setTestResult(null);
     setTestError(null);
-    setEnabledFeatures(new Set());
+    setEnabledFeatures(new Set(["redis", "auto-remediation"]));
   }
 
   function toggleFeature(id: string) {
