@@ -81,7 +81,7 @@ export default async function DocsPage({ params }: PageProps) {
       <DocsSidebar />
 
       <main className="flex-1 px-3 sm:px-4 lg:px-6 py-8 lg:ml-0">
-        <div className="mx-auto max-w-[1400px]">
+        <div className="mx-auto max-w-4xl xl:max-w-5xl">
           <div className="mb-6 flex flex-col sm:flex-row items-start justify-between gap-3 sm:gap-4">
             <div className="flex-1 w-full">
               <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500 mb-1.5">
@@ -90,7 +90,6 @@ export default async function DocsPage({ params }: PageProps) {
               <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 break-words leading-tight">
                 {title}
               </h1>
-              <p className="text-xs text-slate-500 mt-1 break-all">{target.relativePath}</p>
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto">
               <Link
