@@ -203,7 +203,8 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
   const corrId = activeAnomalies[0]?.id.slice(0, 6) ?? '—';
 
   const traceRows = useMemo(() => {
-    type Row = { rawTs: number; ts: string; sev: string; agent: string; action: string; detail: string; latency: string; ok: boolean };
+    type RawRow = { rawTs: number; ts: string; sev: string; agent: string; action: string; detail: string; latency: string; ok: boolean };
+    type Row = RawRow & { count: number };
 
     const sevRank: Record<string, number> = { critical: 0, high: 1, medium: 2, info: 3 };
 
@@ -212,7 +213,7 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
       return ['critical', 'high', 'medium'].includes(v) ? v : 'info';
     }
 
-    const fromAnomalies: Row[] = anomalyEvents.slice(0, 15).map(e => ({
+    const fromAnomalies: RawRow[] = anomalyEvents.slice(0, 15).map(e => ({
       rawTs: typeof e.timestamp === 'number' ? e.timestamp : new Date(e.timestamp).getTime(),
       ts: new Date(e.timestamp).toLocaleTimeString('en-US', { hour12: false }),
       sev: normSev(e.deepAnalysis?.severity),
@@ -225,7 +226,7 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
       ok: e.status === 'resolved',
     }));
 
-    const fromDecisions: Row[] = (decisions ?? []).slice(0, 15).map(d => {
+    const fromDecisions: RawRow[] = (decisions ?? []).slice(0, 15).map(d => {
       const phases = d.phaseTrace ?? [];
       const t0 = phases.length > 0 ? new Date(phases[0].startedAt).getTime() : 0;
       const t1 = phases.length > 0 ? new Date(phases[phases.length - 1].endedAt).getTime() : 0;
@@ -248,9 +249,28 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
       };
     });
 
-    return [...fromAnomalies, ...fromDecisions]
+    const sorted = [...fromAnomalies, ...fromDecisions]
       .sort((a, b) => b.rawTs - a.rawTs || sevRank[a.sev] - sevRank[b.sev])
       .slice(0, 20);
+
+    // Merge consecutive rows sharing the same second-level timestamp into one
+    const merged: Row[] = [];
+    for (const row of sorted) {
+      const prev = merged[merged.length - 1];
+      if (prev && prev.ts === row.ts) {
+        prev.count++;
+        // Escalate severity and use the more severe event's detail
+        if (sevRank[row.sev] < sevRank[prev.sev]) { prev.sev = row.sev; prev.detail = row.detail; }
+        // Append distinct agents / actions
+        if (!prev.agent.split(' · ').includes(row.agent)) prev.agent += ` · ${row.agent}`;
+        if (!prev.action.split(' · ').includes(row.action)) prev.action += ` · ${row.action}`;
+        // Prefer a real latency value
+        if (row.latency !== '—') prev.latency = row.latency;
+      } else {
+        merged.push({ ...row, count: 1 });
+      }
+    }
+    return merged;
   }, [anomalyEvents, decisions]);
 
   const isScaling = !!scaling && scaling.from !== scaling.to;
@@ -386,7 +406,6 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
             No events — all systems nominal
           </div>
         ) : traceRows.map((row, i) => {
-          const sameTsAsPrev = i > 0 && traceRows[i - 1].ts === row.ts;
           const sevStyle: React.CSSProperties =
             row.sev === 'critical' ? { background: '#FFE6E6', color: '#D40000' } :
             row.sev === 'high'     ? { background: '#FFF3E0', color: '#CC6600' } :
@@ -399,11 +418,9 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
               fontFamily: FONT, fontSize: 10, alignItems: 'center',
               background: i % 2 === 1 ? '#F7F7F7' : '#FFFFFF',
             }}>
-              <span style={{ color: sameTsAsPrev ? '#C0C0C0' : '#707070', fontSize: 9 }}>
-                {sameTsAsPrev ? '″' : row.ts}
-              </span>
+              <span style={{ color: '#707070', fontSize: 9 }}>{row.ts}</span>
               <span style={{ ...sevStyle, fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 2 }}>
-                {row.sev.toUpperCase().slice(0, 4)}
+                {row.sev.toUpperCase().slice(0, 4)}{row.count > 1 ? ` ×${row.count}` : ''}
               </span>
               <span style={{ color: '#0055AA', fontSize: 9, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.agent}</span>
               <span style={{ color: '#3A3A3A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.action}</span>
