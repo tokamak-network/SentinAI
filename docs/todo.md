@@ -50,3 +50,19 @@
 - [x] Analyze API routes plus `src/lib` and `src/core` agent/detection/autonomy flows.
 - [x] Write a code-based report under `docs/`.
 - [x] Review the resulting diff for documentation-only changes.
+
+### Report Localization
+
+- [x] Convert the analysis report narrative and section labels into natural Korean while keeping code identifiers unchanged.
+
+### Follow-up Decisions
+
+- [x] Reflect the chosen follow-up direction in the report: Redis Streams for Agent V2 events, remove docs search, defer chain/plugin convergence.
+
+### Redis Streams Design + Docs Search Removal
+
+- [x] Write an implementation plan covering the Redis Streams EventBus design document and docs search removal.
+- [x] Add a failing regression test proving docs pages should not render docs search UI.
+- [x] Remove docs search UI/component usage from the docs page and keep docs navigation intact.
+- [x] Write the Redis Streams EventBus design document under `docs/plans/`.
+- [x] Run focused verification and review the resulting diff.

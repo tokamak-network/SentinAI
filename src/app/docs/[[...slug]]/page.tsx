@@ -3,7 +3,6 @@ import path from 'node:path';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
-import DocSearch from '@/components/DocSearch';
 import DocsSidebar from '@/components/DocsSidebar';
 import TableOfContents from '@/components/TableOfContents';
 
@@ -61,7 +60,6 @@ export default async function DocsPage({ params }: PageProps) {
               <p className="text-xs text-slate-500 mt-1 break-all">{target.relativePath}</p>
             </div>
             <div className="flex items-center gap-2 w-full sm:w-auto">
-              <DocSearch className="flex-1 sm:w-56" />
               <Link href="/" className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors">
                 ← Landing
               </Link>
