@@ -14,7 +14,9 @@ import {
   getCircuitBreakerStates,
   resetCircuitBreaker,
   executePlaybook,
+  executeRemediation,
 } from '@/lib/remediation-engine';
+import { getEvents } from '@/lib/anomaly-event-store';
 
 // ============================================================
 // GET — Query state
@@ -63,10 +65,24 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Action: Trigger playbook
+    // Action: Auto-remediate latest active anomaly
+    if (body.trigger === 'auto') {
+      const { events } = await getEvents(20);
+      const activeEvent = events.find(e => e.status === 'active');
+      if (!activeEvent) {
+        return NextResponse.json({ success: false, message: 'No active anomaly to remediate' });
+      }
+      const execution = await executeRemediation(activeEvent);
+      return NextResponse.json({
+        success: execution.status === 'success' || execution.status === 'skipped',
+        execution,
+      });
+    }
+
+    // Action: Trigger specific playbook
     if (body.playbookName) {
       const execution = await executePlaybook(body.playbookName, 'manual');
-      
+
       return NextResponse.json({
         success: execution.status === 'success',
         execution,
@@ -74,7 +90,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: 'Missing playbookName or action in request body' },
+      { error: 'Missing playbookName or trigger in request body' },
       { status: 400 }
     );
   } catch (error) {

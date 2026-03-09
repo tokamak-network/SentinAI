@@ -741,8 +741,26 @@ export default function Dashboard() {
     }
   }, []);
 
-  const handleRemediate = useCallback(() => {
-    toast.info('Remediation triggered', { description: 'Use NLOps to request remediation.' });
+  const handleRemediate = useCallback(async () => {
+    try {
+      const res = await fetch(`${BASE_PATH}/api/remediation`, {
+        method: 'POST',
+        headers: writeHeaders(),
+        body: JSON.stringify({ trigger: 'auto' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error('Remediation failed', { description: data.error });
+        return;
+      }
+      if (data.success) {
+        toast.success('Remediation complete', { description: `Playbook: ${data.execution?.playbookName}` });
+      } else {
+        toast.info('Remediation skipped', { description: data.execution?.playbookName === 'none' ? 'No matching playbook for current anomaly.' : data.message ?? 'Blocked by safety gate.' });
+      }
+    } catch {
+      toast.error('Remediation request failed');
+    }
   }, []);
 
   const handleNLOpsSend = useCallback((message: string) => {
