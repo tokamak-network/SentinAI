@@ -143,6 +143,7 @@ interface ScalerState {
   cooldownRemaining: number;
   autoScalingEnabled: boolean;
   simulationMode: boolean;
+  lastScalingTime: string | null;
   prediction: PredictionInfo | null;
   predictionMeta: PredictionMeta;
 }
@@ -739,6 +740,12 @@ export default function Dashboard() {
     if (activeAnomalies.some((a) => a.deepAnalysis)) return 'analyze';
     // If there are active anomalies without deep analysis yet → show 'detect'
     if (activeAnomalies.length > 0) return 'detect';
+    // If a scaling event occurred within the last 30s → show 'act' (captures
+    // scale-down after TTL expiry, which the UI poll might otherwise miss)
+    if (scalerState?.lastScalingTime) {
+      const elapsedMs = Date.now() - new Date(scalerState.lastScalingTime).getTime();
+      if (elapsedMs < 30_000) return 'act';
+    }
     // While seed is active, derive phase from metric intensity so edges stay
     // animated for the full seed TTL (80s), not just the anomaly lifetime.
     if (isSeedActive) {
@@ -748,7 +755,7 @@ export default function Dashboard() {
     }
     // Fall back to raw phase (may be 'complete', 'error', etc.)
     return rawPhase ?? 'idle';
-  }, [agentLoop?.lastCycle?.phase, anomalyEvents, isSeedActive, scalingScore]);
+  }, [agentLoop?.lastCycle?.phase, anomalyEvents, scalerState?.lastScalingTime, isSeedActive, scalingScore]);
 
 
   // --- Handler stubs for new layout ---
