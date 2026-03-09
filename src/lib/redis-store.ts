@@ -1367,6 +1367,10 @@ export class RedisStateStore implements IStateStore {
     return this.connected;
   }
 
+  async ping(): Promise<void> {
+    await this.client.ping();
+  }
+
   async disconnect(): Promise<void> {
     await this.client.quit();
     this.connected = false;
@@ -2189,13 +2193,15 @@ export class InMemoryStateStore implements IStateStore {
 const globalForStore = globalThis as unknown as { __sentinai_store?: IStateStore };
 
 /**
- * Get the state store singleton
- * Uses Redis if REDIS_URL is set, otherwise falls back to InMemory
+ * Get the state store singleton.
+ * REDIS_URL is required in production — throws on startup if not set.
+ * In test environments (VITEST=true), falls back to InMemory to avoid external dependencies.
  */
 export function getStore(): IStateStore {
   if (globalForStore.__sentinai_store) return globalForStore.__sentinai_store;
 
   const redisUrl = process.env.REDIS_URL;
+  const isTest = process.env.VITEST === 'true';
 
   if (redisUrl) {
     logger.info('[State Store] Using Redis:', redisUrl.replace(/\/\/.*@/, '//<credentials>@'));
@@ -2203,12 +2209,41 @@ export function getStore(): IStateStore {
       url: redisUrl,
       ...DEFAULT_REDIS_CONFIG,
     });
-  } else {
-    logger.info('[State Store] Using InMemory (set REDIS_URL for persistence)');
+  } else if (isTest) {
     globalForStore.__sentinai_store = new InMemoryStateStore();
+  } else {
+    throw new Error(
+      '[State Store] REDIS_URL is required. ' +
+      'Start Redis and set REDIS_URL=redis://localhost:6379 in .env.local. ' +
+      'Quick start: docker run -d -p 6379:6379 redis:7-alpine'
+    );
   }
 
   return globalForStore.__sentinai_store;
+}
+
+/**
+ * Validate that Redis is reachable. Called at startup before the scheduler starts.
+ * Triggers getStore() which will throw if REDIS_URL is missing (non-test env).
+ * Then pings the Redis connection to confirm the server is up.
+ */
+export async function validateRedisConnection(): Promise<void> {
+  const isTest = process.env.VITEST === 'true';
+  if (isTest) return;
+
+  const store = getStore();
+
+  if (store instanceof RedisStateStore) {
+    try {
+      await store.ping();
+      logger.info('[State Store] Redis connection verified');
+    } catch (error) {
+      throw new Error(
+        `[State Store] Cannot connect to Redis at ${process.env.REDIS_URL}. ` +
+        `Ensure Redis is running. Error: ${String(error)}`
+      );
+    }
+  }
 }
 
 /**

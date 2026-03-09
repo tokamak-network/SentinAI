@@ -9,6 +9,9 @@ export async function register() {
     return;
   }
 
+  const { validateRedisConnection } = await import('./lib/redis-store');
+  await validateRedisConnection();
+
   const { initializeScheduler } = await import('./lib/scheduler');
   await initializeScheduler();
 
