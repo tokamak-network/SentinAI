@@ -341,6 +341,9 @@ export default function Dashboard() {
   // --- Anomaly toast ref ---
   const prevAnomaliesRef = useRef<AnomalyEventData[] | null>(null);
 
+  // --- vCPU change tracking ---
+  const prevVcpuRef = useRef<number | null>(null);
+
   // --- L1 RPC Failover State ---
   const [l1Failover, setL1Failover] = useState<L1FailoverStatus | null>(null);
 
@@ -523,6 +526,20 @@ export default function Dashboard() {
             });
             if (scalerRes.ok) {
               const scalerData: ScalerState = await scalerRes.json();
+              const newVcpu = scalerData.currentVcpu;
+              const oldVcpu = prevVcpuRef.current;
+              if (oldVcpu !== null && newVcpu !== oldVcpu) {
+                const direction = newVcpu > oldVcpu ? '⬆' : '⬇';
+                const msg = `${direction} Scaling: ${oldVcpu}→${newVcpu} vCPU`;
+                if (newVcpu >= 8) {
+                  toast.error(msg, { description: 'EMERGENCY tier — all hands on deck' });
+                } else if (newVcpu > oldVcpu) {
+                  toast.warning(msg, { description: newVcpu >= 4 ? 'HIGH tier activated' : 'NORMAL tier activated' });
+                } else {
+                  toast.success(msg, { description: 'Load reduced — scaled down' });
+                }
+              }
+              prevVcpuRef.current = newVcpu;
               setPrediction(scalerData.prediction);
               setPredictionMeta(scalerData.predictionMeta);
               setScalerState(scalerData);
@@ -798,6 +815,12 @@ export default function Dashboard() {
   const successRate = agentFleet?.kpi.successRate ?? 100; // 0–100 (percent, already multiplied in agent-fleet.ts)
   const vcpu = scalerState?.currentVcpu ?? agentLoop?.lastCycle?.scaling?.currentVcpu ?? 2;
   const p95 = agentFleet?.kpi.p95CycleMs ?? 0;
+
+  // Derive scaling event for interaction graph banner
+  const lastScaling = agentLoop?.lastCycle?.scaling;
+  const scalingEvent = lastScaling && lastScaling.targetVcpu !== lastScaling.currentVcpu
+    ? { from: lastScaling.currentVcpu, to: lastScaling.targetVcpu, score: lastScaling.score }
+    : null;
   const p95Str = p95 >= 1000 ? `${(p95 / 1000).toFixed(1)}s` : `${p95}ms`;
 
   // Ticker items (duplicated for seamless scroll)
@@ -898,6 +921,7 @@ export default function Dashboard() {
           anomalyEvents={anomalyEvents}
           agentPhase={graphAgentPhase}
           decisions={agentDecisions}
+          scaling={scalingEvent}
         />
 
         {/* Right: Operations */}
