@@ -80,16 +80,6 @@ function eoa_color(level: string): string {
   return '#007A00';
 }
 
-// ─── Heatmap data (pseudo-random but stable) ─────────────────────────────────
-const HEATMAP = Array.from({ length: 24 }, (_, i) => {
-  const h = Math.sin(i * 0.7 + 1) * 2 + Math.cos(i * 1.3) * 1.5 + 2;
-  return Math.max(0, Math.min(4, Math.round(h)));
-});
-
-function heatColor(v: number): string {
-  const colors = ['#EFEFEF', '#BFDFBF', '#7FBF7F', '#3F9F3F', '#007A00'];
-  return colors[v] ?? '#EFEFEF';
-}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -184,21 +174,6 @@ export function OperationsPanel({ metrics, scalerState, agentFleet, l1Failover, 
           </svg>
         </div>
 
-        {/* 24h heatmap */}
-        <div style={{ padding: '6px 10px 8px', borderBottom: '1px solid #D0D0D0' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', color: '#707070', marginBottom: 4 }}>
-            <span>24H ACTIVITY</span>
-            <span style={{ color: '#007A00' }}>today</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(24, 1fr)', gap: 1 }}>
-            {HEATMAP.map((v, i) => (
-              <div key={i} style={{ aspectRatio: '1', borderRadius: 1, background: heatColor(v) }} />
-            ))}
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', fontFamily: FONT, fontSize: 9, color: '#A0A0A0', marginTop: 2 }}>
-            <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>now</span>
-          </div>
-        </div>
 
         {/* L2 components */}
         {components.length > 0 && (
