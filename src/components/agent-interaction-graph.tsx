@@ -213,18 +213,33 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
       return ['critical', 'high', 'medium'].includes(v) ? v : 'info';
     }
 
-    const fromAnomalies: RawRow[] = anomalyEvents.slice(0, 15).map(e => ({
-      rawTs: typeof e.timestamp === 'number' ? e.timestamp : new Date(e.timestamp).getTime(),
-      ts: new Date(e.timestamp).toLocaleTimeString('en-US', { hour12: false }),
-      sev: normSev(e.deepAnalysis?.severity),
-      agent: 'detector',
-      action: e.status === 'active' ? 'anomaly-detected' : e.status === 'resolved' ? 'resolved' : 'acknowledged',
-      detail: e.deepAnalysis?.anomalyType
-        ? [e.deepAnalysis.relatedComponents?.[0], e.deepAnalysis.anomalyType].filter(Boolean).join(': ')
-        : e.id.slice(0, 24),
-      latency: '—',
-      ok: e.status === 'resolved',
-    }));
+    const fromAnomalies: RawRow[] = anomalyEvents.slice(0, 15).map(e => {
+      const comp = e.deepAnalysis?.relatedComponents?.[0] ?? '';
+      const type = e.deepAnalysis?.anomalyType ?? '';
+      const a1 = e.anomalies?.[0];
+      let detail: string;
+      if (type) {
+        if (a1) {
+          const val = Number.isFinite(a1.value) ? a1.value.toFixed(a1.value < 10 ? 2 : 0) : '?';
+          const z = a1.zScore ? ` Z=${a1.zScore.toFixed(1)}` : '';
+          detail = `${comp ? comp + ': ' : ''}${type} · ${a1.metric}=${val}${z}`;
+        } else {
+          detail = [comp, type].filter(Boolean).join(': ');
+        }
+      } else {
+        detail = e.id.slice(0, 24);
+      }
+      return {
+        rawTs: typeof e.timestamp === 'number' ? e.timestamp : new Date(e.timestamp).getTime(),
+        ts: new Date(e.timestamp).toLocaleTimeString('en-US', { hour12: false }),
+        sev: normSev(e.deepAnalysis?.severity),
+        agent: 'detector',
+        action: e.status === 'active' ? 'anomaly-detected' : e.status === 'resolved' ? 'resolved' : 'acknowledged',
+        detail,
+        latency: '—',
+        ok: e.status === 'resolved',
+      };
+    });
 
     const fromDecisions: RawRow[] = (decisions ?? []).slice(0, 15).map(d => {
       const phases = d.phaseTrace ?? [];
@@ -253,6 +268,11 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
       .sort((a, b) => b.rawTs - a.rawTs || sevRank[a.sev] - sevRank[b.sev])
       .slice(0, 20);
 
+    const AGENT_SHORT: Record<string, string> = {
+      detector: 'det', executor: 'exe', analyzer: 'ana',
+      notifier: 'ntf', rca: 'rca', collector: 'col',
+    };
+
     // Merge consecutive rows sharing the same second-level timestamp into one
     const merged: Row[] = [];
     for (const row of sorted) {
@@ -261,8 +281,13 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
         prev.count++;
         // Escalate severity and use the more severe event's detail
         if (sevRank[row.sev] < sevRank[prev.sev]) { prev.sev = row.sev; prev.detail = row.detail; }
-        // Append distinct agents / actions
-        if (!prev.agent.split(' · ').includes(row.agent)) prev.agent += ` · ${row.agent}`;
+        // Append distinct agents using short form when multiple
+        const prevAgents = prev.agent.split('·').map(s => s.trim());
+        const rowAgent = AGENT_SHORT[row.agent] ?? row.agent;
+        if (!prevAgents.includes(rowAgent) && !prevAgents.includes(row.agent)) {
+          const prevShort = prevAgents.map(a => AGENT_SHORT[a] ?? a).join('·');
+          prev.agent = `${prevShort}·${rowAgent}`;
+        }
         if (!prev.action.split(' · ').includes(row.action)) prev.action += ` · ${row.action}`;
         // Prefer a real latency value
         if (row.latency !== '—') prev.latency = row.latency;
