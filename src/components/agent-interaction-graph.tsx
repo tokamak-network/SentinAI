@@ -269,10 +269,7 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
       .sort((a, b) => b.rawTs - a.rawTs || sevRank[a.sev] - sevRank[b.sev])
       .slice(0, 20);
 
-    const AGENT_SHORT: Record<string, string> = {
-      detector: 'det', executor: 'exe', analyzer: 'ana',
-      notifier: 'ntf', rca: 'rca', collector: 'col',
-    };
+    const AGENT_SHORT: Record<string, string> = {};
 
     // Merge consecutive rows sharing the same second-level timestamp into one
     const merged: Row[] = [];
@@ -419,7 +416,7 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
       {/* Event trace table */}
       <div style={{ borderTop: '2px solid #A0A0A0', flexShrink: 0, maxHeight: 162, overflowY: 'auto', background: '#FFFFFF' }}>
         <div style={{
-          display: 'grid', gridTemplateColumns: '62px 54px 90px 124px 1fr 58px',
+          display: 'grid', gridTemplateColumns: '62px 54px 140px 180px 1fr 58px',
           padding: '3px 10px', background: '#0A0A0A', color: 'white',
           fontFamily: FONT, fontSize: 9, fontWeight: 700,
           letterSpacing: '0.1em', textTransform: 'uppercase', position: 'sticky', top: 0,
@@ -439,7 +436,7 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
                                      { background: '#F0F0F0', color: '#606060' };
           return (
             <div key={i} style={{
-              display: 'grid', gridTemplateColumns: '62px 54px 90px 124px 1fr 58px',
+              display: 'grid', gridTemplateColumns: '62px 54px 140px 180px 1fr 58px',
               padding: '3px 10px', borderBottom: '1px solid #F0F0F0',
               fontFamily: FONT, fontSize: 10, alignItems: 'start',
               background: i % 2 === 1 ? '#F7F7F7' : '#FFFFFF',
@@ -449,7 +446,7 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
                 {row.sev.toUpperCase().slice(0, 4)}{row.count > 1 ? ` ×${row.count}` : ''}
               </span>
               <span style={{ color: '#0055AA', fontSize: 9, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.agent}</span>
-              <span style={{ color: '#3A3A3A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.action}</span>
+              <span style={{ color: '#3A3A3A', whiteSpace: 'normal', wordBreak: 'break-word' }}>{row.action}</span>
               <span style={{ color: '#0A0A0A', whiteSpace: 'normal', wordBreak: 'break-word' }}>{row.detail}</span>
               <span style={{ color: row.latency !== '—' ? (row.ok ? '#007A00' : '#CC6600') : '#A0A0A0', textAlign: 'right', fontWeight: 600, fontSize: 9 }}>{row.latency}</span>
             </div>
