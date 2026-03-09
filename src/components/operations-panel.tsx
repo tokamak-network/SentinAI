@@ -212,7 +212,7 @@ export function OperationsPanel({ metrics, scalerState, agentFleet, l1Failover, 
               const memLabel = memMiB !== null
                 ? memMiB >= 1024 ? `${(memMiB / 1024).toFixed(1)}G` : `${Math.round(memMiB)}M`
                 : null;
-              const cpuLabel = notDetected ? 'N/A' : (cpuPct < 1 ? '< 1%' : `${cpuPct.toFixed(0)}%`);
+              const cpuLabel = notDetected ? '—' : `${cpuPct.toFixed(1)}%`;
               const color = notDetected ? '#A0A0A0' : '#0055AA';
               return (
                 <div key={c.name} style={{
@@ -223,17 +223,12 @@ export function OperationsPanel({ metrics, scalerState, agentFleet, l1Failover, 
                   <div style={{ width: 60, height: 4, background: '#EFEFEF', borderRadius: 1, overflow: 'hidden' }}>
                     <div style={{ width: `${Math.min(100, cpuPct)}%`, height: '100%', background: color, borderRadius: 1 }} />
                   </div>
-                  <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: notDetected ? '#A0A0A0' : '#0A0A0A', minWidth: 36, textAlign: 'right' }}>
+                  <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: notDetected ? '#C0C0C0' : '#0A0A0A', minWidth: 40, textAlign: 'right' }}>
                     {cpuLabel}
                   </span>
-                  {memLabel !== null && (
-                    <span style={{ fontFamily: FONT, fontSize: 9, color: '#707070', minWidth: 32, textAlign: 'right' }}>
-                      {memLabel}
-                    </span>
-                  )}
-                  {memLabel === null && !notDetected && (
-                    <span style={{ fontFamily: FONT, fontSize: 9, color: '#C0C0C0', minWidth: 32, textAlign: 'right' }}>—</span>
-                  )}
+                  <span style={{ fontFamily: FONT, fontSize: 9, color: notDetected ? '#A0A0A0' : '#707070', minWidth: 32, textAlign: 'right' }}>
+                    {notDetected ? 'N/A' : (memLabel ?? '—')}
+                  </span>
                 </div>
               );
             })}
