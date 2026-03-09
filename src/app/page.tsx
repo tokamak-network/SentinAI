@@ -912,6 +912,11 @@ export default function Dashboard() {
         onRemediate={handleRemediate}
         onInjectScenario={handleInjectScenario}
         isLoading={isSending}
+        chatMessages={chatMessages}
+        chatMessagesEndRef={chatMessagesEndRef}
+        pendingConfirmation={pendingConfirmation}
+        onConfirm={handleConfirm}
+        onDismiss={handleCancel}
       />
 
       <Toaster position="top-right" theme="light" />
