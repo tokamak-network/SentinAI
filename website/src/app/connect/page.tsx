@@ -27,6 +27,7 @@ const C = {
 
 type NodeType = "ethereum-el" | "opstack-l2" | "arbitrum-nitro" | "zkstack";
 type AiProvider = "none" | "qwen" | "anthropic" | "openai" | "gemini" | "gateway";
+type DeployTarget = "eks" | "docker";
 
 interface NodeConfig {
   type: NodeType;
@@ -118,6 +119,7 @@ interface FeatureDef {
   description: string;
   snippet: string;
   nodeTypes?: NodeType[];
+  deployTargets?: DeployTarget[];
 }
 
 const OPTIONAL_FEATURES: FeatureDef[] = [
@@ -175,6 +177,7 @@ const OPTIONAL_FEATURES: FeatureDef[] = [
     label: "Proxyd Integration",
     description: "Update L2 node Proxyd config on L1 RPC failover",
     nodeTypes: ["opstack-l2"],
+    deployTargets: ["eks"] as DeployTarget[],
     snippet:
       "# Update Proxyd ConfigMap when L1 RPC failover occurs\n" +
       "L1_PROXYD_ENABLED=true\n" +
@@ -187,6 +190,7 @@ const OPTIONAL_FEATURES: FeatureDef[] = [
     id: "real-scaling",
     label: "Real K8s Scaling",
     description: "Apply actual pod resource changes (simulation off by default)",
+    deployTargets: ["eks"] as DeployTarget[],
     snippet:
       "# Disable simulation — applies real K8s scaling actions\n" +
       "SCALING_SIMULATION_MODE=false",
@@ -403,6 +407,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export default function ConnectPage() {
   const [nodeType, setNodeType] = useState<NodeType>("opstack-l2");
+  const [deployTarget, setDeployTarget] = useState<DeployTarget | null>(null);
   const [url, setUrl] = useState("");
   const [authToken, setAuthToken] = useState("");
   const [networkName, setNetworkName] = useState("");
@@ -457,8 +462,12 @@ export default function ConnectPage() {
   }
 
   const visibleFeatures = OPTIONAL_FEATURES.filter(
-    f => !f.nodeTypes || f.nodeTypes.includes(nodeType)
+    f =>
+      (!f.nodeTypes || f.nodeTypes.includes(nodeType)) &&
+      (!f.deployTargets || !deployTarget || f.deployTargets.includes(deployTarget))
   );
+
+  const isLocalUrl = /localhost|127\.0\.0\.1/.test(url);
 
   function copyToClipboard(text: string, id: string) {
     navigator.clipboard.writeText(text).catch(() => {
@@ -621,11 +630,113 @@ export default function ConnectPage() {
               </div>
             </div>
 
-            {/* ② Connection */}
+            {/* ② Deployment Target */}
             <div style={{ border: `1px solid ${C.border}` }}>
               <div style={{ borderBottom: `1px solid ${C.border}`, padding: "10px 16px", background: "#F7F7F7" }}>
                 <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: "0.15em", color: C.fg }}>
-                  ② CONNECTION
+                  ② DEPLOYMENT TARGET
+                </span>
+              </div>
+              <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+                {[
+                  {
+                    value: "eks" as DeployTarget,
+                    label: "AWS EKS / Kubernetes",
+                    sub: "Full auto-scaling · pod monitoring · RCA · remediation",
+                    badge: "FULL",
+                    badgeColor: "#006600",
+                  },
+                  {
+                    value: "docker" as DeployTarget,
+                    label: "Docker / VM",
+                    sub: "Monitoring · anomaly detection · NLOps · alerts",
+                    badge: "MONITORING",
+                    badgeColor: "#0055AA",
+                  },
+                ].map(({ value, label, sub, badge, badgeColor }) => {
+                  const isSelected = deployTarget === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => { setDeployTarget(value); if (value === "docker") { setAwsClusterName(""); } resetOutput(); }}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "10px 12px", textAlign: "left", cursor: "pointer",
+                        background: isSelected ? `${badgeColor}08` : C.bg,
+                        border: `1px solid ${isSelected ? badgeColor : C.border}`,
+                        fontFamily: FONT,
+                      }}
+                    >
+                      <div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: C.fg, marginBottom: 2 }}>{label}</div>
+                        <div style={{ fontSize: 10, color: C.muted }}>{sub}</div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                        <span style={{
+                          fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: "0.1em",
+                          background: badgeColor, color: "#fff", padding: "2px 6px",
+                        }}>{badge}</span>
+                        {isSelected && (
+                          <span style={{ width: 8, height: 8, borderRadius: "50%", background: badgeColor }} />
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+
+                {/* EKS: cluster name + prerequisites */}
+                {deployTarget === "eks" && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+                    <div>
+                      <label style={labelStyle}>AWS Cluster Name</label>
+                      <input
+                        id="aws-cluster"
+                        type="text"
+                        value={awsClusterName}
+                        onChange={(e) => { setAwsClusterName(e.target.value); resetOutput(); }}
+                        placeholder="my-eks-cluster"
+                        style={inputStyle}
+                      />
+                      <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
+                        Used for K8s API auto-detection and token generation (AWS_CLUSTER_NAME).
+                      </p>
+                    </div>
+                    <div style={{ background: "#FFFBEA", border: `1px solid #E0C800`, padding: "10px 12px" }}>
+                      <p style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: "#7A6000", margin: "0 0 4px", letterSpacing: "0.1em" }}>
+                        ⚠ CONTAINER PREREQUISITES
+                      </p>
+                      <ul style={{ fontFamily: FONT, fontSize: 9, color: "#5A4800", margin: "0 0 4px", paddingLeft: 14 }}>
+                        <li><code style={{ background: "#FFF3A0", padding: "0 3px" }}>aws</code> CLI + IAM credentials (role, env vars, or profile)</li>
+                        <li><code style={{ background: "#FFF3A0", padding: "0 3px" }}>kubectl</code> CLI installed in the container</li>
+                      </ul>
+                      <p style={{ fontFamily: FONT, fontSize: 9, color: "#5A4800", margin: 0 }}>
+                        Alternative: set <code style={{ background: "#FFF3A0", padding: "0 3px" }}>K8S_API_URL</code> + <code style={{ background: "#FFF3A0", padding: "0 3px" }}>K8S_TOKEN</code> directly (Advanced).
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Docker: monitoring-only notice */}
+                {deployTarget === "docker" && (
+                  <div style={{ background: "#EEF4FF", border: `1px solid #B0C8F0`, padding: "10px 12px", marginTop: 4 }}>
+                    <p style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: "#003A8C", margin: "0 0 4px", letterSpacing: "0.1em" }}>
+                      ℹ MONITORING MODE
+                    </p>
+                    <p style={{ fontFamily: FONT, fontSize: 9, color: "#002D6E", margin: 0 }}>
+                      Auto-scaling requires Kubernetes. Anomaly detection, RCA, NLOps, and alerts are fully available.
+                      To enable scaling later, add <code style={{ background: "#D0E4FF", padding: "0 3px" }}>AWS_CLUSTER_NAME</code> and redeploy.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ③ Connection */}
+            <div style={{ border: `1px solid ${C.border}` }}>
+              <div style={{ borderBottom: `1px solid ${C.border}`, padding: "10px 16px", background: "#F7F7F7" }}>
+                <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: "0.15em", color: C.fg }}>
+                  ③ CONNECTION
                 </span>
               </div>
               <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 16 }}>
@@ -643,6 +754,17 @@ export default function ConnectPage() {
                   <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
                     Sent to server only during connection test.
                   </p>
+                  {isLocalUrl && (
+                    <div style={{ background: "#FFF0F0", border: `1px solid #E08080`, padding: "8px 10px", marginTop: 6 }}>
+                      <p style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: "#8B0000", margin: "0 0 2px" }}>
+                        ✕ LOCAL URL NOT SUPPORTED
+                      </p>
+                      <p style={{ fontFamily: FONT, fontSize: 9, color: "#6B0000", margin: 0 }}>
+                        SentinAI runs inside Docker and cannot reach <code style={{ background: "#FFD0D0", padding: "0 3px" }}>localhost</code> on your machine.
+                        Use a network-accessible IP or hostname instead.
+                      </p>
+                    </div>
+                  )}
                 </div>
 
                 {/* Network Name */}
@@ -675,11 +797,11 @@ export default function ConnectPage() {
               </div>
             </div>
 
-            {/* ③ AI Provider */}
+            {/* ④ AI Provider */}
             <div style={{ border: `1px solid ${C.border}` }}>
               <div style={{ borderBottom: `1px solid ${C.border}`, padding: "10px 16px", background: "#F7F7F7" }}>
                 <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: "0.15em", color: C.fg }}>
-                  ③ AI PROVIDER
+                  ④ AI PROVIDER
                 </span>
                 <span style={{ fontFamily: FONT, fontSize: 9, color: C.primary, marginLeft: 8 }}>*Required</span>
               </div>
@@ -765,7 +887,7 @@ export default function ConnectPage() {
               </div>
             </div>
 
-            {/* ④ Advanced (collapsible) */}
+            {/* ⑤ Advanced (collapsible) */}
             <div style={{ border: `1px solid ${C.border}` }}>
               <button
                 type="button"
@@ -776,48 +898,13 @@ export default function ConnectPage() {
                   fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: "0.15em", color: C.fg,
                 }}
               >
-                <span>④ ADVANCED SETTINGS (Optional)</span>
+                <span>⑤ ADVANCED SETTINGS (Optional)</span>
                 <span style={{ fontSize: 12 }}>{advancedOpen ? "−" : "+"}</span>
               </button>
 
               {advancedOpen && (
                 <div style={{ borderTop: `1px solid ${C.border}`, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
 
-                  {/* Prerequisites notice */}
-                  <div style={{
-                    background: "#FFFBEA", border: `1px solid #E0C800`,
-                    padding: "10px 12px",
-                  }}>
-                    <p style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: "#7A6000", margin: "0 0 6px", letterSpacing: "0.1em" }}>
-                      ⚠ PREREQUISITES FOR K8S INTEGRATION
-                    </p>
-                    <p style={{ fontFamily: FONT, fontSize: 9, color: "#5A4800", margin: "0 0 4px" }}>
-                      SentinAI auto-detects K8s API URL and auth token via AWS CLI. The Docker container must have:
-                    </p>
-                    <ul style={{ fontFamily: FONT, fontSize: 9, color: "#5A4800", margin: "0 0 6px", paddingLeft: 14 }}>
-                      <li><code style={{ background: "#FFF3A0", padding: "0 3px" }}>aws</code> CLI installed + IAM credentials configured (via IAM role, env vars, or profile)</li>
-                      <li><code style={{ background: "#FFF3A0", padding: "0 3px" }}>kubectl</code> CLI installed</li>
-                    </ul>
-                    <p style={{ fontFamily: FONT, fontSize: 9, color: "#5A4800", margin: 0 }}>
-                      Without these, K8s features (scaling, pod monitoring, RCA) will not function even if cluster name is set.
-                      Alternatively, set <code style={{ background: "#FFF3A0", padding: "0 3px" }}>K8S_API_URL</code> + <code style={{ background: "#FFF3A0", padding: "0 3px" }}>K8S_TOKEN</code> directly to skip CLI dependency.
-                    </p>
-                  </div>
-
-                  <div>
-                    <label style={labelStyle}>AWS Cluster Name</label>
-                    <input
-                      id="aws-cluster"
-                      type="text"
-                      value={awsClusterName}
-                      onChange={(e) => { setAwsClusterName(e.target.value); resetOutput(); }}
-                      placeholder="my-eks-cluster"
-                      style={inputStyle}
-                    />
-                    <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
-                      EKS cluster name for K8s auto-scaling and pod monitoring (AWS_CLUSTER_NAME).
-                    </p>
-                  </div>
                   <div>
                     <label style={labelStyle}>Alert Webhook URL</label>
                     <input
