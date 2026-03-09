@@ -1,7 +1,7 @@
 import type { ConnectionConfig, NodeType } from '@/core/types';
 import { loadCustomProfiles } from './client-profile/custom-profiles';
 
-export type ClientLayer = 'execution' | 'consensus';
+export type ClientLayer = 'execution';
 
 export type ExecutionClientFamily =
   | 'geth'
@@ -13,18 +13,10 @@ export type ExecutionClientFamily =
   | 'nitro-node'
   | 'unknown';
 
-export type ConsensusClientFamily =
-  | 'lighthouse'
-  | 'prysm'
-  | 'teku'
-  | 'nimbus'
-  | 'lodestar'
-  | 'unknown';
-
 export interface DetectedClient {
   layer: ClientLayer;
   /** Best-effort normalized family name */
-  family: ExecutionClientFamily | ConsensusClientFamily;
+  family: ExecutionClientFamily;
   /** Best-effort version string (raw) */
   version?: string;
   /** Only for EVM JSON-RPC */
@@ -102,21 +94,6 @@ function normalizeExecutionFamily(version?: string): ExecutionClientFamily {
   return 'unknown';
 }
 
-function normalizeConsensusFamily(version?: string): ConsensusClientFamily {
-  const v = (version ?? '').toLowerCase();
-  if (v.includes('lighthouse')) return 'lighthouse';
-  if (v.includes('prysm')) return 'prysm';
-  if (v.includes('teku')) return 'teku';
-  if (v.includes('nimbus')) return 'nimbus';
-  if (v.includes('lodestar')) return 'lodestar';
-  return 'unknown';
-}
-
-function inferLayer(protocolId?: NodeType): ClientLayer | undefined {
-  if (!protocolId) return undefined;
-  if (protocolId === 'ethereum-cl') return 'consensus';
-  return 'execution';
-}
 
 export async function detectClient(
   config: ConnectionConfig,
@@ -126,13 +103,6 @@ export async function detectClient(
   }
 ): Promise<DetectedClient> {
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const hintedLayer = inferLayer(options?.protocolIdHint);
-
-  if (hintedLayer === 'consensus' || config.beaconApiUrl) {
-    return detectConsensusClient(config, timeoutMs);
-  }
-
-  // Default to EVM JSON-RPC
   return detectExecutionClient(config, timeoutMs);
 }
 
@@ -274,61 +244,4 @@ export async function detectExecutionClient(
   };
 }
 
-export async function detectConsensusClient(
-  config: ConnectionConfig,
-  timeoutMs = DEFAULT_TIMEOUT_MS
-): Promise<DetectedClient> {
-  const baseUrl = config.beaconApiUrl ?? config.rpcUrl;
-  const probes: Record<string, boolean> = {};
-  const raw: Record<string, unknown> = {};
 
-  let version: string | undefined;
-  try {
-    const data = (await fetchJson(`${baseUrl}/eth/v1/node/version`, { method: 'GET' }, timeoutMs)) as {
-      data?: { version?: string };
-    };
-    version = data.data?.version;
-    probes['/eth/v1/node/version'] = !!version;
-    raw['/eth/v1/node/version'] = data;
-  } catch {
-    probes['/eth/v1/node/version'] = false;
-  }
-
-  let syncing: boolean | undefined;
-  try {
-    const data = (await fetchJson(`${baseUrl}/eth/v1/node/syncing`, { method: 'GET' }, timeoutMs)) as {
-      data?: { is_syncing?: boolean };
-    };
-    syncing = data.data?.is_syncing;
-    probes['/eth/v1/node/syncing'] = typeof syncing === 'boolean';
-    raw['/eth/v1/node/syncing'] = data;
-  } catch {
-    probes['/eth/v1/node/syncing'] = false;
-  }
-
-  let peerCount: number | undefined;
-  try {
-    const data = (await fetchJson(`${baseUrl}/eth/v1/node/peer_count`, { method: 'GET' }, timeoutMs)) as {
-      data?: { connected?: string };
-    };
-    const connected = data.data?.connected;
-    if (connected && /^[0-9]+$/.test(connected)) peerCount = Number.parseInt(connected, 10);
-    probes['/eth/v1/node/peer_count'] = peerCount !== undefined;
-    raw['/eth/v1/node/peer_count'] = data;
-  } catch {
-    probes['/eth/v1/node/peer_count'] = false;
-  }
-
-  return {
-    layer: 'consensus',
-    family: normalizeConsensusFamily(version),
-    version,
-    syncing,
-    peerCount,
-    supportsL2SyncStatus: false,
-    l2SyncMethod: null,
-    txpoolNamespace: null,
-    probes,
-    raw,
-  };
-}

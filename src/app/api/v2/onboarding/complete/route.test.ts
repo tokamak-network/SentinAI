@@ -13,7 +13,6 @@ vi.mock('@/core/instance-registry', () => {
 vi.mock('@/core/collectors/connection-validator', () => {
   return {
     validateRpcConnection: vi.fn(async () => ({ valid: true, checks: [], totalLatencyMs: 1, clientVersion: 'Geth/x', chainId: 10 })),
-    validateBeaconConnection: vi.fn(async () => ({ valid: true, checks: [], totalLatencyMs: 1, clientVersion: 'Lighthouse/x' })),
   };
 });
 

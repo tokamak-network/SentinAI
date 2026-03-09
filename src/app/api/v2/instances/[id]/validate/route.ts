@@ -8,10 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getInstance } from '@/core/instance-registry';
-import {
-  validateRpcConnection,
-  validateBeaconConnection,
-} from '@/core/collectors/connection-validator';
+import { validateRpcConnection } from '@/core/collectors/connection-validator';
 import type { ConnectionConfig } from '@/core/types';
 import { getCoreRedis } from '@/core/redis';
 import logger from '@/lib/logger';
@@ -55,11 +52,7 @@ export async function POST(
       ...(body.beaconUrl && { beaconApiUrl: body.beaconUrl }),
     };
 
-    const isBeaconProtocol = instance.protocolId === 'ethereum-cl';
-
-    const validationResult = isBeaconProtocol
-      ? await validateBeaconConnection(connectionConfig)
-      : await validateRpcConnection(connectionConfig);
+    const validationResult = await validateRpcConnection(connectionConfig);
 
     let detectedClient: unknown;
     let mappedCapabilities: unknown;

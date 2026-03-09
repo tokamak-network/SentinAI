@@ -1,6 +1,6 @@
 import type { ConnectionConfig, NodeType } from '@/core/types';
 import { createInstance, listInstances, updateInstance } from '@/core/instance-registry';
-import { validateBeaconConnection, validateRpcConnection } from '@/core/collectors/connection-validator';
+import { validateRpcConnection } from '@/core/collectors/connection-validator';
 import { getCoreRedis } from '@/core/redis';
 import { detectClient } from '@/lib/client-detector';
 import { mapDetectedClientToCapabilities } from '@/lib/capability-mapper';
@@ -30,13 +30,6 @@ function normalizeForMatch(value?: string): string | undefined {
 function envConnectionConfig(): { protocolId: NodeType; connectionConfig: ConnectionConfig } | null {
   const l2Rpc = normalizeUrl(process.env.L2_RPC_URL) ?? normalizeUrl(process.env.SENTINAI_L2_RPC_URL);
   const l1Rpc = normalizeUrl(process.env.SENTINAI_L1_RPC_URL) ?? normalizeUrl(process.env.L1_RPC_URL);
-  const cl = normalizeUrl(process.env.CL_BEACON_URL) ?? normalizeUrl(process.env.SENTINAI_L1_BEACON_URL);
-
-  // Prefer CL-only when explicitly provided
-  if (cl) {
-    return { protocolId: 'ethereum-cl', connectionConfig: { rpcUrl: cl, beaconApiUrl: cl } };
-  }
-
   // L2 first
   if (l2Rpc) {
     return { protocolId: 'opstack-l2', connectionConfig: { rpcUrl: l2Rpc } };
@@ -61,16 +54,14 @@ export async function firstRunBootstrap(options?: {
   if (!env) {
     return {
       ok: false,
-      error: 'No connection environment variables found. Set L2_RPC_URL or SENTINAI_L1_RPC_URL or CL_BEACON_URL.',
+      error: 'No connection environment variables found. Set L2_RPC_URL or SENTINAI_L1_RPC_URL.',
     };
   }
 
   const { protocolId, connectionConfig } = env;
 
   // Validate
-  const validation = protocolId === 'ethereum-cl'
-    ? await validateBeaconConnection(connectionConfig)
-    : await validateRpcConnection(connectionConfig);
+  const validation = await validateRpcConnection(connectionConfig);
 
   if (!validation.valid) {
     return { ok: false, protocolId, error: validation.error ?? 'Connection validation failed.' };

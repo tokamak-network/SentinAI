@@ -255,11 +255,6 @@ const clientGroups = [
     color: '#0055AA',
     clients: ['Geth', 'Reth', 'Nethermind', 'Besu'],
   },
-  {
-    label: 'L1 CONSENSUS',
-    color: '#007A00',
-    clients: ['Lighthouse', 'Prysm', 'Teku'],
-  },
 ];
 
 function SupportedClients() {

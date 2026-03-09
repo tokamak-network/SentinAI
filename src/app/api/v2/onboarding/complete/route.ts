@@ -20,10 +20,7 @@ import {
   createInstance,
   updateInstance,
 } from '@/core/instance-registry';
-import {
-  validateRpcConnection,
-  validateBeaconConnection,
-} from '@/core/collectors/connection-validator';
+import { validateRpcConnection } from '@/core/collectors/connection-validator';
 import { getCoreRedis } from '@/core/redis';
 import type { NodeType, ConnectionConfig } from '@/core/types';
 import logger from '@/lib/logger';
@@ -106,11 +103,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   // ── Step 1: Validate connection ──────────────────────────────
   logger.info('[v2 onboarding] Step 1: validating connection');
-  const validation = await (
-    nodeType === 'ethereum-cl'
-      ? validateBeaconConnection(connectionConfig)
-      : validateRpcConnection(connectionConfig)
-  ).catch((err) => {
+  const validation = await validateRpcConnection(connectionConfig).catch((err) => {
     errors.push(`Connection validation error: ${String(err)}`);
     return null;
   });

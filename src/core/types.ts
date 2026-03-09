@@ -2,7 +2,7 @@
  * SentinAI Core Type Definitions
  * Foundation types for the multi-protocol node monitoring platform.
  *
- * Supports: L1 Execution Clients (Geth, Reth), L1 Consensus Clients (Lighthouse, Prysm),
+ * Supports: L1 Execution Clients (Geth, Reth, Nethermind, Besu),
  *           L2 Sequencers (OP Stack, Arbitrum Nitro, ZK Stack)
  */
 
@@ -16,7 +16,6 @@
  */
 export type NodeType =
   | 'ethereum-el'     // L1 Execution Layer (Geth, Reth, Nethermind, Besu)
-  | 'ethereum-cl'     // L1 Consensus Layer (Lighthouse, Prysm, Teku, Nimbus)
   | 'opstack-l2'      // OP Stack L2 Sequencer (Thanos, Optimism, Base, etc.)
   | 'arbitrum-nitro'  // Arbitrum Nitro L2 (Arbitrum One, Nova, Orbit)
   | 'zkstack';        // ZK Stack L2 (zkSync Era, etc.)
@@ -32,8 +31,6 @@ export type ProtocolCapability =
   | 'txpool-monitoring'         // Transaction pool size tracking
   | 'peer-monitoring'           // Peer count tracking
   | 'sync-monitoring'           // Sync status (syncing/synced)
-  | 'finality-monitoring'       // Finality checkpoints (CL only)
-  | 'validator-monitoring'      // Validator status (CL only)
   | 'l1-dependency-monitoring'  // L1 block reference tracking (L2 only)
   | 'gas-monitoring'            // Gas usage ratio tracking
   | 'eoa-balance-monitoring'    // EOA wallet balance (L2 sequencer only)
@@ -109,10 +106,7 @@ export interface ConnectionConfig {
    * Stored encrypted in Redis — never returned in plaintext via API.
    */
   authToken?: string;
-  /**
-   * Beacon API endpoint for CL clients (e.g., "http://localhost:5052").
-   * Required for NodeType 'ethereum-cl'.
-   */
+  /** Beacon API endpoint (legacy, unused). */
   beaconApiUrl?: string;
   /** WebSocket endpoint for subscription-based monitoring */
   wsUrl?: string;

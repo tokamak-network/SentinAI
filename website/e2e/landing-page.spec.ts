@@ -137,10 +137,9 @@ test.describe('Supported Clients Section', () => {
     await expect(sectionBars.first()).toBeVisible();
   });
 
-  test('3 client groups are visible: L2, L1 EXECUTION, L1 CONSENSUS', async ({ page }) => {
+  test('2 client groups are visible: L2, L1 EXECUTION', async ({ page }) => {
     await expect(page.getByText('L2', { exact: true }).first()).toBeVisible();
     await expect(page.getByText('L1 EXECUTION', { exact: true })).toBeVisible();
-    await expect(page.getByText('L1 CONSENSUS', { exact: true })).toBeVisible();
   });
 
   test('L2 clients: OP Stack, Arbitrum Nitro, ZK Stack', async ({ page }) => {
@@ -158,11 +157,6 @@ test.describe('Supported Clients Section', () => {
     await expect(page.getByText('Besu', { exact: true })).toBeVisible();
   });
 
-  test('L1 Consensus clients: Lighthouse, Prysm, Teku', async ({ page }) => {
-    await expect(page.getByText('Lighthouse')).toBeVisible();
-    await expect(page.getByText('Prysm')).toBeVisible();
-    await expect(page.getByText('Teku')).toBeVisible();
-  });
 });
 
 // ─── What It Does ────────────────────────────────────────────────────────────

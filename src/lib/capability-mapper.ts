@@ -7,7 +7,6 @@ export interface CapabilityMapping {
   /** Which txpool namespace is active: 'txpool' (standard), 'parity' (nethermind), or null */
   txpoolNamespace: 'txpool' | 'parity' | null;
   supportsPeerCount: boolean;
-  supportsValidatorDuty: boolean;
 }
 
 function uniq<T>(arr: T[]): T[] {
@@ -23,22 +22,12 @@ export function mapDetectedClientToCapabilities(
   const supportsTxPool =
     detected.layer === 'execution' &&
     (!!detected.probes.txpool_status || !!detected.probes.parity_pendingTransactions);
-  const supportsPeerCount =
-    detected.layer === 'execution'
-      ? !!detected.probes.net_peerCount || !!detected.probes.admin_peers
-      : !!detected.probes['/eth/v1/node/peer_count'];
-
-  // Best-effort: for CL, most modern clients support validator duty endpoints, but
-  // it may require indices; do not probe here.
-  const supportsValidatorDuty = detected.layer === 'consensus';
+  const supportsPeerCount = !!detected.probes.net_peerCount || !!detected.probes.admin_peers;
 
   const caps: ProtocolCapability[] = ['block-production'];
 
   // Syncing
-  if (
-    (detected.layer === 'execution' && detected.probes.eth_syncing) ||
-    (detected.layer === 'consensus' && detected.probes['/eth/v1/node/syncing'])
-  ) {
+  if (detected.probes.eth_syncing) {
     caps.push('sync-monitoring');
   }
 
@@ -47,12 +36,6 @@ export function mapDetectedClientToCapabilities(
 
   // Txpool monitoring
   if (supportsTxPool) caps.push('txpool-monitoring');
-
-  // CL-specific
-  if (protocolId === 'ethereum-cl') {
-    caps.push('finality-monitoring');
-    if (supportsValidatorDuty) caps.push('validator-monitoring');
-  }
 
   // L2-specific (safe defaults)
   if (protocolId === 'opstack-l2' || protocolId === 'arbitrum-nitro' || protocolId === 'zkstack') {
@@ -64,6 +47,5 @@ export function mapDetectedClientToCapabilities(
     supportsTxPool,
     txpoolNamespace,
     supportsPeerCount,
-    supportsValidatorDuty,
   };
 }

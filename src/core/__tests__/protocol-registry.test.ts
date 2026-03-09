@@ -82,20 +82,19 @@ describe('ProtocolRegistry', () => {
   });
 
   it('findProtocol - returns undefined when protocolId is not registered', () => {
-    const result = findProtocol('ethereum-cl');
+    const result = findProtocol('zkstack');
     expect(result).toBeUndefined();
   });
 
   it('findProtocol - returns the descriptor when registered', () => {
-    registerProtocol(makeDescriptor('ethereum-cl'));
-    const result = findProtocol('ethereum-cl');
-    expect(result?.protocolId).toBe('ethereum-cl');
+    registerProtocol(makeDescriptor('zkstack'));
+    const result = findProtocol('zkstack');
+    expect(result?.protocolId).toBe('zkstack');
   });
 
-  it('listProtocols - returns all 5 registered descriptors', () => {
+  it('listProtocols - returns all 4 registered descriptors', () => {
     const allIds: ProtocolDescriptor['protocolId'][] = [
       'ethereum-el',
-      'ethereum-cl',
       'opstack-l2',
       'arbitrum-nitro',
       'zkstack',
@@ -105,7 +104,7 @@ describe('ProtocolRegistry', () => {
     }
 
     const list = listProtocols();
-    expect(list).toHaveLength(5);
+    expect(list).toHaveLength(4);
     const registeredIds = list.map(d => d.protocolId);
     for (const id of allIds) {
       expect(registeredIds).toContain(id);

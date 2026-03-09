@@ -68,24 +68,4 @@ describe('capability-mapper', () => {
     expect(mapped.capabilities).not.toContain('txpool-monitoring');
   });
 
-  it('adds CL-specific capabilities for ethereum-cl', () => {
-    const detected: DetectedClient = {
-      layer: 'consensus',
-      family: 'lighthouse',
-      version: 'Lighthouse/v5.0.0',
-      supportsL2SyncStatus: false,
-      l2SyncMethod: null,
-      txpoolNamespace: null,
-      probes: {
-        '/eth/v1/node/syncing': true,
-        '/eth/v1/node/peer_count': true,
-      },
-    };
-
-    const mapped = mapDetectedClientToCapabilities(detected, 'ethereum-cl');
-    expect(mapped.capabilities).toContain('finality-monitoring');
-    expect(mapped.capabilities).toContain('validator-monitoring');
-    expect(mapped.supportsValidatorDuty).toBe(true);
-    expect(mapped.txpoolNamespace).toBeNull();
-  });
 });

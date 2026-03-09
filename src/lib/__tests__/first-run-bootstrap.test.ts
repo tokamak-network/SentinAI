@@ -12,7 +12,6 @@ vi.mock('@/core/instance-registry', () => {
 vi.mock('@/core/collectors/connection-validator', () => {
   return {
     validateRpcConnection: vi.fn(async () => ({ valid: true, checks: [], totalLatencyMs: 1, clientVersion: 'Geth/x', chainId: 10 })),
-    validateBeaconConnection: vi.fn(async () => ({ valid: true, checks: [], totalLatencyMs: 1, clientVersion: 'Lighthouse/x' })),
   };
 });
 
@@ -31,7 +30,6 @@ describe('first-run-bootstrap', () => {
     delete process.env.SENTINAI_L2_RPC_URL;
     delete process.env.SENTINAI_L1_RPC_URL;
     delete process.env.L1_RPC_URL;
-    delete process.env.CL_BEACON_URL;
   });
 
   afterEach(() => {
@@ -70,30 +68,6 @@ describe('first-run-bootstrap', () => {
     const res = await firstRunBootstrap();
     expect(res.ok).toBe(true);
     expect(res.protocolId).toBe('opstack-l2');
-  });
-
-  it('bootstraps using CL_BEACON_URL when set', async () => {
-    process.env.CL_BEACON_URL = 'http://beacon';
-
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (url: string) => {
-        if (url.includes('/eth/v1/node/version')) {
-          return new Response(JSON.stringify({ data: { version: 'Lighthouse/v5' } }), { status: 200 });
-        }
-        if (url.includes('/eth/v1/node/syncing')) {
-          return new Response(JSON.stringify({ data: { is_syncing: false } }), { status: 200 });
-        }
-        if (url.includes('/eth/v1/node/peer_count')) {
-          return new Response(JSON.stringify({ data: { connected: '1' } }), { status: 200 });
-        }
-        return new Response(JSON.stringify({ data: {} }), { status: 200 });
-      })
-    );
-
-    const res = await firstRunBootstrap();
-    expect(res.ok).toBe(true);
-    expect(res.protocolId).toBe('ethereum-cl');
   });
 
   it('reuses existing instance with normalized endpoint', async () => {

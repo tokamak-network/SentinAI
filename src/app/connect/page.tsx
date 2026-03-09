@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 
-type NodeType = 'ethereum-el' | 'opstack-l2' | 'arbitrum-nitro' | 'ethereum-cl';
+type NodeType = 'ethereum-el' | 'opstack-l2' | 'arbitrum-nitro';
 
 type OnboardingCompleteResponse = {
   data?: {
@@ -19,7 +19,6 @@ const NODE_TYPES: Array<{ type: NodeType; label: string; placeholder: string; ha
   { type: 'ethereum-el', label: 'Ethereum EL', placeholder: 'http://localhost:8545', hasAuth: true },
   { type: 'opstack-l2', label: 'OP Stack L2', placeholder: 'https://...', hasAuth: true },
   { type: 'arbitrum-nitro', label: 'Arbitrum Nitro', placeholder: 'https://...', hasAuth: true },
-  { type: 'ethereum-cl', label: 'Ethereum CL (Beacon API)', placeholder: 'http://localhost:5052', hasAuth: false },
 ];
 
 function pretty(obj: unknown): string {
@@ -49,10 +48,10 @@ export default function ConnectPage() {
     setResult(null);
 
     try {
-      const connectionConfig: Record<string, unknown> =
-        nodeType === 'ethereum-cl'
-          ? { rpcUrl: url.trim(), beaconApiUrl: url.trim() }
-          : { rpcUrl: url.trim(), ...(authToken.trim() ? { authToken: authToken.trim() } : {}) };
+      const connectionConfig: Record<string, unknown> = {
+        rpcUrl: url.trim(),
+        ...(authToken.trim() ? { authToken: authToken.trim() } : {}),
+      };
 
       const apiKey = process.env.NEXT_PUBLIC_SENTINAI_API_KEY || '';
 
