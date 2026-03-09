@@ -345,6 +345,10 @@ export default function Dashboard() {
   // --- vCPU change tracking ---
   const prevVcpuRef = useRef<number | null>(null);
 
+  // --- Phase replay: re-animate last cycle's phaseTrace locally ---
+  const [replayPhase, setReplayPhase] = useState<string | null>(null);
+  const prevCycleTsRef = useRef<string | null>(null);
+
   // --- L1 RPC Failover State ---
   const [l1Failover, setL1Failover] = useState<L1FailoverStatus | null>(null);
 
@@ -758,6 +762,28 @@ export default function Dashboard() {
     return rawPhase ?? 'idle';
   }, [agentLoop?.lastCycle?.phase, anomalyEvents, scalerState?.lastScalingTime, isSeedActive, scalingScore]);
 
+  // Replay last cycle's phaseTrace locally so the map shows the real sequence.
+  // Each phase is displayed for ~2s; after all phases shown, replay clears and
+  // graphAgentPhase (heuristic) resumes.
+  useEffect(() => {
+    const cycleTs = agentLoop?.lastCycle?.timestamp;
+    if (!cycleTs || cycleTs === prevCycleTsRef.current) return;
+    prevCycleTsRef.current = cycleTs;
+
+    const trace = agentLoop?.lastCycle?.phaseTrace;
+    if (!trace || trace.length === 0) return;
+
+    const PHASE_MS = 2000;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    trace.forEach((p, i) => {
+      timers.push(setTimeout(() => setReplayPhase(p.phase), i * PHASE_MS));
+    });
+    timers.push(setTimeout(() => setReplayPhase(null), trace.length * PHASE_MS));
+    return () => timers.forEach(clearTimeout);
+  }, [agentLoop?.lastCycle?.timestamp]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Effective phase for the interaction map: replay takes priority over heuristic
+  const effectiveAgentPhase = replayPhase ?? graphAgentPhase;
 
   // --- Handler stubs for new layout ---
   const handleRunRca = useCallback(async () => {
@@ -932,7 +958,7 @@ export default function Dashboard() {
             roles: agentFleet.roles,
           } : null}
           anomalyEvents={anomalyEvents}
-          agentPhase={graphAgentPhase}
+          agentPhase={effectiveAgentPhase}
           decisions={agentDecisions}
           scaling={scalingEvent}
         />
