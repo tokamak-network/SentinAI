@@ -382,7 +382,7 @@ export default function ConnectPage() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (msg.toLowerCase().includes("syntaxerror") || msg.toLowerCase().includes("not valid json")) {
-        setTestError("서버에 연결할 수 없습니다. RPC URL을 확인하거나 SentinAI 백엔드가 실행 중인지 확인하세요.");
+        setTestError("Cannot reach server. Check the RPC URL or verify the SentinAI backend is running.");
       } else {
         setTestError(msg);
       }
@@ -427,11 +427,11 @@ export default function ConnectPage() {
             Connect Your Node to SentinAI
           </h1>
           <p style={{ fontFamily: FONT, fontSize: 12, color: C.muted, margin: 0 }}>
-            노드 정보를 입력하면{" "}
+            Enter your node details to generate a ready-to-run{" "}
             <code style={{ background: C.secondary, padding: "1px 5px", fontSize: 11 }}>docker run</code>
-            {" "}및{" "}
+            {" "}or{" "}
             <code style={{ background: C.secondary, padding: "1px 5px", fontSize: 11 }}>.env.local</code>
-            {" "}설정을 자동 생성합니다.
+            {" "}configuration.
           </p>
         </div>
 
@@ -520,19 +520,19 @@ export default function ConnectPage() {
                     style={inputStyle}
                   />
                   <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
-                    연결 테스트 시에만 서버로 전송됩니다.
+                    Sent to server only during connection test.
                   </p>
                 </div>
 
                 {/* Network Name */}
                 <div>
-                  <label style={labelStyle}>Network Name <span style={{ fontWeight: 400 }}>(선택)</span></label>
+                  <label style={labelStyle}>Network Name <span style={{ fontWeight: 400 }}>(Optional)</span></label>
                   <input
                     id="network-name"
                     type="text"
                     value={networkName}
                     onChange={(e) => { setNetworkName(e.target.value); resetOutput(); }}
-                    placeholder="예: Thanos Sepolia"
+                    placeholder="e.g. Thanos Sepolia"
                     style={inputStyle}
                   />
                 </div>
@@ -540,7 +540,7 @@ export default function ConnectPage() {
                 {/* Auth Token */}
                 {currentConfig.supportsAuthToken && (
                   <div>
-                    <label style={labelStyle}>Auth Token <span style={{ fontWeight: 400 }}>(선택)</span></label>
+                    <label style={labelStyle}>Auth Token <span style={{ fontWeight: 400 }}>(Optional)</span></label>
                     <input
                       id="auth-token"
                       type="password"
@@ -560,11 +560,11 @@ export default function ConnectPage() {
                 <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: "0.15em", color: C.fg }}>
                   ③ AI PROVIDER
                 </span>
-                <span style={{ fontFamily: FONT, fontSize: 9, color: C.primary, marginLeft: 8 }}>*필수</span>
+                <span style={{ fontFamily: FONT, fontSize: 9, color: C.primary, marginLeft: 8 }}>*Required</span>
               </div>
               <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
                 <p style={{ fontFamily: FONT, fontSize: 10, color: C.muted, margin: 0 }}>
-                  이상 감지, NLOps, RCA, 예측 스케일링에 필요합니다.
+                  Required for anomaly detection, NLOps, RCA, and predictive scaling.
                 </p>
                 <div>
                   <label style={labelStyle}>Provider</label>
@@ -591,7 +591,7 @@ export default function ConnectPage() {
                       style={inputStyle}
                     />
                     <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
-                      생성된 스크립트에만 포함됩니다 — 서버로 전송되지 않습니다.
+                      Included in generated script only — never sent to any server.
                     </p>
                   </div>
                 )}
@@ -609,7 +609,7 @@ export default function ConnectPage() {
                   fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: "0.15em", color: C.fg,
                 }}
               >
-                <span>④ ADVANCED SETTINGS (선택)</span>
+                <span>④ ADVANCED SETTINGS (Optional)</span>
                 <span style={{ fontSize: 12 }}>{advancedOpen ? "−" : "+"}</span>
               </button>
 
@@ -626,7 +626,7 @@ export default function ConnectPage() {
                       style={inputStyle}
                     />
                     <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
-                      K8s 자동 스케일링 및 파드 모니터링에 필요합니다 (AWS_CLUSTER_NAME).
+                      Required for K8s auto-scaling and pod monitoring (AWS_CLUSTER_NAME).
                     </p>
                   </div>
                   <div>
@@ -640,7 +640,7 @@ export default function ConnectPage() {
                       style={inputStyle}
                     />
                     <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
-                      이상 감지 시 Slack/Webhook 알림 (ALERT_WEBHOOK_URL).
+                      Slack/Webhook alert on anomaly detection (ALERT_WEBHOOK_URL).
                     </p>
                   </div>
                 </div>
@@ -695,7 +695,7 @@ export default function ConnectPage() {
                 border: "1px solid #007A0050", background: "#007A0008", padding: 16,
               }}>
                 <div style={{ fontFamily: FONT, fontSize: 11, color: "#007A00", marginBottom: 8 }}>
-                  ● 연결 성공 — instanceId:{" "}
+                  ● Connection successful — instanceId:{" "}
                   <span style={{ fontWeight: 700 }}>{testResult.data.instanceId}</span>
                 </div>
                 {testResult.data.warnings?.length ? (
@@ -713,7 +713,7 @@ export default function ConnectPage() {
                       textDecoration: "none",
                     }}
                   >
-                    DASHBOARD로 이동 →
+                    Go to Dashboard →
                   </a>
                 )}
               </div>
@@ -751,16 +751,16 @@ export default function ConnectPage() {
                     ▮ TERMINAL
                   </div>
                   <p style={{ fontFamily: FONT, fontSize: 11, color: C.muted, margin: 0 }}>
-                    노드 타입과 URL을 입력한 후<br />
-                    <span style={{ color: C.fg }}>TEST CONNECTION</span> 또는{" "}
-                    <span style={{ color: C.fg }}>GENERATE CONFIG</span>를 실행하세요
+                    Enter node type and URL, then run<br />
+                    <span style={{ color: C.fg }}>TEST CONNECTION</span> or{" "}
+                    <span style={{ color: C.fg }}>GENERATE CONFIG</span>
                   </p>
                 </div>
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                 <div style={{ fontFamily: FONT, fontSize: 10, color: "#007A00", fontWeight: 700 }}>
-                  ● 설정 생성 완료
+                  ● Configuration generated
                 </div>
                 <CodeBlock
                   title="docker run"
