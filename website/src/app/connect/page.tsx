@@ -950,7 +950,7 @@ export default function ConnectPage() {
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
                 }}
               >
-                GENERATE CONFIG →
+                GET SETUP GUIDE →
               </button>
             </div>
           </div>
@@ -1029,14 +1029,14 @@ export default function ConnectPage() {
                   <p style={{ fontFamily: FONT, fontSize: 11, color: C.muted, margin: 0 }}>
                     Enter node type and URL, then run<br />
                     <span style={{ color: C.fg }}>TEST CONNECTION</span> or{" "}
-                    <span style={{ color: C.fg }}>GENERATE CONFIG</span>
+                    <span style={{ color: C.fg }}>GET SETUP GUIDE</span>
                   </p>
                 </div>
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
                 <div style={{ fontFamily: FONT, fontSize: 10, color: "#007A00", fontWeight: 700, marginBottom: 20 }}>
-                  ● Configuration generated — follow the steps below
+                  ● Setup guide ready — follow the steps below
                 </div>
 
                 {/* Step 1 */}
