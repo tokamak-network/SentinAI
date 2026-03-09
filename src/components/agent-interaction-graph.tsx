@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import React, { useMemo } from 'react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -22,10 +22,23 @@ interface AnomalyEvent {
   };
 }
 
+interface AgentDecision {
+  decisionId: string;
+  timestamp: string;
+  severity?: string;
+  chosenAction: string;
+  reasoningSummary: string;
+  evidence: Array<{ key: string; value: string }>;
+  phaseTrace: Array<{ phase: string; startedAt: string; endedAt: string; ok: boolean }>;
+  verification: { passed: boolean };
+  inputs: { scalingScore?: number; anomalyCount: number };
+}
+
 export interface AgentInteractionGraphProps {
   agentFleet: AgentFleetData | null;
   anomalyEvents: AnomalyEvent[];
   agentPhase: string;
+  decisions?: AgentDecision[];
 }
 
 // ─── Layout (viewBox 0 0 760 390) ────────────────────────────────────────────
@@ -180,24 +193,63 @@ function CurvedEdge({ x1, y1, x2, y2, color, active, label }: {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase }: AgentInteractionGraphProps) {
+export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, decisions }: AgentInteractionGraphProps) {
   const roles = agentFleet?.roles;
   const activeAnomalies = useMemo(() => anomalyEvents.filter(e => e.status === 'active'), [anomalyEvents]);
   const hasActive = activeAnomalies.length > 0;
 
   const corrId = activeAnomalies[0]?.id.slice(0, 6) ?? '—';
 
-  const traceRows = useMemo(() => anomalyEvents.slice(0, 8).map(e => ({
-    ts: new Date(e.timestamp).toLocaleTimeString('en-US', { hour12: false }),
-    corrId: e.id.slice(0, 6),
-    event: e.status === 'active' ? 'anomaly-detected'
-         : e.status === 'resolved' ? 'remediation-complete'
-         : 'acknowledged',
-    detail: e.deepAnalysis?.anomalyType
-      ? `${e.deepAnalysis.relatedComponents?.[0] ?? 'component'}: ${e.deepAnalysis.anomalyType}`
-      : e.id,
-    latency: `${Math.floor(50 + (parseInt(e.id.slice(-3), 16) % 900))}ms`,
-  })), [anomalyEvents]);
+  const traceRows = useMemo(() => {
+    type Row = { rawTs: number; ts: string; sev: string; agent: string; action: string; detail: string; latency: string; ok: boolean };
+
+    const sevRank: Record<string, number> = { critical: 0, high: 1, medium: 2, info: 3 };
+
+    function normSev(s: string | undefined): string {
+      const v = (s ?? 'info').toLowerCase();
+      return ['critical', 'high', 'medium'].includes(v) ? v : 'info';
+    }
+
+    const fromAnomalies: Row[] = anomalyEvents.slice(0, 15).map(e => ({
+      rawTs: typeof e.timestamp === 'number' ? e.timestamp : new Date(e.timestamp).getTime(),
+      ts: new Date(e.timestamp).toLocaleTimeString('en-US', { hour12: false }),
+      sev: normSev(e.deepAnalysis?.severity),
+      agent: 'detector',
+      action: e.status === 'active' ? 'anomaly-detected' : e.status === 'resolved' ? 'resolved' : 'acknowledged',
+      detail: e.deepAnalysis?.anomalyType
+        ? [e.deepAnalysis.relatedComponents?.[0], e.deepAnalysis.anomalyType].filter(Boolean).join(': ')
+        : e.id.slice(0, 24),
+      latency: '—',
+      ok: e.status === 'resolved',
+    }));
+
+    const fromDecisions: Row[] = (decisions ?? []).slice(0, 15).map(d => {
+      const phases = d.phaseTrace ?? [];
+      const t0 = phases.length > 0 ? new Date(phases[0].startedAt).getTime() : 0;
+      const t1 = phases.length > 0 ? new Date(phases[phases.length - 1].endedAt).getTime() : 0;
+      const latencyMs = t1 > t0 ? t1 - t0 : 0;
+      const keyEvidence = d.evidence.slice(0, 2).map(ev => `${ev.key}=${ev.value}`).join(' ');
+      const agentName = d.chosenAction.startsWith('scale') ? 'executor'
+        : d.chosenAction.startsWith('rca') ? 'rca'
+        : d.chosenAction.startsWith('alert') || d.chosenAction.startsWith('notify') ? 'notifier'
+        : d.chosenAction === 'no-action' ? 'analyzer'
+        : 'executor';
+      return {
+        rawTs: new Date(d.timestamp).getTime(),
+        ts: new Date(d.timestamp).toLocaleTimeString('en-US', { hour12: false }),
+        sev: normSev(d.severity),
+        agent: agentName,
+        action: d.chosenAction,
+        detail: keyEvidence || d.reasoningSummary.slice(0, 60),
+        latency: latencyMs > 0 ? `${latencyMs}ms` : '—',
+        ok: d.verification?.passed ?? false,
+      };
+    });
+
+    return [...fromAnomalies, ...fromDecisions]
+      .sort((a, b) => b.rawTs - a.rawTs || sevRank[a.sev] - sevRank[b.sev])
+      .slice(0, 20);
+  }, [anomalyEvents, decisions]);
 
   // Stat label for each agent
   const stat = (key: string, layer: 'pipeline' | 'domain' | 'action') => {
@@ -304,32 +356,42 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase }:
       {/* Event trace table */}
       <div style={{ borderTop: '2px solid #A0A0A0', flexShrink: 0, maxHeight: 162, overflowY: 'auto', background: '#FFFFFF' }}>
         <div style={{
-          display: 'grid', gridTemplateColumns: '70px 60px 155px 1fr 58px',
+          display: 'grid', gridTemplateColumns: '62px 46px 72px 110px 1fr 52px',
           padding: '3px 10px', background: '#0A0A0A', color: 'white',
           fontFamily: FONT, fontSize: 9, fontWeight: 700,
           letterSpacing: '0.1em', textTransform: 'uppercase', position: 'sticky', top: 0,
         }}>
-          <span>TIME</span><span>CORR-ID</span><span>EVENT</span><span>DETAIL</span>
-          <span style={{ textAlign: 'right' }}>LATENCY</span>
+          <span>TIME</span><span>SEV</span><span>AGENT</span><span>ACTION</span>
+          <span>DETAIL</span><span style={{ textAlign: 'right' }}>LATENCY</span>
         </div>
         {traceRows.length === 0 ? (
           <div style={{ padding: '8px 10px', fontFamily: FONT, fontSize: 10, color: '#A0A0A0' }}>
-            No anomaly events — all systems nominal
+            No events — all systems nominal
           </div>
-        ) : traceRows.map((row, i) => (
-          <div key={i} style={{
-            display: 'grid', gridTemplateColumns: '70px 60px 155px 1fr 58px',
-            padding: '3px 10px', borderBottom: '1px solid #F0F0F0',
-            fontFamily: FONT, fontSize: 10, alignItems: 'center',
-            background: i % 2 === 1 ? '#F7F7F7' : '#FFFFFF',
-          }}>
-            <span style={{ color: '#707070', fontSize: 9 }}>{row.ts}</span>
-            <span style={{ color: '#0055AA', fontSize: 9, fontWeight: 600 }}>{row.corrId}</span>
-            <span style={{ color: '#3A3A3A' }}>{row.event}</span>
-            <span style={{ color: '#0A0A0A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.detail}</span>
-            <span style={{ color: '#007A00', textAlign: 'right', fontWeight: 600 }}>{row.latency}</span>
-          </div>
-        ))}
+        ) : traceRows.map((row, i) => {
+          const sevStyle: React.CSSProperties =
+            row.sev === 'critical' ? { background: '#FFE6E6', color: '#D40000' } :
+            row.sev === 'high'     ? { background: '#FFF3E0', color: '#CC6600' } :
+            row.sev === 'medium'   ? { background: '#EEF3FF', color: '#0055AA' } :
+                                     { background: '#F0F0F0', color: '#606060' };
+          return (
+            <div key={i} style={{
+              display: 'grid', gridTemplateColumns: '62px 46px 72px 110px 1fr 52px',
+              padding: '3px 10px', borderBottom: '1px solid #F0F0F0',
+              fontFamily: FONT, fontSize: 10, alignItems: 'center',
+              background: i % 2 === 1 ? '#F7F7F7' : '#FFFFFF',
+            }}>
+              <span style={{ color: '#707070', fontSize: 9 }}>{row.ts}</span>
+              <span style={{ ...sevStyle, fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 2 }}>
+                {row.sev.toUpperCase().slice(0, 4)}
+              </span>
+              <span style={{ color: '#0055AA', fontSize: 9, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.agent}</span>
+              <span style={{ color: '#3A3A3A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.action}</span>
+              <span style={{ color: '#0A0A0A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.detail}</span>
+              <span style={{ color: row.latency !== '—' ? (row.ok ? '#007A00' : '#CC6600') : '#A0A0A0', textAlign: 'right', fontWeight: 600, fontSize: 9 }}>{row.latency}</span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

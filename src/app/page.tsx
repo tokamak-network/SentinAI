@@ -160,6 +160,18 @@ interface AnomalyEventData {
   };
 }
 
+interface AgentDecisionEntry {
+  decisionId: string;
+  timestamp: string;
+  severity?: string;
+  chosenAction: string;
+  reasoningSummary: string;
+  evidence: Array<{ key: string; value: string }>;
+  phaseTrace: Array<{ phase: string; startedAt: string; endedAt: string; ok: boolean }>;
+  verification: { passed: boolean };
+  inputs: { scalingScore?: number; anomalyCount: number };
+}
+
 interface DetectionInfo {
   anomalies: {
     isAnomaly: boolean;
@@ -334,6 +346,9 @@ export default function Dashboard() {
 
   // --- Anomaly Events State ---
   const [anomalyEvents, setAnomalyEvents] = useState<AnomalyEventData[]>([]);
+
+  // --- Agent Decisions State ---
+  const [agentDecisions, setAgentDecisions] = useState<AgentDecisionEntry[]>([]);
 
   // --- NLOps Chat State ---
   const [chatOpen, setChatOpen] = useState(false);
@@ -644,6 +659,22 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [isSeedActive]);
 
+  // --- Agent Decisions polling (30s) ---
+  useEffect(() => {
+    const fetchDecisions = async () => {
+      try {
+        const res = await fetch(`${BASE_PATH}/api/agent-decisions?limit=20`, { cache: 'no-store' });
+        if (res.ok) {
+          const data = await res.json();
+          setAgentDecisions(data.traces || []);
+        }
+      } catch { /* ignore */ }
+    };
+    fetchDecisions();
+    const interval = setInterval(fetchDecisions, AGENT_LOOP_REFRESH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
+
   // --- Agent Experience polling (30s) ---
   useEffect(() => {
     const fetchExperience = async () => {
@@ -842,6 +873,7 @@ export default function Dashboard() {
           } : null}
           anomalyEvents={anomalyEvents}
           agentPhase={graphAgentPhase}
+          decisions={agentDecisions}
         />
 
         {/* Right: Operations */}
@@ -851,6 +883,7 @@ export default function Dashboard() {
           agentFleet={agentFleet ? { kpi: { throughputPerMin: agentFleet.kpi.throughputPerMin } } : null}
           l1Failover={l1Failover}
           scalingScore={scalingScore}
+          currentVcpu={vcpu}
         />
       </div>
 
