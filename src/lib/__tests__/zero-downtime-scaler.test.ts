@@ -15,6 +15,7 @@ import {
   isSwapInProgress,
   resetSwapState,
   _testHooks,
+  MAX_BLOCK_GAP,
 } from '../zero-downtime-scaler';
 import { ScalingConfig, DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 
@@ -71,25 +72,69 @@ const rpcSuccessResponse = JSON.stringify({
   result: '0x1a4',
 });
 
+const txPoolEmptyResponse = JSON.stringify({
+  jsonrpc: '2.0',
+  id: 1,
+  result: { pending: '0x0', queued: '0x0' },
+});
+
 // ============================================================
 // Helper: set up sequential mock responses
 // ============================================================
 
+const mockPvcSpec = {
+  spec: {
+    accessModes: ['ReadWriteMany'],
+    storageClassName: 'efs-sc',
+    resources: { requests: { storage: '500Gi' } },
+  },
+};
+
+/** Common handlers for preflight, PVC clone, and cleanup that all tests need */
+function handleCommonCommands(cmd: string): { stdout: string; stderr: string } | null {
+  // Preflight: updateStrategy check
+  if (cmd.includes('get statefulset') && cmd.includes('jsonpath') && cmd.includes('updateStrategy')) {
+    return { stdout: "'OnDelete'", stderr: '' };
+  }
+  // PVC spec fetch for cloning
+  if (cmd.includes('get pvc') && cmd.includes('-o json')) {
+    return { stdout: JSON.stringify(mockPvcSpec), stderr: '' };
+  }
+  // PVC listing for cleanup
+  if (cmd.includes('get pvc') && cmd.includes('-l')) {
+    return { stdout: '', stderr: '' };
+  }
+  // PVC deletion (cleanup/rollback)
+  if (cmd.includes('delete pvc')) {
+    return { stdout: 'pvc deleted', stderr: '' };
+  }
+  return null;
+}
+
 function setupFullSuccessMocks() {
   mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+    const common = handleCommonCommands(cmd);
+    if (common) return common;
+
     // Phase 1: createStandbyPod
     if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
       return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
     }
     if (cmd.includes('apply -f -')) {
-      return { stdout: 'pod/test-geth-standby created', stderr: '' };
+      return { stdout: 'resource created', stderr: '' };
     }
 
     // Phase 2: waitForReady (consolidated Ready+podIP in single jsonpath call)
     if (cmd.includes('jsonpath') && cmd.includes('Ready') && cmd.includes('podIP')) {
       return { stdout: "'True,10.0.0.99'", stderr: '' };
     }
-    if (cmd.includes('exec') && cmd.includes('wget')) {
+
+    // Safety Gate: txpool_status
+    if (cmd.includes('exec') && cmd.includes('wget') && cmd.includes('txpool_status')) {
+      return { stdout: txPoolEmptyResponse, stderr: '' };
+    }
+    // RPC check (readiness + block sync)
+    if (cmd.includes('exec') && cmd.includes('wget') && cmd.includes('eth_blockNumber')) {
       return { stdout: rpcSuccessResponse, stderr: '' };
     }
 
@@ -181,14 +226,20 @@ describe('zero-downtime-scaler', () => {
     });
 
     it('should return false when phase is failed', async () => {
-      // First call: get pod spec succeeds
-      mockRunK8sCommand.mockResolvedValueOnce({
-        stdout: JSON.stringify(mockPodSpec), stderr: '',
+      let applyCount = 0;
+      mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        const common = handleCommonCommands(cmd);
+        if (common) return common;
+        if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
+          return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
+        }
+        if (cmd.includes('apply -f -')) {
+          applyCount++;
+          if (applyCount === 2) throw new Error('k8s error');
+          return { stdout: 'pvc cloned', stderr: '' };
+        }
+        return { stdout: '', stderr: '' };
       });
-      // Second call: apply fails
-      mockRunK8sCommand.mockRejectedValueOnce(new Error('k8s error'));
-      // Rollback calls
-      mockRunK8sCommand.mockResolvedValue({ stdout: '', stderr: '' });
 
       await zeroDowntimeScale(4, 8, testConfig);
       expect(getSwapState().phase).toBe('failed');
@@ -255,14 +306,20 @@ describe('zero-downtime-scaler', () => {
     });
 
     it('should rollback on kubectl error during createStandbyPod', async () => {
-      // get pod succeeds
-      mockRunK8sCommand.mockResolvedValueOnce({
-        stdout: JSON.stringify(mockPodSpec), stderr: '',
+      let applyCount = 0;
+      mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        const common = handleCommonCommands(cmd);
+        if (common) return common;
+        if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
+          return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
+        }
+        if (cmd.includes('apply -f -')) {
+          applyCount++;
+          if (applyCount === 2) throw new Error('insufficient resources'); // Pod apply fails
+          return { stdout: 'pvc cloned', stderr: '' }; // PVC clone apply succeeds
+        }
+        return { stdout: 'ok', stderr: '' };
       });
-      // apply fails
-      mockRunK8sCommand.mockRejectedValueOnce(new Error('insufficient resources'));
-      // rollback calls
-      mockRunK8sCommand.mockResolvedValue({ stdout: 'ok', stderr: '' });
 
       const result = await zeroDowntimeScale(4, 8, testConfig);
 
@@ -282,6 +339,8 @@ describe('zero-downtime-scaler', () => {
       });
 
       mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        const common = handleCommonCommands(cmd);
+        if (common) return common;
         if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
           return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
         }
@@ -309,6 +368,8 @@ describe('zero-downtime-scaler', () => {
 
     it('should rollback on switchTraffic failure', async () => {
       mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        const common = handleCommonCommands(cmd);
+        if (common) return common;
         // createStandbyPod
         if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
           return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
@@ -319,6 +380,9 @@ describe('zero-downtime-scaler', () => {
         // waitForReady (immediate success — consolidated Ready+podIP)
         if (cmd.includes('jsonpath') && cmd.includes('Ready') && cmd.includes('podIP')) {
           return { stdout: "'True,10.0.0.99'", stderr: '' };
+        }
+        if (cmd.includes('exec') && cmd.includes('wget') && cmd.includes('txpool_status')) {
+          return { stdout: txPoolEmptyResponse, stderr: '' };
         }
         if (cmd.includes('exec') && cmd.includes('wget')) {
           return { stdout: rpcSuccessResponse, stderr: '' };
@@ -347,7 +411,7 @@ describe('zero-downtime-scaler', () => {
   // ----------------------------------------------------------
 
   describe('createStandbyPod (via orchestration)', () => {
-    it('should fetch pod spec, modify resources, replace PVC with emptyDir', async () => {
+    it('should fetch pod spec, modify resources, clone PVC via CSI dataSource', async () => {
       setupFullSuccessMocks();
       await zeroDowntimeScale(4, 8, testConfig);
 
@@ -359,15 +423,17 @@ describe('zero-downtime-scaler', () => {
       expect(getCalls[0][0]).toContain(`${testConfig.statefulSetName}-0`);
       expect(getCalls[0][0]).toContain(`-n ${testConfig.namespace}`);
 
-      // Verify: apply was called with stdin
+      // Verify: apply was called (PVC clone + Pod manifest)
       const applyCalls = mockRunK8sCommand.mock.calls.filter(
         (c: unknown[]) => (c[0] as string).includes('apply -f -')
       );
-      expect(applyCalls.length).toBe(1);
-      expect(applyCalls[0][1]).toHaveProperty('stdin');
+      // 1 PVC clone apply + 1 Pod apply = 2
+      expect(applyCalls.length).toBe(2);
 
-      // Verify manifest content
-      const manifest = JSON.parse((applyCalls[0][1] as { stdin: string }).stdin);
+      // Verify Pod manifest content (second apply call)
+      const podApply = applyCalls[1];
+      expect(podApply[1]).toHaveProperty('stdin');
+      const manifest = JSON.parse((podApply[1] as { stdin: string }).stdin);
       expect(manifest.metadata.labels.role).toBe('standby');
       expect(manifest.metadata.labels.slot).toBe('standby');
       expect(manifest.spec.containers[0].resources.requests.cpu).toBe('4');
@@ -375,10 +441,10 @@ describe('zero-downtime-scaler', () => {
       expect(manifest.spec.containers[0].resources.limits.cpu).toBe('4');
       expect(manifest.spec.containers[0].resources.limits.memory).toBe('8Gi');
 
-      // Verify PVC replaced with emptyDir
+      // Verify PVC volume now points to cloned PVC (not emptyDir)
       const dataVolume = manifest.spec.volumes.find((v: Record<string, unknown>) => v.name === 'data');
-      expect(dataVolume.emptyDir).toEqual({});
-      expect(dataVolume.persistentVolumeClaim).toBeUndefined();
+      expect(dataVolume.persistentVolumeClaim).toBeDefined();
+      expect(dataVolume.persistentVolumeClaim.claimName).toMatch(/standby/);
 
       // Verify non-PVC volumes preserved
       const configVolume = manifest.spec.volumes.find((v: Record<string, unknown>) => v.name === 'config');
@@ -405,11 +471,11 @@ describe('zero-downtime-scaler', () => {
       );
       expect(readyCalls.length).toBeGreaterThanOrEqual(1);
 
-      // RPC check
+      // RPC check (1 readiness + 1 block sync = 2 calls)
       const execCalls = mockRunK8sCommand.mock.calls.filter(
         (c: unknown[]) => (c[0] as string).includes('exec') && (c[0] as string).includes('eth_blockNumber')
       );
-      expect(execCalls.length).toBe(1);
+      expect(execCalls.length).toBe(2);
     });
 
     it('should use a single consolidated kubectl get pod call for Ready+podIP per poll (not two)', async () => {
@@ -444,6 +510,9 @@ describe('zero-downtime-scaler', () => {
 
       let readyCheckCount = 0;
       mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        const common = handleCommonCommands(cmd);
+        if (common) return common;
+
         // Phase 1: createStandbyPod
         if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
           return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
@@ -460,6 +529,9 @@ describe('zero-downtime-scaler', () => {
             return { stdout: "'False,'", stderr: '' };
           }
           return { stdout: "'True,10.0.0.99'", stderr: '' };
+        }
+        if (cmd.includes('exec') && cmd.includes('wget') && cmd.includes('txpool_status')) {
+          return { stdout: txPoolEmptyResponse, stderr: '' };
         }
         if (cmd.includes('exec') && cmd.includes('wget')) {
           return { stdout: rpcSuccessResponse, stderr: '' };
@@ -490,12 +562,15 @@ describe('zero-downtime-scaler', () => {
   describe('switchTraffic (via orchestration)', () => {
     it('should set up slot selector when not present on service', async () => {
       mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        const common = handleCommonCommands(cmd);
+        if (common) return common;
         if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
           return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
         }
         if (cmd.includes('apply -f -')) return { stdout: 'created', stderr: '' };
         // consolidated Ready+podIP
         if (cmd.includes('jsonpath') && cmd.includes('Ready') && cmd.includes('podIP')) return { stdout: "'True,10.0.0.99'", stderr: '' };
+        if (cmd.includes('exec') && cmd.includes('wget') && cmd.includes('txpool_status')) return { stdout: txPoolEmptyResponse, stderr: '' };
         if (cmd.includes('exec') && cmd.includes('wget')) return { stdout: rpcSuccessResponse, stderr: '' };
 
         // Return service WITHOUT slot selector
@@ -539,6 +614,9 @@ describe('zero-downtime-scaler', () => {
 
     it('should attempt partial rollback when draining old pod fails', async () => {
       mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        const common = handleCommonCommands(cmd);
+        if (common) return common;
+
         // Phase 1: createStandbyPod
         if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
           return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
@@ -550,6 +628,9 @@ describe('zero-downtime-scaler', () => {
         // Phase 2: waitForReady (immediate success)
         if (cmd.includes('jsonpath') && cmd.includes('Ready') && cmd.includes('podIP')) {
           return { stdout: "'True,10.0.0.99'", stderr: '' };
+        }
+        if (cmd.includes('exec') && cmd.includes('wget') && cmd.includes('txpool_status')) {
+          return { stdout: txPoolEmptyResponse, stderr: '' };
         }
         if (cmd.includes('exec') && cmd.includes('wget')) {
           return { stdout: rpcSuccessResponse, stderr: '' };
@@ -655,12 +736,20 @@ describe('zero-downtime-scaler', () => {
 
   describe('rollback (via orchestration)', () => {
     it('should delete standby pod and restore label on failure', async () => {
-      mockRunK8sCommand.mockResolvedValueOnce({
-        stdout: JSON.stringify(mockPodSpec), stderr: '',
+      let applyCount = 0;
+      mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        const common = handleCommonCommands(cmd);
+        if (common) return common;
+        if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
+          return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
+        }
+        if (cmd.includes('apply -f -')) {
+          applyCount++;
+          if (applyCount === 2) throw new Error('apply failed'); // Pod apply fails
+          return { stdout: 'pvc cloned', stderr: '' };
+        }
+        return { stdout: 'ok', stderr: '' };
       });
-      mockRunK8sCommand.mockRejectedValueOnce(new Error('apply failed'));
-      // rollback calls
-      mockRunK8sCommand.mockResolvedValue({ stdout: 'ok', stderr: '' });
 
       const result = await zeroDowntimeScale(4, 8, testConfig);
       expect(result.success).toBe(false);
@@ -673,18 +762,174 @@ describe('zero-downtime-scaler', () => {
       expect(labelCalls.length).toBeGreaterThanOrEqual(1);
     });
 
-    it('should handle rollback failure gracefully', async () => {
-      mockRunK8sCommand.mockResolvedValueOnce({
-        stdout: JSON.stringify(mockPodSpec), stderr: '',
+    it('should handle rollback failure gracefully with retries', async () => {
+      let applyCount = 0;
+      mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        const common = handleCommonCommands(cmd);
+        if (common) return common;
+        if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
+          return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
+        }
+        if (cmd.includes('apply -f -')) {
+          applyCount++;
+          if (applyCount === 2) throw new Error('apply failed');
+          return { stdout: 'pvc cloned', stderr: '' };
+        }
+        // All rollback calls fail
+        if (cmd.includes('delete pod') || cmd.includes('label pod')) {
+          throw new Error('rollback error');
+        }
+        return { stdout: '', stderr: '' };
       });
-      mockRunK8sCommand.mockRejectedValueOnce(new Error('apply failed'));
-      // rollback also fails
-      mockRunK8sCommand.mockRejectedValue(new Error('rollback error'));
 
       const result = await zeroDowntimeScale(4, 8, testConfig);
       expect(result.success).toBe(false);
       expect(result.error).toContain('apply failed');
       expect(getSwapState().phase).toBe('failed');
+    });
+  });
+
+  // ----------------------------------------------------------
+  // Safety Gates
+  // ----------------------------------------------------------
+
+  describe('block sync gate', () => {
+    it('should pass when block gap is within threshold', async () => {
+      setupFullSuccessMocks();
+      const result = await zeroDowntimeScale(4, 8, testConfig);
+
+      expect(result.success).toBe(true);
+      expect(result.safetyGates?.blockSync).toBeDefined();
+      expect(result.safetyGates?.blockSync?.synced).toBe(true);
+      // Both pods return same block (0x1a4 = 420)
+      expect(result.safetyGates?.blockSync?.gap).toBe(0);
+    });
+
+    it('should abort when block gap exceeds threshold', async () => {
+      const farBehindBlockResponse = JSON.stringify({
+        jsonrpc: '2.0', id: 1, result: '0x64',  // 100 — far behind 420
+      });
+
+      let execCallCount = 0;
+      mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        const common = handleCommonCommands(cmd);
+        if (common) return common;
+        // Phase 1
+        if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
+          return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
+        }
+        if (cmd.includes('apply -f -')) {
+          return { stdout: 'created', stderr: '' };
+        }
+        // Phase 2: waitForReady
+        if (cmd.includes('jsonpath') && cmd.includes('Ready') && cmd.includes('podIP')) {
+          return { stdout: "'True,10.0.0.99'", stderr: '' };
+        }
+        // RPC calls — readiness check returns standby block, then block sync checks old pod
+        if (cmd.includes('exec') && cmd.includes('eth_blockNumber')) {
+          execCallCount++;
+          if (execCallCount === 1) {
+            // Phase 2 readiness: standby pod returns block 420
+            return { stdout: rpcSuccessResponse, stderr: '' };
+          }
+          // Block sync gate: old pod returns block 100 (huge gap)
+          return { stdout: farBehindBlockResponse, stderr: '' };
+        }
+        // Rollback / cleanup
+        if (cmd.includes('delete pod') || cmd.includes('label pod')) {
+          return { stdout: 'ok', stderr: '' };
+        }
+        return { stdout: '', stderr: '' };
+      });
+
+      const result = await zeroDowntimeScale(4, 8, testConfig);
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Block sync gap too large');
+      expect(result.safetyGates?.blockSync?.synced).toBe(false);
+      expect(result.safetyGates?.blockSync?.gap).toBe(320); // |420 - 100|
+    });
+  });
+
+  describe('TX drain gate', () => {
+    it('should pass when txpool is empty', async () => {
+      setupFullSuccessMocks();
+      const result = await zeroDowntimeScale(4, 8, testConfig);
+
+      expect(result.success).toBe(true);
+      expect(result.safetyGates?.txDrain).toBeDefined();
+      expect(result.safetyGates?.txDrain?.drained).toBe(true);
+    });
+
+    it('should treat txpool_status RPC failure as drained (graceful fallback)', async () => {
+      mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        const common = handleCommonCommands(cmd);
+        if (common) return common;
+        if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
+          return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
+        }
+        if (cmd.includes('apply -f -')) return { stdout: 'created', stderr: '' };
+        if (cmd.includes('jsonpath') && cmd.includes('Ready') && cmd.includes('podIP')) {
+          return { stdout: "'True,10.0.0.99'", stderr: '' };
+        }
+        // eth_blockNumber succeeds for both readiness and block sync
+        if (cmd.includes('exec') && cmd.includes('eth_blockNumber')) {
+          return { stdout: rpcSuccessResponse, stderr: '' };
+        }
+        // txpool_status fails
+        if (cmd.includes('exec') && cmd.includes('txpool_status')) {
+          throw new Error('method not found');
+        }
+        if (cmd.includes('get service') && cmd.includes('-o json')) {
+          return { stdout: JSON.stringify(mockServiceWithSlot), stderr: '' };
+        }
+        if (cmd.includes('label pod')) return { stdout: 'pod labeled', stderr: '' };
+        if (cmd.includes('delete pod')) return { stdout: 'pod deleted', stderr: '' };
+        if (cmd.includes('wait --for=delete')) return { stdout: 'condition met', stderr: '' };
+        if (cmd.includes('patch statefulset')) return { stdout: 'statefulset patched', stderr: '' };
+        return { stdout: '', stderr: '' };
+      });
+
+      const result = await zeroDowntimeScale(4, 8, testConfig);
+
+      expect(result.success).toBe(true);
+      // txpool_status failure is treated as drained
+      expect(result.safetyGates?.txDrain?.drained).toBe(true);
+    });
+  });
+
+  describe('rollback retry', () => {
+    it('should retry rollback up to MAX_ROLLBACK_RETRIES times', async () => {
+      let rollbackAttempts = 0;
+      let applyCount = 0;
+      mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        const common = handleCommonCommands(cmd);
+        if (common) return common;
+        if (cmd.includes('get pod') && cmd.includes('-o json') && !cmd.includes('jsonpath')) {
+          return { stdout: JSON.stringify(mockPodSpec), stderr: '' };
+        }
+        // PVC clone apply succeeds, Pod apply fails
+        if (cmd.includes('apply -f -')) {
+          applyCount++;
+          if (applyCount === 2) throw new Error('create failed');
+          return { stdout: 'pvc cloned', stderr: '' };
+        }
+        // First 2 rollback attempts fail, third succeeds
+        if (cmd.includes('delete pod') || cmd.includes('label pod')) {
+          rollbackAttempts++;
+          if (rollbackAttempts <= 4) { // 2 retries × 2 steps each
+            throw new Error('rollback step failed');
+          }
+          return { stdout: 'ok', stderr: '' };
+        }
+        return { stdout: '', stderr: '' };
+      });
+
+      const result = await zeroDowntimeScale(4, 8, testConfig);
+
+      expect(result.success).toBe(false);
+      // Should have attempted multiple rollback cycles
+      expect(rollbackAttempts).toBeGreaterThan(1);
     });
   });
 });

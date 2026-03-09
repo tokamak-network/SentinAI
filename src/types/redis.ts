@@ -57,6 +57,10 @@ export interface IStateStore {
   getZeroDowntimeEnabled(): Promise<boolean>;
   setZeroDowntimeEnabled(enabled: boolean): Promise<void>;
 
+  // --- In-Place Resize ---
+  getInPlaceResizeEnabled(): Promise<boolean>;
+  setInPlaceResizeEnabled(enabled: boolean): Promise<void>;
+
   // --- Prediction Cache ---
   getLastPrediction(): Promise<PredictionResult | null>;
   setLastPrediction(prediction: PredictionResult): Promise<void>;

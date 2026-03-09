@@ -31,6 +31,7 @@ const { mockGetStore } = vi.hoisted(() => {
   };
   let simulationConfig = { enabled: true, mockCurrentVcpu: 1 };
   let zeroDowntimeEnabled = false;
+  let inPlaceResizeEnabled = true;
 
   const store = {
     getScalingState: vi.fn(async () => ({ ...scalingState })),
@@ -44,6 +45,10 @@ const { mockGetStore } = vi.hoisted(() => {
     getZeroDowntimeEnabled: vi.fn(async () => zeroDowntimeEnabled),
     setZeroDowntimeEnabled: vi.fn(async (enabled: boolean) => {
       zeroDowntimeEnabled = enabled;
+    }),
+    getInPlaceResizeEnabled: vi.fn(async () => inPlaceResizeEnabled),
+    setInPlaceResizeEnabled: vi.fn(async (enabled: boolean) => {
+      inPlaceResizeEnabled = enabled;
     }),
     addScalingHistory: vi.fn(async () => {}),
     getScalingHistory: vi.fn(async () => []),
@@ -59,6 +64,7 @@ const { mockGetStore } = vi.hoisted(() => {
       };
       simulationConfig = { enabled: true, mockCurrentVcpu: 1 };
       zeroDowntimeEnabled = false;
+      inPlaceResizeEnabled = true;
     },
   };
 
@@ -76,6 +82,8 @@ import {
   scaleOpGeth,
   isZeroDowntimeEnabled,
   setZeroDowntimeEnabled,
+  isInPlaceResizeEnabled,
+  setInPlaceResizeEnabled,
   setSimulationMode,
   getScalingState,
   getContainerCpuUsage,
@@ -121,8 +129,9 @@ describe('k8s-scaler', () => {
 
   describe('scaleOpGeth (zero-downtime branch)', () => {
     beforeEach(async () => {
-      // Disable simulation mode so we hit the real/zero-downtime branch
+      // Disable simulation and in-place resize so we hit the zero-downtime branch
       await setSimulationMode(false);
+      await setInPlaceResizeEnabled(false);
       await setZeroDowntimeEnabled(true);
     });
 
@@ -213,12 +222,134 @@ describe('k8s-scaler', () => {
   });
 
   // ----------------------------------------------------------
+  // In-Place Resize toggle
+  // ----------------------------------------------------------
+
+  describe('isInPlaceResizeEnabled / setInPlaceResizeEnabled', () => {
+    it('should default to enabled', async () => {
+      expect(await isInPlaceResizeEnabled()).toBe(true);
+    });
+
+    it('should disable in-place resize mode', async () => {
+      await setInPlaceResizeEnabled(false);
+      expect(await isInPlaceResizeEnabled()).toBe(false);
+    });
+  });
+
+  // ----------------------------------------------------------
+  // scaleOpGeth with In-Place Resize mode
+  // ----------------------------------------------------------
+
+  describe('scaleOpGeth (in-place resize branch)', () => {
+    beforeEach(async () => {
+      await setSimulationMode(false);
+      await setInPlaceResizeEnabled(true);
+    });
+
+    it('should use in-place resize when enabled', async () => {
+      mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        // getCurrentVcpu
+        if (cmd.includes('get statefulset') && cmd.includes('jsonpath') && cmd.includes('resources.requests.cpu')) {
+          return { stdout: "'1'", stderr: '' };
+        }
+        // getContainerName
+        if (cmd.includes('get pod') && cmd.includes('jsonpath') && cmd.includes('.name')) {
+          return { stdout: "'op-geth'", stderr: '' };
+        }
+        // patch pod --subresource resize
+        if (cmd.includes('patch pod') && cmd.includes('--subresource resize')) {
+          return { stdout: 'pod/op-geth-0 patched', stderr: '' };
+        }
+        // syncStatefulSetSpec
+        if (cmd.includes('patch statefulset')) {
+          return { stdout: 'statefulset patched', stderr: '' };
+        }
+        return { stdout: '', stderr: '' };
+      });
+
+      const result = await scaleOpGeth(4, 8, DEFAULT_SCALING_CONFIG);
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('In-Place Resize');
+      expect(mockZeroDowntimeScale).not.toHaveBeenCalled();
+
+      // Verify pod resize was called
+      const resizeCalls = mockRunK8sCommand.mock.calls.filter(
+        (c: unknown[]) => (c[0] as string).includes('--subresource resize')
+      );
+      expect(resizeCalls.length).toBe(1);
+
+      // State should be updated
+      const state = await getScalingState();
+      expect(state.currentVcpu).toBe(4);
+      expect(state.currentMemoryGiB).toBe(8);
+    });
+
+    it('should fall through to zero-downtime when resize is not supported', async () => {
+      await setZeroDowntimeEnabled(true);
+
+      mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        if (cmd.includes('get statefulset') && cmd.includes('jsonpath') && cmd.includes('resources.requests.cpu')) {
+          return { stdout: "'1'", stderr: '' };
+        }
+        if (cmd.includes('get pod') && cmd.includes('jsonpath') && cmd.includes('.name')) {
+          return { stdout: "'op-geth'", stderr: '' };
+        }
+        // resize subresource not supported
+        if (cmd.includes('--subresource resize')) {
+          throw new Error('unknown subresource "resize"');
+        }
+        return { stdout: '', stderr: '' };
+      });
+
+      mockZeroDowntimeScale.mockResolvedValue({
+        success: true,
+        totalDurationMs: 5000,
+        phaseDurations: {},
+        finalPhase: 'completed',
+      });
+
+      const result = await scaleOpGeth(4, 8, DEFAULT_SCALING_CONFIG);
+
+      // Should fall through to zero-downtime
+      expect(result.success).toBe(true);
+      expect(result.zeroDowntime).toBe(true);
+      expect(mockZeroDowntimeScale).toHaveBeenCalled();
+    });
+
+    it('should return error when resize patch fails (not unsupported)', async () => {
+      mockRunK8sCommand.mockImplementation(async (cmd: string) => {
+        if (cmd.includes('get statefulset') && cmd.includes('jsonpath') && cmd.includes('resources.requests.cpu')) {
+          return { stdout: "'1'", stderr: '' };
+        }
+        if (cmd.includes('get pod') && cmd.includes('jsonpath') && cmd.includes('.name')) {
+          return { stdout: "'op-geth'", stderr: '' };
+        }
+        if (cmd.includes('--subresource resize')) {
+          throw new Error('Forbidden: pod resize denied by policy');
+        }
+        return { stdout: '', stderr: '' };
+      });
+
+      const result = await scaleOpGeth(4, 8, DEFAULT_SCALING_CONFIG);
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('In-Place Resize');
+      expect(result.error).toContain('Forbidden');
+      // Should NOT fall through to other modes
+      expect(mockZeroDowntimeScale).not.toHaveBeenCalled();
+    });
+
+  });
+
+  // ----------------------------------------------------------
   // scaleOpGeth without zero-downtime mode (legacy kubectl patch)
   // ----------------------------------------------------------
 
   describe('scaleOpGeth (legacy branch)', () => {
     beforeEach(async () => {
       await setSimulationMode(false);
+      await setInPlaceResizeEnabled(false);
       await setZeroDowntimeEnabled(false);
     });
 

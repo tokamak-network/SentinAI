@@ -14,6 +14,8 @@ import {
   ReadinessCheckResult,
   TrafficSwitchResult,
   ZeroDowntimeResult,
+  BlockSyncResult,
+  TxDrainResult,
   INITIAL_SWAP_STATE,
 } from '@/types/zero-downtime';
 import { ScalingConfig, DEFAULT_SCALING_CONFIG } from '@/types/scaling';
@@ -25,6 +27,21 @@ import logger from '@/lib/logger';
 
 /** Exponential backoff intervals for readiness polling (ms) */
 export const BACKOFF_INTERVALS = [1000, 2000, 5000, 10000];
+
+/** Maximum allowed block height gap between old and standby pods */
+export const MAX_BLOCK_GAP = parseInt(process.env.ZERO_DOWNTIME_MAX_BLOCK_GAP || '2', 10);
+
+/** Maximum time to wait for TX pool to drain (ms) */
+export const MAX_TX_DRAIN_WAIT_MS = parseInt(process.env.ZERO_DOWNTIME_TX_DRAIN_TIMEOUT_MS || '60000', 10);
+
+/** TX drain poll interval (ms) */
+export const TX_DRAIN_POLL_MS = 3000;
+
+/** Maximum pending TXs allowed before traffic switch */
+export const MAX_PENDING_TX_FOR_SWITCH = parseInt(process.env.ZERO_DOWNTIME_MAX_PENDING_TX || '0', 10);
+
+/** Maximum rollback retry attempts */
+export const MAX_ROLLBACK_RETRIES = 3;
 
 // ============================================================
 // Singleton State
@@ -119,6 +136,8 @@ export async function zeroDowntimeScale(
   // Reset state for new operation
   resetSwapState();
 
+  const safetyGates: ZeroDowntimeResult['safetyGates'] = {};
+
   try {
     // Phase 1: Create standby pod
     updatePhase('creating_standby', targetVcpu, targetMemoryGiB);
@@ -135,7 +154,7 @@ export async function zeroDowntimeScale(
 
     if (!readiness.ready) {
       updatePhase('rolling_back', targetVcpu, targetMemoryGiB);
-      await rollback(config);
+      await rollbackWithRetry(config);
       recordPhaseDuration('rolling_back', phaseStart);
       return {
         success: false,
@@ -143,7 +162,41 @@ export async function zeroDowntimeScale(
         phaseDurations: { ...swapState.phaseDurations },
         finalPhase: 'failed',
         error: 'Standby pod failed to become ready',
+        safetyGates,
       };
+    }
+
+    // Safety Gate 1: Block sync check
+    // Ensures standby pod has caught up to old pod's block height
+    const blockSync = await checkBlockSync(
+      `${config.statefulSetName}-0`, standbyPodName, readiness.blockNumber, config
+    );
+    safetyGates.blockSync = blockSync;
+
+    if (!blockSync.synced) {
+      logger.error(`[ZeroDowntime] Block sync gate FAILED: old=${blockSync.oldBlockNumber} standby=${blockSync.standbyBlockNumber} gap=${blockSync.gap} (max=${MAX_BLOCK_GAP})`);
+      updatePhase('rolling_back', targetVcpu, targetMemoryGiB);
+      await rollbackWithRetry(config);
+      recordPhaseDuration('rolling_back', phaseStart);
+      return {
+        success: false,
+        totalDurationMs: Date.now() - startTime,
+        phaseDurations: { ...swapState.phaseDurations },
+        finalPhase: 'failed',
+        error: `Block sync gap too large: ${blockSync.gap} blocks (max ${MAX_BLOCK_GAP})`,
+        safetyGates,
+      };
+    }
+    logger.info(`[ZeroDowntime] Block sync gate PASSED: gap=${blockSync.gap} blocks`);
+
+    // Safety Gate 2: TX drain — wait for old pod's txpool to empty
+    const txDrain = await waitForTxDrain(`${config.statefulSetName}-0`, config);
+    safetyGates.txDrain = txDrain;
+
+    if (!txDrain.drained) {
+      logger.warn(`[ZeroDowntime] TX drain gate: ${txDrain.pendingTxCount} pending TXs remain after ${txDrain.waitDurationMs}ms (proceeding with caution)`);
+    } else {
+      logger.info(`[ZeroDowntime] TX drain gate PASSED: 0 pending TXs`);
     }
 
     // Phase 3: Switch traffic
@@ -172,16 +225,13 @@ export async function zeroDowntimeScale(
       totalDurationMs: Date.now() - startTime,
       phaseDurations: { ...swapState.phaseDurations },
       finalPhase: 'completed',
+      safetyGates,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     logger.error('[ZeroDowntime] Orchestration failed:', errorMessage);
 
-    try {
-      await rollback(config);
-    } catch (rollbackError) {
-      logger.error('[ZeroDowntime] Rollback also failed:', rollbackError);
-    }
+    await rollbackWithRetry(config);
 
     swapState.phase = 'failed';
     swapState.error = errorMessage;
@@ -192,6 +242,7 @@ export async function zeroDowntimeScale(
       phaseDurations: { ...swapState.phaseDurations },
       finalPhase: 'failed',
       error: errorMessage,
+      safetyGates,
     };
   }
 }
@@ -213,6 +264,124 @@ function recordPhaseDuration(phase: SwapPhase, startTime: number): void {
   swapState.phaseDurations[phase] = Date.now() - startTime;
 }
 
+
+// ============================================================
+// Safety Gates
+// ============================================================
+
+/**
+ * Safety Gate 1: Block Sync Check
+ *
+ * Compares block height between old and standby pods.
+ * Aborts scaling if the gap exceeds MAX_BLOCK_GAP to prevent
+ * serving stale data after traffic switch.
+ */
+async function checkBlockSync(
+  oldPodName: string,
+  standbyPodName: string,
+  standbyBlockNumber: number | null,
+  config: ScalingConfig
+): Promise<BlockSyncResult> {
+  const start = Date.now();
+  const { namespace } = config;
+
+  try {
+    // Get old pod's current block number
+    const { stdout: oldRpcResponse } = await runK8sCommand(
+      `exec ${oldPodName} -n ${namespace} -- wget -qO- --timeout=5 http://localhost:8545 --post-data='{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'`,
+      { timeout: parseInt(process.env.RPC_CHECK_TIMEOUT_MS || '15000', 10) }
+    );
+    const oldParsed = JSON.parse(oldRpcResponse);
+    const oldBlockNumber = parseInt(oldParsed.result, 16);
+
+    // If standby block wasn't captured during readiness, fetch it now
+    let actualStandbyBlock = standbyBlockNumber;
+    if (actualStandbyBlock === null) {
+      const { stdout: standbyRpcResponse } = await runK8sCommand(
+        `exec ${standbyPodName} -n ${namespace} -- wget -qO- --timeout=5 http://localhost:8545 --post-data='{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'`,
+        { timeout: parseInt(process.env.RPC_CHECK_TIMEOUT_MS || '15000', 10) }
+      );
+      const standbyParsed = JSON.parse(standbyRpcResponse);
+      actualStandbyBlock = parseInt(standbyParsed.result, 16);
+    }
+
+    const gap = Math.abs(oldBlockNumber - actualStandbyBlock);
+
+    return {
+      synced: gap <= MAX_BLOCK_GAP,
+      oldBlockNumber,
+      standbyBlockNumber: actualStandbyBlock,
+      gap,
+      checkDurationMs: Date.now() - start,
+    };
+  } catch (error) {
+    logger.warn('[ZeroDowntime] Block sync check failed, treating as unsynced:', error);
+    return {
+      synced: false,
+      oldBlockNumber: -1,
+      standbyBlockNumber: standbyBlockNumber ?? -1,
+      gap: Infinity,
+      checkDurationMs: Date.now() - start,
+    };
+  }
+}
+
+/**
+ * Safety Gate 2: TX Drain
+ *
+ * Waits for the old pod's txpool to drain (pending TXs → 0)
+ * before switching traffic. This prevents in-flight transactions
+ * from being lost during the handover.
+ *
+ * Non-blocking: if drain times out, scaling proceeds with a warning
+ * (the TX drain is best-effort to avoid blocking scaling indefinitely).
+ */
+async function waitForTxDrain(
+  oldPodName: string,
+  config: ScalingConfig
+): Promise<TxDrainResult> {
+  const start = Date.now();
+  const { namespace } = config;
+
+  while (Date.now() - start < MAX_TX_DRAIN_WAIT_MS) {
+    try {
+      const { stdout: txPoolResponse } = await runK8sCommand(
+        `exec ${oldPodName} -n ${namespace} -- wget -qO- --timeout=5 http://localhost:8545 --post-data='{"jsonrpc":"2.0","method":"txpool_status","params":[],"id":1}'`,
+        { timeout: 10000 }
+      );
+      const parsed = JSON.parse(txPoolResponse);
+      const pending = parseInt(parsed.result?.pending || '0x0', 16);
+      const queued = parseInt(parsed.result?.queued || '0x0', 16);
+      const total = pending + queued;
+
+      if (total <= MAX_PENDING_TX_FOR_SWITCH) {
+        return {
+          drained: true,
+          pendingTxCount: total,
+          waitDurationMs: Date.now() - start,
+        };
+      }
+
+      logger.info(`[ZeroDowntime] TX drain: ${total} TXs pending, waiting...`);
+      await _testHooks.sleep(TX_DRAIN_POLL_MS);
+    } catch {
+      // txpool_status may not be available — treat as drained
+      logger.warn('[ZeroDowntime] txpool_status RPC failed, assuming drained');
+      return {
+        drained: true,
+        pendingTxCount: 0,
+        waitDurationMs: Date.now() - start,
+      };
+    }
+  }
+
+  // Timeout — return current state (non-blocking: we proceed anyway)
+  return {
+    drained: false,
+    pendingTxCount: -1,
+    waitDurationMs: Date.now() - start,
+  };
+}
 
 // ============================================================
 // Phase Functions
@@ -547,12 +716,36 @@ async function syncStatefulSet(
 }
 
 /**
+ * Rollback with retry: delete standby Pod + cloned PVCs, restore old Pod labels.
+ *
+ * Retries up to MAX_ROLLBACK_RETRIES times to ensure cleanup succeeds.
+ * Each retry attempts all cleanup steps independently.
+ */
+async function rollbackWithRetry(config: ScalingConfig): Promise<void> {
+  for (let attempt = 1; attempt <= MAX_ROLLBACK_RETRIES; attempt++) {
+    try {
+      await rollback(config);
+      logger.info(`[ZeroDowntime] Rollback succeeded on attempt ${attempt}/${MAX_ROLLBACK_RETRIES}`);
+      return;
+    } catch (error) {
+      logger.error(`[ZeroDowntime] Rollback attempt ${attempt}/${MAX_ROLLBACK_RETRIES} failed:`, error);
+      if (attempt < MAX_ROLLBACK_RETRIES) {
+        await _testHooks.sleep(2000 * attempt);
+      }
+    }
+  }
+  logger.error(`[ZeroDowntime] All ${MAX_ROLLBACK_RETRIES} rollback attempts failed — manual intervention required`);
+}
+
+/**
  * Rollback: delete standby Pod + cloned PVCs, restore old Pod labels
  *
  * If failure occurs before traffic switch, the old Pod is unaffected.
+ * Throws on critical failures so rollbackWithRetry can retry.
  */
 async function rollback(config: ScalingConfig): Promise<void> {
   const { namespace, statefulSetName } = config;
+  const errors: string[] = [];
 
   // Delete standby Pod
   if (swapState.standbyPodName) {
@@ -562,7 +755,9 @@ async function rollback(config: ScalingConfig): Promise<void> {
         { timeout: 30000 }
       );
     } catch (error) {
-      logger.warn('[ZeroDowntime] Failed to delete standby pod during rollback:', error);
+      const msg = `Failed to delete standby pod: ${error}`;
+      logger.warn(`[ZeroDowntime] ${msg}`);
+      errors.push(msg);
     }
   }
 
@@ -572,19 +767,28 @@ async function rollback(config: ScalingConfig): Promise<void> {
       await runK8sCommand(`delete pvc ${pvcName} -n ${namespace}`, { timeout: 30000 });
       logger.info(`[ZeroDowntime] Rollback: deleted cloned PVC ${pvcName}`);
     } catch (error) {
-      logger.warn(`[ZeroDowntime] Rollback: failed to delete cloned PVC ${pvcName}:`, error);
+      const msg = `Failed to delete cloned PVC ${pvcName}: ${error}`;
+      logger.warn(`[ZeroDowntime] ${msg}`);
+      errors.push(msg);
     }
   }
 
-  // Restore old Pod labels
+  // Restore old Pod labels — this is critical for traffic restoration
   try {
     await runK8sCommand(
       `label pod ${statefulSetName}-0 -n ${namespace} slot=active --overwrite`,
       { timeout: 10000 }
     );
   } catch (error) {
-    logger.warn('[ZeroDowntime] Failed to restore label during rollback:', error);
+    const msg = `Failed to restore label: ${error}`;
+    logger.warn(`[ZeroDowntime] ${msg}`);
+    errors.push(msg);
   }
 
   swapState.phase = 'failed';
+
+  // If any critical step failed, throw so retry logic can re-attempt
+  if (errors.length > 0) {
+    throw new Error(`Rollback incomplete: ${errors.join('; ')}`);
+  }
 }

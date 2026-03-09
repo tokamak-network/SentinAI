@@ -46,6 +46,22 @@ export interface ReadinessCheckResult {
   checkDurationMs: number;
 }
 
+/** Block sync gate result */
+export interface BlockSyncResult {
+  synced: boolean;
+  oldBlockNumber: number;
+  standbyBlockNumber: number;
+  gap: number;
+  checkDurationMs: number;
+}
+
+/** TX drain gate result */
+export interface TxDrainResult {
+  drained: boolean;
+  pendingTxCount: number;
+  waitDurationMs: number;
+}
+
 /** Traffic switch result */
 export interface TrafficSwitchResult {
   success: boolean;
@@ -64,6 +80,11 @@ export interface ZeroDowntimeResult {
   /** Final phase */
   finalPhase: SwapPhase;
   error?: string;
+  /** Safety gate results */
+  safetyGates?: {
+    blockSync?: BlockSyncResult;
+    txDrain?: TxDrainResult;
+  };
 }
 
 /** Initial SwapState */

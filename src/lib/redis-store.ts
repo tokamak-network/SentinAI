@@ -93,6 +93,7 @@ const KEYS = {
   scalingHistory: 'scaling:history',
   simulationConfig: 'scaling:simulation',
   zeroDowntimeEnabled: 'scaling:zerodowntime',
+  inPlaceResizeEnabled: 'scaling:inplaceresize',
   predictionLatest: 'prediction:latest',
   predictionTime: 'prediction:time',
   lastBlock: 'metrics:lastblock',
@@ -362,6 +363,18 @@ export class RedisStateStore implements IStateStore {
 
   async setZeroDowntimeEnabled(enabled: boolean): Promise<void> {
     await this.client.set(this.key(KEYS.zeroDowntimeEnabled), String(enabled));
+  }
+
+  // --- In-Place Resize ---
+
+  async getInPlaceResizeEnabled(): Promise<boolean> {
+    const val = await this.client.get(this.key(KEYS.inPlaceResizeEnabled));
+    // Default to true — In-Place Resize is the safest mode (no pod restart, no data loss)
+    return val === null ? true : val === 'true';
+  }
+
+  async setInPlaceResizeEnabled(enabled: boolean): Promise<void> {
+    await this.client.set(this.key(KEYS.inPlaceResizeEnabled), String(enabled));
   }
 
   // --- Prediction Cache ---
@@ -1390,6 +1403,7 @@ export class InMemoryStateStore implements IStateStore {
     enabled: process.env.SCALING_SIMULATION_MODE !== 'false',
   };
   private zeroDowntimeEnabled: boolean = false;
+  private inPlaceResizeEnabled: boolean = true; // Default: enabled (safest mode)
   private lastPrediction: PredictionResult | null = null;
   private lastPredictionTime: number = 0;
   private lastBlock: { height: string | null; time: string | null } = {
@@ -1512,6 +1526,16 @@ export class InMemoryStateStore implements IStateStore {
 
   async setZeroDowntimeEnabled(enabled: boolean): Promise<void> {
     this.zeroDowntimeEnabled = enabled;
+  }
+
+  // --- In-Place Resize ---
+
+  async getInPlaceResizeEnabled(): Promise<boolean> {
+    return this.inPlaceResizeEnabled;
+  }
+
+  async setInPlaceResizeEnabled(enabled: boolean): Promise<void> {
+    this.inPlaceResizeEnabled = enabled;
   }
 
   // --- Prediction Cache ---

@@ -256,6 +256,131 @@ export async function setZeroDowntimeEnabled(enabled: boolean): Promise<void> {
 }
 
 /**
+ * Check In-Place Resize mode
+ */
+export async function isInPlaceResizeEnabled(): Promise<boolean> {
+  return getStore().getInPlaceResizeEnabled();
+}
+
+/**
+ * Enable/disable In-Place Resize mode
+ */
+export async function setInPlaceResizeEnabled(enabled: boolean): Promise<void> {
+  await getStore().setInPlaceResizeEnabled(enabled);
+}
+
+/**
+ * In-Place Pod Vertical Scaling (K8s 1.27+)
+ *
+ * Patches the running pod's resource requests/limits via the `resize` subresource.
+ * The kubelet adjusts cgroup limits without restarting the container.
+ *
+ * Benefits:
+ * - Zero downtime (no pod restart)
+ * - Zero data loss (same PVC, same process)
+ * - Instant (~1-3s)
+ *
+ * Verified on: EKS 1.34 + Fargate
+ */
+export async function inPlaceResize(
+  targetVcpu: number,
+  targetMemoryGiB: number,
+  config: ScalingConfig = DEFAULT_SCALING_CONFIG
+): Promise<{ success: boolean; message: string; durationMs: number; error?: string }> {
+  const start = Date.now();
+  const { namespace, statefulSetName, containerIndex } = config;
+  const podName = `${statefulSetName}-0`;
+  const containerName = await getContainerName(podName, namespace, containerIndex);
+
+  try {
+    // Step 1: Patch pod via resize subresource
+    const patchPayload = JSON.stringify({
+      spec: {
+        containers: [{
+          name: containerName,
+          resources: {
+            requests: { cpu: `${targetVcpu}`, memory: `${targetMemoryGiB}Gi` },
+            limits: { cpu: `${targetVcpu}`, memory: `${targetMemoryGiB}Gi` },
+          },
+        }],
+      },
+    });
+
+    await runK8sCommand(
+      `patch pod ${podName} -n ${namespace} --subresource resize --type='merge' -p='${patchPayload}'`,
+      { timeout: 15000 }
+    );
+
+    // Step 2: Sync StatefulSet spec (so next pod recreation uses new resources)
+    try {
+      await syncStatefulSetSpec(targetVcpu, targetMemoryGiB, config);
+    } catch (syncErr) {
+      // Non-fatal: pod is already resized, STS sync can be retried
+      logger.warn('[InPlaceResize] StatefulSet spec sync failed (pod is resized, STS out of sync):', syncErr);
+    }
+
+    return {
+      success: true,
+      message: `In-Place Resize: ${targetVcpu} vCPU, ${targetMemoryGiB}Gi applied in ${Date.now() - start}ms`,
+      durationMs: Date.now() - start,
+    };
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+
+    // If resize subresource is not supported, return a specific error
+    if (msg.includes('unknown subresource') || msg.includes('not found') || msg.includes('does not support')) {
+      return {
+        success: false,
+        message: 'In-Place Resize not supported on this cluster',
+        durationMs: Date.now() - start,
+        error: 'RESIZE_NOT_SUPPORTED',
+      };
+    }
+
+    return {
+      success: false,
+      message: `In-Place Resize failed: ${msg}`,
+      durationMs: Date.now() - start,
+      error: msg,
+    };
+  }
+}
+
+/** Get container name from pod spec */
+async function getContainerName(
+  podName: string, namespace: string, containerIndex: number
+): Promise<string> {
+  try {
+    const { stdout } = await runK8sCommand(
+      `get pod ${podName} -n ${namespace} -o jsonpath='{.spec.containers[${containerIndex}].name}'`,
+      { timeout: 10000 }
+    );
+    return stdout.replace(/'/g, '').trim() || podName;
+  } catch {
+    return podName;
+  }
+}
+
+/** Sync StatefulSet spec to match resized pod (for future pod recreations) */
+async function syncStatefulSetSpec(
+  targetVcpu: number, targetMemoryGiB: number, config: ScalingConfig
+): Promise<void> {
+  const { namespace, statefulSetName, containerIndex } = config;
+  const patchJson = JSON.stringify([
+    { op: 'replace', path: `/spec/template/spec/containers/${containerIndex}/resources/requests/cpu`, value: `${targetVcpu}` },
+    { op: 'replace', path: `/spec/template/spec/containers/${containerIndex}/resources/requests/memory`, value: `${targetMemoryGiB}Gi` },
+    { op: 'replace', path: `/spec/template/spec/containers/${containerIndex}/resources/limits/cpu`, value: `${targetVcpu}` },
+    { op: 'replace', path: `/spec/template/spec/containers/${containerIndex}/resources/limits/memory`, value: `${targetMemoryGiB}Gi` },
+  ]);
+
+  await runK8sCommand(
+    `patch statefulset ${statefulSetName} -n ${namespace} --type='json' -p='${patchJson}'`,
+    { timeout: 30000 }
+  );
+  logger.info(`[InPlaceResize] StatefulSet spec synced: ${targetVcpu} vCPU, ${targetMemoryGiB} GiB`);
+}
+
+/**
  * Get current op-geth vCPU
  */
 export async function getCurrentVcpu(
@@ -408,6 +533,50 @@ export async function scaleOpGeth(
       timestamp,
       message: `[SIMULATION] Scaled from ${previousVcpu} to ${targetVcpu} vCPU (No actual K8s changes)`,
     };
+  }
+
+  // In-Place Resize mode: patch pod resources without restart (highest priority)
+  const ipEnabled = await store.getInPlaceResizeEnabled();
+  if (ipEnabled && !isDockerMode()) {
+    const previousVcpu = state.currentVcpu;
+    const previousMemoryGiB = state.currentMemoryGiB;
+    const ipResult = await inPlaceResize(targetVcpu, targetMemoryGiB, config);
+
+    if (ipResult.success) {
+      await store.updateScalingState({
+        currentVcpu: targetVcpu,
+        currentMemoryGiB: targetMemoryGiB,
+        lastScalingTime: timestamp,
+      });
+      return {
+        success: true,
+        previousVcpu,
+        currentVcpu: targetVcpu,
+        previousMemoryGiB,
+        currentMemoryGiB: targetMemoryGiB,
+        timestamp,
+        message: `[In-Place Resize] ${ipResult.message}`,
+      };
+    }
+
+    // If not supported, fall through to other modes
+    if (ipResult.error === 'RESIZE_NOT_SUPPORTED') {
+      logger.info('[InPlaceResize] Not supported on this cluster, falling through to next mode');
+      await store.setInPlaceResizeEnabled(false); // Disable for future calls
+    } else {
+      // Resize was attempted but failed — return error (don't fall through)
+      logger.error(`[InPlaceResize] Failed: ${ipResult.error}`);
+      return {
+        success: false,
+        previousVcpu,
+        currentVcpu: previousVcpu,
+        previousMemoryGiB,
+        currentMemoryGiB: previousMemoryGiB,
+        timestamp,
+        message: `[In-Place Resize] ${ipResult.message}`,
+        error: ipResult.error,
+      };
+    }
   }
 
   // Zero-downtime mode: Parallel Pod Swap orchestration
