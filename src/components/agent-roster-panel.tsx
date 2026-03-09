@@ -50,7 +50,7 @@ function getAgentStatus(key: string, roles: Record<string, AgentRoleSummary> | u
   if (!r) return 'ok';
   if (r.stale > 0 && r.running === 0) return 'err';
   if (r.stale > 0) return 'warn';
-  if (key === 'notifier' && successRate < 0.95) return 'delay';
+  if (key === 'notifier' && successRate < 95) return 'delay';
   return 'ok';
 }
 
@@ -89,8 +89,11 @@ function tierLabel(tier: string): string {
 
 export function AgentRosterPanel({ agentFleet, experience }: AgentRosterPanelProps) {
   const roles = agentFleet?.roles;
-  const successRate = agentFleet?.kpi.successRate ?? 1;
-  const uptime = experience?.stats?.successRate ?? (agentFleet?.kpi.successRate ?? 1);
+  const successRate = agentFleet?.kpi.successRate ?? 100; // 0–100 (percent)
+  // experience.stats.successRate is 0–1; normalize to 0–100 to match kpi.successRate
+  const uptime = experience?.stats?.successRate != null
+    ? experience.stats.successRate * 100
+    : successRate;
 
   return (
     <div style={{
@@ -113,7 +116,7 @@ export function AgentRosterPanel({ agentFleet, experience }: AgentRosterPanelPro
 
       {/* KPI strip */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #D0D0D0', flexShrink: 0 }}>
-        <KpiCell label="Uptime" value={`${(uptime * 100).toFixed(1)}%`} color="#007A00" note="+0.1% vs yesterday" />
+        <KpiCell label="Uptime" value={`${uptime.toFixed(1)}%`} color="#007A00" note="+0.1% vs yesterday" />
         <KpiCell label="Cycles/min" value={`${agentFleet?.kpi.throughputPerMin.toFixed(0) ?? '—'}`} color="#0055AA" note="normal range" isLast />
       </div>
 

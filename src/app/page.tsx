@@ -740,7 +740,7 @@ export default function Dashboard() {
   const l2Block = current?.metrics?.blockHeight ?? 0;
   const txPool = current?.metrics?.txPoolCount ?? 0;
   const gasUsed = agentLoop?.lastCycle?.metrics?.gasUsedRatio ?? 0;
-  const successRate = agentFleet?.kpi.successRate ?? 1;
+  const successRate = agentFleet?.kpi.successRate ?? 100; // 0–100 (percent, already multiplied in agent-fleet.ts)
   const vcpu = scalerState?.currentVcpu ?? agentLoop?.lastCycle?.scaling?.currentVcpu ?? 2;
   const p95 = agentFleet?.kpi.p95CycleMs ?? 0;
   const p95Str = p95 >= 1000 ? `${(p95 / 1000).toFixed(1)}s` : `${p95}ms`;
@@ -751,7 +751,7 @@ export default function Dashboard() {
     { label: 'L1 BLOCK', value: l1Block.toLocaleString() },
     { label: 'GAS RATIO', value: `${(gasUsed * 100).toFixed(0)}%` },
     { label: 'CYCLES/MIN', value: agentFleet?.kpi.throughputPerMin.toFixed(2) ?? '—' },
-    { label: 'SUCCESS', value: `${(successRate * 100).toFixed(1)}%` },
+    { label: 'SUCCESS', value: `${successRate.toFixed(1)}%` },
     { label: 'P95', value: p95Str },
     { label: 'vCPU', value: `${vcpu} ACTIVE`, warn: vcpu >= 4 },
     { label: 'ANOMALIES', value: `${anomalyEvents.filter(e => e.status === 'active').length} OPEN`, neg: anomalyEvents.filter(e => e.status === 'active').length > 0 },

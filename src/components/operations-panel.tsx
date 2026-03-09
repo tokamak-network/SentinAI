@@ -147,7 +147,7 @@ export function OperationsPanel({ metrics, scalerState, agentFleet, l1Failover, 
           <div style={{ padding: '8px 10px', borderRight: '1px solid #D0D0D0' }}>
             <div style={{ fontFamily: FONT, fontSize: 9, color: '#707070', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 2 }}>SUCCESS</div>
             <div style={{ fontFamily: FONT, fontSize: 18, fontWeight: 700, color: '#007A00', lineHeight: 1 }}>
-              {(successRate * 100).toFixed(1)}%
+              {successRate.toFixed(1)}%
             </div>
           </div>
           <div style={{ padding: '8px 10px' }}>
