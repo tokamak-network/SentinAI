@@ -1,32 +1,32 @@
 @import "tailwindcss";
 
 @theme inline {
-  /* Sentinel Dark palette */
-  --color-background: #050C18;
-  --color-foreground: #E8F4FF;
-  --color-card: #0D1626;
-  --color-card-foreground: #E8F4FF;
-  --color-primary: #3B82F6;
-  --color-primary-foreground: #050C18;
-  --color-secondary: #0D1626;
-  --color-secondary-foreground: #E8F4FF;
-  --color-muted: #0D1626;
-  --color-muted-foreground: #4A7FA5;
-  --color-accent: #10FFAA;
-  --color-accent-foreground: #050C18;
-  --color-destructive: #EF4444;
-  --color-destructive-foreground: #E8F4FF;
-  --color-warning: #F59E0B;
-  --color-border: #1A2B4A;
-  --color-input: #0D1626;
-  --color-ring: #3B82F6;
+  /* Bloomberg Terminal Light palette — aligned with dashboard */
+  --color-background: #FFFFFF;
+  --color-foreground: #0A0A0A;
+  --color-card: #FFFFFF;
+  --color-card-foreground: #0A0A0A;
+  --color-primary: #D40000;
+  --color-primary-foreground: #FFFFFF;
+  --color-secondary: #F7F7F7;
+  --color-secondary-foreground: #0A0A0A;
+  --color-muted: #F7F7F7;
+  --color-muted-foreground: #707070;
+  --color-accent: #0055AA;
+  --color-accent-foreground: #FFFFFF;
+  --color-destructive: #D40000;
+  --color-destructive-foreground: #FFFFFF;
+  --color-border: #D0D0D0;
+  --color-input: #F7F7F7;
+  --color-ring: #D40000;
 
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --radius: 0.5rem;
+  --font-sans: 'IBM Plex Mono', var(--font-ibm-plex-mono), monospace;
+  --font-mono: 'IBM Plex Mono', var(--font-ibm-plex-mono), monospace;
+  --radius: 0px;
 }
 
 body {
   background: var(--color-background);
   color: var(--color-foreground);
+  font-family: 'IBM Plex Mono', var(--font-ibm-plex-mono), monospace;
 }

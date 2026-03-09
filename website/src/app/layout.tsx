@@ -1,23 +1,19 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const ibmPlexMono = IBM_Plex_Mono({
+  variable: "--font-ibm-plex-mono",
   subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
 });
 
 export const metadata: Metadata = {
-  title: "SentinAI — AI-Native Ops for L2 & Rollup Infrastructure",
+  title: "SentinAI — Autonomous Node Guardian for L2 Infrastructure",
   description:
     "SentinAI detects incidents, plans actions by policy, and helps teams recover safely with approval-gated automation.",
   openGraph: {
-    title: "SentinAI — AI-Native Ops for L2 & Rollup Infrastructure",
+    title: "SentinAI — Autonomous Node Guardian for L2 Infrastructure",
     description:
       "Autonomous monitoring and auto-scaling for L2 networks. Observe, Decide, Act.",
     type: "website",
@@ -29,9 +25,7 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+      <body className={`${ibmPlexMono.variable} antialiased`}>
         {children}
       </body>
     </html>

@@ -1,174 +1,239 @@
 'use client';
 
-import {
-  Eye,
-  Brain,
-  Zap,
-  ShieldCheck,
-  FileSearch,
-  Terminal,
-  Cloud,
-  ArrowRight,
-  CheckCircle2,
-  Lock,
-  ClipboardList,
-  Github,
-  ExternalLink,
-  Shield,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { HeroMiniature } from "@/components/hero-miniature";
+import { Github } from 'lucide-react';
+import { HeroMiniature } from '@/components/hero-miniature';
 
-const GITHUB_URL = "https://github.com/tokamak-network/SentinAI";
-const EXAMPLE_DASHBOARD_URL = "https://sentinai.tokamak.network/thanos-sepolia";
+const GITHUB_URL = 'https://github.com/tokamak-network/SentinAI';
+const EXAMPLE_DASHBOARD_URL = 'https://sentinai.tokamak.network/thanos-sepolia';
 
-// ============================================================================
-// Navbar
-// ============================================================================
+const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
+
+// ─── Shared primitives ────────────────────────────────────────────────────────
+
+function SectionBar({ children }: { children: string }) {
+  return (
+    <div style={{
+      background: '#0A0A0A', color: 'white',
+      padding: '3px 14px', fontFamily: FONT, fontSize: 9, fontWeight: 700,
+      letterSpacing: '0.15em', textTransform: 'uppercase',
+    }}>
+      {children}
+    </div>
+  );
+}
+
+function StatusDot({ color }: { color: string }) {
+  return (
+    <span style={{
+      display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
+      background: color, marginRight: 6, flexShrink: 0,
+    }} />
+  );
+}
+
+// ─── Navbar ───────────────────────────────────────────────────────────────────
 
 function Navbar() {
   return (
-    <header className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        {/* Logo */}
-        <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/20">
-            <ShieldCheck className="h-4 w-4 text-white" />
-          </div>
-          <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-lg font-bold text-transparent">
-            SentinAI
-          </span>
-        </div>
-
-        {/* Links */}
-        <nav className="hidden items-center gap-6 text-sm text-muted-foreground sm:flex">
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 transition-colors hover:text-foreground"
-          >
-            <Github className="h-4 w-4" />
-            GitHub
-          </a>
-          <a
-            href="/docs"
-            className="transition-colors hover:text-foreground"
-          >
-            Docs
-          </a>
-          <a href="/setup" className="transition-colors hover:text-foreground">
-            Deploy
-          </a>
-        </nav>
-
-        {/* CTA */}
-        <Button asChild size="sm" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-primary/20 hover:opacity-90 hover:bg-primary">
-          <a href="/connect">
-            Connect Your Node
-            <ArrowRight className="h-4 w-4" />
-          </a>
-        </Button>
+    <header style={{
+      position: 'sticky', top: 0, zIndex: 50,
+      background: '#FFFFFF', borderBottom: '1px solid #D0D0D0',
+      display: 'flex', alignItems: 'stretch', height: 40,
+    }}>
+      {/* Brand block */}
+      <div style={{
+        background: '#D40000', color: 'white',
+        padding: '0 18px', display: 'flex', alignItems: 'center',
+        borderRight: '2px solid #8B0000', flexShrink: 0,
+      }}>
+        <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, letterSpacing: '0.05em' }}>
+          SENTINAI
+        </span>
       </div>
+
+      {/* Nav links */}
+      <nav style={{
+        display: 'flex', alignItems: 'center', gap: 0, marginLeft: 0, flex: 1,
+      }}>
+        {[
+          { href: '/docs', label: 'DOCS' },
+          { href: '/setup', label: 'DEPLOY' },
+        ].map(({ href, label }) => (
+          <a key={label} href={href} style={{
+            fontFamily: FONT, fontSize: 10, fontWeight: 600, letterSpacing: '0.1em',
+            color: '#3A3A3A', textDecoration: 'none', padding: '0 16px', height: '100%',
+            display: 'flex', alignItems: 'center',
+            borderRight: '1px solid #E8E8E8',
+          }}
+            onMouseEnter={e => (e.currentTarget.style.color = '#D40000')}
+            onMouseLeave={e => (e.currentTarget.style.color = '#3A3A3A')}
+          >
+            {label}
+          </a>
+        ))}
+        <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" style={{
+          fontFamily: FONT, fontSize: 10, fontWeight: 600, letterSpacing: '0.1em',
+          color: '#3A3A3A', textDecoration: 'none', padding: '0 16px', height: '100%',
+          display: 'flex', alignItems: 'center', gap: 6,
+          borderRight: '1px solid #E8E8E8',
+        }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#D40000')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#3A3A3A')}
+        >
+          <Github size={13} />
+          GITHUB
+        </a>
+      </nav>
+
+      {/* CTA */}
+      <a href="/connect" style={{
+        background: '#D40000', color: 'white',
+        padding: '0 20px', display: 'flex', alignItems: 'center', gap: 8,
+        fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+        textDecoration: 'none', borderLeft: '2px solid #8B0000',
+      }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#8B0000')}
+        onMouseLeave={e => (e.currentTarget.style.background = '#D40000')}
+      >
+        CONNECT NODE →
+      </a>
     </header>
   );
 }
 
-// ============================================================================
-// Hero
-// ============================================================================
+// ─── Hero ─────────────────────────────────────────────────────────────────────
 
 function Hero() {
   return (
-    <section className="relative overflow-hidden pb-24 pt-24">
-      {/* Background glow */}
-      <div className="pointer-events-none absolute inset-0 flex items-start justify-center">
-        <div className="h-[600px] w-[800px] rounded-full bg-cyan-500/5 blur-[120px]" />
+    <section style={{ background: '#FFFFFF', borderBottom: '1px solid #D0D0D0' }}>
+      {/* Ticker-style status bar */}
+      <div style={{
+        background: '#0A0A0A', padding: '0 18px', height: 22,
+        display: 'flex', alignItems: 'center', gap: 20, overflow: 'hidden',
+      }}>
+        {[
+          { label: 'STATUS', value: 'OPERATIONAL', color: '#00FF88' },
+          { label: 'AGENT LOOP', value: 'ACTIVE · 30s', color: '#00FF88' },
+          { label: 'CHAINS', value: 'OP STACK · ARB NITRO · ZK STACK', color: '#FFD700' },
+          { label: 'OPEN SOURCE', value: 'MIT LICENSE', color: '#888' },
+        ].map(({ label, value, color }) => (
+          <span key={label} style={{ fontFamily: FONT, fontSize: 9, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ color: '#666', letterSpacing: '0.08em' }}>{label}</span>
+            <span style={{ color, fontWeight: 700, letterSpacing: '0.06em' }}>{value}</span>
+          </span>
+        ))}
       </div>
 
-      <div className="relative mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center gap-12 lg:gap-16">
-          {/* Hero text content */}
-          <div className="flex-1 flex flex-col items-center text-center lg:items-start lg:text-left">
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '48px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 60 }}>
+          {/* Left: text */}
+          <div style={{ flex: 1, minWidth: 0 }}>
             {/* Badge */}
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-cyan-500/20 bg-cyan-500/10 px-4 py-1.5 text-sm text-cyan-400">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-cyan-400" />
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 8,
+              border: '1px solid #D0D0D0', padding: '3px 10px', marginBottom: 20,
+            }}>
+              <StatusDot color="#007A00" />
+              <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: '0.15em', color: '#007A00' }}>
+                AUTONOMOUS NODE GUARDIAN
               </span>
-              Autonomous Node Guardian
             </div>
 
             {/* Heading */}
-            <h1 className="mb-6 max-w-3xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl">
-              L1 & L2 Node Infrastructure{" "}
-              <span className="bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
-                Autonomous Operations
-              </span>
+            <h1 style={{
+              fontFamily: FONT, fontSize: 32, fontWeight: 700,
+              color: '#0A0A0A', lineHeight: 1.2, letterSpacing: '0.01em',
+              marginBottom: 16, maxWidth: 560,
+            }}>
+              L1 & L2 Node Infrastructure{' '}
+              <span style={{ color: '#D40000' }}>Autonomous Operations</span>
             </h1>
 
-            {/* Subheading */}
-            <p className="mb-10 max-w-2xl text-lg text-muted-foreground">
-              Geth, Reth, OP Stack, Arbitrum — AI-powered 24/7 autonomous operations for every EVM node.
-              Reduce operator burden with anomaly detection, policy-based planning, and approval gate automation.
+            {/* Sub */}
+            <p style={{
+              fontFamily: FONT, fontSize: 12, color: '#707070', lineHeight: 1.7,
+              marginBottom: 32, maxWidth: 480,
+            }}>
+              Geth, Reth, OP Stack, Arbitrum — AI-powered 24/7 autonomous ops for every EVM node.
+              Anomaly detection, policy-based planning, and approval-gated remediation.
             </p>
 
             {/* CTAs */}
-            <div className="mb-16 flex flex-wrap items-center justify-center lg:justify-start gap-4">
-              <Button asChild size="lg" className="bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-primary/20 hover:opacity-90 hover:bg-primary">
-                <a href="/connect">
-                  <Terminal className="h-4 w-4" />
-                  Connect Your Node
-                </a>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="border-border bg-card/50 text-foreground hover:border-border/70 hover:text-foreground">
-                <a href={EXAMPLE_DASHBOARD_URL} target="_blank" rel="noopener noreferrer">
-                  <ExternalLink className="h-4 w-4" />
-                  View Example Dashboard
-                </a>
-              </Button>
-              <Button asChild size="lg" variant="outline" className="border-border bg-card/50 text-foreground hover:border-border/70 hover:text-foreground">
-                <a href="/docs">
-                  Read Docs
-                  <ExternalLink className="h-4 w-4" />
-                </a>
-              </Button>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 36 }}>
+              <a href="/connect" style={{
+                background: '#D40000', color: 'white',
+                padding: '8px 20px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.1em', textDecoration: 'none', display: 'inline-flex',
+                alignItems: 'center', gap: 8,
+              }}
+                onMouseEnter={e => (e.currentTarget.style.background = '#8B0000')}
+                onMouseLeave={e => (e.currentTarget.style.background = '#D40000')}
+              >
+                ▶ CONNECT YOUR NODE
+              </a>
+              <a href={EXAMPLE_DASHBOARD_URL} target="_blank" rel="noopener noreferrer" style={{
+                background: 'transparent', color: '#0055AA',
+                padding: '8px 20px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.1em', textDecoration: 'none', display: 'inline-flex',
+                alignItems: 'center', gap: 8, border: '1px solid #0055AA',
+              }}
+                onMouseEnter={e => { e.currentTarget.style.background = '#0055AA'; e.currentTarget.style.color = 'white'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#0055AA'; }}
+              >
+                VIEW DASHBOARD ↗
+              </a>
+              <a href="/docs" style={{
+                background: 'transparent', color: '#3A3A3A',
+                padding: '8px 20px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
+                letterSpacing: '0.1em', textDecoration: 'none', display: 'inline-flex',
+                alignItems: 'center', gap: 8, border: '1px solid #D0D0D0',
+              }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = '#A0A0A0')}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = '#D0D0D0')}
+              >
+                READ DOCS
+              </a>
             </div>
 
-            {/* Terminal code block */}
-            <div className="w-full max-w-2xl overflow-hidden rounded-xl border border-border bg-card/80 text-left shadow-2xl shadow-background">
-              {/* Title bar */}
-              <div className="flex items-center gap-2 border-b border-border px-4 py-3">
-                <span className="h-3 w-3 rounded-full bg-rose-500/80" />
-                <span className="h-3 w-3 rounded-full bg-amber-500/80" />
-                <span className="h-3 w-3 rounded-full bg-emerald-500/80" />
-                <span className="ml-2 text-xs text-slate-500">terminal</span>
+            {/* Terminal block */}
+            <div style={{
+              border: '1px solid #D0D0D0', maxWidth: 480, overflow: 'hidden',
+            }}>
+              <div style={{
+                background: '#F7F7F7', borderBottom: '1px solid #D0D0D0',
+                padding: '5px 12px', display: 'flex', alignItems: 'center', gap: 8,
+              }}>
+                <span style={{ fontFamily: FONT, fontSize: 9, color: '#A0A0A0', letterSpacing: '0.1em' }}>
+                  TERMINAL
+                </span>
+                <span style={{
+                  marginLeft: 'auto', background: '#007A00', color: 'white',
+                  fontSize: 8, fontFamily: FONT, padding: '1px 6px', fontWeight: 700,
+                }}>
+                  READY
+                </span>
               </div>
-              {/* Code */}
-              <div className="p-4 font-mono text-sm">
-                <p className="text-slate-500">
-                  <span className="text-slate-600">$</span>{" "}
-                  <span className="text-slate-300">
-                    cp .env.local.sample .env.local
-                  </span>
+              <div style={{ background: '#0A0A0A', padding: '14px 16px', fontFamily: FONT, fontSize: 11 }}>
+                <p style={{ color: '#555', marginBottom: 6 }}>
+                  <span style={{ color: '#888' }}>$</span>{' '}
+                  <span style={{ color: '#D0D0D0' }}>cp .env.local.sample .env.local</span>
                 </p>
-                <p className="mt-1 text-slate-500">
-                  <span className="text-slate-600">$</span>{" "}
-                  <span className="text-slate-300">docker compose up -d</span>
+                <p style={{ color: '#555', marginBottom: 10 }}>
+                  <span style={{ color: '#888' }}>$</span>{' '}
+                  <span style={{ color: '#D0D0D0' }}>docker compose up -d</span>
                 </p>
-                <p className="mt-2 text-emerald-400">
+                <p style={{ color: '#00FF88', marginBottom: 4 }}>
                   ✓ sentinai started on port 3002
                 </p>
-                <p className="text-cyan-400">
+                <p style={{ color: '#00AAFF' }}>
                   ✓ agent loop active — observing L2 metrics
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Hero miniature */}
-          <div className="shrink-0 hidden lg:block">
+          {/* Right: dashboard miniature */}
+          <div style={{ flexShrink: 0 }} className="hidden lg:block">
             <HeroMiniature />
           </div>
         </div>
@@ -177,62 +242,55 @@ function Hero() {
   );
 }
 
-// ============================================================================
-// Supported Clients
-// ============================================================================
+// ─── Supported Clients ────────────────────────────────────────────────────────
 
 const clientGroups = [
   {
-    label: "L1 Execution",
-    color: "text-blue-400",
-    borderColor: "border-blue-500/30",
-    bgColor: "bg-blue-500/5",
-    clients: ["Geth", "Reth", "Nethermind", "Besu"],
+    label: 'L2',
+    color: '#D40000',
+    clients: ['OP Stack', 'Arbitrum Nitro', 'ZK Stack'],
   },
   {
-    label: "L2",
-    color: "text-cyan-400",
-    borderColor: "border-cyan-500/30",
-    bgColor: "bg-cyan-500/5",
-    clients: ["OP Stack", "Arbitrum Nitro", "ZK Stack"],
+    label: 'L1 EXECUTION',
+    color: '#0055AA',
+    clients: ['Geth', 'Reth', 'Nethermind', 'Besu'],
   },
   {
-    label: "L1 Consensus",
-    color: "text-violet-400",
-    borderColor: "border-violet-500/30",
-    bgColor: "bg-violet-500/5",
-    clients: ["Lighthouse", "Prysm", "Teku"],
+    label: 'L1 CONSENSUS',
+    color: '#007A00',
+    clients: ['Lighthouse', 'Prysm', 'Teku'],
   },
 ];
 
 function SupportedClients() {
   return (
-    <section className="py-16">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-8 text-center">
-          <h2 className="mb-2 text-xl font-semibold text-foreground/80">
-            Supported Clients
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Compatible with all major EVM execution, consensus, and L2 clients
-          </p>
-        </div>
-
-        <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-center">
-          {clientGroups.map((group) => (
-            <div
-              key={group.label}
-              className={`flex w-full flex-col gap-3 rounded-xl border ${group.borderColor} ${group.bgColor} p-4 sm:w-auto sm:min-w-[200px]`}
-            >
-              <span className={`text-xs font-semibold uppercase tracking-wider ${group.color}`}>
+    <section style={{ borderBottom: '1px solid #D0D0D0' }}>
+      <SectionBar>Supported Clients</SectionBar>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '24px 24px' }}>
+        <div style={{ display: 'flex', gap: 0, flexWrap: 'wrap' }}>
+          {clientGroups.map((group, gi) => (
+            <div key={group.label} style={{
+              flex: 1, minWidth: 200,
+              borderRight: gi < clientGroups.length - 1 ? '1px solid #D0D0D0' : 'none',
+              padding: '0 20px', paddingLeft: gi === 0 ? 0 : 20,
+            }}>
+              <div style={{
+                fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: '0.15em',
+                color: group.color, marginBottom: 10, textTransform: 'uppercase',
+                display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                <StatusDot color={group.color} />
                 {group.label}
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {group.clients.map((client) => (
-                  <span
-                    key={client}
-                    className="rounded-md border border-border bg-muted/60 px-2.5 py-1 text-xs font-medium text-foreground/80"
-                  >
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {group.clients.map(client => (
+                  <span key={client} style={{
+                    border: `1px solid ${group.color}30`,
+                    background: `${group.color}08`,
+                    color: '#3A3A3A',
+                    padding: '3px 8px',
+                    fontFamily: FONT, fontSize: 10, fontWeight: 500,
+                  }}>
                     {client}
                   </span>
                 ))}
@@ -245,166 +303,62 @@ function SupportedClients() {
   );
 }
 
-// ============================================================================
-// What it does
-// ============================================================================
+// ─── What It Does ─────────────────────────────────────────────────────────────
 
 const capabilities = [
   {
-    icon: Eye,
-    color: "text-cyan-400",
-    bg: "bg-cyan-500/10",
-    title: "Real-time Detection",
-    description:
-      "Monitors L2 operational anomalies in real time — sync failures, sequencer stalls, infra instability.",
+    dot: '#D40000',
+    title: 'Real-time Detection',
+    description: 'Monitors L2 operational anomalies — sync failures, sequencer stalls, infra instability. Z-Score + AI analysis pipeline.',
   },
   {
-    icon: Brain,
-    color: "text-blue-400",
-    bg: "bg-blue-500/10",
-    title: "Policy-based Planning",
-    description:
-      "Generates recovery plans based on risk tiers. Dangerous actions are blocked by default.",
+    dot: '#0055AA',
+    title: 'Policy-based Planning',
+    description: 'Generates recovery plans based on risk tiers. Dangerous actions are blocked by default at the policy layer.',
   },
   {
-    icon: Zap,
-    color: "text-emerald-400",
-    bg: "bg-emerald-500/10",
-    title: "Auto-execution",
-    description:
-      "Low-risk remediation actions (restart, scale) execute automatically within policy bounds.",
+    dot: '#007A00',
+    title: 'Auto-execution',
+    description: 'Low-risk remediation actions (restart, scale) execute automatically within policy bounds. No human needed for routine ops.',
   },
   {
-    icon: ShieldCheck,
-    color: "text-amber-400",
-    bg: "bg-amber-500/10",
-    title: "Approval Gating",
-    description:
-      "High-risk operations (drain, replace, rollback) require human approval via ChatOps.",
+    dot: '#CC6600',
+    title: 'Approval Gating',
+    description: 'High-risk operations (drain, replace, rollback) require human approval via ChatOps. Fully auditable.',
   },
   {
-    icon: FileSearch,
-    color: "text-violet-400",
-    bg: "bg-violet-500/10",
-    title: "Audit Trails",
-    description:
-      "Every decision, action, and outcome is logged. Full traceability for ops teams and governance.",
+    dot: '#0055AA',
+    title: 'Audit Trails',
+    description: 'Every decision, action, and outcome is logged with timestamps. Full traceability for ops teams and governance.',
   },
   {
-    icon: Shield,
-    color: "text-rose-400",
-    bg: "bg-rose-500/10",
-    title: "L1 Validator Monitoring",
-    description:
-      "Real-time detection of finality delays, peer isolation, and sync issues. Block L1 consensus anomalies before they impact L2 operations.",
+    dot: '#D40000',
+    title: 'L1 Validator Monitoring',
+    description: 'Real-time detection of finality delays, peer isolation, and sync issues before they impact L2 operations.',
   },
 ];
 
 function WhatItDoes() {
   return (
-    <section className="py-24">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-12 text-center">
-          <h2 className="mb-4 text-3xl font-bold text-foreground">
-            What it does
-          </h2>
-          <p className="mx-auto max-w-xl text-muted-foreground">
-            Five capabilities working together to reduce MTTR and operator
-            burden for L2 infrastructure teams.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {capabilities.map((cap) => {
-            const Icon = cap.icon;
-            return (
-              <Card
-                key={cap.title}
-                className="transition-colors hover:border-border/70"
-              >
-                <CardContent className="p-6">
-                  <div
-                    className={`mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg ${cap.bg}`}
-                  >
-                    <Icon className={`h-5 w-5 ${cap.color}`} />
-                  </div>
-                  <h3 className="mb-2 font-semibold text-foreground">
-                    {cap.title}
-                  </h3>
-                  <p className="text-sm text-muted-foreground">{cap.description}</p>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-// ============================================================================
-// How it works
-// ============================================================================
-
-const steps = [
-  {
-    number: "01",
-    title: "Observe & Detect",
-    description:
-      "Collect L1/L2 metrics and run the 4-layer anomaly detection pipeline (Z-Score + AI analysis).",
-    accent: "border-cyan-500/50 text-cyan-400",
-  },
-  {
-    number: "02",
-    title: "Analyze & Plan",
-    description:
-      "Trace root causes with AI RCA. The Goal Manager prioritizes and plans the response.",
-    accent: "border-blue-500/50 text-blue-400",
-  },
-  {
-    number: "03",
-    title: "Act & Verify",
-    description:
-      "Execute scaling or remediation, then verify the outcome. Automatic rollback on failure.",
-    accent: "border-violet-500/50 text-violet-400",
-  },
-];
-
-function HowItWorks() {
-  return (
-    <section className="py-24">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-12 text-center">
-          <h2 className="mb-4 text-3xl font-bold text-foreground">
-            How it works
-          </h2>
-          <p className="mx-auto max-w-xl text-muted-foreground">
-            An agent loop running every 30 seconds — observe, analyze, and act to autonomously manage your infrastructure.
-          </p>
-        </div>
-
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-start">
-          {steps.map((step, i) => (
-            <div key={step.number} className="flex flex-1 flex-col items-center text-center">
-              {/* Number */}
-              <div
-                className={`mb-6 flex h-14 w-14 items-center justify-center rounded-full border-2 bg-slate-900 font-mono text-lg font-bold ${step.accent}`}
-              >
-                {step.number}
+    <section style={{ borderBottom: '1px solid #D0D0D0' }}>
+      <SectionBar>What It Does</SectionBar>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)' }}>
+          {capabilities.map((cap, i) => (
+            <div key={cap.title} style={{
+              padding: '18px 20px',
+              borderRight: (i + 1) % 3 !== 0 ? '1px solid #F0F0F0' : 'none',
+              borderBottom: i < 3 ? '1px solid #F0F0F0' : 'none',
+            }}>
+              <div style={{
+                fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+                color: '#0A0A0A', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6,
+              }}>
+                <StatusDot color={cap.dot} />
+                {cap.title.toUpperCase()}
               </div>
-
-              {/* Connector arrow (desktop) */}
-              {i < steps.length - 1 && (
-                <div className="absolute hidden lg:block" style={{ left: `${(i + 1) * 33.33 - 4}%`, top: "1.75rem" }}>
-                  <ArrowRight className="h-6 w-6 text-slate-700" />
-                </div>
-              )}
-
-              <h3 className="mb-3 text-xl font-semibold text-foreground">
-                {step.title}
-              </h3>
-              <p className="max-w-xs text-sm text-muted-foreground">
-                {step.description}
+              <p style={{ fontFamily: FONT, fontSize: 10, color: '#707070', lineHeight: 1.6 }}>
+                {cap.description}
               </p>
             </div>
           ))}
@@ -414,245 +368,292 @@ function HowItWorks() {
   );
 }
 
-// ============================================================================
-// Deployment Options
-// ============================================================================
+// ─── How It Works ─────────────────────────────────────────────────────────────
 
-function Deployment() {
+const pipeline = [
+  {
+    phase: 'OBSERVE',
+    sub: 'collector · rpc',
+    color: '#0055AA',
+    fill: '#F0F4FF',
+    desc: 'Collect L1/L2 metrics from RPC. Block heights, tx pool, gas ratio, CPU.',
+  },
+  {
+    phase: 'DETECT',
+    sub: 'z-score · ai',
+    color: '#0055AA',
+    fill: '#F0F4FF',
+    desc: 'Z-Score statistical anomaly detection + AI semantic analysis (4-layer pipeline).',
+  },
+  {
+    phase: 'ANALYZE',
+    sub: 'rca · context',
+    color: '#007A00',
+    fill: '#F0FFF4',
+    desc: 'Root cause analysis traces fault propagation. Goal Manager prioritizes response.',
+  },
+  {
+    phase: 'ACT',
+    sub: 'k8s · actions',
+    color: '#D40000',
+    fill: '#FFF0F0',
+    desc: 'Execute scaling or remediation. Verify outcome. Auto-rollback on failure.',
+  },
+];
+
+function HowItWorks() {
   return (
-    <section className="py-24">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-12 text-center">
-          <h2 className="mb-4 text-3xl font-bold text-foreground">
-            Deployment Options
-          </h2>
-          <p className="text-muted-foreground">
-            Start locally in minutes. Scale to production when ready.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-          {/* Docker Compose */}
-          <div className="rounded-xl border border-border bg-card/50 p-8">
-            <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-500/10">
-              <Terminal className="h-5 w-5 text-emerald-400" />
+    <section style={{ borderBottom: '1px solid #D0D0D0' }}>
+      <SectionBar>How It Works</SectionBar>
+      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '28px 24px' }}>
+        <p style={{ fontFamily: FONT, fontSize: 10, color: '#707070', marginBottom: 24 }}>
+          An autonomous agent loop running every 30 seconds.
+        </p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 0 }}>
+          {pipeline.map((node, i) => (
+            <div key={node.phase} style={{ display: 'flex', alignItems: 'flex-start', flex: 1 }}>
+              {/* Node */}
+              <div style={{ flex: 1 }}>
+                <div style={{
+                  border: `1.5px solid ${node.color}`,
+                  background: node.fill,
+                  padding: '10px 14px',
+                }}>
+                  <div style={{
+                    fontFamily: FONT, fontSize: 11, fontWeight: 700, color: node.color,
+                    letterSpacing: '0.08em', marginBottom: 2,
+                  }}>
+                    {node.phase}
+                  </div>
+                  <div style={{ fontFamily: FONT, fontSize: 8, color: '#A0A0A0', marginBottom: 8 }}>
+                    {node.sub}
+                  </div>
+                  <p style={{ fontFamily: FONT, fontSize: 9, color: '#707070', lineHeight: 1.5 }}>
+                    {node.desc}
+                  </p>
+                </div>
+              </div>
+              {/* Arrow */}
+              {i < pipeline.length - 1 && (
+                <div style={{
+                  padding: '12px 6px 0',
+                  fontFamily: FONT, fontSize: 14, color: '#A0A0A0', flexShrink: 0,
+                }}>
+                  →
+                </div>
+              )}
             </div>
-            <h3 className="mb-2 text-xl font-semibold text-foreground">
-              Docker Compose
-            </h3>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Local development and demo. Up in under 10 minutes.
-            </p>
-            <div className="rounded-lg border border-border bg-background p-4 font-mono text-sm">
-              <p className="text-slate-500">
-                <span className="text-slate-600">$</span>{" "}
-                <span className="text-slate-300">
-                  docker compose up -d
-                </span>
-              </p>
-            </div>
-            <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-              {["Next.js dashboard on :3002", "Redis state store", "Caddy HTTPS proxy (optional)"].map((item) => (
-                <li key={item} className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <Button asChild className="mt-6 w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg hover:opacity-90 hover:bg-primary">
-              <a href="/setup">
-                <Terminal className="h-4 w-4" />
-                Generate Setup Script
-              </a>
-            </Button>
-          </div>
-
-          {/* Kubernetes */}
-          <div className="rounded-xl border border-border bg-card/50 p-8">
-            <div className="mb-4 inline-flex h-10 w-10 items-center justify-center rounded-lg bg-cyan-500/10">
-              <Cloud className="h-5 w-5 text-cyan-400" />
-            </div>
-            <h3 className="mb-2 text-xl font-semibold text-foreground">
-              Kubernetes (EKS)
-            </h3>
-            <p className="mb-4 text-sm text-muted-foreground">
-              Production-grade deployment with real K8s scaling integration.
-            </p>
-            <div className="rounded-lg border border-border bg-background p-4 font-mono text-sm">
-              <p className="text-slate-500">
-                <span className="text-slate-600">$</span>{" "}
-                <span className="text-slate-300">
-                  AWS_CLUSTER_NAME=my-cluster docker compose up -d
-                </span>
-              </p>
-            </div>
-            <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-              {["Auto-detects EKS region & API endpoint", "Real pod scaling (kubectl integration)", "L1 RPC failover with auto-switch"].map((item) => (
-                <li key={item} className="flex items-center gap-2">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-cyan-400" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
+          ))}
         </div>
       </div>
     </section>
   );
 }
 
-// ============================================================================
-// Safety & Control
-// ============================================================================
+// ─── Deployment ───────────────────────────────────────────────────────────────
+
+function Deployment() {
+  return (
+    <section style={{ borderBottom: '1px solid #D0D0D0' }}>
+      <SectionBar>Deployment Options</SectionBar>
+      <div style={{ maxWidth: 1100, margin: '0 auto', display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+        {/* Docker */}
+        <div style={{ padding: '24px', borderRight: '1px solid #D0D0D0' }}>
+          <div style={{
+            fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
+            color: '#0A0A0A', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <StatusDot color="#007A00" />
+            DOCKER COMPOSE
+          </div>
+          <p style={{ fontFamily: FONT, fontSize: 10, color: '#707070', marginBottom: 14, lineHeight: 1.6 }}>
+            Local development and demo. Up in under 10 minutes.
+          </p>
+          <div style={{ background: '#0A0A0A', padding: '12px 14px', marginBottom: 14 }}>
+            <span style={{ color: '#888', fontFamily: FONT, fontSize: 10 }}>$ </span>
+            <span style={{ color: '#D0D0D0', fontFamily: FONT, fontSize: 10 }}>docker compose up -d</span>
+          </div>
+          {['Next.js dashboard on :3002', 'Redis state store', 'Caddy HTTPS proxy (optional)'].map(item => (
+            <div key={item} style={{
+              fontFamily: FONT, fontSize: 10, color: '#3A3A3A',
+              padding: '4px 0', borderBottom: '1px solid #F0F0F0',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              <span style={{ color: '#007A00' }}>✓</span> {item}
+            </div>
+          ))}
+          <a href="/setup" style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            marginTop: 16, background: '#0055AA', color: 'white',
+            padding: '7px 16px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
+            letterSpacing: '0.08em', textDecoration: 'none',
+          }}
+            onMouseEnter={e => (e.currentTarget.style.background = '#003D80')}
+            onMouseLeave={e => (e.currentTarget.style.background = '#0055AA')}
+          >
+            GENERATE SETUP SCRIPT →
+          </a>
+        </div>
+
+        {/* K8s */}
+        <div style={{ padding: '24px' }}>
+          <div style={{
+            fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.12em',
+            color: '#0A0A0A', marginBottom: 4, display: 'flex', alignItems: 'center', gap: 6,
+          }}>
+            <StatusDot color="#0055AA" />
+            KUBERNETES (EKS)
+          </div>
+          <p style={{ fontFamily: FONT, fontSize: 10, color: '#707070', marginBottom: 14, lineHeight: 1.6 }}>
+            Production-grade deployment with real K8s scaling integration.
+          </p>
+          <div style={{ background: '#0A0A0A', padding: '12px 14px', marginBottom: 14 }}>
+            <span style={{ color: '#888', fontFamily: FONT, fontSize: 10 }}>$ </span>
+            <span style={{ color: '#D0D0D0', fontFamily: FONT, fontSize: 10 }}>
+              AWS_CLUSTER_NAME=my-cluster docker compose up -d
+            </span>
+          </div>
+          {['Auto-detects EKS region & API endpoint', 'Real pod scaling (kubectl integration)', 'L1 RPC failover with auto-switch'].map(item => (
+            <div key={item} style={{
+              fontFamily: FONT, fontSize: 10, color: '#3A3A3A',
+              padding: '4px 0', borderBottom: '1px solid #F0F0F0',
+              display: 'flex', alignItems: 'center', gap: 6,
+            }}>
+              <span style={{ color: '#0055AA' }}>✓</span> {item}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─── Safety & Control ─────────────────────────────────────────────────────────
 
 const safetyItems = [
   {
-    icon: Shield,
-    color: "text-cyan-400",
-    bg: "bg-cyan-500/10",
-    title: "Risk-tiered Policies",
-    description:
-      "Actions are classified by risk level. Each tier has its own execution policy — from auto-approve to always-block.",
+    dot: '#0055AA',
+    label: 'RISK-TIERED POLICIES',
+    level: 'POLICY',
+    levelColor: '#0055AA',
+    description: 'Actions are classified by risk level. Each tier has its own execution policy — from auto-approve to always-block.',
   },
   {
-    icon: Lock,
-    color: "text-rose-400",
-    bg: "bg-rose-500/10",
-    title: "Destructive Actions Blocked",
-    description:
-      "Node deletion, data wipes, and other irreversible operations are blocked by default at the policy layer.",
+    dot: '#D40000',
+    label: 'DESTRUCTIVE ACTIONS BLOCKED',
+    level: 'BLOCKED',
+    levelColor: '#D40000',
+    description: 'Node deletion, data wipes, and irreversible operations are blocked by default at the policy layer.',
   },
   {
-    icon: ShieldCheck,
-    color: "text-amber-400",
-    bg: "bg-amber-500/10",
-    title: "Approval Required",
-    description:
-      "High-risk remediations trigger a ChatOps approval flow. No action is taken without on-call confirmation.",
+    dot: '#CC6600',
+    label: 'APPROVAL REQUIRED',
+    level: 'GATED',
+    levelColor: '#CC6600',
+    description: 'High-risk remediations trigger a ChatOps approval flow. No action taken without on-call confirmation.',
   },
   {
-    icon: ClipboardList,
-    color: "text-violet-400",
-    bg: "bg-violet-500/10",
-    title: "Full Audit History",
-    description:
-      "Every decision, action, and outcome is stored with timestamps. Replay past incidents for post-mortems.",
+    dot: '#007A00',
+    label: 'FULL AUDIT HISTORY',
+    level: 'LOGGED',
+    levelColor: '#007A00',
+    description: 'Every decision, action, and outcome stored with timestamps. Replay incidents for post-mortems.',
   },
 ];
 
 function SafetyControl() {
   return (
-    <section className="py-24">
-      <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-        <div className="mb-12 text-center">
-          <h2 className="mb-4 text-3xl font-bold text-foreground">
-            Safety & Control
-          </h2>
-          <p className="mx-auto max-w-xl text-muted-foreground">
-            Autonomous doesn&apos;t mean uncontrolled. Every action is
-            governed by policy, risk score, and human approval gates.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {safetyItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <Card
-                key={item.title}
-                className="transition-colors hover:border-border/70"
-              >
-                <CardContent className="flex gap-4 p-6">
-                  <div
-                    className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ${item.bg}`}
-                  >
-                    <Icon className={`h-5 w-5 ${item.color}`} />
-                  </div>
-                  <div>
-                    <h3 className="mb-1 font-semibold text-foreground">
-                      {item.title}
-                    </h3>
-                    <p className="text-sm text-muted-foreground">{item.description}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </div>
+    <section style={{ borderBottom: '1px solid #D0D0D0' }}>
+      <SectionBar>Safety &amp; Control</SectionBar>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+        {safetyItems.map((item, i) => (
+          <div key={item.label} style={{
+            display: 'flex', alignItems: 'center', gap: 16,
+            padding: '12px 24px',
+            borderBottom: i < safetyItems.length - 1 ? '1px solid #F0F0F0' : 'none',
+          }}>
+            <StatusDot color={item.dot} />
+            <span style={{
+              fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+              color: '#0A0A0A', minWidth: 240,
+            }}>
+              {item.label}
+            </span>
+            <span style={{
+              fontFamily: FONT, fontSize: 8, fontWeight: 700,
+              padding: '2px 6px', border: `1px solid ${item.levelColor}`,
+              color: item.levelColor, flexShrink: 0,
+            }}>
+              {item.level}
+            </span>
+            <span style={{ fontFamily: FONT, fontSize: 10, color: '#707070', lineHeight: 1.6, flex: 1 }}>
+              {item.description}
+            </span>
+          </div>
+        ))}
       </div>
     </section>
   );
 }
 
-// ============================================================================
-// Footer
-// ============================================================================
+// ─── Footer ───────────────────────────────────────────────────────────────────
 
 function Footer() {
   return (
-    <footer className="border-t border-border bg-card/30">
-      <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-6 px-4 py-12 text-sm text-muted-foreground sm:flex-row sm:px-6 lg:px-8">
+    <footer style={{ background: '#0A0A0A' }}>
+      <div style={{
+        maxWidth: 1100, margin: '0 auto',
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '16px 24px',
+      }}>
         {/* Brand */}
-        <div className="flex flex-col items-center gap-3 sm:items-start">
-          <div className="flex items-center gap-2">
-            <div className="flex h-6 w-6 items-center justify-center rounded-md bg-gradient-to-br from-cyan-500 to-blue-600">
-              <ShieldCheck className="h-3.5 w-3.5 text-white" />
-            </div>
-            <span className="font-semibold text-foreground/70">SentinAI</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <div style={{
+            background: '#D40000', color: 'white',
+            padding: '2px 10px', fontFamily: FONT, fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+          }}>
+            SENTINAI
           </div>
-          <p className="max-w-xs text-center text-xs sm:text-left">
-            Autonomous Node Guardian for L2 & Rollup Infrastructure.
-            Built by{" "}
-            <a
-              href="https://tokamak.network"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-muted-foreground hover:text-foreground"
-            >
+          <span style={{ fontFamily: FONT, fontSize: 9, color: '#555' }}>
+            Autonomous Node Guardian · Built by{' '}
+            <a href="https://tokamak.network" target="_blank" rel="noopener noreferrer"
+              style={{ color: '#888', textDecoration: 'none' }}>
               Tokamak Network
             </a>
-            .
-          </p>
+          </span>
         </div>
 
         {/* Links */}
-        <nav className="flex items-center gap-6">
-          <a
-            href="/docs"
-            className="hover:text-foreground"
-          >
-            Docs
-          </a>
-          <a
-            href={GITHUB_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1 hover:text-foreground"
-          >
-            <Github className="h-4 w-4" />
-            GitHub
-          </a>
-          <a
-            href="https://x.com/tokamak_network"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-foreground"
-          >
-            X
-          </a>
+        <nav style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
+          {[
+            { href: '/docs', label: 'DOCS' },
+            { href: '/setup', label: 'DEPLOY' },
+            { href: GITHUB_URL, label: 'GITHUB', external: true },
+            { href: 'https://x.com/tokamak_network', label: 'X / TWITTER', external: true },
+          ].map(({ href, label, external }) => (
+            <a key={label} href={href}
+              {...(external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+              style={{
+                fontFamily: FONT, fontSize: 9, fontWeight: 600, letterSpacing: '0.1em',
+                color: '#666', textDecoration: 'none',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#FFFFFF')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#666')}
+            >
+              {label}
+            </a>
+          ))}
         </nav>
       </div>
     </footer>
   );
 }
 
-// ============================================================================
-// Page
-// ============================================================================
+// ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div style={{ minHeight: '100vh', background: '#FFFFFF', fontFamily: FONT }}>
       <Navbar />
       <main>
         <Hero />
