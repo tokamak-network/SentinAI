@@ -27,6 +27,11 @@ export interface FleetBuildInput {
   now?: string | Date;
   staleAfterSec?: number;
   windowMinutes?: number;
+  /** Roles that run on a fixed schedule and should be stale-checked.
+   *  Event-driven roles are excluded — they only activate on events and
+   *  should not show WARN just because no events have occurred.
+   *  Defaults to all roles (backward-compatible). */
+  scheduledRoles?: ReadonlySet<string>;
 }
 
 interface FleetRoleSummary {
@@ -125,11 +130,16 @@ export function buildAgentFleetSnapshot(input: FleetBuildInput): FleetSnapshot {
       roleSummary[status.role].running += 1;
       runningAgents += 1;
 
-      const lastActivityMs = toMs(status.lastActivityAt);
-      const stale = lastActivityMs === null || nowMs - lastActivityMs > staleThresholdMs;
-      if (stale) {
-        roleSummary[status.role].stale += 1;
-        staleAgents += 1;
+      // Only check staleness for scheduled (timer-based) roles.
+      // Event-driven roles are healthy even without recent activity.
+      const isScheduled = !input.scheduledRoles || input.scheduledRoles.has(status.role);
+      if (isScheduled) {
+        const lastActivityMs = toMs(status.lastActivityAt);
+        const stale = lastActivityMs === null || nowMs - lastActivityMs > staleThresholdMs;
+        if (stale) {
+          roleSummary[status.role].stale += 1;
+          staleAgents += 1;
+        }
       }
     }
   }

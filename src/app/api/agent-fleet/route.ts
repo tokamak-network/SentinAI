@@ -31,7 +31,13 @@ export async function GET(request: Request) {
       })),
     }));
 
-    const snapshot = buildAgentFleetSnapshot({ statuses, cycles });
+    // In V2, only collector and detector run on a fixed schedule.
+    // All other roles are event-driven and should not be marked stale
+    // just because no events have occurred.
+    const scheduledRoles = agentV2
+      ? new Set(['collector', 'detector'])
+      : undefined;
+    const snapshot = buildAgentFleetSnapshot({ statuses, cycles, scheduledRoles });
 
     // In Agent V2 mode, enrich KPIs from experience store
     if (agentV2) {
