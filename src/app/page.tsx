@@ -761,14 +761,19 @@ export default function Dashboard() {
   // --- Handler stubs for new layout ---
   const handleRunRca = useCallback(async () => {
     try {
-      await fetch(`${BASE_PATH}/api/rca`, {
+      const res = await fetch(`${BASE_PATH}/api/rca`, {
         method: 'POST',
         headers: writeHeaders(),
         body: JSON.stringify({}),
       });
-      toast.info('Running RCA...', { description: 'Root cause analysis started.' });
+      const data = await res.json();
+      if (!data.success) {
+        toast.info('RCA 건너뜀', { description: data.message });
+        return;
+      }
+      toast.info('RCA 실행 중', { description: 'Root cause analysis started.' });
     } catch {
-      toast.error('RCA failed');
+      toast.error('RCA 요청 실패');
     }
   }, []);
 

@@ -52,6 +52,16 @@ export async function POST(request: NextRequest): Promise<NextResponse<RCARespon
       logger.info(`[API /rca] Detected ${anomalies.filter(a => a.isAnomaly).length} anomalies`);
     }
 
+    // Guard: skip RCA if no anomalies detected (prevents hallucinated results)
+    const activeAnomalyCount = anomalies.filter(a => a.isAnomaly).length;
+    if (!body.autoTriggered && activeAnomalyCount === 0) {
+      logger.info('[API /rca] No active anomalies — skipping RCA');
+      return NextResponse.json({
+        success: false,
+        message: '현재 감지된 이상 징후가 없습니다. 이상 발생 시 RCA를 실행해 주세요.',
+      });
+    }
+
     // 3. Collect logs from all components
     let logs: Record<string, string>;
     try {
