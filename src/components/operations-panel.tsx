@@ -14,7 +14,13 @@ interface MetricData {
   eoaBalances?: {
     roles: Record<string, { address: string; balanceEth: number; level: string } | null>;
   };
-  components?: Array<{ name: string; type: string; rawCpu?: number; status: string }>;
+  components?: Array<{
+    name: string;
+    type: string;
+    rawCpu?: number;
+    status: string;
+    usage?: { cpuPercent: number; memoryMiB: number };
+  }>;
 }
 
 interface ScalerState {
@@ -40,6 +46,7 @@ export interface OperationsPanelProps {
   agentFleet: AgentFleetData | null;
   l1Failover: L1FailoverStatus | null;
   scalingScore: number;
+  currentVcpu?: number;
 }
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -115,8 +122,8 @@ function MetricRow({ label, pct, value, color }: { label: string; pct: number; v
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function OperationsPanel({ metrics, scalerState, agentFleet, l1Failover, scalingScore }: OperationsPanelProps) {
-  const vcpu = scalerState?.currentVcpu ?? 2;
+export function OperationsPanel({ metrics, scalerState, agentFleet, l1Failover, scalingScore, currentVcpu: vcpuProp }: OperationsPanelProps) {
+  const vcpu = vcpuProp ?? scalerState?.currentVcpu ?? 2;
   const tierIdx = currentTierIndex(vcpu);
   const txMin = agentFleet?.kpi.throughputPerMin ?? 0;
   const costHourly = metrics?.cost.hourlyRate ?? 0;
@@ -198,11 +205,36 @@ export function OperationsPanel({ metrics, scalerState, agentFleet, l1Failover, 
           <>
             <SectionLabel>L2 COMPONENTS</SectionLabel>
             {components.slice(0, 5).map(c => {
-              const pct = c.rawCpu ?? metrics?.metrics.cpuUsage ?? 50;
-              const healthy = c.status !== 'error' && c.status !== 'stopped';
+              const statusLower = c.status?.toLowerCase() ?? '';
+              const notDetected = statusLower === 'stopped' || statusLower === 'error' || statusLower === 'not managed';
+              const cpuPct = notDetected ? 0 : (c.usage?.cpuPercent ?? 0);
+              const memMiB = notDetected ? null : (c.usage?.memoryMiB ?? null);
+              const memLabel = memMiB !== null
+                ? memMiB >= 1024 ? `${(memMiB / 1024).toFixed(1)}G` : `${Math.round(memMiB)}M`
+                : null;
+              const cpuLabel = notDetected ? 'N/A' : (cpuPct < 1 ? '< 1%' : `${cpuPct.toFixed(0)}%`);
+              const color = notDetected ? '#A0A0A0' : '#0055AA';
               return (
-                <MetricRow key={c.name} label={c.name} pct={pct}
-                  value={`${pct.toFixed(0)}%`} color={healthy ? '#0055AA' : '#D40000'} />
+                <div key={c.name} style={{
+                  display: 'flex', alignItems: 'center', padding: '4px 10px',
+                  borderBottom: '1px solid #F0F0F0', gap: 8,
+                }}>
+                  <span style={{ fontFamily: FONT, fontSize: 10, color: '#3A3A3A', flex: 1 }}>{c.name}</span>
+                  <div style={{ width: 60, height: 4, background: '#EFEFEF', borderRadius: 1, overflow: 'hidden' }}>
+                    <div style={{ width: `${Math.min(100, cpuPct)}%`, height: '100%', background: color, borderRadius: 1 }} />
+                  </div>
+                  <span style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: notDetected ? '#A0A0A0' : '#0A0A0A', minWidth: 36, textAlign: 'right' }}>
+                    {cpuLabel}
+                  </span>
+                  {memLabel !== null && (
+                    <span style={{ fontFamily: FONT, fontSize: 9, color: '#707070', minWidth: 32, textAlign: 'right' }}>
+                      {memLabel}
+                    </span>
+                  )}
+                  {memLabel === null && !notDetected && (
+                    <span style={{ fontFamily: FONT, fontSize: 9, color: '#C0C0C0', minWidth: 32, textAlign: 'right' }}>—</span>
+                  )}
+                </div>
               );
             })}
           </>
