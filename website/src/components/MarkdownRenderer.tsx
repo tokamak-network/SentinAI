@@ -8,9 +8,11 @@ import 'highlight.js/styles/github-dark.css';
 
 interface MarkdownRendererProps {
   content: string;
+  skipFirstH1?: boolean;
 }
 
-export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
+export default function MarkdownRenderer({ content, skipFirstH1 = false }: MarkdownRendererProps) {
+  const firstH1Skipped = { current: false };
   return (
     <div className="prose prose-slate max-w-none prose-sm lg:prose-base prose-headings:scroll-mt-20 prose-a:text-blue-600 hover:prose-a:text-blue-500 prose-code:text-xs prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-[''] prose-code:after:content-[''] prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-p:leading-relaxed prose-li:leading-relaxed">
       <ReactMarkdown
@@ -18,6 +20,10 @@ export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
         rehypePlugins={[rehypeRaw, rehypeHighlight]}
         components={{
           h1: ({ children }) => {
+            if (skipFirstH1 && !firstH1Skipped.current) {
+              firstH1Skipped.current = true;
+              return null;
+            }
             const id = String(children)
               .toLowerCase()
               .replace(/[^\w\s-]/g, '')

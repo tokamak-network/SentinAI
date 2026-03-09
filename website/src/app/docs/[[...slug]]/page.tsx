@@ -103,7 +103,7 @@ export default async function DocsPage({ params }: PageProps) {
 
           <div className="flex flex-col xl:flex-row gap-6">
             <article className="flex-1 rounded-xl border border-slate-200 bg-white px-6 py-5 sm:px-8 sm:py-6 shadow-sm overflow-hidden">
-              <MarkdownRenderer content={content} />
+              <MarkdownRenderer content={content} skipFirstH1 />
             </article>
 
             <div className="xl:w-52">
