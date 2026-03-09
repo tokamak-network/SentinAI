@@ -419,7 +419,7 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
       {/* Event trace table */}
       <div style={{ borderTop: '2px solid #A0A0A0', flexShrink: 0, maxHeight: 162, overflowY: 'auto', background: '#FFFFFF' }}>
         <div style={{
-          display: 'grid', gridTemplateColumns: '62px 46px 72px 110px 1fr 52px',
+          display: 'grid', gridTemplateColumns: '62px 54px 90px 124px 1fr 58px',
           padding: '3px 10px', background: '#0A0A0A', color: 'white',
           fontFamily: FONT, fontSize: 9, fontWeight: 700,
           letterSpacing: '0.1em', textTransform: 'uppercase', position: 'sticky', top: 0,
@@ -439,9 +439,9 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
                                      { background: '#F0F0F0', color: '#606060' };
           return (
             <div key={i} style={{
-              display: 'grid', gridTemplateColumns: '62px 46px 72px 110px 1fr 52px',
+              display: 'grid', gridTemplateColumns: '62px 54px 90px 124px 1fr 58px',
               padding: '3px 10px', borderBottom: '1px solid #F0F0F0',
-              fontFamily: FONT, fontSize: 10, alignItems: 'center',
+              fontFamily: FONT, fontSize: 10, alignItems: 'start',
               background: i % 2 === 1 ? '#F7F7F7' : '#FFFFFF',
             }}>
               <span style={{ color: '#707070', fontSize: 9 }}>{row.ts}</span>
@@ -450,7 +450,7 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
               </span>
               <span style={{ color: '#0055AA', fontSize: 9, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.agent}</span>
               <span style={{ color: '#3A3A3A', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.action}</span>
-              <span style={{ color: '#0A0A0A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.detail}</span>
+              <span style={{ color: '#0A0A0A', whiteSpace: 'normal', wordBreak: 'break-word' }}>{row.detail}</span>
               <span style={{ color: row.latency !== '—' ? (row.ok ? '#007A00' : '#CC6600') : '#A0A0A0', textAlign: 'right', fontWeight: 600, fontSize: 9 }}>{row.latency}</span>
             </div>
           );
