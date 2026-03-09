@@ -10,7 +10,7 @@ import { NextResponse } from 'next/server';
 import { getChainPlugin } from '@/chains';
 import { getRecentMetrics } from '@/lib/metrics-store';
 import { getEvents } from '@/lib/anomaly-event-store';
-import { getAgentCycleCount, getLastCycleResult } from '@/lib/agent-loop';
+import { getLastCycle, getCycleCount } from '@/lib/cycle-store';
 import { isAgentV2Enabled } from '@/core/agent-orchestrator';
 import { getGoalManagerConfig } from '@/lib/goal-manager';
 import { getExperienceStats } from '@/lib/experience-store';
@@ -184,11 +184,12 @@ export async function GET(): Promise<NextResponse<PublicStatusResponse | { error
     // Fetch in parallel
     // Fetch enough events to cover the 7-day window accurately.
     // 500 is a safe upper bound for typical L2 deployments.
+    const agentV2 = isAgentV2Enabled();
     const [recentMetrics, anomalyResult, totalCycles, lastCycle] = await Promise.all([
       getRecentMetrics(1),
       getEvents(500, 0),
-      getAgentCycleCount(),
-      getLastCycleResult(),
+      getCycleCount(),
+      getLastCycle(),
     ]);
 
     const latestMetric = recentMetrics[0] ?? null;
@@ -213,7 +214,6 @@ export async function GET(): Promise<NextResponse<PublicStatusResponse | { error
       .map(buildIncidentSummary);
 
     // Agent loop info — Agent V2 uses Goal Manager instead of cron-based agent loop
-    const agentV2 = isAgentV2Enabled();
     const agentRunning = agentV2
       ? getGoalManagerConfig().enabled
       : (lastCycle !== null && (now - new Date(lastCycle.timestamp).getTime()) < 120_000);

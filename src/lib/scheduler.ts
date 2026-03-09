@@ -12,7 +12,16 @@ import cron, { type ScheduledTask } from 'node-cron';
 import { takeSnapshot, getAccumulatedData, initializeAccumulator } from '@/lib/daily-accumulator';
 import { generateDailyReport } from '@/lib/daily-report-generator';
 import { deliverDailyReport } from '@/lib/daily-report-mailer';
-import { runAgentCycle } from '@/lib/agent-loop';
+// Dynamic import — only loaded when V1 agent loop is active (AGENT_V2 != 'true').
+// This allows agent-loop.ts to be removed when fully migrated to V2.
+let _runAgentCycle: (() => Promise<unknown>) | null = null;
+async function getRunAgentCycle(): Promise<() => Promise<unknown>> {
+  if (!_runAgentCycle) {
+    const m = await import('@/lib/agent-loop');
+    _runAgentCycle = m.runAgentCycle;
+  }
+  return _runAgentCycle;
+}
 import { applyScheduledScaling, buildScheduleProfile } from '@/lib/scheduled-scaler';
 import { cleanupExpiredAgentMemory } from '@/lib/agent-memory';
 import { getStore } from '@/lib/redis-store';
@@ -298,6 +307,7 @@ export async function executeAgentCycle(source: AgentCycleSource): Promise<Agent
       setTimeout(() => reject(new Error('Agent loop timeout after 50s')), AGENT_CYCLE_TIMEOUT_MS)
     );
 
+    const runAgentCycle = await getRunAgentCycle();
     const result = await Promise.race([runAgentCycle(), timeoutPromise]) as {
       phase?: string;
       error?: string;

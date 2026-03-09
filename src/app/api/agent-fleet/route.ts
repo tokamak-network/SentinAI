@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAgentOrchestrator, isAgentV2Enabled } from '@/core/agent-orchestrator';
-import { getAgentCycleHistory, type AgentCycleResult } from '@/lib/agent-loop';
+import { getCycleHistory } from '@/lib/cycle-store';
+import type { AgentCycleResult } from '@/types/agent-cycle';
 import { buildAgentFleetSnapshot } from '@/lib/agent-fleet';
 import { getExperienceStats } from '@/lib/experience-store';
 import logger from '@/lib/logger';
@@ -17,7 +18,7 @@ export async function GET(request: Request) {
 
     const [statuses, recentCycles] = await Promise.all([
       Promise.resolve(getAgentOrchestrator().getStatuses()),
-      agentV2 ? Promise.resolve([]) : getAgentCycleHistory(limit),
+      getCycleHistory(limit),
     ]);
 
     const cycles = recentCycles.map((cycle: AgentCycleResult) => ({

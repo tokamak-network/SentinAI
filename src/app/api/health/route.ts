@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getLastCycleResult } from '@/lib/agent-loop';
+import { getLastCycle } from '@/lib/cycle-store';
 import { getStore } from '@/lib/redis-store';
 import { getSchedulerStatus } from '@/lib/scheduler';
 import logger from '@/lib/logger';
@@ -59,14 +59,14 @@ export async function GET() {
 
   try {
     const chain = getChainSnapshot();
+    const agentV2 = isAgentV2Enabled();
     const [heartbeatAt, lastCycle, scheduler] = await Promise.all([
       getStore().getAgentLoopHeartbeat(),
-      getLastCycleResult(),
+      getLastCycle(),
       Promise.resolve(getSchedulerStatus()),
     ]);
 
     const heartbeatLagSec = computeLagSeconds(nowMs, heartbeatAt);
-    const agentV2 = isAgentV2Enabled();
     const stale = !agentV2 && scheduler.agentLoopEnabled && (heartbeatLagSec === null || heartbeatLagSec > staleThresholdSec);
 
     return NextResponse.json({
