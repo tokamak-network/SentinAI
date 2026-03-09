@@ -18,18 +18,16 @@ interface DocItem {
 
 const docStructure: DocSection[] = [
   {
-    title: 'Start Here',
+    title: 'Get Started',
     items: [
       { title: 'Overview', href: '/docs/guide/overview', emoji: '📖' },
-      { title: 'Whitepaper', href: '/docs/whitepaper', emoji: '📄' },
-      { title: 'Quick Start (5 min)', href: '/docs/guide/quickstart', emoji: '⚡' },
-      { title: 'OP Stack Setup', href: '/docs/guide/optimism-l2-sentinai-local-setup' },
+      { title: 'Quick Start', href: '/docs/guide/quickstart', emoji: '⚡' },
       { title: 'Demo Scenarios', href: '/docs/guide/demo-scenarios' },
       { title: 'Troubleshooting', href: '/docs/guide/troubleshooting', emoji: '🔧' },
     ],
   },
   {
-    title: 'Setup & Deployment',
+    title: 'Deploy',
     items: [
       { title: 'Setup Guide', href: '/docs/guide/setup' },
       { title: 'EC2 Deployment', href: '/docs/guide/ec2-setup-guide' },
@@ -41,26 +39,16 @@ const docStructure: DocSection[] = [
     items: [
       { title: 'Daily Operations', href: '/docs/guide/agentic-q1-operations-runbook' },
       { title: 'Autonomy Cockpit', href: '/docs/guide/autonomy-cockpit-user-guide' },
+      { title: 'MCP User Guide', href: '/docs/guide/sentinai-mcp-user-guide' },
     ],
   },
   {
-    title: 'Integrate & Extend',
+    title: 'Reference',
     items: [
       { title: 'Architecture', href: '/docs/guide/architecture', emoji: '🏗️' },
       { title: 'API Reference', href: '/docs/guide/api-reference', emoji: '📡' },
-      { title: 'MCP User Guide', href: '/docs/guide/sentinai-mcp-user-guide' },
-      { title: 'Claude MCP Setup', href: '/docs/guide/claude-code-mcp-setup' },
-      { title: 'Client Ops Contract', href: '/docs/spec/client-ops-contract' },
       { title: 'Anomaly Detection', href: '/docs/spec/anomaly-detection-guide' },
       { title: 'RCA Engine', href: '/docs/spec/rca-engine-guide' },
-    ],
-  },
-  {
-    title: 'Testing & Verification',
-    items: [
-      { title: 'Testing Guide', href: '/docs/verification/testing-guide' },
-      { title: 'Integration Tests', href: '/docs/verification/integration-test-report' },
-      { title: 'Dashboard UI Testing', href: '/docs/verification/dashboard-ui-testing-guide' },
     ],
   },
 ];
