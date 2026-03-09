@@ -14,7 +14,7 @@ export async function GET(_request: NextRequest, context: RouteContext): Promise
 
   const instance = await getInstance(id);
   if (!instance) {
-    return NextResponse.json({ error: '인스턴스를 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 });
+    return NextResponse.json({ error: 'Instance not found.', code: 'NOT_FOUND' }, { status: 404 });
   }
 
   const playbook = await getPlaybook(id, playbookId);

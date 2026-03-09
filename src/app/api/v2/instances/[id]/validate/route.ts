@@ -36,7 +36,7 @@ export async function POST(
     const instance = await getInstance(id);
     if (!instance) {
       return NextResponse.json(
-        { error: '인스턴스를 찾을 수 없습니다.', code: 'NOT_FOUND' },
+        { error: 'Instance not found.', code: 'NOT_FOUND' },
         { status: 404 }
       );
     }
@@ -108,7 +108,7 @@ export async function POST(
   } catch (error) {
     logger.error(`[v2 POST /instances/${id}/validate] error:`, error);
     return NextResponse.json(
-      { error: '연결 검증에 실패했습니다.', code: 'INTERNAL_ERROR' },
+      { error: 'Connection validation failed.', code: 'INTERNAL_ERROR' },
       { status: 500 }
     );
   }

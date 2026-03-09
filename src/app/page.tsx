@@ -768,12 +768,12 @@ export default function Dashboard() {
       });
       const data = await res.json();
       if (!data.success) {
-        toast.info('RCA 건너뜀', { description: data.message });
+        toast.info('RCA skipped', { description: data.message });
         return;
       }
-      toast.info('RCA 실행 중', { description: 'Root cause analysis started.' });
+      toast.info('Running RCA...', { description: 'Root cause analysis started.' });
     } catch {
-      toast.error('RCA 요청 실패');
+      toast.error('RCA request failed');
     }
   }, []);
 

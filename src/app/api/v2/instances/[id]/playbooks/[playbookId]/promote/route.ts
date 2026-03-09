@@ -20,13 +20,13 @@ function checkWriteAuth(request: NextRequest): boolean {
 
 export async function POST(request: NextRequest, context: RouteContext): Promise<NextResponse> {
   if (!checkWriteAuth(request)) {
-    return NextResponse.json({ error: '인증에 실패했습니다.', code: 'UNAUTHORIZED' }, { status: 401 });
+    return NextResponse.json({ error: 'Authentication failed.', code: 'UNAUTHORIZED' }, { status: 401 });
   }
 
   const { id, playbookId } = await context.params;
   const instance = await getInstance(id);
   if (!instance) {
-    return NextResponse.json({ error: '인스턴스를 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 });
+    return NextResponse.json({ error: 'Instance not found.', code: 'NOT_FOUND' }, { status: 404 });
   }
 
   const playbook = await getPlaybook(id, playbookId);

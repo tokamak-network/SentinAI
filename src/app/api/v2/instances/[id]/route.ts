@@ -55,7 +55,7 @@ export async function GET(
     const instance = await getInstance(id);
     if (!instance) {
       return NextResponse.json(
-        { error: '인스턴스를 찾을 수 없습니다.', code: 'NOT_FOUND' },
+        { error: 'Instance not found.', code: 'NOT_FOUND' },
         { status: 404 }
       );
     }
@@ -85,7 +85,7 @@ export async function PATCH(
 ): Promise<NextResponse> {
   if (!checkWriteAuth(request)) {
     return NextResponse.json(
-      { error: '인증에 실패했습니다.', code: 'UNAUTHORIZED' },
+      { error: 'Authentication failed.', code: 'UNAUTHORIZED' },
       { status: 401 }
     );
   }
@@ -97,7 +97,7 @@ export async function PATCH(
       body = await request.json();
     } catch {
       return NextResponse.json(
-        { error: '요청 본문이 올바르지 않습니다.', code: 'BAD_REQUEST' },
+        { error: 'Invalid request body.', code: 'BAD_REQUEST' },
         { status: 400 }
       );
     }
@@ -105,7 +105,7 @@ export async function PATCH(
     const updated = await updateInstance(id, body);
     if (!updated) {
       return NextResponse.json(
-        { error: '인스턴스를 찾을 수 없습니다.', code: 'NOT_FOUND' },
+        { error: 'Instance not found.', code: 'NOT_FOUND' },
         { status: 404 }
       );
     }
@@ -135,7 +135,7 @@ export async function DELETE(
 ): Promise<NextResponse> {
   if (!checkWriteAuth(request)) {
     return NextResponse.json(
-      { error: '인증에 실패했습니다.', code: 'UNAUTHORIZED' },
+      { error: 'Authentication failed.', code: 'UNAUTHORIZED' },
       { status: 401 }
     );
   }
@@ -145,7 +145,7 @@ export async function DELETE(
     const deleted = await deleteInstance(id);
     if (!deleted) {
       return NextResponse.json(
-        { error: '인스턴스를 찾을 수 없습니다.', code: 'NOT_FOUND' },
+        { error: 'Instance not found.', code: 'NOT_FOUND' },
         { status: 404 }
       );
     }

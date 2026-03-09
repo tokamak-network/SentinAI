@@ -75,7 +75,7 @@ interface OnboardingCompleteBody {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!checkWriteAuth(request)) {
     return NextResponse.json(
-      { error: '인증에 실패했습니다.', code: 'UNAUTHORIZED' },
+      { error: 'Authentication failed.', code: 'UNAUTHORIZED' },
       { status: 401 }
     );
   }
@@ -85,7 +85,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     body = await request.json();
   } catch {
     return NextResponse.json(
-      { error: '요청 본문이 올바르지 않습니다.', code: 'BAD_REQUEST' },
+      { error: 'Invalid request body.', code: 'BAD_REQUEST' },
       { status: 400 }
     );
   }

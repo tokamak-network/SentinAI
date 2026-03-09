@@ -55,7 +55,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     logger.error('[v2 GET /instances] error:', error);
     return NextResponse.json(
-      { error: '인스턴스 목록 조회에 실패했습니다.', code: 'INTERNAL_ERROR' },
+      { error: 'Failed to fetch instance list.', code: 'INTERNAL_ERROR' },
       { status: 500 }
     );
   }
@@ -68,7 +68,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 export async function POST(request: NextRequest): Promise<NextResponse> {
   if (!checkWriteAuth(request)) {
     return NextResponse.json(
-      { error: '인증에 실패했습니다.', code: 'UNAUTHORIZED' },
+      { error: 'Authentication failed.', code: 'UNAUTHORIZED' },
       { status: 401 }
     );
   }
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       body = await request.json();
     } catch {
       return NextResponse.json(
-        { error: '요청 본문이 올바르지 않습니다.', code: 'BAD_REQUEST' },
+        { error: 'Invalid request body.', code: 'BAD_REQUEST' },
         { status: 400 }
       );
     }
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!body.protocolId || !body.displayName || !body.connectionConfig?.rpcUrl) {
       return NextResponse.json(
         {
-          error: 'protocolId, displayName, connectionConfig.rpcUrl 은 필수 항목입니다.',
+          error: 'protocolId, displayName, connectionConfig.rpcUrl are required.',
           code: 'VALIDATION_ERROR',
         },
         { status: 400 }
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   } catch (error) {
     logger.error('[v2 POST /instances] error:', error);
     return NextResponse.json(
-      { error: '인스턴스 생성에 실패했습니다.', code: 'INTERNAL_ERROR' },
+      { error: 'Failed to create instance.', code: 'INTERNAL_ERROR' },
       { status: 500 }
     );
   }

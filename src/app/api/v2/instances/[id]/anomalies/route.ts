@@ -29,7 +29,7 @@ export async function GET(
     const instance = await getInstance(id);
     if (!instance) {
       return NextResponse.json(
-        { error: '인스턴스를 찾을 수 없습니다.', code: 'NOT_FOUND' },
+        { error: 'Instance not found.', code: 'NOT_FOUND' },
         { status: 404 }
       );
     }
@@ -65,7 +65,7 @@ export async function GET(
   } catch (error) {
     logger.error(`[v2 GET /instances/${id}/anomalies] error:`, error);
     return NextResponse.json(
-      { error: '이상 이벤트 조회에 실패했습니다.', code: 'INTERNAL_ERROR' },
+      { error: 'Failed to fetch anomaly events.', code: 'INTERNAL_ERROR' },
       { status: 500 }
     );
   }

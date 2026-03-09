@@ -57,7 +57,7 @@ export async function GET(
     const instance = await getInstance(id);
     if (!instance) {
       return NextResponse.json(
-        { error: '인스턴스를 찾을 수 없습니다.', code: 'NOT_FOUND' },
+        { error: 'Instance not found.', code: 'NOT_FOUND' },
         { status: 404 }
       );
     }
