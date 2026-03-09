@@ -26,7 +26,7 @@ const C = {
 // ============================================================================
 
 type NodeType = "ethereum-el" | "opstack-l2" | "arbitrum-nitro" | "zkstack";
-type AiProvider = "none" | "qwen" | "anthropic" | "openai" | "gemini";
+type AiProvider = "none" | "qwen" | "anthropic" | "openai" | "gemini" | "gateway";
 
 interface NodeConfig {
   type: NodeType;
@@ -101,6 +101,7 @@ const NODE_GROUPS: { id: NodeConfig["group"]; label: string; color: string }[] =
 
 const AI_OPTIONS: { value: AiProvider; label: string; keyVar: string; placeholder: string }[] = [
   { value: "none", label: "None (Set Later)", keyVar: "", placeholder: "" },
+  { value: "gateway", label: "LiteLLM Gateway", keyVar: "AI_GATEWAY_URL", placeholder: "" },
   { value: "qwen", label: "Qwen (DashScope)", keyVar: "QWEN_API_KEY", placeholder: "sk-..." },
   { value: "anthropic", label: "Anthropic (Claude)", keyVar: "ANTHROPIC_API_KEY", placeholder: "sk-ant-..." },
   { value: "openai", label: "OpenAI", keyVar: "OPENAI_API_KEY", placeholder: "sk-..." },
@@ -141,8 +142,8 @@ function buildDockerRun(cfg: BuildConfig): string {
   if (optional) lines.push(`  -e ${optional}=<optional-l1-rpc-url> \\\n`);
   if (cfg.authToken.trim()) lines.push(`  -e SENTINAI_RPC_AUTH_TOKEN=${cfg.authToken.trim()} \\\n`);
 
-  if (cfg.gatewayUrl.trim()) {
-    lines.push(`  -e AI_GATEWAY_URL=${cfg.gatewayUrl.trim()} \\\n`);
+  if (cfg.aiProvider === "gateway") {
+    lines.push(`  -e AI_GATEWAY_URL=${cfg.gatewayUrl.trim() || "<your-gateway-url>"} \\\n`);
     if (cfg.gatewayApiKey.trim()) lines.push(`  -e AI_GATEWAY_KEY=${cfg.gatewayApiKey.trim()} \\\n`);
   } else {
     const aiOpt = AI_OPTIONS.find((o) => o.value === cfg.aiProvider);
@@ -173,8 +174,8 @@ function buildEnvLocal(cfg: BuildConfig): string {
   if (optional) lines.push(`${optional}=<optional-l1-rpc-url>`);
   if (cfg.authToken.trim()) lines.push(`SENTINAI_RPC_AUTH_TOKEN=${cfg.authToken.trim()}`);
 
-  if (cfg.gatewayUrl.trim()) {
-    lines.push(`AI_GATEWAY_URL=${cfg.gatewayUrl.trim()}`);
+  if (cfg.aiProvider === "gateway") {
+    lines.push(`AI_GATEWAY_URL=${cfg.gatewayUrl.trim() || "<your-gateway-url>"}`);
     if (cfg.gatewayApiKey.trim()) lines.push(`AI_GATEWAY_KEY=${cfg.gatewayApiKey.trim()}`);
   } else {
     const aiOpt = AI_OPTIONS.find((o) => o.value === cfg.aiProvider);
@@ -577,22 +578,22 @@ export default function ConnectPage() {
                 </span>
                 <span style={{ fontFamily: FONT, fontSize: 9, color: C.primary, marginLeft: 8 }}>*Required</span>
               </div>
-              <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12, opacity: gatewayUrl.trim() ? 0.4 : 1, pointerEvents: gatewayUrl.trim() ? "none" : "auto" }}>
-                {gatewayUrl.trim() ? (
-                  <p style={{ fontFamily: FONT, fontSize: 10, color: C.accent, margin: 0, fontWeight: 700 }}>
-                    Overridden by LiteLLM Gateway — AI_GATEWAY_URL takes priority.
-                  </p>
-                ) : (
-                  <p style={{ fontFamily: FONT, fontSize: 10, color: C.muted, margin: 0 }}>
-                    Required for anomaly detection, NLOps, RCA, and predictive scaling.
-                  </p>
-                )}
+              <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+                <p style={{ fontFamily: FONT, fontSize: 10, color: C.muted, margin: 0 }}>
+                  Required for anomaly detection, NLOps, RCA, and predictive scaling.
+                </p>
                 <div>
                   <label style={labelStyle}>Provider</label>
                   <select
                     id="ai-provider"
                     value={aiProvider}
-                    onChange={(e) => { setAiProvider(e.target.value as AiProvider); setAiApiKey(""); resetOutput(); }}
+                    onChange={(e) => {
+                      setAiProvider(e.target.value as AiProvider);
+                      setAiApiKey("");
+                      setGatewayUrl("");
+                      setGatewayApiKey("");
+                      resetOutput();
+                    }}
                     style={{ ...inputStyle, appearance: "none" as const }}
                   >
                     {AI_OPTIONS.map((opt) => (
@@ -600,7 +601,47 @@ export default function ConnectPage() {
                     ))}
                   </select>
                 </div>
-                {aiProvider !== "none" && (
+
+                {aiProvider === "gateway" && (
+                  <>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                        <label style={{ ...labelStyle, marginBottom: 0 }}>Gateway URL</label>
+                        <span style={{
+                          fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: "0.1em",
+                          background: C.accent, color: "#fff", padding: "1px 6px",
+                        }}>PRIORITY 0</span>
+                      </div>
+                      <input
+                        id="gateway-url"
+                        type="url"
+                        value={gatewayUrl}
+                        onChange={(e) => { setGatewayUrl(e.target.value); resetOutput(); }}
+                        placeholder="http://localhost:4000"
+                        style={inputStyle}
+                      />
+                      <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
+                        Overrides all other providers when set (AI_GATEWAY_URL).
+                      </p>
+                    </div>
+                    <div>
+                      <label style={labelStyle}>Gateway API Key <span style={{ fontWeight: 400 }}>(Optional)</span></label>
+                      <input
+                        id="gateway-api-key"
+                        type="password"
+                        value={gatewayApiKey}
+                        onChange={(e) => { setGatewayApiKey(e.target.value); resetOutput(); }}
+                        placeholder="sk-..."
+                        style={inputStyle}
+                      />
+                      <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
+                        Required if your LiteLLM server has auth enabled (AI_GATEWAY_KEY).
+                      </p>
+                    </div>
+                  </>
+                )}
+
+                {aiProvider !== "none" && aiProvider !== "gateway" && (
                   <div>
                     <label style={labelStyle}>API Key</label>
                     <input
@@ -637,46 +678,7 @@ export default function ConnectPage() {
               {advancedOpen && (
                 <div style={{ borderTop: `1px solid ${C.border}`, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
 
-                  {/* LiteLLM Gateway */}
                   <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                      <label style={{ ...labelStyle, marginBottom: 0 }}>LiteLLM Gateway URL</label>
-                      <span style={{
-                        fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: "0.1em",
-                        background: C.accent, color: "#fff", padding: "1px 6px",
-                      }}>PRIORITY 0</span>
-                    </div>
-                    <input
-                      id="gateway-url"
-                      type="url"
-                      value={gatewayUrl}
-                      onChange={(e) => { setGatewayUrl(e.target.value); resetOutput(); }}
-                      placeholder="http://localhost:4000"
-                      style={inputStyle}
-                    />
-                    <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
-                      Overrides all other AI providers when set (AI_GATEWAY_URL).
-                    </p>
-                  </div>
-
-                  {gatewayUrl.trim() && (
-                    <div>
-                      <label style={labelStyle}>Gateway API Key <span style={{ fontWeight: 400 }}>(Optional)</span></label>
-                      <input
-                        id="gateway-api-key"
-                        type="password"
-                        value={gatewayApiKey}
-                        onChange={(e) => { setGatewayApiKey(e.target.value); resetOutput(); }}
-                        placeholder="sk-..."
-                        style={inputStyle}
-                      />
-                      <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
-                        Required if your LiteLLM server has auth enabled (AI_GATEWAY_KEY).
-                      </p>
-                    </div>
-                  )}
-
-                  <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
                     <label style={labelStyle}>AWS Cluster Name</label>
                     <input
                       id="aws-cluster"
