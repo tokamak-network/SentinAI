@@ -14,7 +14,7 @@ import { MetricDataPoint } from '@/types/prediction';
 import { runK8sCommand, getNamespace, getAppPrefix } from '@/lib/k8s-config';
 import { getStore } from '@/lib/redis-store';
 import { runDetectionPipeline } from '@/lib/detection-pipeline';
-import { getContainerCpuUsage, getAllContainerUsage, getAllContainerUsageViaKubelet } from '@/lib/k8s-scaler';
+import { getContainerCpuUsage, getAllContainerUsage, getAllContainerUsageViaKubelet, getScalingState } from '@/lib/k8s-scaler';
 import { isDockerMode } from '@/lib/docker-config';
 import { getDockerComponentDetails } from '@/lib/docker-orchestrator';
 import { getL2NodesL1RpcStatus, getSentinaiL1RpcUrl } from '@/lib/l1-rpc-failover';
@@ -755,7 +755,20 @@ export async function GET(request: Request) {
             logger.info(`[Metrics API] Seed scenario active (${activeScenario}): using vCPU = ${seedVcpu}`);
             currentVcpu = seedVcpu;
         } else if (!activeScenario || activeScenario === 'live') {
-            logger.info(`[Metrics API] No active seed scenario, using K8s vCPU = ${currentVcpu}`);
+            // Prefer scaler's own currentVcpu over K8s resource request.
+            // In simulation mode K8s is never patched, so rawCpu stays stale
+            // while the scaler state already tracks the intended vCPU.
+            try {
+                const scalerState = await getScalingState();
+                if (scalerState.currentVcpu && scalerState.currentVcpu > 0) {
+                    currentVcpu = scalerState.currentVcpu;
+                    logger.info(`[Metrics API] Using scaler state vCPU = ${currentVcpu}`);
+                } else {
+                    logger.info(`[Metrics API] Scaler state not set, using K8s vCPU = ${currentVcpu}`);
+                }
+            } catch {
+                logger.info(`[Metrics API] Could not read scaler state, using K8s vCPU = ${currentVcpu}`);
+            }
         }
 
         if (isStressTest) {

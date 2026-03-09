@@ -20,6 +20,7 @@ interface AnomalyEvent {
     anomalyType?: string;
     relatedComponents?: string[];
   };
+  anomalies?: Array<{ metric: string; value: number; zScore?: number }>;
 }
 
 interface AgentDecision {
