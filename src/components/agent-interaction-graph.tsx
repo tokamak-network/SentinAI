@@ -261,9 +261,9 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
     if (!roles) return '—';
     const r = roles[key];
     if (!r) return '—';
-    if (layer === 'action') return `${r.running} actions`;
+    if (layer === 'action') return `${r.running} active`;
     if (key === 'cost') return `$${(agentFleet?.kpi.throughputPerMin ?? 0).toFixed(0)}/day`;
-    return `${r.running.toLocaleString()} cycles`;
+    return `${r.running} instance${r.running !== 1 ? 's' : ''}`;
   };
 
   // Data label shown on active edges
