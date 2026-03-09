@@ -109,6 +109,90 @@ const AI_OPTIONS: { value: AiProvider; label: string; keyVar: string; placeholde
 ];
 
 // ============================================================================
+// Optional feature snippets
+// ============================================================================
+
+interface FeatureDef {
+  id: string;
+  label: string;
+  description: string;
+  snippet: string;
+  nodeTypes?: NodeType[];
+}
+
+const OPTIONAL_FEATURES: FeatureDef[] = [
+  {
+    id: "l1-failover",
+    label: "L1 RPC Failover",
+    description: "Auto-switch to backup endpoints on quota exhaustion",
+    snippet:
+      "# Backup L1 RPC endpoints (comma-separated, priority order)\n" +
+      "L1_RPC_URLS=https://rpc1.example.io,https://rpc2.example.io\n" +
+      "SENTINAI_L1_RPC_URL=https://rpc1.example.io",
+  },
+  {
+    id: "eoa-monitor",
+    label: "EOA Balance Monitor",
+    description: "Alert when batcher/proposer wallet balance runs low",
+    nodeTypes: ["opstack-l2", "arbitrum-nitro"],
+    snippet:
+      "# EOA wallet addresses to monitor\n" +
+      "BATCHER_EOA_ADDRESS=0x...\n" +
+      "PROPOSER_EOA_ADDRESS=0x...\n\n" +
+      "# Auto-refill (optional — requires treasury wallet)\n" +
+      "# TREASURY_PRIVATE_KEY=0x...\n" +
+      "# EOA_BALANCE_CRITICAL_ETH=0.1\n" +
+      "# EOA_REFILL_AMOUNT_ETH=0.5",
+  },
+  {
+    id: "redis",
+    label: "Redis State",
+    description: "Persist metrics and anomaly history across restarts",
+    snippet:
+      "# Redis connection (default: in-memory, resets on restart)\n" +
+      "REDIS_URL=redis://localhost:6379",
+  },
+  {
+    id: "mcp-auth",
+    label: "MCP / API Auth",
+    description: "Secure write endpoints with a shared API key",
+    snippet:
+      "# Shared secret for dashboard write operations\n" +
+      "SENTINAI_API_KEY=your-secret-key\n" +
+      "NEXT_PUBLIC_SENTINAI_API_KEY=your-secret-key",
+  },
+  {
+    id: "auto-remediation",
+    label: "Auto-Remediation",
+    description: "Automatically execute playbooks on detected anomalies",
+    snippet:
+      "# Enable autonomous remediation engine\n" +
+      "AUTO_REMEDIATION_ENABLED=true",
+  },
+  {
+    id: "proxyd",
+    label: "Proxyd Integration",
+    description: "Update L2 node Proxyd config on L1 RPC failover",
+    nodeTypes: ["opstack-l2"],
+    snippet:
+      "# Update Proxyd ConfigMap when L1 RPC failover occurs\n" +
+      "L1_PROXYD_ENABLED=true\n" +
+      "L1_PROXYD_CONFIGMAP_NAME=proxyd-config\n" +
+      "L1_PROXYD_DATA_KEY=proxyd.toml\n" +
+      "L1_PROXYD_UPSTREAM_GROUP=main\n" +
+      "L1_PROXYD_SPARE_URLS=https://spare1.io,https://spare2.io",
+  },
+  {
+    id: "real-scaling",
+    label: "Real K8s Scaling",
+    description: "Apply actual pod resource changes (simulation off by default)",
+    snippet:
+      "# Disable simulation — applies real K8s scaling actions\n" +
+      "SCALING_SIMULATION_MODE=false",
+  },
+];
+
+// ============================================================================
 // Output generators
 // ============================================================================
 
@@ -319,6 +403,7 @@ export default function ConnectPage() {
   const [gatewayUrl, setGatewayUrl] = useState("");
   const [gatewayApiKey, setGatewayApiKey] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [enabledFeatures, setEnabledFeatures] = useState<Set<string>>(new Set());
 
   const [generated, setGenerated] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -353,7 +438,20 @@ export default function ConnectPage() {
     setGenerated(false);
     setTestResult(null);
     setTestError(null);
+    setEnabledFeatures(new Set());
   }
+
+  function toggleFeature(id: string) {
+    setEnabledFeatures(prev => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  }
+
+  const visibleFeatures = OPTIONAL_FEATURES.filter(
+    f => !f.nodeTypes || f.nodeTypes.includes(nodeType)
+  );
 
   function copyToClipboard(text: string, id: string) {
     navigator.clipboard.writeText(text).catch(() => {
@@ -839,6 +937,66 @@ export default function ConnectPage() {
                   copiedId={copiedId}
                   onCopy={copyToClipboard}
                 />
+
+                {/* Optional Features */}
+                <div style={{ borderTop: `2px solid ${C.fg}`, paddingTop: 16, marginTop: 4 }}>
+                  <div style={{
+                    fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: "0.15em",
+                    color: C.fg, marginBottom: 12,
+                  }}>
+                    OPTIONAL FEATURES — click to add env vars
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 12 }}>
+                    {visibleFeatures.map(f => {
+                      const on = enabledFeatures.has(f.id);
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => toggleFeature(f.id)}
+                          style={{
+                            fontFamily: FONT, textAlign: "left", cursor: "pointer",
+                            padding: "8px 10px",
+                            border: `1px solid ${on ? C.accent : C.border}`,
+                            background: on ? `${C.accent}0A` : C.bg,
+                            display: "flex", flexDirection: "column", gap: 2,
+                          }}
+                        >
+                          <span style={{
+                            fontSize: 10, fontWeight: 700,
+                            color: on ? C.accent : C.fg,
+                            display: "flex", alignItems: "center", gap: 6,
+                          }}>
+                            <span style={{
+                              width: 12, height: 12, border: `1px solid ${on ? C.accent : C.border}`,
+                              background: on ? C.accent : "transparent", flexShrink: 0,
+                              display: "inline-flex", alignItems: "center", justifyContent: "center",
+                            }}>
+                              {on && <span style={{ color: "#fff", fontSize: 8, lineHeight: 1 }}>✓</span>}
+                            </span>
+                            {f.label}
+                          </span>
+                          <span style={{ fontSize: 9, color: C.muted, paddingLeft: 18 }}>
+                            {f.description}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Snippets for enabled features */}
+                  {visibleFeatures.filter(f => enabledFeatures.has(f.id)).map(f => (
+                    <div key={f.id} style={{ marginBottom: 8 }}>
+                      <CodeBlock
+                        title={`+ ${f.label}`}
+                        content={f.snippet}
+                        copyId={`feat-${f.id}`}
+                        copiedId={copiedId}
+                        onCopy={copyToClipboard}
+                      />
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
