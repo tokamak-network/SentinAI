@@ -1040,7 +1040,22 @@ export default function ConnectPage() {
                 </div>
 
                 {/* Step 1 */}
-                <DeployStep number={1} title="CREATE .ENV.LOCAL" font={FONT} colors={C}>
+                <DeployStep number={1} title="CLONE REPOSITORY" font={FONT} colors={C}>
+                  <CodeBlock
+                    title="terminal"
+                    content={`git clone ${GITHUB_URL}.git\ncd SentinAI`}
+                    copyId="clone"
+                    copiedId={copiedId}
+                    onCopy={copyToClipboard}
+                  />
+                  <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "8px 0 0" }}>
+                    Clone the repository to get <code style={{ background: C.secondary, padding: "1px 4px" }}>docker-compose.yml</code>{" "}
+                    and all required configuration files.
+                  </p>
+                </DeployStep>
+
+                {/* Step 2 */}
+                <DeployStep number={2} title="CREATE .ENV.LOCAL" font={FONT} colors={C}>
                   <CodeBlock
                     title=".env.local"
                     content={envLocal}
@@ -1054,8 +1069,8 @@ export default function ConnectPage() {
                   </p>
                 </DeployStep>
 
-                {/* Step 2 */}
-                <DeployStep number={2} title="START WITH DOCKER COMPOSE" font={FONT} colors={C}>
+                {/* Step 3 */}
+                <DeployStep number={3} title="START WITH DOCKER COMPOSE" font={FONT} colors={C}>
                   <CodeBlock
                     title="terminal"
                     content={`docker compose up -d`}
@@ -1076,8 +1091,8 @@ export default function ConnectPage() {
                   </p>
                 </DeployStep>
 
-                {/* Step 3 */}
-                <DeployStep number={3} title="OPEN DASHBOARD" font={FONT} colors={C} last>
+                {/* Step 4 */}
+                <DeployStep number={4} title="OPEN DASHBOARD" font={FONT} colors={C} last>
                   <div style={{ display: "flex", gap: 0, border: `1px solid ${C.border}` }}>
                     <span style={{
                       flex: 1, fontFamily: FONT, fontSize: 11, color: C.accent,
