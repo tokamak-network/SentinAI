@@ -43,27 +43,27 @@ const LAYERS = [
   },
 ] as const;
 
-type AgentStatus = 'ok' | 'warn' | 'err' | 'delay';
+type AgentStatus = 'ok' | 'stale' | 'err' | 'delay';
 
 function getAgentStatus(key: string, roles: Record<string, AgentRoleSummary> | undefined, successRate: number): AgentStatus {
   const r = roles?.[key];
   if (!r) return 'ok';
   if (r.stale > 0 && r.running === 0) return 'err';
-  if (r.stale > 0) return 'warn';
+  if (r.stale > 0) return 'stale';
   if (key === 'notifier' && successRate < 95) return 'delay';
   return 'ok';
 }
 
 function statusDotColor(status: AgentStatus): string {
   if (status === 'err')   return '#D40000';
-  if (status === 'warn')  return '#CC6600';
+  if (status === 'stale') return '#909090';
   if (status === 'delay') return '#CC6600';
   return '#007A00';
 }
 
 function badgeText(status: AgentStatus): string {
   if (status === 'err')   return 'ERR';
-  if (status === 'warn')  return 'WARN';
+  if (status === 'stale') return 'STALE';
   if (status === 'delay') return 'DELAY';
   return 'OK';
 }
@@ -71,7 +71,8 @@ function badgeText(status: AgentStatus): string {
 function badgeStyle(status: AgentStatus): React.CSSProperties {
   const base: React.CSSProperties = { fontFamily: FONT, fontSize: 9, fontWeight: 700, padding: '1px 4px', borderRadius: 2 };
   if (status === 'err')   return { ...base, background: '#FFE6E6', color: '#D40000' };
-  if (status === 'warn' || status === 'delay') return { ...base, background: '#FFF3E0', color: '#CC6600' };
+  if (status === 'stale') return { ...base, background: '#F0F0F0', color: '#606060' };
+  if (status === 'delay') return { ...base, background: '#FFF3E0', color: '#CC6600' };
   return { ...base, background: '#E6F4E6', color: '#007A00' };
 }
 
