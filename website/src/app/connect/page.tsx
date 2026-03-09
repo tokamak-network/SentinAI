@@ -221,7 +221,7 @@ interface BuildConfig {
   gatewayApiKey: string;
 }
 
-function buildEnvLocal(cfg: BuildConfig): string {
+function buildEnvLocal(cfg: BuildConfig, featureSnippets: string[] = []): string {
   const { primary, optional } = ENV_MAP[cfg.nodeType];
   const u = cfg.url.trim() || "<your-url>";
   const lines: string[] = [];
@@ -246,6 +246,15 @@ function buildEnvLocal(cfg: BuildConfig): string {
 
   if (cfg.awsClusterName.trim()) lines.push(`AWS_CLUSTER_NAME=${cfg.awsClusterName.trim()}`);
   if (cfg.alertWebhookUrl.trim()) lines.push(`ALERT_WEBHOOK_URL=${cfg.alertWebhookUrl.trim()}`);
+
+  if (featureSnippets.length > 0) {
+    lines.push("");
+    lines.push("# --- Optional Features ---");
+    featureSnippets.forEach(snippet => {
+      lines.push("");
+      lines.push(snippet);
+    });
+  }
 
   return lines.join("\n");
 }
@@ -434,9 +443,23 @@ export default function ConnectPage() {
     awsClusterName, alertWebhookUrl, gatewayUrl, gatewayApiKey,
   };
 
-  const envLocal = useMemo(() => buildEnvLocal(buildCfg), [
-    nodeType, url, authToken, networkName, aiProvider, aiApiKey, awsClusterName, alertWebhookUrl, gatewayUrl, gatewayApiKey,
-  ]);
+  const visibleFeatures = OPTIONAL_FEATURES.filter(
+    f =>
+      (!f.nodeTypes || f.nodeTypes.includes(nodeType)) &&
+      (!f.deployTargets || !deployTarget || f.deployTargets.includes(deployTarget))
+  );
+
+  const envLocal = useMemo(() => {
+    const featureSnippets = OPTIONAL_FEATURES
+      .filter(f =>
+        enabledFeatures.has(f.id) &&
+        (!f.nodeTypes || f.nodeTypes.includes(nodeType)) &&
+        (!f.deployTargets || !deployTarget || f.deployTargets.includes(deployTarget))
+      )
+      .map(f => f.snippet);
+    return buildEnvLocal(buildCfg, featureSnippets);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nodeType, url, authToken, networkName, aiProvider, aiApiKey, awsClusterName, alertWebhookUrl, gatewayUrl, gatewayApiKey, deployTarget, enabledFeatures]);
 
   useEffect(() => {
     if (!testResult?.data?.dashboardUrl) return;
@@ -460,12 +483,6 @@ export default function ConnectPage() {
       return next;
     });
   }
-
-  const visibleFeatures = OPTIONAL_FEATURES.filter(
-    f =>
-      (!f.nodeTypes || f.nodeTypes.includes(nodeType)) &&
-      (!f.deployTargets || !deployTarget || f.deployTargets.includes(deployTarget))
-  );
 
   const isLocalUrl = /localhost|127\.0\.0\.1/.test(url);
 
@@ -1035,8 +1052,55 @@ export default function ConnectPage() {
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-                <div style={{ fontFamily: FONT, fontSize: 10, color: "#007A00", fontWeight: 700, marginBottom: 20 }}>
+                <div style={{ fontFamily: FONT, fontSize: 10, color: "#007A00", fontWeight: 700, marginBottom: 16 }}>
                   ● Setup guide ready — follow the steps below
+                </div>
+
+                {/* Optional Features selector */}
+                <div style={{ marginBottom: 20, paddingBottom: 20, borderBottom: `2px solid ${C.fg}` }}>
+                  <div style={{
+                    fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: "0.15em",
+                    color: C.fg, marginBottom: 10,
+                  }}>
+                    OPTIONAL FEATURES — included in .env.local below
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                    {visibleFeatures.map(f => {
+                      const on = enabledFeatures.has(f.id);
+                      return (
+                        <button
+                          key={f.id}
+                          type="button"
+                          onClick={() => toggleFeature(f.id)}
+                          style={{
+                            fontFamily: FONT, textAlign: "left", cursor: "pointer",
+                            padding: "8px 10px",
+                            border: `1px solid ${on ? C.accent : C.border}`,
+                            background: on ? `${C.accent}0A` : C.bg,
+                            display: "flex", flexDirection: "column", gap: 2,
+                          }}
+                        >
+                          <span style={{
+                            fontSize: 10, fontWeight: 700,
+                            color: on ? C.accent : C.fg,
+                            display: "flex", alignItems: "center", gap: 6,
+                          }}>
+                            <span style={{
+                              width: 12, height: 12, border: `1px solid ${on ? C.accent : C.border}`,
+                              background: on ? C.accent : "transparent", flexShrink: 0,
+                              display: "inline-flex", alignItems: "center", justifyContent: "center",
+                            }}>
+                              {on && <span style={{ color: "#fff", fontSize: 8, lineHeight: 1 }}>✓</span>}
+                            </span>
+                            {f.label}
+                          </span>
+                          <span style={{ fontSize: 9, color: C.muted, paddingLeft: 18 }}>
+                            {f.description}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
                 {/* Step 1 */}
@@ -1115,65 +1179,6 @@ export default function ConnectPage() {
                   </div>
                 </DeployStep>
 
-                {/* Optional Features */}
-                <div style={{ borderTop: `2px solid ${C.fg}`, paddingTop: 16, marginTop: 8 }}>
-                  <div style={{
-                    fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: "0.15em",
-                    color: C.fg, marginBottom: 12,
-                  }}>
-                    OPTIONAL FEATURES — add to .env.local
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 12 }}>
-                    {visibleFeatures.map(f => {
-                      const on = enabledFeatures.has(f.id);
-                      return (
-                        <button
-                          key={f.id}
-                          type="button"
-                          onClick={() => toggleFeature(f.id)}
-                          style={{
-                            fontFamily: FONT, textAlign: "left", cursor: "pointer",
-                            padding: "8px 10px",
-                            border: `1px solid ${on ? C.accent : C.border}`,
-                            background: on ? `${C.accent}0A` : C.bg,
-                            display: "flex", flexDirection: "column", gap: 2,
-                          }}
-                        >
-                          <span style={{
-                            fontSize: 10, fontWeight: 700,
-                            color: on ? C.accent : C.fg,
-                            display: "flex", alignItems: "center", gap: 6,
-                          }}>
-                            <span style={{
-                              width: 12, height: 12, border: `1px solid ${on ? C.accent : C.border}`,
-                              background: on ? C.accent : "transparent", flexShrink: 0,
-                              display: "inline-flex", alignItems: "center", justifyContent: "center",
-                            }}>
-                              {on && <span style={{ color: "#fff", fontSize: 8, lineHeight: 1 }}>✓</span>}
-                            </span>
-                            {f.label}
-                          </span>
-                          <span style={{ fontSize: 9, color: C.muted, paddingLeft: 18 }}>
-                            {f.description}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Snippets for enabled features */}
-                  {visibleFeatures.filter(f => enabledFeatures.has(f.id)).map(f => (
-                    <div key={f.id} style={{ marginBottom: 8 }}>
-                      <CodeBlock
-                        title={`+ ${f.label}`}
-                        content={f.snippet}
-                        copyId={`feat-${f.id}`}
-                        copiedId={copiedId}
-                        onCopy={copyToClipboard}
-                      />
-                    </div>
-                  ))}
-                </div>
               </div>
             )}
           </div>
