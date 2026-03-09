@@ -369,6 +369,7 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
             No events — all systems nominal
           </div>
         ) : traceRows.map((row, i) => {
+          const sameTsAsPrev = i > 0 && traceRows[i - 1].ts === row.ts;
           const sevStyle: React.CSSProperties =
             row.sev === 'critical' ? { background: '#FFE6E6', color: '#D40000' } :
             row.sev === 'high'     ? { background: '#FFF3E0', color: '#CC6600' } :
@@ -381,7 +382,9 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
               fontFamily: FONT, fontSize: 10, alignItems: 'center',
               background: i % 2 === 1 ? '#F7F7F7' : '#FFFFFF',
             }}>
-              <span style={{ color: '#707070', fontSize: 9 }}>{row.ts}</span>
+              <span style={{ color: sameTsAsPrev ? '#C0C0C0' : '#707070', fontSize: 9 }}>
+                {sameTsAsPrev ? '″' : row.ts}
+              </span>
               <span style={{ ...sevStyle, fontSize: 8, fontWeight: 700, padding: '1px 4px', borderRadius: 2 }}>
                 {row.sev.toUpperCase().slice(0, 4)}
               </span>
