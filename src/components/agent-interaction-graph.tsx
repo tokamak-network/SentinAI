@@ -391,9 +391,9 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
           <CurvedEdge x1={380} y1={58 + ph} x2={532} y2={195 - ph} color="#007A00" active={hasActive} label={hasActive ? edgeLabel('analyzer', 'rca') : undefined} />
 
           {/* ── Domain → Action cross edges ── */}
-          <CurvedEdge x1={75}  y1={195 + ph} x2={258} y2={320 - ph} color="#CC6600" />
+          <CurvedEdge x1={75}  y1={195 + ph} x2={258} y2={320 - ph} color="#CC6600" active={hasActive} label={hasActive ? edgeLabel('scaling', 'remediation') : undefined} />
           <CurvedEdge x1={227} y1={195 + ph} x2={258} y2={320 - ph} color="#D40000" active={hasActive} label={hasActive ? edgeLabel('security', 'remediation') : undefined} />
-          <CurvedEdge x1={532} y1={195 + ph} x2={258} y2={320 - ph} color="#CC6600" active={hasActive} label={hasActive ? edgeLabel('scaling', 'remediation') : undefined} />
+          <CurvedEdge x1={532} y1={195 + ph} x2={258} y2={320 - ph} color="#CC6600" active={hasActive} label={hasActive ? edgeLabel('rca', 'remediation') : undefined} />
           <CurvedEdge x1={380} y1={195 + ph} x2={503} y2={320 - ph} color="#007A00" />
           <CurvedEdge x1={227} y1={195 + ph} x2={503} y2={320 - ph} color="#CC6600" active={hasActive} label={hasActive ? edgeLabel('security', 'notifier') : undefined} />
 

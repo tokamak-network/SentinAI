@@ -57,7 +57,7 @@ function Navbar() {
       }}>
         {[
           { href: '/docs', label: 'DOCS' },
-          { href: '/setup', label: 'DEPLOY' },
+          { href: '/connect', label: 'DEPLOY' },
         ].map(({ href, label }) => (
           <a key={label} href={href} style={{
             fontFamily: FONT, fontSize: 10, fontWeight: 600, letterSpacing: '0.1em',
@@ -477,7 +477,7 @@ function Deployment() {
               <span style={{ color: '#007A00' }}>✓</span> {item}
             </div>
           ))}
-          <a href="/setup" style={{
+          <a href="/connect" style={{
             display: 'inline-flex', alignItems: 'center', gap: 6,
             marginTop: 16, background: '#0055AA', color: 'white',
             padding: '7px 16px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
@@ -622,7 +622,7 @@ function Footer() {
         <nav style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           {[
             { href: '/docs', label: 'DOCS' },
-            { href: '/setup', label: 'DEPLOY' },
+            { href: '/connect', label: 'DEPLOY' },
             { href: GITHUB_URL, label: 'GITHUB', external: true },
             { href: 'https://x.com/tokamak_network', label: 'X / TWITTER', external: true },
           ].map(({ href, label, external }) => (

@@ -287,7 +287,7 @@ function Navbar() {
         <nav style={{ display: "flex", alignItems: "center", gap: 24 }}>
           {[
             { href: "/docs", label: "DOCS" },
-            { href: "/setup", label: "DEPLOY" },
+            { href: "/connect", label: "DEPLOY" },
             { href: GITHUB_URL, label: "GITHUB", external: true },
           ].map(({ href, label, external }) => (
             <a
