@@ -710,6 +710,8 @@ export default function Dashboard() {
     return states;
   }, [anomalyEvents]);
 
+  const scalingScore = agentLoop?.lastCycle?.scaling?.score ?? 0;
+
   // Derive agentPhase for 3D graph:
   // lastCycle.phase is always 'complete' by the time UI polls (cycle finishes in ~2s).
   // Instead, derive a meaningful phase from anomaly event state.
@@ -720,11 +722,16 @@ export default function Dashboard() {
     if (activeAnomalies.some((a) => a.deepAnalysis)) return 'analyze';
     // If there are active anomalies without deep analysis yet → show 'detect'
     if (activeAnomalies.length > 0) return 'detect';
-    // If seed is active (non-live) → show 'observe' to indicate monitoring
-    if (isSeedActive) return 'observe';
+    // While seed is active, derive phase from metric intensity so edges stay
+    // animated for the full seed TTL (80s), not just the anomaly lifetime.
+    if (isSeedActive) {
+      if (scalingScore >= 70) return 'act';     // SPIKE: executor/scaling edges
+      if (scalingScore >= 30) return 'detect';  // RISING: detector→analyzer edges
+      return 'observe';                         // STABLE: collector→detector edge
+    }
     // Fall back to raw phase (may be 'complete', 'error', etc.)
     return rawPhase ?? 'idle';
-  }, [agentLoop?.lastCycle?.phase, anomalyEvents, isSeedActive]);
+  }, [agentLoop?.lastCycle?.phase, anomalyEvents, isSeedActive, scalingScore]);
 
 
   // --- Handler stubs for new layout ---
@@ -784,7 +791,6 @@ export default function Dashboard() {
   const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
   const networkName = process.env.NEXT_PUBLIC_NETWORK_NAME || current?.chain?.displayName;
   const chainName = networkName ?? 'Thanos Sepolia';
-  const scalingScore = agentLoop?.lastCycle?.scaling?.score ?? 0;
   const l1Block = current?.metrics?.l1BlockHeight ?? 0;
   const l2Block = current?.metrics?.blockHeight ?? 0;
   const txPool = current?.metrics?.txPoolCount ?? 0;

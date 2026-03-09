@@ -39,6 +39,7 @@ export interface AgentInteractionGraphProps {
   anomalyEvents: AnomalyEvent[];
   agentPhase: string;
   decisions?: AgentDecision[];
+  scaling?: { from: number; to: number; score: number } | null;
 }
 
 // ─── Layout (viewBox 0 0 760 390) ────────────────────────────────────────────
@@ -98,6 +99,7 @@ function statusTextColor(status: AgentStatus): string {
 
 function isEdgeActive(phase: string, from: string, to: string): boolean {
   const map: Record<string, [string, string][]> = {
+    observe: [['collector', 'detector']],
     detect:  [['collector', 'detector']],
     analyze: [['detector', 'analyzer'], ['detector', 'security']],
     act:     [['analyzer', 'executor'], ['scaling', 'remediation']],
@@ -193,7 +195,7 @@ function CurvedEdge({ x1, y1, x2, y2, color, active, label }: {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, decisions }: AgentInteractionGraphProps) {
+export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, decisions, scaling }: AgentInteractionGraphProps) {
   const roles = agentFleet?.roles;
   const activeAnomalies = useMemo(() => anomalyEvents.filter(e => e.status === 'active'), [anomalyEvents]);
   const hasActive = activeAnomalies.length > 0;
@@ -251,8 +253,11 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
       .slice(0, 20);
   }, [anomalyEvents, decisions]);
 
+  const isScaling = !!scaling && scaling.from !== scaling.to;
+
   // Stat label for each agent
   const stat = (key: string, layer: 'pipeline' | 'domain' | 'action') => {
+    if (key === 'executor' && agentPhase === 'act' && isScaling) return `${scaling!.from}→${scaling!.to} vCPU`;
     if (!roles) return '—';
     const r = roles[key];
     if (!r) return '—';
@@ -317,6 +322,18 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
               {lbl}
             </text>
           ))}
+
+          {/* ── Scaling Event Banner ── */}
+          {isScaling && agentPhase === 'act' && (
+            <g>
+              <rect x={240} y={6} width={280} height={20} rx={3}
+                fill="#D40000" opacity={0.92} />
+              <text x={380} y={20} textAnchor="middle"
+                fontFamily={FONT} fontSize={10} fontWeight={700} fill="white" letterSpacing="0.1em">
+                {scaling!.to > scaling!.from ? '⬆' : '⬇'} SCALING {scaling!.from}→{scaling!.to} vCPU · SCORE {scaling!.score}
+              </text>
+            </g>
+          )}
 
           {/* ── Pipeline horizontal edges ── */}
           <HEdge x1={75 + NODE_W/2} y={58} x2={227 - NODE_W/2} color="#0055AA" active={isEdgeActive(agentPhase, 'collector', 'detector')} label={isEdgeActive(agentPhase, 'collector', 'detector') ? edgeLabel('collector', 'detector') : undefined} />
