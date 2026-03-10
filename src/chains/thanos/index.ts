@@ -45,6 +45,7 @@ export class ThanosPlugin implements ChainPlugin {
   readonly chainType = 'thanos';
   readonly displayName = 'Thanos L2 Rollup';
   readonly chainMode = 'standard' as const;
+  readonly nodeLayer = 'l2' as const;
   readonly capabilities = {
     l1Failover: true,
     eoaBalanceMonitoring: true,

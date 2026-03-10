@@ -393,7 +393,7 @@ export async function GET(request: Request) {
         try {
             const rpcUrl = resolveL2RpcUrl();
             const l1RpcUrl = getSentinaiL1RpcUrl();
-            if (rpcUrl) {
+            if (rpcUrl && plugin.nodeLayer !== 'l1') {
                 const l2Client = createPublicClient({ chain: plugin.l2Chain, transport: http(rpcUrl) });
                 const l1Client = createPublicClient({ chain: plugin.l1Chain, transport: http(l1RpcUrl) });
                 const [l2Block, l1Block] = await Promise.all([
@@ -402,6 +402,9 @@ export async function GET(request: Request) {
                 ]);
                 realL2Block = Number(l2Block);
                 realL1Block = Number(l1Block);
+            } else if (plugin.nodeLayer === 'l1') {
+                const l1Client = createPublicClient({ chain: plugin.l1Chain, transport: http(l1RpcUrl) });
+                realL1Block = Number(await getCachedL1BlockNumber(() => l1Client.getBlockNumber()));
             }
         } catch {
             // Fallback to time-based simulation if RPC fails
@@ -568,7 +571,8 @@ export async function GET(request: Request) {
 
         // 2. Metrics (Chain Data)
         const startRpc = performance.now();
-        const rpcUrl = resolveL2RpcUrl();
+        // In L1-only mode, skip L2 block fetch (no L2 chain)
+        const rpcUrl = plugin.nodeLayer !== 'l1' ? resolveL2RpcUrl() : null;
         if (!rpcUrl) {
             // Fallback path without L2 RPC: keep K8s-derived component/cost data instead of zeroing UI.
             const lastBlock = await getStore().getLastBlock();

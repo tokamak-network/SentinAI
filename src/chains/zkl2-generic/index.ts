@@ -55,6 +55,7 @@ export class ZkL2GenericPlugin implements ChainPlugin {
   readonly chainType = 'zkl2-generic';
   readonly displayName = process.env.L2_CHAIN_NAME || `${resolveNetworkLabel()} Plugin`;
   readonly chainMode = 'generic' as const;
+  readonly nodeLayer = 'l2' as const;
   readonly capabilities = {
     l1Failover: true,
     eoaBalanceMonitoring: true,

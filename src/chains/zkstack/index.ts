@@ -71,6 +71,7 @@ export class ZkstackPlugin implements ChainPlugin {
   readonly chainType = 'zkstack';
   readonly displayName = getDisplayName();
   readonly chainMode = getMode();
+  readonly nodeLayer = 'l2' as const;
   readonly capabilities = {
     l1Failover: true,
     eoaBalanceMonitoring: true,

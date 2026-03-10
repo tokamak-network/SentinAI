@@ -10,6 +10,7 @@ function makePlugin(overrides?: {
     chainType: 'zkl2-generic',
     displayName: 'ZK L2 Generic',
     chainMode: 'generic',
+    nodeLayer: 'l2',
     capabilities: {
       l1Failover: true,
       eoaBalanceMonitoring: true,

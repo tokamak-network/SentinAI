@@ -506,6 +506,16 @@ export async function executeAction(
     startedAt: new Date().toISOString(),
   };
 
+  // In L1-only mode with external deployment, skip guarded pod-control actions
+  const plugin = getChainPlugin();
+  const deploymentType = process.env.L1_DEPLOYMENT_TYPE as 'k8s' | 'docker' | 'external' | undefined;
+  if (plugin.nodeLayer === 'l1' && deploymentType === 'external' && action.safetyLevel === 'guarded') {
+    result.status = 'skipped';
+    result.output = `Action '${action.type}' skipped: external deployment has no pod control`;
+    result.completedAt = new Date().toISOString();
+    return result;
+  }
+
   try {
     let output: string;
 

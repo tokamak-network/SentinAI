@@ -8,6 +8,7 @@ function makePlugin(chainType: string, proofMonitoring: boolean, settlementMonit
     chainType,
     displayName: chainType,
     chainMode: chainType === 'zkstack' ? 'legacy-era' : 'generic',
+    nodeLayer: 'l2',
     capabilities: {
       l1Failover: true,
       eoaBalanceMonitoring: true,

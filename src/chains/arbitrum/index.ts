@@ -39,6 +39,7 @@ export class ArbitrumPlugin implements ChainPlugin {
   readonly chainType = 'arbitrum';
   readonly displayName = process.env.L2_CHAIN_NAME || 'Arbitrum Orbit L2';
   readonly chainMode = 'standard' as const;
+  readonly nodeLayer = 'l2' as const;
   readonly capabilities = {
     l1Failover: true,
     eoaBalanceMonitoring: true,
