@@ -10,6 +10,7 @@ import { OptimismPlugin } from './optimism';
 import { ZkstackPlugin } from './zkstack';
 import { ArbitrumPlugin } from './arbitrum';
 import { ZkL2GenericPlugin } from './zkl2-generic';
+import { L1EVMPlugin } from './l1-evm';
 import logger from '@/lib/logger';
 
 let activePlugin: ChainPlugin | null = null;
@@ -41,6 +42,9 @@ function resolvePluginFromEnv(): ChainPlugin {
     case 'polygon-zkevm':
     case 'zkevm':
       return new ZkL2GenericPlugin();
+    case 'l1-evm':
+    case 'l1':
+      return new L1EVMPlugin();
     default:
       logger.warn(`[ChainRegistry] Unknown CHAIN_TYPE "${chainType}", falling back to thanos`);
       return new ThanosPlugin();
