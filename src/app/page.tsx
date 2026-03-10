@@ -916,7 +916,7 @@ export default function Dashboard() {
           </div>
         )}
         <div style={{ marginLeft: 'auto', padding: '0 14px', fontSize: 11, fontWeight: 600, letterSpacing: '0.1em', color: 'rgba(255,255,255,0.9)' }}>
-          {new Date().toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).toUpperCase()} UTC
+          {new Date().toLocaleString('en-US', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false, timeZoneName: 'short' }).toUpperCase()}
         </div>
       </div>
 

@@ -30,6 +30,14 @@ vi.mock('@/lib/k8s-config', () => ({
   getAppPrefix: vi.fn(() => process.env.K8S_APP_PREFIX || 'op'),
 }));
 
+const { mockIsDockerMode } = vi.hoisted(() => ({
+  mockIsDockerMode: vi.fn(() => false),
+}));
+
+vi.mock('@/lib/docker-config', () => ({
+  isDockerMode: mockIsDockerMode,
+}));
+
 import {
   getActiveL1RpcUrl,
   getSentinaiL1RpcUrl,
@@ -47,6 +55,8 @@ import {
   replaceBackendInToml,
   replaceProxydBackendUrl,
   checkProxydBackends,
+  fetchProxydLogs,
+  parseProxydLogErrors,
 } from '../l1-rpc-failover';
 
 describe('l1-rpc-failover', () => {
@@ -69,6 +79,7 @@ describe('l1-rpc-failover', () => {
     delete process.env.L1_PROXYD_CONFIGMAP_NAME;
     delete process.env.L1_PROXYD_DATA_KEY;
     delete process.env.L1_PROXYD_UPSTREAM_GROUP;
+    delete process.env.L1_PROXYD_APP_NAME;
     // Default: health check succeeds
     mockGetBlockNumber.mockResolvedValue(BigInt(1000));
   });
@@ -235,6 +246,18 @@ describe('l1-rpc-failover', () => {
       expect(getActiveL1RpcUrl()).toBe('https://rpc2.io');
     });
 
+    it('should trigger failover after 3 consecutive 429 errors (same as general errors)', async () => {
+      process.env.L1_RPC_URLS = 'https://rpc1.io,https://rpc2.io';
+      getL1FailoverState(); // init
+
+      await reportL1Failure(new Error('HTTP request failed. Status: 429 Too Many Requests'));
+      await reportL1Failure(new Error('HTTP request failed. Status: 429 Too Many Requests'));
+      const result = await reportL1Failure(new Error('HTTP request failed. Status: 429 Too Many Requests'));
+
+      expect(result).toBe('https://rpc2.io');
+      expect(getActiveL1RpcUrl()).toBe('https://rpc2.io');
+    });
+
     it('should respect cooldown period', async () => {
       process.env.L1_RPC_URLS = 'https://rpc1.io,https://rpc2.io,https://rpc3.io';
       const state = getL1FailoverState();
@@ -381,6 +404,106 @@ describe('l1-rpc-failover', () => {
       expect(events[0].simulated).toBe(false);
     });
 
+    it('should update Proxyd ConfigMap and restart pod in Proxyd mode', async () => {
+      process.env.L1_RPC_URLS = 'https://rpc1.io,https://rpc2.io';
+      process.env.L1_PROXYD_ENABLED = 'true';
+      process.env.L1_PROXYD_CONFIGMAP_NAME = 'proxyd-config';
+      getL1FailoverState();
+
+      const MOCK_TOML = `[backends]
+[backends.backend1]
+rpc_url = "https://rpc1.io"
+
+[backend_groups]
+[backend_groups.main]
+backends = ["backend1"]
+`;
+      // L1_PROXYD_CONFIGMAP_NAME set → resolveProxydConfigMapName returns from env (no kubectl)
+      // Calls: getConfigMapToml (find backend) + getConfigMapToml (apply) + patch + restart
+      mockRunK8sCommand
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (find backend)
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (applyBackendReplacement)
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }) // patch configmap
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }); // rollout restart
+
+      const event = await executeFailover('L1 RPC down');
+
+      expect(event).not.toBeNull();
+      expect(event!.toUrl).toContain('rpc2.io');
+      expect(event!.k8sUpdated).toBe(true);
+      expect(event!.k8sComponents).toEqual(['proxyd:backend1']);
+
+      // Verify ConfigMap was patched and pod restarted
+      const patchCall = mockRunK8sCommand.mock.calls.find(
+        (c: string[]) => c[0]?.includes('patch configmap')
+      );
+      expect(patchCall).toBeDefined();
+
+      const restartCall = mockRunK8sCommand.mock.calls.find(
+        (c: string[]) => c[0]?.includes('rollout restart')
+      );
+      expect(restartCall).toBeDefined();
+    });
+
+    it('should use L1_PROXYD_APP_NAME for Proxyd restart label', async () => {
+      process.env.L1_RPC_URLS = 'https://rpc1.io,https://rpc2.io';
+      process.env.L1_PROXYD_ENABLED = 'true';
+      process.env.L1_PROXYD_CONFIGMAP_NAME = 'proxyd-config';
+      process.env.L1_PROXYD_APP_NAME = 'sepolia-thanos-stack-l1-proxyd';
+      getL1FailoverState();
+
+      const MOCK_TOML = `[backends]
+[backends.backend1]
+rpc_url = "https://rpc1.io"
+
+[backend_groups]
+[backend_groups.main]
+backends = ["backend1"]
+`;
+      mockRunK8sCommand
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (find backend)
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (applyBackendReplacement)
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }) // patch configmap
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }); // rollout restart
+
+      await executeFailover('L1 RPC down');
+
+      const restartCall = mockRunK8sCommand.mock.calls.find(
+        (c: string[]) => c[0]?.includes('rollout restart')
+      );
+      expect(restartCall).toBeDefined();
+      expect(restartCall![0]).toContain('sepolia-thanos-stack-l1-proxyd');
+      expect(restartCall![0]).not.toContain('op-l1-proxyd');
+    });
+
+    it('should detect no-op pod delete when label matches no pods', async () => {
+      process.env.L1_RPC_URLS = 'https://rpc1.io,https://rpc2.io';
+      process.env.L1_PROXYD_ENABLED = 'true';
+      process.env.L1_PROXYD_CONFIGMAP_NAME = 'proxyd-config';
+      getL1FailoverState();
+
+      const MOCK_TOML = `[backends]
+[backends.backend1]
+rpc_url = "https://rpc1.io"
+
+[backend_groups]
+[backend_groups.main]
+backends = ["backend1"]
+`;
+      mockRunK8sCommand
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (find backend)
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (applyBackendReplacement)
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }) // patch configmap
+        .mockRejectedValueOnce(new Error('not found')) // rollout restart fails
+        .mockResolvedValueOnce({ stdout: 'No resources found', stderr: '' }); // delete pod (no match)
+
+      const event = await executeFailover('L1 RPC down');
+
+      // Failover still succeeds (ConfigMap was updated), but pod restart is flagged
+      expect(event).not.toBeNull();
+      expect(event!.k8sUpdated).toBe(true);
+    });
+
     it('should set lastFailoverTime', async () => {
       process.env.L1_RPC_URLS = 'https://rpc1.io,https://rpc2.io';
       process.env.SCALING_SIMULATION_MODE = 'true';
@@ -408,6 +531,35 @@ describe('l1-rpc-failover', () => {
       const event = await setActiveL1RpcUrl('https://rpc2.io', 'manual switch');
       expect(event).not.toBeNull();
       expect(getActiveL1RpcUrl()).toBe('https://rpc2.io');
+    });
+
+    it('should update Proxyd ConfigMap when switching in Proxyd mode', async () => {
+      process.env.L1_RPC_URLS = 'https://rpc1.io,https://rpc2.io';
+      process.env.L1_PROXYD_ENABLED = 'true';
+      process.env.L1_PROXYD_CONFIGMAP_NAME = 'proxyd-config';
+      getL1FailoverState();
+
+      const MOCK_TOML = `[backends]
+[backends.backend1]
+rpc_url = "https://rpc1.io"
+
+[backend_groups]
+[backend_groups.main]
+backends = ["backend1"]
+`;
+      // L1_PROXYD_CONFIGMAP_NAME set → resolveProxydConfigMapName returns from env (no kubectl)
+      // Calls: getConfigMapToml (find backend) + getConfigMapToml (apply) + patch + restart
+      mockRunK8sCommand
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (find backend)
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (applyBackendReplacement)
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }) // patch configmap
+        .mockResolvedValueOnce({ stdout: '', stderr: '' }); // rollout restart
+
+      const event = await setActiveL1RpcUrl('https://rpc2.io', 'manual switch');
+
+      expect(event).not.toBeNull();
+      expect(event!.k8sUpdated).toBe(true);
+      expect(event!.k8sComponents).toEqual(['proxyd:backend1']);
     });
 
     it('should return null when target endpoint is unhealthy', async () => {
@@ -636,7 +788,7 @@ backends = ["backend1"]
       });
     });
 
-    describe('checkProxydBackends', () => {
+    describe('checkProxydBackends (direct probe fallback)', () => {
       const MOCK_PROXYD_TOML = `[backends]
 [backends.backend1]
 rpc_url = "https://rpc1.io"
@@ -647,6 +799,11 @@ rpc_url = "https://rpc2.io"
 [backend_groups.main]
 backends = ["backend1", "backend2"]
 `;
+
+      // Force Docker mode so log detection is skipped → direct probe fallback
+      beforeEach(() => {
+        mockIsDockerMode.mockReturnValue(true);
+      });
 
       it('should skip when L1_PROXYD_ENABLED is not true', async () => {
         delete process.env.L1_PROXYD_ENABLED;
@@ -668,14 +825,14 @@ backends = ["backend1", "backend2"]
           new Response('Too Many Requests', { status: 429 })
         );
 
-        // Run 9 times — should not trigger replacement yet
-        for (let i = 0; i < 9; i++) {
+        // Run 2 times — should not trigger replacement yet (threshold is 3)
+        for (let i = 0; i < 2; i++) {
           await checkProxydBackends();
         }
 
         const state = getL1FailoverState();
         const health = state.proxydHealth.find((h) => h.name === 'backend1');
-        expect(health?.consecutiveFailures).toBe(9);
+        expect(health?.consecutiveFailures).toBe(2);
         expect(health?.replaced).toBe(false);
 
         fetchSpy.mockRestore();
@@ -694,7 +851,7 @@ backends = ["backend1", "backend2"]
         );
 
         let replacement = null;
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 3; i++) {
           replacement = await checkProxydBackends();
         }
 
@@ -722,7 +879,7 @@ backends = ["backend1", "backend2"]
         );
 
         let replacement = null;
-        for (let i = 0; i < 10; i++) {
+        for (let i = 0; i < 3; i++) {
           replacement = await checkProxydBackends();
         }
 
@@ -762,9 +919,9 @@ backends = ["backend1", "backend2"]
 
         const fetchSpy = vi.spyOn(globalThis, 'fetch');
 
-        // 5 x 429
+        // 2 x 429 (below threshold of 3)
         fetchSpy.mockResolvedValue(new Response('Too Many Requests', { status: 429 }));
-        for (let i = 0; i < 5; i++) {
+        for (let i = 0; i < 2; i++) {
           await checkProxydBackends();
         }
 
@@ -776,6 +933,417 @@ backends = ["backend1", "backend2"]
         const health = state.proxydHealth.find((h) => h.name === 'backend1');
         expect(health?.consecutiveFailures).toBe(0);
         expect(health?.healthy).toBe(true);
+
+        fetchSpy.mockRestore();
+      });
+    });
+
+    describe('checkProxydBackends (log-based detection)', () => {
+      const MOCK_PROXYD_TOML = `[backends]
+[backends.infura_1]
+rpc_url = "https://rpc1.io"
+[backends.alchemy_1]
+rpc_url = "https://rpc2.io"
+
+[backend_groups]
+[backend_groups.main]
+backends = ["infura_1", "alchemy_1"]
+`;
+
+      beforeEach(() => {
+        mockIsDockerMode.mockReturnValue(false); // Enable log-based detection
+      });
+
+      it('should detect 429 errors from Proxyd pod logs and increment failures', async () => {
+        process.env.L1_PROXYD_ENABLED = 'true';
+        process.env.L1_PROXYD_CONFIGMAP_NAME = 'proxyd-config';
+        process.env.L1_RPC_URLS = 'https://spare1.io';
+        resetL1FailoverState();
+
+        const PROXYD_LOGS_429 = [
+          '2026-03-10T10:00:01Z WARN Backend request failed backend_name=infura_1 status_code=429 msg="Too Many Requests"',
+          '2026-03-10T10:00:02Z WARN Backend request failed backend_name=infura_1 status_code=429 msg="Too Many Requests"',
+          '2026-03-10T10:00:03Z INFO Backend request ok backend_name=alchemy_1 status_code=200',
+        ].join('\n');
+
+        // Mock: pod lookup → "proxyd-pod-0", logs → PROXYD_LOGS_429, configmap → TOML
+        mockRunK8sCommand
+          .mockImplementation((cmd: string) => {
+            if (cmd.includes('get pods')) {
+              return Promise.resolve({ stdout: 'proxyd-pod-0', stderr: '' });
+            }
+            if (cmd.includes('logs ')) {
+              return Promise.resolve({ stdout: PROXYD_LOGS_429, stderr: '' });
+            }
+            // ConfigMap reads, patches, restarts
+            return Promise.resolve({ stdout: MOCK_PROXYD_TOML, stderr: '' });
+          });
+
+        await checkProxydBackends();
+
+        const state = getL1FailoverState();
+        const infura = state.proxydHealth.find((h) => h.name === 'infura_1');
+        expect(infura?.consecutiveFailures).toBe(1);
+        expect(infura?.healthy).toBe(false);
+        expect(infura?.logErrors).toHaveLength(2);
+        expect(infura?.logErrors?.[0].statusCode).toBe(429);
+
+        // alchemy_1 should be healthy (no errors in logs)
+        const alchemy = state.proxydHealth.find((h) => h.name === 'alchemy_1');
+        expect(alchemy?.consecutiveFailures).toBe(0);
+        expect(alchemy?.healthy).toBe(true);
+      });
+
+      it('should trigger replacement after repeated log-detected 429 failures', async () => {
+        process.env.L1_PROXYD_ENABLED = 'true';
+        process.env.L1_PROXYD_CONFIGMAP_NAME = 'proxyd-config';
+        process.env.L1_RPC_URLS = 'https://spare1.io';
+        process.env.L1_PROXYD_REPLACEMENT_THRESHOLD = '3';
+        resetL1FailoverState();
+
+        const PROXYD_LOGS_429 = [
+          '2026-03-10T10:00:01Z WARN Backend request failed backend_name=infura_1 status_code=429',
+        ].join('\n');
+
+        mockRunK8sCommand
+          .mockImplementation((cmd: string) => {
+            if (cmd.includes('get pods')) {
+              return Promise.resolve({ stdout: 'proxyd-pod-0', stderr: '' });
+            }
+            if (cmd.includes('logs ')) {
+              return Promise.resolve({ stdout: PROXYD_LOGS_429, stderr: '' });
+            }
+            return Promise.resolve({ stdout: MOCK_PROXYD_TOML, stderr: '' });
+          });
+
+        // Run 3 cycles — each cycle sees 429 in logs
+        let replacement = null;
+        for (let i = 0; i < 3; i++) {
+          replacement = await checkProxydBackends();
+        }
+
+        expect(replacement).not.toBeNull();
+        expect(replacement!.backendName).toBe('infura_1');
+        expect(replacement!.reason).toContain('proxyd-log');
+        expect(replacement!.reason).toContain('429');
+      });
+
+      it('should detect 5xx errors from Proxyd pod logs', async () => {
+        process.env.L1_PROXYD_ENABLED = 'true';
+        process.env.L1_PROXYD_CONFIGMAP_NAME = 'proxyd-config';
+        process.env.L1_RPC_URLS = 'https://spare1.io';
+        process.env.L1_PROXYD_REPLACEMENT_THRESHOLD = '1';
+        resetL1FailoverState();
+
+        const PROXYD_LOGS_5XX = [
+          '2026-03-10T10:00:01Z ERROR Backend responded with non-200 status code backend_name=infura_1 status_code=503',
+        ].join('\n');
+
+        mockRunK8sCommand
+          .mockImplementation((cmd: string) => {
+            if (cmd.includes('get pods')) {
+              return Promise.resolve({ stdout: 'proxyd-pod-0', stderr: '' });
+            }
+            if (cmd.includes('logs ')) {
+              return Promise.resolve({ stdout: PROXYD_LOGS_5XX, stderr: '' });
+            }
+            return Promise.resolve({ stdout: MOCK_PROXYD_TOML, stderr: '' });
+          });
+
+        const replacement = await checkProxydBackends();
+
+        expect(replacement).not.toBeNull();
+        expect(replacement!.backendName).toBe('infura_1');
+        expect(replacement!.reason).toContain('5xx');
+      });
+
+      it('should detect backend degradation errors from logs', async () => {
+        process.env.L1_PROXYD_ENABLED = 'true';
+        process.env.L1_PROXYD_CONFIGMAP_NAME = 'proxyd-config';
+        process.env.L1_RPC_URLS = 'https://spare1.io';
+        process.env.L1_PROXYD_REPLACEMENT_THRESHOLD = '1';
+        resetL1FailoverState();
+
+        const PROXYD_LOGS_DEGRADED = [
+          '2026-03-10T10:00:01Z WARN Backend is degraded (unhealthy) backend_name=infura_1',
+        ].join('\n');
+
+        mockRunK8sCommand
+          .mockImplementation((cmd: string) => {
+            if (cmd.includes('get pods')) {
+              return Promise.resolve({ stdout: 'proxyd-pod-0', stderr: '' });
+            }
+            if (cmd.includes('logs ')) {
+              return Promise.resolve({ stdout: PROXYD_LOGS_DEGRADED, stderr: '' });
+            }
+            return Promise.resolve({ stdout: MOCK_PROXYD_TOML, stderr: '' });
+          });
+
+        const replacement = await checkProxydBackends();
+
+        expect(replacement).not.toBeNull();
+        expect(replacement!.backendName).toBe('infura_1');
+      });
+
+      it('should reset failure counter when no errors in logs', async () => {
+        process.env.L1_PROXYD_ENABLED = 'true';
+        process.env.L1_PROXYD_CONFIGMAP_NAME = 'proxyd-config';
+        process.env.L1_RPC_URLS = 'https://spare1.io';
+        resetL1FailoverState();
+
+        const PROXYD_LOGS_429 =
+          '2026-03-10T10:00:01Z WARN Backend request failed backend_name=infura_1 status_code=429';
+        const PROXYD_LOGS_CLEAN =
+          '2026-03-10T10:01:00Z INFO Backend request ok status_code=200';
+
+        let currentLogs = PROXYD_LOGS_429;
+        mockRunK8sCommand
+          .mockImplementation((cmd: string) => {
+            if (cmd.includes('get pods')) {
+              return Promise.resolve({ stdout: 'proxyd-pod-0', stderr: '' });
+            }
+            if (cmd.includes('logs ')) {
+              return Promise.resolve({ stdout: currentLogs, stderr: '' });
+            }
+            return Promise.resolve({ stdout: MOCK_PROXYD_TOML, stderr: '' });
+          });
+
+        // Cycle 1: errors → failures=1
+        await checkProxydBackends();
+        let state = getL1FailoverState();
+        expect(state.proxydHealth.find((h) => h.name === 'infura_1')?.consecutiveFailures).toBe(1);
+
+        // Cycle 2: clean logs → failures=0
+        currentLogs = PROXYD_LOGS_CLEAN;
+        await checkProxydBackends();
+        state = getL1FailoverState();
+        expect(state.proxydHealth.find((h) => h.name === 'infura_1')?.consecutiveFailures).toBe(0);
+        expect(state.proxydHealth.find((h) => h.name === 'infura_1')?.healthy).toBe(true);
+      });
+
+      it('should fall back to direct probe when log fetch fails', async () => {
+        process.env.L1_PROXYD_ENABLED = 'true';
+        process.env.L1_PROXYD_CONFIGMAP_NAME = 'proxyd-config';
+        process.env.L1_RPC_URLS = 'https://spare1.io';
+        resetL1FailoverState();
+
+        // Pod lookup fails → fallback to direct probe
+        mockRunK8sCommand
+          .mockImplementation((cmd: string) => {
+            if (cmd.includes('get pods')) {
+              return Promise.reject(new Error('RBAC denied'));
+            }
+            return Promise.resolve({ stdout: MOCK_PROXYD_TOML, stderr: '' });
+          });
+
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+          new Response('Too Many Requests', { status: 429 })
+        );
+
+        await checkProxydBackends();
+
+        const state = getL1FailoverState();
+        const health = state.proxydHealth.find((h) => h.name === 'infura_1');
+        expect(health?.consecutiveFailures).toBe(1);
+        expect(health?.healthy).toBe(false);
+
+        fetchSpy.mockRestore();
+      });
+
+      it('should fall back to direct probe when no Proxyd pod is found', async () => {
+        process.env.L1_PROXYD_ENABLED = 'true';
+        process.env.L1_PROXYD_CONFIGMAP_NAME = 'proxyd-config';
+        process.env.L1_RPC_URLS = 'https://spare1.io';
+        resetL1FailoverState();
+
+        mockRunK8sCommand
+          .mockImplementation((cmd: string) => {
+            if (cmd.includes('get pods')) {
+              return Promise.resolve({ stdout: '', stderr: '' }); // No pod found
+            }
+            return Promise.resolve({ stdout: MOCK_PROXYD_TOML, stderr: '' });
+          });
+
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+          new Response('Too Many Requests', { status: 429 })
+        );
+
+        await checkProxydBackends();
+
+        const state = getL1FailoverState();
+        const health = state.proxydHealth.find((h) => h.name === 'infura_1');
+        expect(health?.consecutiveFailures).toBe(1);
+
+        fetchSpy.mockRestore();
+      });
+    });
+
+    describe('parseProxydLogErrors', () => {
+      it('should parse 429 errors with backend_name', () => {
+        const logs = [
+          '2026-03-10T10:00:01Z WARN Backend request failed backend_name=infura_1 status_code=429 msg="Too Many Requests"',
+          '2026-03-10T10:00:02Z WARN Backend is rate limited backend_name=alchemy_1',
+        ].join('\n');
+
+        const errors = parseProxydLogErrors(logs);
+
+        expect(errors).toHaveLength(2);
+        expect(errors[0].backendName).toBe('infura_1');
+        expect(errors[0].statusCode).toBe(429);
+        expect(errors[0].message).toContain('rate limited');
+        expect(errors[1].backendName).toBe('alchemy_1');
+        expect(errors[1].statusCode).toBe(429);
+      });
+
+      it('should parse 5xx errors', () => {
+        const logs = '2026-03-10T10:00:01Z ERROR Backend responded with non-200 status code backend_name=infura_1 status_code=503';
+        const errors = parseProxydLogErrors(logs);
+
+        expect(errors).toHaveLength(1);
+        expect(errors[0].statusCode).toBe(503);
+        expect(errors[0].message).toBe('HTTP 503');
+      });
+
+      it('should parse JSON-formatted logs', () => {
+        const logs = '{"timestamp":"2026-03-10T10:00:01Z","level":"warn","msg":"Backend request failed","backend_name":"infura_1","status_code":429}';
+        const errors = parseProxydLogErrors(logs);
+
+        expect(errors).toHaveLength(1);
+        expect(errors[0].backendName).toBe('infura_1');
+        expect(errors[0].statusCode).toBe(429);
+      });
+
+      it('should parse degradation/unhealthy messages', () => {
+        const logs = '2026-03-10T10:00:01Z WARN Backend is degraded (unhealthy) backend_name=infura_1';
+        const errors = parseProxydLogErrors(logs);
+
+        expect(errors).toHaveLength(1);
+        expect(errors[0].backendName).toBe('infura_1');
+        expect(errors[0].message).toBe('backend error/degraded');
+      });
+
+      it('should ignore normal log lines', () => {
+        const logs = [
+          '2026-03-10T10:00:01Z INFO Backend request ok backend_name=infura_1 status_code=200',
+          '2026-03-10T10:00:02Z INFO Started HTTP server addr=0.0.0.0:8080',
+          '2026-03-10T10:00:03Z DEBUG Received RPC request method=eth_blockNumber',
+        ].join('\n');
+
+        const errors = parseProxydLogErrors(logs);
+        expect(errors).toHaveLength(0);
+      });
+
+      it('should return empty for empty input', () => {
+        expect(parseProxydLogErrors('')).toEqual([]);
+      });
+
+      it('should handle mixed error and normal lines', () => {
+        const logs = [
+          '2026-03-10T10:00:01Z INFO OK backend_name=infura_1 status_code=200',
+          '2026-03-10T10:00:02Z WARN Backend request failed backend_name=infura_1 status_code=429',
+          '2026-03-10T10:00:03Z INFO OK backend_name=alchemy_1 status_code=200',
+          '2026-03-10T10:00:04Z ERROR Backend request failed backend_name=alchemy_1 status_code=502',
+        ].join('\n');
+
+        const errors = parseProxydLogErrors(logs);
+        expect(errors).toHaveLength(2);
+        expect(errors[0].backendName).toBe('infura_1');
+        expect(errors[0].statusCode).toBe(429);
+        expect(errors[1].backendName).toBe('alchemy_1');
+        expect(errors[1].statusCode).toBe(502);
+      });
+    });
+
+    describe('fetchProxydLogs', () => {
+      it('should fetch logs from the running Proxyd pod', async () => {
+        mockRunK8sCommand
+          .mockResolvedValueOnce({ stdout: 'op-l1-proxyd-0', stderr: '' }) // get pods
+          .mockResolvedValueOnce({ stdout: 'some log content', stderr: '' }); // logs
+
+        const logs = await fetchProxydLogs('default');
+
+        expect(logs).toBe('some log content');
+        expect(mockRunK8sCommand).toHaveBeenCalledTimes(2);
+        expect(mockRunK8sCommand.mock.calls[0][0]).toContain('get pods');
+        expect(mockRunK8sCommand.mock.calls[0][0]).toContain('app=op-l1-proxyd');
+        expect(mockRunK8sCommand.mock.calls[1][0]).toContain('logs op-l1-proxyd-0');
+      });
+
+      it('should return empty string when no pod found', async () => {
+        mockRunK8sCommand.mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+        const logs = await fetchProxydLogs('default');
+        expect(logs).toBe('');
+      });
+
+      it('should return empty string on kubectl error', async () => {
+        mockRunK8sCommand.mockRejectedValueOnce(new Error('cluster unreachable'));
+
+        const logs = await fetchProxydLogs('default');
+        expect(logs).toBe('');
+      });
+    });
+
+    describe('duplicate spare URL skipping', () => {
+      const MOCK_PROXYD_TOML = `[backends]
+[backends.backend1]
+rpc_url = "https://rpc1.io"
+
+[backend_groups]
+[backend_groups.main]
+backends = ["backend1"]
+`;
+
+      // Use Docker mode for direct probe tests
+      beforeEach(() => {
+        mockIsDockerMode.mockReturnValue(true);
+      });
+
+      it('should skip spare URLs identical to the current backend URL', async () => {
+        process.env.L1_PROXYD_ENABLED = 'true';
+        // First spare is same as backend1's rpc_url, second is different
+        process.env.L1_PROXYD_SPARE_URLS = 'https://rpc1.io,https://actual-spare.io';
+        process.env.L1_PROXYD_REPLACEMENT_THRESHOLD = '1';
+        resetL1FailoverState();
+
+        mockRunK8sCommand.mockResolvedValue({ stdout: MOCK_PROXYD_TOML, stderr: '' });
+
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+          new Response('Too Many Requests', { status: 429 })
+        );
+
+        const replacement = await checkProxydBackends();
+
+        expect(replacement).not.toBeNull();
+        expect(replacement!.backendName).toBe('backend1');
+        // Should have used the non-duplicate spare
+        expect(replacement!.newUrl).toContain('actual-spare');
+
+        // The duplicate should have been consumed, plus the used spare
+        const state = getL1FailoverState();
+        expect(state.spareUrls).toHaveLength(0);
+
+        fetchSpy.mockRestore();
+      });
+
+      it('should return null when all spare URLs are identical to current backend', async () => {
+        process.env.L1_PROXYD_ENABLED = 'true';
+        // All spares are same as backend1's URL
+        process.env.L1_PROXYD_SPARE_URLS = 'https://rpc1.io,https://rpc1.io';
+        process.env.L1_PROXYD_REPLACEMENT_THRESHOLD = '1';
+        resetL1FailoverState();
+
+        mockRunK8sCommand.mockResolvedValue({ stdout: MOCK_PROXYD_TOML, stderr: '' });
+
+        const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+          new Response('Too Many Requests', { status: 429 })
+        );
+
+        const replacement = await checkProxydBackends();
+
+        expect(replacement).toBeNull();
+        const state = getL1FailoverState();
+        expect(state.spareUrls).toHaveLength(0);
 
         fetchSpy.mockRestore();
       });

@@ -21,6 +21,7 @@ import type {
   ConfigMapUpdateResult,
   BackendReplacementEvent,
   L2NodeL1RpcStatus,
+  ProxydLogError,
 } from '@/types/l1-failover';
 
 const logger = createLogger('L1 Failover');
@@ -33,13 +34,27 @@ const logger = createLogger('L1 Failover');
 const MAX_CONSECUTIVE_FAILURES = 3;
 
 /** Default consecutive probe failures before triggering Proxyd backend replacement */
-const MAX_CONSECUTIVE_FAILURES_429 = 10;
+const MAX_CONSECUTIVE_FAILURES_429 = 3;
 
 /** Minimum interval between failovers (ms) */
 const FAILOVER_COOLDOWN_MS = 5 * 60 * 1000; // 5 minutes
 
 /** Health check timeout (ms) */
 const HEALTH_CHECK_TIMEOUT_MS = 10_000;
+
+/**
+ * Resolve the Proxyd deployment/app name.
+ * L1 Proxyd follows a different naming convention than L2 components:
+ *   L2 components: {release}-{chain-component} (e.g., sepolia-thanos-stack-op-geth)
+ *   L1 Proxyd:     {release}-l1-proxyd         (e.g., sepolia-thanos-stack-l1-proxyd)
+ *
+ * When K8S_APP_PREFIX includes a chain-specific suffix (e.g., "sepolia-thanos-stack-op"),
+ * the default derivation `${prefix}-l1-proxyd` produces a wrong name.
+ * Use L1_PROXYD_APP_NAME to override explicitly.
+ */
+function getProxydAppName(): string {
+  return process.env.L1_PROXYD_APP_NAME || `${getStatefulSetPrefix()}-l1-proxyd`;
+}
 
 /** Max failover events to keep */
 const MAX_FAILOVER_EVENTS = 20;
@@ -205,8 +220,7 @@ export async function getConfigMapToml(
  * not app=proxyd.
  */
 async function restartProxydPod(namespace: string): Promise<boolean> {
-  const prefix = getStatefulSetPrefix();
-  const deploymentName = `${prefix}-l1-proxyd`;
+  const deploymentName = getProxydAppName();
 
   // 1) Prefer a clean rollout restart (works for Deployments)
   try {
@@ -222,7 +236,16 @@ async function restartProxydPod(namespace: string): Promise<boolean> {
   try {
     const labelSelector = `app=${deploymentName}`;
     const cmd = `delete pod -l ${labelSelector} -n ${namespace}`;
-    await runK8sCommand(cmd, { timeout: 15000 });
+    const { stdout } = await runK8sCommand(cmd, { timeout: 15000 });
+
+    // kubectl delete with non-matching label returns exit 0 with "No resources found"
+    if (stdout && stdout.includes('No resources found')) {
+      logger.warn(
+        `No Proxyd pods found with label ${labelSelector} in ${namespace}. ` +
+          `Check L1_PROXYD_APP_NAME env var or pod labels.`
+      );
+      return false;
+    }
 
     logger.info(`Restarted Proxyd pod(s) via delete: -l ${labelSelector} (${namespace})`);
     return true;
@@ -437,10 +460,11 @@ export async function reportL1Failure(
     endpoint.consecutiveFailures++;
   }
 
-  // Determine threshold based on error type
-  const errorMessage = error.message.toLowerCase();
-  const is429Error = errorMessage.includes('429') || errorMessage.includes('too many requests') || errorMessage.includes('quota');
-  const threshold = is429Error ? MAX_CONSECUTIVE_FAILURES_429 : MAX_CONSECUTIVE_FAILURES;
+  // 429 (rate-limit) is a clear signal the endpoint won't recover soon — use same
+  // threshold as general errors so failover triggers quickly.
+  // The higher MAX_CONSECUTIVE_FAILURES_429 threshold is only for Proxyd backend
+  // replacement (heavier operation: ConfigMap patch + pod restart).
+  const threshold = MAX_CONSECUTIVE_FAILURES;
 
   // Check if failover is needed
   if (
@@ -531,11 +555,15 @@ export async function executeFailover(
       `Switched: ${maskUrl(fromUrl)} → ${maskUrl(candidate.url)} (reason: ${reason})`
     );
 
-    // Update K8s components (skip StatefulSet env patch when Proxyd handles L1 routing)
+    // Update K8s components
     const isProxydMode = process.env.L1_PROXYD_ENABLED === 'true';
-    const k8sResult = isProxydMode
-      ? { updated: [] as string[], errors: [] as string[] }
-      : await updateK8sL1Rpc(candidate.url);
+    let k8sResult: K8sUpdateResult;
+    if (isProxydMode) {
+      // In Proxyd mode, update the ConfigMap backend URL and restart the pod
+      k8sResult = await updateProxydBackendForFailover(fromUrl, candidate.url);
+    } else {
+      k8sResult = await updateK8sL1Rpc(candidate.url);
+    }
 
     const event: FailoverEvent = {
       timestamp: new Date().toISOString(),
@@ -609,9 +637,12 @@ export async function setActiveL1RpcUrl(
   endpoint.consecutiveFailures = 0;
 
   const isProxydMode = process.env.L1_PROXYD_ENABLED === 'true';
-  const k8sResult = isProxydMode
-    ? { updated: [] as string[], errors: [] as string[] }
-    : await updateK8sL1Rpc(trimmed);
+  let k8sResult: K8sUpdateResult;
+  if (isProxydMode) {
+    k8sResult = await updateProxydBackendForFailover(fromUrl, trimmed);
+  } else {
+    k8sResult = await updateK8sL1Rpc(trimmed);
+  }
 
   const event: FailoverEvent = {
     timestamp: new Date().toISOString(),
@@ -629,6 +660,82 @@ export async function setActiveL1RpcUrl(
   }
 
   return event;
+}
+
+/**
+ * Update Proxyd ConfigMap backend during L1 failover.
+ * Finds the backend whose rpc_url matches oldUrl and replaces it with newUrl,
+ * then restarts the Proxyd pod to pick up the change.
+ */
+async function updateProxydBackendForFailover(
+  oldUrl: string,
+  newUrl: string
+): Promise<K8sUpdateResult> {
+  const result: K8sUpdateResult = { updated: [], errors: [] };
+  const configMapName = await resolveProxydConfigMapName();
+  const dataKey = process.env.L1_PROXYD_DATA_KEY || 'proxyd-config.toml';
+  const namespace = getNamespace();
+
+  try {
+    const currentToml = await getConfigMapToml(configMapName, dataKey, namespace);
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = TOML.parse(currentToml) as Record<string, unknown>;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      result.errors.push(`TOML parse failed: ${message}`);
+      return result;
+    }
+
+    const backends = parsed.backends as Record<string, Record<string, unknown>> | undefined;
+    if (!backends) {
+      result.errors.push('TOML missing [backends] section');
+      return result;
+    }
+
+    // Find the backend matching the old URL
+    const backendName = Object.keys(backends).find(
+      (name) => backends[name]?.rpc_url === oldUrl
+    );
+
+    if (!backendName) {
+      // No exact match — fall back to replacing the first backend in the target group
+      const backendGroups = parsed.backend_groups as Record<string, Record<string, unknown>> | undefined;
+      const targetGroup = process.env.L1_PROXYD_UPSTREAM_GROUP || 'main';
+      const group = backendGroups?.[targetGroup] as { backends?: string[] } | undefined;
+      const firstBackend = group?.backends?.[0];
+
+      if (!firstBackend) {
+        result.errors.push(`No backend found matching old URL and no backends in group '${targetGroup}'`);
+        return result;
+      }
+
+      logger.warn(
+        `No backend matched old URL ${maskUrl(oldUrl)}, falling back to first backend in group: ${firstBackend}`
+      );
+
+      const cmResult = await applyBackendReplacement(firstBackend, newUrl);
+      if (cmResult.success) {
+        result.updated.push(`proxyd:${firstBackend}`);
+      } else {
+        result.errors.push(`proxyd:${firstBackend}: ${cmResult.error}`);
+      }
+      return result;
+    }
+
+    const cmResult = await applyBackendReplacement(backendName, newUrl);
+    if (cmResult.success) {
+      result.updated.push(`proxyd:${backendName}`);
+    } else {
+      result.errors.push(`proxyd:${backendName}: ${cmResult.error}`);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    result.errors.push(`Proxyd failover update failed: ${message}`);
+  }
+
+  return result;
 }
 
 /**
@@ -713,11 +820,137 @@ export async function probeBackend(url: string): Promise<{ ok: boolean; status?:
   }
 }
 
+/** Number of log lines to tail from Proxyd pod */
+const PROXYD_LOG_TAIL_LINES = 200;
+
 /**
- * Check all Proxyd backends in the target group for probe failures.
- * When a backend accumulates repeated failures (429, 5xx, timeout/network),
- * replace its URL with the next spare URL.
- * Threshold can be tuned with L1_PROXYD_REPLACEMENT_THRESHOLD (default: 10).
+ * Fetch recent log lines from the Proxyd pod.
+ * Uses the same label convention as restartProxydPod: app=<prefix>-l1-proxyd.
+ */
+export async function fetchProxydLogs(namespace: string): Promise<string> {
+  const label = `app=${getProxydAppName()}`;
+
+  try {
+    // Find a running Proxyd pod
+    const { stdout: rawPodName } = await runK8sCommand(
+      `get pods -n ${namespace} -l ${label} --field-selector=status.phase=Running -o jsonpath="{.items[*].metadata.name}"`,
+      { timeout: 10000 }
+    );
+    const podName = rawPodName?.split(' ')[0]?.trim();
+    if (!podName) {
+      logger.warn(`No running Proxyd pod found (label: ${label})`);
+      return '';
+    }
+
+    const { stdout: logs } = await runK8sCommand(
+      `logs ${podName} -n ${namespace} --tail=${PROXYD_LOG_TAIL_LINES}`,
+      { timeout: 15000 }
+    );
+    return logs || '';
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    logger.warn(`Failed to fetch Proxyd logs: ${message}`);
+    return '';
+  }
+}
+
+/**
+ * Parse Proxyd pod log lines for backend error signals.
+ *
+ * Proxyd log patterns (optimism/proxyd):
+ *   - `"Backend request failed" ... status_code=429 ... backend_name=infura_1`
+ *   - `"Backend is rate limited" ... backend_name=infura_1`
+ *   - `"Backend responded with non-200 status code" ... status_code=503 ... backend_name=infura_1`
+ *   - `"Backend is degraded (unhealthy)" ... backend_name=infura_1`
+ *
+ * Returns error signals per backend name.
+ */
+export function parseProxydLogErrors(logContent: string): ProxydLogError[] {
+  if (!logContent) return [];
+
+  const errors: ProxydLogError[] = [];
+  const lines = logContent.split('\n');
+
+  for (const line of lines) {
+    if (!line) continue;
+
+    // Match backend_name (JSON or key=value format)
+    const backendMatch =
+      line.match(/backend_name[=:]\s*"?([a-zA-Z0-9_-]+)"?/) ||
+      line.match(/"backend_name"\s*:\s*"([a-zA-Z0-9_-]+)"/) ||
+      line.match(/backend[=:]\s*"?([a-zA-Z0-9_-]+)"?/);
+    if (!backendMatch) continue;
+
+    const backendName = backendMatch[1];
+
+    // Extract status code if present
+    const statusMatch =
+      line.match(/status_code[=:]\s*"?(\d{3})"?/) ||
+      line.match(/"status_code"\s*:\s*(\d{3})/) ||
+      line.match(/status[=:]\s*"?(\d{3})"?/);
+    const statusCode = statusMatch ? Number.parseInt(statusMatch[1], 10) : 0;
+
+    // Detect error conditions
+    const is429 = statusCode === 429 || /rate.?limit/i.test(line);
+    const is5xx = statusCode >= 500;
+    const isError =
+      /backend.*(fail|error|degrad|unhealthy)/i.test(line) ||
+      /error.*backend/i.test(line);
+
+    if (!is429 && !is5xx && !isError) continue;
+
+    // Extract timestamp (ISO format or bracketed)
+    const tsMatch =
+      line.match(/(\d{4}-\d{2}-\d{2}T[\d:.]+Z?)/) ||
+      line.match(/\[(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}[^\]]*)\]/);
+    const timestamp = tsMatch ? tsMatch[1] : new Date().toISOString();
+
+    // Build descriptive message
+    const effectiveStatus = is429 ? 429 : statusCode || 0;
+    const message = is429
+      ? `rate limited (${effectiveStatus || '429'})`
+      : is5xx
+        ? `HTTP ${statusCode}`
+        : 'backend error/degraded';
+
+    errors.push({
+      timestamp,
+      backendName,
+      statusCode: effectiveStatus,
+      message,
+    });
+  }
+
+  return errors;
+}
+
+/**
+ * Aggregate log errors by backend name.
+ * Returns a map of backendName → count of failover-eligible errors in the log window.
+ */
+function aggregateLogErrors(
+  logErrors: ProxydLogError[]
+): Map<string, { count: number; errors: ProxydLogError[] }> {
+  const map = new Map<string, { count: number; errors: ProxydLogError[] }>();
+  for (const err of logErrors) {
+    const entry = map.get(err.backendName) || { count: 0, errors: [] };
+    entry.count++;
+    entry.errors.push(err);
+    map.set(err.backendName, entry);
+  }
+  return map;
+}
+
+/**
+ * Check all Proxyd backends for failures.
+ *
+ * Detection strategy (L1_PROXYD_ENABLED=true):
+ *   1. **Primary**: Fetch Proxyd pod logs and parse for 429/5xx/error patterns.
+ *      This detects issues the Proxyd is actually experiencing with upstream backends.
+ *   2. **Fallback**: If log fetch fails (no pod, RBAC, etc.), fall back to direct RPC probe.
+ *
+ * When a backend accumulates repeated failures, replace its URL with the next spare.
+ * Threshold: L1_PROXYD_REPLACEMENT_THRESHOLD (default: 3).
  *
  * Called from agent-loop every cycle (scheduler interval, currently 60s).
  */
@@ -758,7 +991,30 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
   const group = backendGroups[targetGroup] as { backends?: string[] } | undefined;
   if (!group?.backends || !Array.isArray(group.backends)) return null;
 
-  // 3. Probe each backend in the target group
+  // 3. Primary detection: Proxyd pod logs (detects what Proxyd actually sees)
+  //    Fallback: direct RPC probe (if logs unavailable)
+  let logErrorsByBackend: Map<string, { count: number; errors: ProxydLogError[] }> | null = null;
+  let useLogDetection = false;
+
+  if (!isDockerMode()) {
+    try {
+      const logContent = await fetchProxydLogs(namespace);
+      if (logContent) {
+        const logErrors = parseProxydLogErrors(logContent);
+        logErrorsByBackend = aggregateLogErrors(logErrors);
+        useLogDetection = true;
+        if (logErrors.length > 0) {
+          logger.info(
+            `Proxyd log analysis: ${logErrors.length} error(s) across ${logErrorsByBackend.size} backend(s)`
+          );
+        }
+      }
+    } catch {
+      // Fall through to direct probe
+    }
+  }
+
+  // 4. Evaluate each backend in the target group
   for (const backendName of group.backends) {
     const backend = backends[backendName];
     if (!backend?.rpc_url) continue;
@@ -783,19 +1039,66 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
 
     // Sync URL (may have changed externally)
     health.rpcUrl = rpcUrl;
-
-    const probe = await probeBackend(rpcUrl);
     health.lastChecked = Date.now();
 
-    if (isProxydFailoverCandidate(probe)) {
+    let hasFault = false;
+    let failureDescription = '';
+
+    if (useLogDetection && logErrorsByBackend) {
+      // Log-based detection: check Proxyd's own view of backend health
+      const logEntry = logErrorsByBackend.get(backendName);
+      if (logEntry && logEntry.count > 0) {
+        hasFault = true;
+        health.logErrors = logEntry.errors.slice(-10); // keep last 10
+        // Summarize error types
+        const has429 = logEntry.errors.some((e) => e.statusCode === 429);
+        const has5xx = logEntry.errors.some(
+          (e) => e.statusCode >= 500
+        );
+        const parts: string[] = [];
+        if (has429) parts.push('429');
+        if (has5xx) parts.push('5xx');
+        if (parts.length === 0) parts.push('error');
+        failureDescription = `proxyd-log: ${logEntry.count} ${parts.join('/')} error(s)`;
+      } else {
+        // No errors in log → backend is healthy from Proxyd's perspective
+        health.consecutiveFailures = 0;
+        health.healthy = true;
+        health.logErrors = [];
+      }
+    } else {
+      // Fallback: direct RPC probe (when logs unavailable)
+      const probe = await probeBackend(rpcUrl);
+
+      if (isProxydFailoverCandidate(probe)) {
+        hasFault = true;
+        failureDescription = `direct-probe: ${describeProbeFailure(probe)}`;
+      } else if (probe.ok) {
+        health.consecutiveFailures = 0;
+        health.healthy = true;
+      } else {
+        // Non-failover statuses (e.g. 4xx except 429) mark unhealthy but do not trigger replacement
+        health.healthy = false;
+      }
+    }
+
+    if (hasFault) {
       health.consecutiveFailures++;
       health.healthy = false;
       logger.warn(
-        `Backend ${backendName} probe failed (${describeProbeFailure(probe)}): ${health.consecutiveFailures}/${replacementThreshold}`
+        `Backend ${backendName} failing (${failureDescription}): ${health.consecutiveFailures}/${replacementThreshold}`
       );
 
       if (health.consecutiveFailures >= replacementThreshold) {
         // Threshold reached — replace with spare URL
+        // Skip spare URLs that match the current backend URL (same URL = no-op replacement)
+        while (state.spareUrls.length > 0 && state.spareUrls[0] === rpcUrl) {
+          const skipped = state.spareUrls.shift()!;
+          logger.warn(
+            `Skipping spare URL identical to current backend ${backendName}: ${maskUrl(skipped)}`
+          );
+        }
+
         if (state.spareUrls.length === 0) {
           logger.error(
             `Backend ${backendName} needs replacement but no spare URLs available (L1_RPC_URLS)`
@@ -815,13 +1118,14 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
         health.replaced = true;
         health.replacedWith = spareUrl;
         health.consecutiveFailures = 0;
+        health.logErrors = [];
 
         const event: BackendReplacementEvent = {
           timestamp: new Date().toISOString(),
           backendName,
           oldUrl: maskUrl(rpcUrl),
           newUrl: maskUrl(spareUrl),
-          reason: `${replacementThreshold} consecutive backend probe failures (${describeProbeFailure(probe)})`,
+          reason: `${replacementThreshold} consecutive failures (${failureDescription})`,
           simulated: false,
         };
 
@@ -832,13 +1136,6 @@ export async function checkProxydBackends(): Promise<BackendReplacementEvent | n
 
         return event;
       }
-    } else if (probe.ok) {
-      // Reset failure counter on successful probe
-      health.consecutiveFailures = 0;
-      health.healthy = true;
-    } else {
-      // Non-failover statuses (e.g. 4xx except 429) mark unhealthy but do not trigger replacement
-      health.healthy = false;
     }
   }
 

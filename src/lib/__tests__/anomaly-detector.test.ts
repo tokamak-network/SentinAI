@@ -393,17 +393,18 @@ describe('anomaly-detector', () => {
 
       // Create monotonically increasing TxPool history.
       // Use 59s spacing to avoid boundary flakiness against 300s window.
+      // Values must exceed TXPOOL_MONOTONIC_MIN_INCREASE (default 50).
       const history: MetricDataPoint[] = [];
       for (let i = 0; i < 5; i++) {
         history.push(
           createMetric({
             timestamp: now - (5 - i) * 59 * 1000,
-            txPoolPending: 10 + i * 5, // 10, 15, 20, 25, 30
+            txPoolPending: 10 + i * 20, // 10, 30, 50, 70, 90
           })
         );
       }
 
-      const current = createMetric({ txPoolPending: 35 }); // Continue increasing
+      const current = createMetric({ txPoolPending: 110 }); // Continue increasing (+100 total)
 
       const anomalies = detectAnomalies(current, history);
       const monotopicAnomaly = anomalies.find(a => a.rule === 'monotonic-increase');

@@ -30,12 +30,22 @@ export interface FailoverEvent {
 export interface ProxydBackendHealth {
   name: string;
   rpcUrl: string;
-  /** Consecutive failover-eligible probe failures (429, 5xx, timeout/network) */
+  /** Consecutive failover-eligible failures (429, 5xx, timeout/network) */
   consecutiveFailures: number;
   healthy: boolean;
   replaced: boolean;
   replacedWith?: string;
   lastChecked?: number;
+  /** Recent error patterns detected from Proxyd pod logs */
+  logErrors?: ProxydLogError[];
+}
+
+/** Error signal parsed from Proxyd pod logs */
+export interface ProxydLogError {
+  timestamp: string;
+  backendName: string;
+  statusCode: number;
+  message: string;
 }
 
 /** Backend replacement event */

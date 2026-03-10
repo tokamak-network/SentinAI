@@ -22,6 +22,9 @@ const BLOCK_PLATEAU_SECONDS = parseInt(process.env.ANOMALY_BLOCK_PLATEAU_SECONDS
 /** TxPool monotonic increase detection time (seconds) - anomaly if continuously increasing for 5 minutes */
 const TXPOOL_MONOTONIC_SECONDS = parseInt(process.env.ANOMALY_TXPOOL_MONOTONIC_SECONDS || '300', 10);
 
+/** Minimum absolute increase required for txPool monotonic-increase anomaly (filters low-count noise) */
+const TXPOOL_MONOTONIC_MIN_INCREASE = parseInt(process.env.ANOMALY_TXPOOL_MONOTONIC_MIN_INCREASE || '50', 10);
+
 /** Minimum number of history data points (skip detection if fewer) */
 const MIN_HISTORY_POINTS = 5;
 
@@ -285,7 +288,7 @@ function detectTxPoolMonotonicIncrease(
   if (isMonotonic) {
     const startValue = recentHistory[0].txPoolPending;
     const increase = currentTxPool - startValue;
-    if (increase <= 0) return null;
+    if (increase < TXPOOL_MONOTONIC_MIN_INCREASE) return null;
     const durationSec = (now - parseTimestamp(recentHistory[0].timestamp)) / 1000;
 
     return {
@@ -451,6 +454,7 @@ export function getDetectorConfig() {
     zScoreThreshold: Z_SCORE_THRESHOLD,
     blockPlateauSeconds: BLOCK_PLATEAU_SECONDS,
     txPoolMonotonicSeconds: TXPOOL_MONOTONIC_SECONDS,
+    txPoolMonotonicMinIncrease: TXPOOL_MONOTONIC_MIN_INCREASE,
     minHistoryPoints: MIN_HISTORY_POINTS,
     sustainedCounts: { ...SUSTAINED_COUNT },
     defaultSustainedCount: DEFAULT_SUSTAINED_COUNT,
