@@ -558,6 +558,16 @@ export async function executeAction(
         output = await executeVerifyBalanceRestored(action);
         break;
 
+      case 'switch_l1_rpc': {
+        const switchResult = await switchL1RpcUrl({
+          targetUrl: typeof action.params?.targetUrl === 'string' ? action.params.targetUrl : undefined,
+          reason: typeof action.params?.reason === 'string' ? action.params.reason : 'auto-remediation: L1 RPC failover',
+        });
+        if (!switchResult.success) throw new Error(switchResult.message);
+        output = `L1 RPC switched: ${switchResult.fromUrl} → ${switchResult.toUrl}`;
+        break;
+      }
+
       case 'escalate_operator':
         output = `Escalation required: ${action.params?.message || 'EOA balance critically low'}`;
         break;

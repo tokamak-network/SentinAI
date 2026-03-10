@@ -34,6 +34,7 @@ export type RemediationActionType =
   | 'zero_downtime_swap'
   | 'refill_eoa'
   | 'claim_bond'
+  | 'switch_l1_rpc'
   // Manual
   | 'config_change'
   | 'rollback_deployment'

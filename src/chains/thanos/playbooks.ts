@@ -4,6 +4,7 @@
  */
 
 import type { Playbook } from '@/types/remediation';
+import { L1_PLAYBOOKS } from '@/chains/shared/l1-playbooks';
 
 export const THANOS_PLAYBOOKS: Playbook[] = [
   // Playbook 1: op-geth Resource Exhaustion
@@ -128,36 +129,6 @@ export const THANOS_PLAYBOOKS: Playbook[] = [
       },
     ],
     maxAttempts: 1,
-  },
-
-  // Playbook 5: L1 Connectivity Failure
-  {
-    name: 'l1-connectivity-failure',
-    description: 'L1 RPC connection issues',
-    trigger: {
-      component: 'l1',
-      indicators: [
-        { type: 'metric', condition: 'l1BlockNumber stagnant' },
-        { type: 'log_pattern', condition: 'connection refused|timeout|ECONNRESET' },
-      ],
-    },
-    actions: [
-      {
-        type: 'check_l1_connection',
-        safetyLevel: 'safe',
-      },
-      {
-        type: 'collect_logs',
-        safetyLevel: 'safe',
-        target: 'op-node',
-      },
-      {
-        type: 'collect_logs',
-        safetyLevel: 'safe',
-        target: 'op-batcher',
-      },
-    ],
-    maxAttempts: 0, // Immediate escalation — L1 issues cannot be auto-resolved
   },
 
   // Playbook 6a: Batcher EOA Balance Critical — Auto-refill
@@ -407,4 +378,7 @@ export const THANOS_PLAYBOOKS: Playbook[] = [
     ],
     maxAttempts: 0, // Requires manual investigation
   },
+
+  // L1 Playbooks (shared)
+  ...L1_PLAYBOOKS,
 ];

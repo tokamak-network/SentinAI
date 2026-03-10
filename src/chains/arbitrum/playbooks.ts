@@ -3,6 +3,7 @@
  */
 
 import type { Playbook } from '@/types/remediation';
+import { L1_PLAYBOOKS } from '@/chains/shared/l1-playbooks';
 
 export const ARBITRUM_PLAYBOOKS: Playbook[] = [
   // Playbook 1: nitro-node Resource Exhaustion
@@ -133,36 +134,6 @@ export const ARBITRUM_PLAYBOOKS: Playbook[] = [
     maxAttempts: 0, // Alert only — requires operator review
   },
 
-  // Playbook 5: L1 Connectivity Failure
-  {
-    name: 'l1-connectivity',
-    description: 'L1 RPC connection issues affecting all Arbitrum components',
-    trigger: {
-      component: 'l1',
-      indicators: [
-        { type: 'metric', condition: 'l1BlockNumber stagnant' },
-        { type: 'log_pattern', condition: 'connection refused|timeout|ECONNRESET' },
-      ],
-    },
-    actions: [
-      {
-        type: 'check_l1_connection',
-        safetyLevel: 'safe',
-      },
-      {
-        type: 'collect_logs',
-        safetyLevel: 'safe',
-        target: 'nitro-node',
-      },
-      {
-        type: 'collect_logs',
-        safetyLevel: 'safe',
-        target: 'batch-poster',
-      },
-    ],
-    maxAttempts: 0, // Immediate escalation
-  },
-
   // Playbook 6: Batch Poster EOA Balance Critical
   {
     name: 'batch-poster-balance',
@@ -243,4 +214,7 @@ export const ARBITRUM_PLAYBOOKS: Playbook[] = [
     ],
     maxAttempts: 1,
   },
+
+  // L1 Playbooks (shared)
+  ...L1_PLAYBOOKS,
 ];
