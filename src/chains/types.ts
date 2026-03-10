@@ -124,6 +124,8 @@ export interface ChainPlugin {
   readonly displayName: string;
   /** Runtime mode for this chain plugin */
   readonly chainMode: ChainMode;
+  /** Whether this plugin monitors L1, L2, or both */
+  readonly nodeLayer: 'l1' | 'l2' | 'both';
   /** Feature/capability flags for strict chain isolation in API/UI */
   readonly capabilities: ChainCapabilities;
 
@@ -164,7 +166,7 @@ export interface ChainPlugin {
   /** L1 chain configuration for viem */
   readonly l1Chain: Chain;
   /** L2 chain configuration for viem */
-  readonly l2Chain: Chain;
+  readonly l2Chain?: Chain;
 
   // ---- AI Prompts ----
 

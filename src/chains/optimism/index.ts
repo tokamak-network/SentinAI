@@ -54,6 +54,7 @@ export class OptimismPlugin implements ChainPlugin {
   readonly chainType = 'optimism';
   readonly displayName = getDisplayName();
   readonly chainMode = 'standard' as const;
+  readonly nodeLayer = 'l2' as const;
   readonly capabilities = {
     l1Failover: true,
     eoaBalanceMonitoring: true,
