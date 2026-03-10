@@ -34,6 +34,7 @@ import { buildRollbackPlan, runRollbackPlan } from '@/lib/rollback-runner';
 import { tickGoalManager, dispatchTopGoal } from '@/lib/goal-manager';
 import { checkAndTrackClientVersion } from '@/lib/client-version-tracker';
 import { detectExecutionClient } from '@/lib/client-detector';
+import { collectL1NodeMetrics } from '@/lib/l1-node-metrics';
 import { getCoreRedis } from '@/core/redis';
 import { DEFAULT_SCALING_CONFIG, type TargetVcpu, type TargetMemoryGiB, type ScalingDecision } from '@/types/scaling';
 import { DEFAULT_PREDICTION_CONFIG } from '@/types/prediction';
@@ -151,6 +152,18 @@ function resolveL2RpcUrl(): string | null {
   return null;
 }
 
+function resolveL1NodeRpcUrl(): string | null {
+  const candidates = [
+    process.env.L1_RPC_URL,
+    process.env.SENTINAI_L1_RPC_URL,
+  ];
+  for (const c of candidates) {
+    const v = c?.trim();
+    if (v) return v;
+  }
+  return null;
+}
+
 async function getRecentSafeMetrics(): Promise<CollectedMetrics | null> {
   const recent = await getRecentMetrics(1);
   if (!recent || recent.length === 0) return null;
@@ -166,6 +179,56 @@ async function getRecentSafeMetrics(): Promise<CollectedMetrics | null> {
 }
 
 async function collectMetrics(): Promise<CollectedMetrics | null> {
+  // L1-only observe path: when plugin.nodeLayer === 'l1', fetch metrics directly
+  // from the L1 node without touching L2_RPC_URL.
+  const plugin = getChainPlugin();
+  if (plugin.nodeLayer === 'l1') {
+    const l1Url = resolveL1NodeRpcUrl();
+    if (!l1Url) {
+      throw new Error('[AgentLoop] L1-only mode requires L1_RPC_URL environment variable');
+    }
+
+    const deploymentType = (process.env.L1_DEPLOYMENT_TYPE ?? 'external') as 'k8s' | 'docker' | 'external';
+    const detectedClient = await detectExecutionClient({ rpcUrl: l1Url });
+    const l1Metrics = await collectL1NodeMetrics(l1Url, detectedClient, deploymentType);
+
+    // Try to get CPU usage from K8s if available
+    let cpuUsage = 0;
+    if (deploymentType === 'k8s') {
+      try {
+        cpuUsage = await getContainerCpuUsage().then((r) => r?.cpuMillicores ?? 0);
+      } catch { /* fallback to 0 */ }
+    }
+
+    const gasUsedRatio = l1Metrics.baseFee > 0n
+      ? Math.min(1, Number(l1Metrics.baseFee) / 100_000_000_000) // normalize relative to 100 gwei
+      : 0;
+
+    const currentVcpu = await getCurrentVcpu();
+
+    const dataPoint: MetricDataPoint = {
+      timestamp: new Date().toISOString(),
+      blockHeight: l1Metrics.blockHeight,
+      blockInterval: l1Metrics.blockInterval,
+      cpuUsage,
+      gasUsedRatio,
+      txPoolPending: Math.max(0, l1Metrics.txPoolPending),
+      currentVcpu,
+    };
+
+    try {
+      await pushMetric(dataPoint);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(`[AgentLoop] Failed to push L1 metric, continuing: ${message}`);
+    }
+
+    return {
+      dataPoint,
+      l1BlockHeight: l1Metrics.blockHeight,
+    };
+  }
+
   const rpcUrl = resolveL2RpcUrl();
   if (!rpcUrl) {
     logger.warn('[AgentLoop] L2 RPC URL not set, skipping metrics collection');
@@ -698,7 +761,7 @@ export async function runAgentCycle(): Promise<AgentCycleResult> {
 
     const metricsResult: AgentCycleResult['metrics'] = {
       l1BlockHeight,
-      l2BlockHeight: dataPoint.blockHeight,
+      l2BlockHeight: getChainPlugin().nodeLayer === 'l1' ? 0 : dataPoint.blockHeight,
       cpuUsage: dataPoint.cpuUsage,
       txPoolPending: dataPoint.txPoolPending,
       gasUsedRatio: dataPoint.gasUsedRatio,
