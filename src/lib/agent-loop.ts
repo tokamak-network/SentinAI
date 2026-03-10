@@ -200,7 +200,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
       } catch { /* fallback to 0 */ }
     }
 
-    const gasUsedRatio = l1Metrics.baseFee > 0n
+    const gasUsedRatio = l1Metrics.baseFee > BigInt(0)
       ? Math.min(1, Number(l1Metrics.baseFee) / 100_000_000_000) // normalize relative to 100 gwei
       : 0;
 

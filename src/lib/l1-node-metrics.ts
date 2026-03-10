@@ -134,7 +134,7 @@ export async function collectL1NodeMetrics(
   const latestTs = parseInt(latestBlock.timestamp, 16);
   const parentTs = parseInt(parentBlock.timestamp, 16);
   const blockInterval = Math.max(0, latestTs - parentTs);
-  const baseFee = latestBlock.baseFeePerGas ? BigInt(latestBlock.baseFeePerGas) : 0n;
+  const baseFee = latestBlock.baseFeePerGas ? BigInt(latestBlock.baseFeePerGas) : BigInt(0);
 
   const [peerCount, syncStatus, txPool] = await Promise.all([
     getPeerCount(rpcUrl),
