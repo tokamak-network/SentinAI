@@ -165,7 +165,7 @@ export interface ChainPlugin {
 
   /** L1 chain configuration for viem */
   readonly l1Chain: Chain;
-  /** L2 chain configuration for viem */
+  /** L2 chain configuration for viem. Undefined for L1-only monitors (nodeLayer === 'l1'). */
   readonly l2Chain?: Chain;
 
   // ---- AI Prompts ----
