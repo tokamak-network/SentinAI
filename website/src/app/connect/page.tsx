@@ -216,6 +216,8 @@ interface BuildConfig {
   aiProvider: AiProvider;
   aiApiKey: string;
   awsClusterName: string;
+  k8sNamespace: string;
+  k8sAppPrefix: string;
   alertWebhookUrl: string;
   gatewayUrl: string;
   gatewayApiKey: string;
@@ -248,6 +250,8 @@ function buildEnvLocal(cfg: BuildConfig, featureSnippets: string[] = [], deployT
   }
 
   if (cfg.awsClusterName.trim()) lines.push(`AWS_CLUSTER_NAME=${cfg.awsClusterName.trim()}`);
+  if (cfg.k8sNamespace.trim()) lines.push(`K8S_NAMESPACE=${cfg.k8sNamespace.trim()}`);
+  if (cfg.k8sAppPrefix.trim()) lines.push(`K8S_APP_PREFIX=${cfg.k8sAppPrefix.trim()}`);
   if (cfg.alertWebhookUrl.trim()) lines.push(`ALERT_WEBHOOK_URL=${cfg.alertWebhookUrl.trim()}`);
 
   if (featureSnippets.length > 0) {
@@ -426,6 +430,8 @@ export default function ConnectPage() {
   const [aiProvider, setAiProvider] = useState<AiProvider>("none");
   const [aiApiKey, setAiApiKey] = useState("");
   const [awsClusterName, setAwsClusterName] = useState("");
+  const [k8sNamespace, setK8sNamespace] = useState("");
+  const [k8sAppPrefix, setK8sAppPrefix] = useState("");
   const [alertWebhookUrl, setAlertWebhookUrl] = useState("");
   const [gatewayUrl, setGatewayUrl] = useState("");
   const [gatewayApiKey, setGatewayApiKey] = useState("");
@@ -443,7 +449,7 @@ export default function ConnectPage() {
 
   const buildCfg: BuildConfig = {
     nodeType, url, authToken, networkName, aiProvider, aiApiKey,
-    awsClusterName, alertWebhookUrl, gatewayUrl, gatewayApiKey,
+    awsClusterName, k8sNamespace, k8sAppPrefix, alertWebhookUrl, gatewayUrl, gatewayApiKey,
   };
 
   const visibleFeatures = OPTIONAL_FEATURES.filter(
@@ -462,7 +468,7 @@ export default function ConnectPage() {
       .map(f => f.snippet);
     return buildEnvLocal(buildCfg, featureSnippets, deployTarget);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodeType, url, authToken, networkName, aiProvider, aiApiKey, awsClusterName, alertWebhookUrl, gatewayUrl, gatewayApiKey, deployTarget, enabledFeatures]);
+  }, [nodeType, url, authToken, networkName, aiProvider, aiApiKey, awsClusterName, k8sNamespace, k8sAppPrefix, alertWebhookUrl, gatewayUrl, gatewayApiKey, deployTarget, enabledFeatures]);
 
   useEffect(() => {
     if (!testResult?.data?.dashboardUrl) return;
@@ -688,7 +694,7 @@ export default function ConnectPage() {
                     <button
                       key={value}
                       type="button"
-                      onClick={() => { setDeployTarget(value); if (value === "docker" || value === "local") { setAwsClusterName(""); } resetOutput(); }}
+                      onClick={() => { setDeployTarget(value); if (value === "docker" || value === "local") { setAwsClusterName(""); setK8sNamespace(""); setK8sAppPrefix(""); } resetOutput(); }}
                       style={{
                         display: "flex", alignItems: "center", justifyContent: "space-between",
                         padding: "10px 12px", textAlign: "left", cursor: "pointer",
@@ -730,6 +736,36 @@ export default function ConnectPage() {
                       <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
                         Used for K8s API auto-detection and token generation (AWS_CLUSTER_NAME).
                       </p>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <div>
+                        <label style={labelStyle}>K8s Namespace</label>
+                        <input
+                          id="k8s-namespace"
+                          type="text"
+                          value={k8sNamespace}
+                          onChange={(e) => { setK8sNamespace(e.target.value); resetOutput(); }}
+                          placeholder="default"
+                          style={inputStyle}
+                        />
+                        <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
+                          Namespace where L2 pods are deployed (K8S_NAMESPACE).
+                        </p>
+                      </div>
+                      <div>
+                        <label style={labelStyle}>App Prefix</label>
+                        <input
+                          id="k8s-app-prefix"
+                          type="text"
+                          value={k8sAppPrefix}
+                          onChange={(e) => { setK8sAppPrefix(e.target.value); resetOutput(); }}
+                          placeholder="op"
+                          style={inputStyle}
+                        />
+                        <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
+                          Pod label prefix, e.g. <code style={{ background: C.secondary, padding: "0 3px" }}>op</code> → app=op-geth (K8S_APP_PREFIX).
+                        </p>
+                      </div>
                     </div>
                     <div style={{ background: "#FFFBEA", border: `1px solid #E0C800`, padding: "10px 12px" }}>
                       <p style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: "#7A6000", margin: "0 0 4px", letterSpacing: "0.1em" }}>
@@ -1181,7 +1217,7 @@ export default function ConnectPage() {
                 <DeployStep number={isLocal ? 4 : 3} title="START WITH DOCKER COMPOSE" font={FONT} colors={C}>
                   <CodeBlock
                     title="terminal"
-                    content={`docker compose up -d`}
+                    content={`docker compose up -d --build`}
                     copyId="compose"
                     copiedId={copiedId}
                     onCopy={copyToClipboard}
