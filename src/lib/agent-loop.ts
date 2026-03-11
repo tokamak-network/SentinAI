@@ -378,9 +378,9 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
   const clientProfile = resolveClientProfile();
   let txPoolPending = 0;
   if (clientProfile.methods.txPool) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
       const txPoolResponse = await fetch(rpcUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -392,7 +392,6 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
         }),
         signal: controller.signal,
       });
-      clearTimeout(timeoutId);
       const txPoolData = (await txPoolResponse.json()) as { result?: unknown };
       txPoolPending = parseTxPoolPendingCount(
         txPoolData.result,
@@ -401,6 +400,8 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
       );
     } catch {
       txPoolPending = block.transactions.length;
+    } finally {
+      clearTimeout(timeoutId);
     }
   } else {
     txPoolPending = block.transactions.length;
@@ -439,31 +440,32 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
   }
   await getStore().setLastBlock(String(blockNumber), String(now));
 
-  // Collect custom metrics from ClientProfile
+  // Collect custom metrics from ClientProfile — run all fetches in parallel
   const customMetrics: Record<string, number> = {};
-  for (const cm of clientProfile.customMetrics) {
-    try {
+  const cmResults = await Promise.allSettled(
+    clientProfile.customMetrics.map(async (cm) => {
       const cmController = new AbortController();
       const cmTimer = setTimeout(() => cmController.abort(), RPC_TIMEOUT_MS);
-      const cmRes = await fetch(rpcUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: cm.method,
-          params: cm.params ?? [],
-          id: 1,
-        }),
-        signal: cmController.signal,
-      });
-      clearTimeout(cmTimer);
-      const cmData = (await cmRes.json()) as { result?: unknown };
-      const raw = cm.responsePath ? getValueByPath(cmData.result, cm.responsePath) : cmData.result;
-      if (raw === null || raw === undefined) continue;
-      const value = typeof raw === 'number' ? raw : parseFloat(String(raw));
-      if (Number.isFinite(value)) customMetrics[cm.name] = value;
-    } catch {
-      // silent failure — missing custom metric does not degrade the cycle
+      try {
+        const cmResponse = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: cm.method, params: cm.params ?? [], id: 1 }),
+          signal: cmController.signal,
+        });
+        const cmData = (await cmResponse.json()) as { result?: unknown };
+        const raw = cm.responsePath ? getValueByPath(cmData.result, cm.responsePath) : cmData.result;
+        const value = typeof raw === 'number' ? raw : parseFloat(String(raw));
+        if (raw === null || raw === undefined || !Number.isFinite(value)) return;
+        return { name: cm.name, value };
+      } finally {
+        clearTimeout(cmTimer);
+      }
+    }),
+  );
+  for (const result of cmResults) {
+    if (result.status === 'fulfilled' && result.value) {
+      customMetrics[result.value.name] = result.value.value;
     }
   }
 
