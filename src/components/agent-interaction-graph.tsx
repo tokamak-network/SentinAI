@@ -105,6 +105,7 @@ function isEdgeActive(phase: string, from: string, to: string): boolean {
     analyze: [['detector', 'analyzer'], ['detector', 'security'], ['analyzer', 'rca'], ['security', 'notifier']],
     act:     [['analyzer', 'executor'], ['scaling', 'remediation'], ['security', 'remediation'], ['rca', 'remediation'], ['security', 'notifier']],
     verify:  [['executor', 'verifier']],
+    cost:    [['cost', 'notifier']],
   };
   return (map[phase] ?? []).some(([f, t]) => f === from && t === to);
 }
@@ -321,6 +322,7 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
     if (from === 'scaling'    && to === 'remediation') return 'scale·up';
     if (from === 'security'   && to === 'notifier')    return 'alert';
     if (from === 'security'   && to === 'remediation') return 'patch';
+    if (from === 'cost'       && to === 'notifier')    return 'schedule';
     return undefined;
   };
 
@@ -396,6 +398,7 @@ export function AgentInteractionGraph({ agentFleet, anomalyEvents, agentPhase, d
           <CurvedEdge x1={532} y1={195 + ph} x2={258} y2={320 - ph} color="#CC6600" active={isEdgeActive(agentPhase, 'rca', 'remediation')} label={isEdgeActive(agentPhase, 'rca', 'remediation') ? edgeLabel('rca', 'remediation') : undefined} />
           <CurvedEdge x1={380} y1={195 + ph} x2={503} y2={320 - ph} color="#007A00" />
           <CurvedEdge x1={227} y1={195 + ph} x2={503} y2={320 - ph} color="#CC6600" active={isEdgeActive(agentPhase, 'security', 'notifier')} label={isEdgeActive(agentPhase, 'security', 'notifier') ? edgeLabel('security', 'notifier') : undefined} />
+          <CurvedEdge x1={685} y1={195 + ph} x2={503} y2={320 - ph} color="#007A00" active={isEdgeActive(agentPhase, 'cost', 'notifier')} label={isEdgeActive(agentPhase, 'cost', 'notifier') ? edgeLabel('cost', 'notifier') : undefined} />
 
           {/* ── Agent nodes ── */}
           {PIPELINE.map(a => (

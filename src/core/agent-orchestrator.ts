@@ -46,6 +46,7 @@ export interface AgentStatus {
   instanceId: string;
   running: boolean;
   lastActivityAt: string | null;
+  lastCostScalingAt?: string | null;
 }
 
 export interface RoleAgent {
@@ -234,12 +235,16 @@ export class AgentOrchestrator {
 
     for (const instance of this.instances.values()) {
       for (const [role, agent] of instance.agents) {
-        statuses.push({
+        const status: AgentStatus = {
           role,
           instanceId: instance.instanceId,
           running: agent.isRunning(),
           lastActivityAt: resolveLastActivityAt(agent),
-        });
+        };
+        if (role === 'cost' && 'getLastCostScalingAt' in agent && typeof agent.getLastCostScalingAt === 'function') {
+          status.lastCostScalingAt = (agent as CostAgent).getLastCostScalingAt();
+        }
+        statuses.push(status);
       }
     }
 
@@ -255,12 +260,16 @@ export class AgentOrchestrator {
 
     const statuses: AgentStatus[] = [];
     for (const [role, agent] of instance.agents) {
-      statuses.push({
+      const status: AgentStatus = {
         role,
         instanceId,
         running: agent.isRunning(),
         lastActivityAt: resolveLastActivityAt(agent),
-      });
+      };
+      if (role === 'cost' && 'getLastCostScalingAt' in agent && typeof agent.getLastCostScalingAt === 'function') {
+        status.lastCostScalingAt = (agent as CostAgent).getLastCostScalingAt();
+      }
+      statuses.push(status);
     }
 
     return statuses;

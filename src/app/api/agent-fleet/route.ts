@@ -59,10 +59,14 @@ export async function GET(request: Request) {
       }
     }
 
+    const costAgent = statuses.find(s => s.role === 'cost');
+    const lastCostScalingAt = costAgent?.lastCostScalingAt ?? null;
+
     return NextResponse.json({
       ...snapshot,
       agentV2,
       agents: statuses,
+      lastCostScalingAt,
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {

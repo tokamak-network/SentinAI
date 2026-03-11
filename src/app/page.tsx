@@ -285,6 +285,7 @@ interface AgentFleetData {
     | 'remediation' | 'notifier',
     AgentFleetRoleSummary
   >;
+  lastCostScalingAt?: string | null;
   updatedAt: string;
 }
 
@@ -765,6 +766,11 @@ export default function Dashboard() {
     if (activeAnomalies.some((a) => a.deepAnalysis)) return 'analyze';
     // If there are active anomalies without deep analysis yet → show 'detect'
     if (activeAnomalies.length > 0) return 'detect';
+    // If a cost-based scaling was applied within the last 30s → show 'cost'
+    if (agentFleet?.lastCostScalingAt) {
+      const elapsedMs = Date.now() - new Date(agentFleet.lastCostScalingAt).getTime();
+      if (elapsedMs < 30_000) return 'cost';
+    }
     // If a scaling event occurred within the last 30s → show 'act' (captures
     // scale-down after TTL expiry, which the UI poll might otherwise miss)
     if (scalerState?.lastScalingTime) {
@@ -780,7 +786,7 @@ export default function Dashboard() {
     }
     // Fall back to raw phase (may be 'complete', 'error', etc.)
     return rawPhase ?? 'idle';
-  }, [agentLoop?.lastCycle?.phase, anomalyEvents, scalerState?.lastScalingTime, isSeedActive, scalingScore]);
+  }, [agentLoop?.lastCycle?.phase, anomalyEvents, scalerState?.lastScalingTime, isSeedActive, scalingScore, agentFleet?.lastCostScalingAt]);
 
   // Replay last cycle's phaseTrace locally so the map shows the real sequence.
   // Each phase is displayed for ~2s; after all phases shown, replay clears and

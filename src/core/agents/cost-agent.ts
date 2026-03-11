@@ -28,9 +28,14 @@ const logger = createLogger('CostAgent');
 
 export class CostAgent extends DomainAgent {
   readonly domain: DomainAgentType = 'cost';
+  private lastCostScalingAt: string | null = null;
 
   constructor(config: { instanceId: string; protocolId: string; intervalMs?: number }) {
     super({ ...config, intervalMs: config.intervalMs ?? 300_000 });
+  }
+
+  getLastCostScalingAt(): string | null {
+    return this.lastCostScalingAt;
   }
 
   protected async tick(): Promise<void> {
@@ -170,6 +175,8 @@ export class CostAgent extends DomainAgent {
         timestamp: new Date().toISOString(),
         correlationId: randomUUID(),
       });
+
+      this.lastCostScalingAt = new Date().toISOString();
 
       logger.info(
         `[CostAgent:${this.instanceId}] Schedule applied: ${result.message} (savings: $${profile.metadata.estimatedMonthlySavings.toFixed(2)}/mo)`
