@@ -145,8 +145,11 @@ function parseMemoryMiB(memStr: string): number {
 
 /**
  * Get real CPU/memory usage for ALL pods in the namespace via single kubectl top call.
- * Returns a Map keyed by component suffix (e.g., "op-geth", "op-node").
+ * Returns a Map keyed by component name (e.g., "op-geth", "op-node").
  * Requires metrics-server installed in the cluster.
+ *
+ * Pod-to-component matching uses getLabelSelectorWithOverride so that
+ * operators can remap label selectors via SENTINAI_K8S_LABEL_* env vars.
  */
 export async function getAllContainerUsage(
   namespace?: string
@@ -156,6 +159,23 @@ export async function getAllContainerUsage(
   if (isDockerMode()) return getAllDockerContainerMetrics();
 
   const ns = namespace || (process.env.K8S_NAMESPACE || 'default');
+  const prefix = process.env.K8S_APP_PREFIX || 'op';
+
+  // Build a map of expected pod-name suffix → component name using
+  // getLabelSelectorWithOverride so that SENTINAI_K8S_LABEL_* overrides
+  // are honoured when identifying which pod belongs to which component.
+  const plugin = getChainPlugin();
+  const selectorToComponent = new Map<string, string>();
+  for (const comp of plugin.k8sComponents) {
+    const defaultSelector = `app=${prefix}-${comp.labelSuffix}`;
+    const effectiveSelector = getLabelSelectorWithOverride(comp.component, defaultSelector);
+    // Extract the label value (e.g. "app=op-geth" → "op-geth") as the
+    // pod-name suffix we expect to see in `kubectl top pods` output.
+    const labelValue = effectiveSelector.includes('=')
+      ? effectiveSelector.split('=')[1]
+      : effectiveSelector;
+    selectorToComponent.set(labelValue, comp.component);
+  }
 
   try {
     const cmd = `top pods -n ${ns} --no-headers`;
@@ -176,12 +196,15 @@ export async function getAllContainerUsage(
 
       if (isNaN(cpuMillicores) || isNaN(memoryMiB)) continue;
 
-      // Extract component suffix from pod name
-      // e.g., "sepolia-thanos-stack-op-geth-0" → match "op-geth"
-      // e.g., "op-node-0" → match "op-node"
-      const suffixMatch = podName.match(/(op-(?:geth|node|batcher|proposer))(?:-\d+)?$/);
-      if (suffixMatch) {
-        result.set(suffixMatch[1], { cpuMillicores, memoryMiB });
+      // Match pod name against each component's effective label value.
+      // A pod named "sepolia-thanos-stack-op-geth-0" ends with "op-geth-0",
+      // so we strip the trailing "-<digits>" ordinal before matching.
+      const podBase = podName.replace(/-\d+$/, '');
+      for (const [labelValue, componentName] of selectorToComponent) {
+        if (podBase.endsWith(labelValue)) {
+          result.set(componentName, { cpuMillicores, memoryMiB });
+          break;
+        }
       }
     }
 
