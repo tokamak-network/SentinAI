@@ -35,6 +35,7 @@ import { tickGoalManager, dispatchTopGoal } from '@/lib/goal-manager';
 import { checkAndTrackClientVersion } from '@/lib/client-version-tracker';
 import { detectExecutionClient } from '@/lib/client-detector';
 import { resolveClientProfile, parseTxPoolPendingCount, getValueByPath } from '@/lib/client-profile';
+import { getOrDetectL2Client } from '@/lib/l2-client-cache';
 import { collectL1NodeMetrics } from '@/lib/l1-node-metrics';
 import { getCoreRedis } from '@/core/redis';
 import { DEFAULT_SCALING_CONFIG, type TargetVcpu, type TargetMemoryGiB, type ScalingDecision } from '@/types/scaling';
@@ -374,10 +375,26 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     }
   }
 
-  // TxPool pending count — use ClientProfile-configured method and parser
+  // TxPool pending count — prefer probe-detected namespace, fall back to ClientProfile
   const clientProfile = resolveClientProfile();
+  // Use probe-detected namespace if available, otherwise fall back to env-based profile
+  let detectedL2ClientNamespace: 'txpool' | 'parity' | null = null;
+  try {
+    const detectedL2Client = await getOrDetectL2Client(rpcUrl);
+    detectedL2ClientNamespace = detectedL2Client.txpoolNamespace;
+  } catch {
+    // Non-blocking: probe failure falls through to profile-based method selection
+  }
+  const txpoolNamespace = detectedL2ClientNamespace;
+  const txpoolMethod = txpoolNamespace === 'txpool' ? 'txpool_status'
+    : txpoolNamespace === 'parity' ? 'parity_pendingTransactions'
+    : clientProfile.methods.txPool?.method ?? null;
+  const txpoolParserType: 'txpool' | 'parity' | 'custom' | null = txpoolNamespace !== null
+    ? txpoolNamespace
+    : (clientProfile.parsers?.txPool ?? null);
+
   let txPoolPending = 0;
-  if (clientProfile.methods.txPool) {
+  if (txpoolMethod) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
     try {
@@ -386,8 +403,8 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           jsonrpc: '2.0',
-          method: clientProfile.methods.txPool.method,
-          params: clientProfile.methods.txPool.params ?? [],
+          method: txpoolMethod,
+          params: clientProfile.methods.txPool?.params ?? [],
           id: 1,
         }),
         signal: controller.signal,
@@ -395,8 +412,8 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
       const txPoolData = (await txPoolResponse.json()) as { result?: unknown };
       txPoolPending = parseTxPoolPendingCount(
         txPoolData.result,
-        clientProfile.parsers.txPool,
-        clientProfile.methods.txPool.responsePath,
+        txpoolParserType,
+        clientProfile.methods.txPool?.responsePath,
       );
     } catch {
       txPoolPending = block.transactions.length;

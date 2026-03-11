@@ -140,6 +140,20 @@ vi.mock('@/lib/client-detector', () => ({
   detectExecutionClient: vi.fn().mockResolvedValue({ family: 'geth', version: 'Geth/v1.13.0' }),
 }));
 
+vi.mock('@/lib/l2-client-cache', () => ({
+  // Default: no namespace detected — let existing tests continue using the env-based profile
+  getOrDetectL2Client: vi.fn().mockResolvedValue({
+    layer: 'execution',
+    family: 'unknown',
+    txpoolNamespace: null,
+    supportsL2SyncStatus: false,
+    l2SyncMethod: null,
+    probes: {},
+    raw: {},
+  }),
+  invalidateL2ClientCache: vi.fn(),
+}));
+
 vi.mock('@/lib/l1-node-metrics', () => ({
   collectL1NodeMetrics: vi.fn().mockResolvedValue({
     blockHeight: 2000,
@@ -167,6 +181,7 @@ import { recordUsage } from '@/lib/usage-tracker';
 import { checkAndTrackClientVersion } from '@/lib/client-version-tracker';
 import { detectExecutionClient } from '@/lib/client-detector';
 import { resetChainRegistry } from '@/chains/registry';
+import { getOrDetectL2Client } from '@/lib/l2-client-cache';
 
 describe('agent-loop', () => {
   beforeEach(async () => {
@@ -689,6 +704,86 @@ describe('agent-loop', () => {
     it('does not degrade the observe cycle when version tracking throws', async () => {
       vi.mocked(detectExecutionClient).mockResolvedValueOnce({ family: 'geth', version: 'Geth/v1.14.0' });
       vi.mocked(checkAndTrackClientVersion).mockRejectedValueOnce(new Error('Redis unavailable'));
+
+      const result = await runAgentCycle();
+
+      expect(result.phase).toBe('complete');
+      expect(result.metrics).not.toBeNull();
+    });
+  });
+
+  describe('probe-driven txpool detection', () => {
+    it('uses parity_pendingTransactions when probe returns txpoolNamespace: parity', async () => {
+      vi.mocked(getOrDetectL2Client).mockResolvedValueOnce({
+        layer: 'execution',
+        family: 'nethermind',
+        version: 'Nethermind/v1.20.0',
+        txpoolNamespace: 'parity',
+        supportsL2SyncStatus: false,
+        l2SyncMethod: null,
+        probes: { parity_pendingTransactions: true },
+        raw: {},
+      });
+
+      // parity returns an array — 7 items
+      vi.mocked(mockFetch).mockResolvedValueOnce({
+        json: () => Promise.resolve({ result: [1, 2, 3, 4, 5, 6, 7] }),
+      } as never);
+
+      const { pushMetric } = await import('@/lib/metrics-store');
+      const result = await runAgentCycle();
+
+      expect(result.phase).toBe('complete');
+
+      // Verify parity_pendingTransactions was called
+      const fetchCalls = vi.mocked(mockFetch).mock.calls;
+      const txpoolCall = fetchCalls.find((call) => {
+        const body = call[1]?.body as string;
+        return body && body.includes('parity_pendingTransactions');
+      });
+      expect(txpoolCall).toBeDefined();
+
+      // Verify pending count was parsed using parity parser (array length = 7)
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.txPoolPending).toBe(7);
+    });
+
+    it('falls back to profile method when probe returns txpoolNamespace: null', async () => {
+      vi.mocked(getOrDetectL2Client).mockResolvedValueOnce({
+        layer: 'execution',
+        family: 'unknown',
+        txpoolNamespace: null,
+        supportsL2SyncStatus: false,
+        l2SyncMethod: null,
+        probes: {},
+        raw: {},
+      });
+
+      // Profile for SENTINAI_CLIENT_FAMILY=geth uses txpool_status
+      process.env.SENTINAI_CLIENT_FAMILY = 'geth';
+
+      vi.mocked(mockFetch).mockResolvedValueOnce({
+        json: () => Promise.resolve({ result: { pending: '0x5' } }), // 5 pending
+      } as never);
+
+      const { pushMetric } = await import('@/lib/metrics-store');
+      await runAgentCycle();
+
+      const fetchCalls = vi.mocked(mockFetch).mock.calls;
+      const txpoolCall = fetchCalls.find((call) => {
+        const body = call[1]?.body as string;
+        return body && body.includes('txpool_status');
+      });
+      expect(txpoolCall).toBeDefined();
+
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.txPoolPending).toBe(5);
+
+      delete process.env.SENTINAI_CLIENT_FAMILY;
+    });
+
+    it('observe cycle completes even when getOrDetectL2Client throws', async () => {
+      vi.mocked(getOrDetectL2Client).mockRejectedValueOnce(new Error('probe timeout'));
 
       const result = await runAgentCycle();
 
