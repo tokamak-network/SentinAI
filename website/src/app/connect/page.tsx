@@ -553,6 +553,8 @@ export default function ConnectPage() {
     color: C.muted, display: "block", marginBottom: 6, textTransform: "uppercase" as const,
   };
 
+  const isLocal = deployTarget === "local";
+
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.fg, fontFamily: FONT }}>
       <Navbar />
@@ -1139,8 +1141,32 @@ export default function ConnectPage() {
                   </p>
                 </DeployStep>
 
-                {/* Step 2 */}
-                <DeployStep number={2} title="CREATE .ENV.LOCAL" font={FONT} colors={C}>
+                {/* Step 2 — Local only: edit docker-compose.yml */}
+                {isLocal && (
+                  <DeployStep number={2} title="EDIT DOCKER-COMPOSE.YML" font={FONT} colors={C}>
+                    <CodeBlock
+                      title="docker-compose.yml diff"
+                      content={
+                        "# Under the sentinai: service block, add:\n" +
+                        "  sentinai:\n" +
+                        "    image: ghcr.io/tokamak-network/sentinai:latest\n" +
+                        "+   extra_hosts:\n" +
+                        '+     - "host.docker.internal:host-gateway"\n' +
+                        "    env_file: .env.local"
+                      }
+                      copyId="compose-diff"
+                      copiedId={copiedId}
+                      onCopy={copyToClipboard}
+                    />
+                    <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "8px 0 0" }}>
+                      Required on <strong>Linux</strong> so Docker can reach your local node.{" "}
+                      Mac and Windows Docker Desktop handle this automatically — skip if not on Linux.
+                    </p>
+                  </DeployStep>
+                )}
+
+                {/* Step 2 / 3 */}
+                <DeployStep number={isLocal ? 3 : 2} title="CREATE .ENV.LOCAL" font={FONT} colors={C}>
                   <CodeBlock
                     title=".env.local"
                     content={envLocal}
@@ -1154,8 +1180,8 @@ export default function ConnectPage() {
                   </p>
                 </DeployStep>
 
-                {/* Step 3 */}
-                <DeployStep number={3} title="START WITH DOCKER COMPOSE" font={FONT} colors={C}>
+                {/* Step 3 / 4 */}
+                <DeployStep number={isLocal ? 4 : 3} title="START WITH DOCKER COMPOSE" font={FONT} colors={C}>
                   <CodeBlock
                     title="terminal"
                     content={`docker compose up -d`}
@@ -1176,8 +1202,8 @@ export default function ConnectPage() {
                   </p>
                 </DeployStep>
 
-                {/* Step 4 */}
-                <DeployStep number={4} title="OPEN DASHBOARD" font={FONT} colors={C} last>
+                {/* Step 4 / 5 */}
+                <DeployStep number={isLocal ? 5 : 4} title="OPEN DASHBOARD" font={FONT} colors={C} last>
                   <div style={{ display: "flex", gap: 0, border: `1px solid ${C.border}` }}>
                     <span style={{
                       flex: 1, fontFamily: FONT, fontSize: 11, color: C.accent,
