@@ -8,6 +8,7 @@
 
 import { detectClient } from '@/lib/client-detector';
 import type { DetectedClient } from '@/lib/client-detector';
+import logger from '@/lib/logger';
 
 interface CacheEntry {
   detected: DetectedClient;
@@ -48,8 +49,8 @@ export async function getOrDetectL2Client(rpcUrl: string): Promise<DetectedClien
     const detected = await detectClient({ rpcUrl });
     cache.set(rpcUrl, { detected, cachedAt: now });
     return detected;
-  } catch {
-    // Return minimal fallback so the observe cycle is never blocked by probe failure
+  } catch (err) {
+    logger.warn({ err, rpcUrl }, '[L2ClientCache] probe failed, using unknown fallback');
     return UNKNOWN_CLIENT;
   }
 }
