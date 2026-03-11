@@ -16,8 +16,6 @@ services:
       - NEXT_PUBLIC_BASE_PATH=${NEXT_PUBLIC_BASE_PATH:-}
       # Self-hosted first-run onboarding (enabled by default)
       - SENTINAI_AUTO_BOOTSTRAP=${SENTINAI_AUTO_BOOTSTRAP:-true}
-      # Read-only mode (protects public dashboard)
-      - NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE=true
     volumes:
       - sentinai-reports:/app/data/reports
       # Host K8s cluster access (read-only)

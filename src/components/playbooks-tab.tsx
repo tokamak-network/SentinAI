@@ -602,6 +602,7 @@ export function PlaybooksTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -657,6 +658,7 @@ export function PlaybooksTab() {
 
   const handleRunNow = useCallback(async () => {
     setRunning(true);
+    setResult(null);
     try {
       const res = await fetch(`${BASE_PATH}/api/playbook-evolution?action=mine`, {
         method: 'POST',
@@ -666,9 +668,18 @@ export function PlaybooksTab() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.error || `Mine operation failed (${res.status})`);
       }
+      const data = await res.json() as { patterns: number; saved: string[]; skipped: string[] };
       await fetchAll();
+      if (data.saved.length > 0) {
+        setResult({ type: 'success', message: `Found ${data.patterns} patterns, saved ${data.saved.length} playbooks.` });
+      } else if (data.patterns > 0) {
+        setResult({ type: 'success', message: `Found ${data.patterns} patterns but none were new or valid.` });
+      } else {
+        setResult({ type: 'success', message: 'No patterns found. Need more operation records to mine patterns.' });
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setResult({ type: 'error', message: msg });
     } finally {
       setRunning(false);
     }
@@ -742,6 +753,40 @@ export function PlaybooksTab() {
         onRunNow={() => void handleRunNow()}
         running={running}
       />
+
+      {/* Result banner */}
+      {result && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: '8px 12px',
+            fontSize: 11,
+            fontFamily: font,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            background: result.type === 'success' ? '#E8FFF5' : '#FFF5F5',
+            border: `1px solid ${result.type === 'success' ? '#007A00' : '#D40000'}`,
+            color: result.type === 'success' ? '#007A00' : '#D40000',
+          }}
+        >
+          <span>{result.type === 'success' ? '✓' : '✗'} {result.message}</span>
+          <button
+            onClick={() => setResult(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              fontSize: 14,
+              color: '#888',
+              padding: '0 4px',
+              fontFamily: font,
+            }}
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       <div style={{ height: 12 }} />
 
