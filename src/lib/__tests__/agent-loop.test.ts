@@ -527,6 +527,26 @@ describe('agent-loop', () => {
       delete process.env.SENTINAI_OVERRIDE_TXPOOL_PARSER;
     });
 
+    it('falls back to block.transactions.length when txPool RPC call throws', async () => {
+      // geth profile supports txPool, so it will attempt a fetch call
+      process.env.SENTINAI_CLIENT_FAMILY = 'geth';
+
+      // Simulate a network error / timeout on the txpool RPC call
+      vi.mocked(mockFetch).mockRejectedValueOnce(new Error('network error: connection refused'));
+
+      const { pushMetric } = await import('@/lib/metrics-store');
+      const result = await runAgentCycle();
+
+      // Cycle should complete successfully despite the txPool fetch failure
+      expect(result.phase).toBe('complete');
+
+      // txPoolPending should fall back to block.transactions.length (2 items: ['0x1', '0x2'])
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.txPoolPending).toBe(2);
+
+      delete process.env.SENTINAI_CLIENT_FAMILY;
+    });
+
     it('falls back to block.transactions.length when txPool method is null', async () => {
       // Use an unknown family — resolveClientProfile falls back to a custom empty profile
       // which has txPool: null, causing the agent-loop to use block.transactions.length
