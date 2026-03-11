@@ -419,7 +419,7 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 
 export default function ConnectPage() {
   const [nodeType, setNodeType] = useState<NodeType>("opstack-l2");
-  const [deployTarget, setDeployTarget] = useState<DeployTarget | null>(null);
+  const [deployTarget, setDeployTarget] = useState<DeployTarget>("local");
   const [url, setUrl] = useState("");
   const [authToken, setAuthToken] = useState("");
   const [networkName, setNetworkName] = useState("");
