@@ -191,6 +191,19 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
 
     const deploymentType = (process.env.L1_DEPLOYMENT_TYPE ?? 'external') as 'k8s' | 'docker' | 'external';
     const detectedClient = await detectExecutionClient({ rpcUrl: l1Url });
+
+    // Non-blocking: track L1 client version changes, invalidate capabilities cache on upgrade
+    try {
+      const instanceId = process.env.SENTINAI_INSTANCE_ID ?? 'default';
+      const keyPrefix = `inst:${instanceId}`;
+      const versionCheck = await checkAndTrackClientVersion(getCoreRedis(), keyPrefix, detectedClient.version);
+      if (versionCheck.changed) {
+        logger.warn('[AgentLoop] L1 client version changed — capabilities cache invalidated');
+      }
+    } catch {
+      // Version tracking failure must not degrade the observe cycle
+    }
+
     const l1Metrics = await collectL1NodeMetrics(l1Url, detectedClient, deploymentType);
 
     // Try to get CPU usage from K8s if available

@@ -128,6 +128,27 @@ vi.mock('@/lib/goal-manager', () => ({
   }),
 }));
 
+vi.mock('@/lib/client-version-tracker', () => ({
+  checkAndTrackClientVersion: vi.fn().mockResolvedValue({ changed: false, currentVersion: 'Geth/v1.13.0', previousVersion: 'Geth/v1.13.0' }),
+}));
+
+vi.mock('@/core/redis', () => ({
+  getCoreRedis: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock('@/lib/client-detector', () => ({
+  detectExecutionClient: vi.fn().mockResolvedValue({ family: 'geth', version: 'Geth/v1.13.0' }),
+}));
+
+vi.mock('@/lib/l1-node-metrics', () => ({
+  collectL1NodeMetrics: vi.fn().mockResolvedValue({
+    blockHeight: 2000,
+    blockInterval: 12.0,
+    txPoolPending: 5,
+    baseFee: BigInt(50_000_000_000),
+  }),
+}));
+
 // Mock global fetch for txpool_status
 const mockFetch = vi.fn().mockResolvedValue({
   json: () => Promise.resolve({ result: { pending: '0xa' } }), // 10 pending
@@ -143,6 +164,9 @@ import { analyzeLogChunk } from '@/lib/ai-analyzer';
 import * as failoverModule from '@/lib/l1-rpc-failover';
 import { tickGoalManager, dispatchTopGoal } from '@/lib/goal-manager';
 import { recordUsage } from '@/lib/usage-tracker';
+import { checkAndTrackClientVersion } from '@/lib/client-version-tracker';
+import { detectExecutionClient } from '@/lib/client-detector';
+import { resetChainRegistry } from '@/chains/registry';
 
 describe('agent-loop', () => {
   beforeEach(async () => {
@@ -625,6 +649,51 @@ describe('agent-loop', () => {
     it('should reset running state', () => {
       resetAgentState();
       expect(isAgentRunning()).toBe(false);
+    });
+  });
+
+  describe('client version tracking in L1 observe cycle', () => {
+    beforeEach(() => {
+      // Switch to L1-only mode
+      delete process.env.L2_RPC_URL;
+      process.env.L1_RPC_URL = 'http://mock-l1-rpc:8545';
+      process.env.CHAIN_TYPE = 'l1-evm';
+      // Reset singleton so CHAIN_TYPE is re-read
+      resetChainRegistry();
+    });
+
+    afterEach(() => {
+      delete process.env.L1_RPC_URL;
+      delete process.env.CHAIN_TYPE;
+      // Restore default plugin for other test suites
+      resetChainRegistry();
+    });
+
+    it('calls checkAndTrackClientVersion with detected version on L1 observe path', async () => {
+      vi.mocked(detectExecutionClient).mockResolvedValueOnce({ family: 'geth', version: 'Geth/v1.14.0' });
+      vi.mocked(checkAndTrackClientVersion).mockResolvedValueOnce({
+        changed: false,
+        currentVersion: 'Geth/v1.14.0',
+        previousVersion: 'Geth/v1.14.0',
+      });
+
+      await runAgentCycle();
+
+      expect(checkAndTrackClientVersion).toHaveBeenCalledWith(
+        null, // getCoreRedis() returns null by default
+        expect.stringContaining('inst:'),
+        'Geth/v1.14.0',
+      );
+    });
+
+    it('does not degrade the observe cycle when version tracking throws', async () => {
+      vi.mocked(detectExecutionClient).mockResolvedValueOnce({ family: 'geth', version: 'Geth/v1.14.0' });
+      vi.mocked(checkAndTrackClientVersion).mockRejectedValueOnce(new Error('Redis unavailable'));
+
+      const result = await runAgentCycle();
+
+      expect(result.phase).toBe('complete');
+      expect(result.metrics).not.toBeNull();
     });
   });
 });
