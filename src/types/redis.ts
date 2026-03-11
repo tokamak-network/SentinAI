@@ -25,6 +25,7 @@ import {
 import { GoalLearningEpisode } from './goal-learning';
 import { RCAHistoryEntry } from './rca';
 import { ExperienceEntry, LifetimeStats } from './experience';
+import type { MarketplacePricingConfig, OutcomeBonusConfig } from './marketplace';
 
 // ============================================================
 // Store Interface
@@ -204,6 +205,15 @@ export interface IStateStore {
   // Permanent per-instance cumulative stats (no TTL, no max)
   incrementLifetimeStats(instanceId: string, entry: ExperienceEntry): Promise<void>;
   getLifetimeStats(instanceId: string): Promise<LifetimeStats | null>;
+
+  // === Marketplace Configuration ===
+  // Dynamic pricing and bonus configuration stored in Redis
+  getMarketplacePricingConfig(
+    defaultConfig: MarketplacePricingConfig
+  ): Promise<MarketplacePricingConfig>;
+  setMarketplacePricingConfig(config: MarketplacePricingConfig): Promise<void>;
+  getMarketplaceBonusConfig(defaultConfig: OutcomeBonusConfig): Promise<OutcomeBonusConfig>;
+  setMarketplaceBonusConfig(config: OutcomeBonusConfig): Promise<void>;
 }
 
 // ============================================================

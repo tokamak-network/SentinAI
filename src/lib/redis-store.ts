@@ -42,6 +42,7 @@ import {
 import { GoalLearningEpisode } from '@/types/goal-learning';
 import { RCAHistoryEntry } from '@/types/rca';
 import type { ExperienceEntry, LifetimeStats } from '@/types/experience';
+import type { MarketplacePricingConfig, OutcomeBonusConfig } from '@/types/marketplace';
 import logger from '@/lib/logger';
 
 // ============================================================
@@ -85,6 +86,9 @@ const RCA_HISTORY_TTL = 7 * 24 * 60 * 60; // 7 days
 const EXPERIENCE_MAX = 5000;
 const EXPERIENCE_TTL = 90 * 24 * 60 * 60; // 90 days
 const LIFETIME_CATEGORY_PREFIX = 'cat:';
+
+// Marketplace Configuration Constants
+const MARKETPLACE_CONFIG_TTL = 0; // Persist indefinitely
 
 // Redis key names (appended to keyPrefix)
 const KEYS = {
@@ -137,6 +141,9 @@ const KEYS = {
   // Experience Store
   experienceLog: 'experience:log',
   experienceLifetime: (instanceId: string) => `experience:lifetime:${instanceId}`,
+  // Marketplace Configuration
+  marketplacePricingConfig: 'marketplace:pricing:config',
+  marketplaceBonusConfig: 'marketplace:bonus:config',
 } as const;
 
 // ============================================================
@@ -1388,6 +1395,50 @@ export class RedisStateStore implements IStateStore {
     await this.client.quit();
     this.connected = false;
   }
+
+  // --- Marketplace Configuration ---
+
+  async getMarketplacePricingConfig(
+    defaultConfig: MarketplacePricingConfig
+  ): Promise<MarketplacePricingConfig> {
+    const data = await this.client.get(this.key(KEYS.marketplacePricingConfig));
+    if (!data) {
+      return defaultConfig;
+    }
+    try {
+      return JSON.parse(data) as MarketplacePricingConfig;
+    } catch (error) {
+      logger.error('Failed to parse marketplace pricing config:', error);
+      return defaultConfig;
+    }
+  }
+
+  async setMarketplacePricingConfig(config: MarketplacePricingConfig): Promise<void> {
+    const key = this.key(KEYS.marketplacePricingConfig);
+    // TTL = 0 means persist indefinitely, so we don't use EX option
+    await this.client.set(key, JSON.stringify(config));
+  }
+
+  async getMarketplaceBonusConfig(
+    defaultConfig: OutcomeBonusConfig
+  ): Promise<OutcomeBonusConfig> {
+    const data = await this.client.get(this.key(KEYS.marketplaceBonusConfig));
+    if (!data) {
+      return defaultConfig;
+    }
+    try {
+      return JSON.parse(data) as OutcomeBonusConfig;
+    } catch (error) {
+      logger.error('Failed to parse marketplace bonus config:', error);
+      return defaultConfig;
+    }
+  }
+
+  async setMarketplaceBonusConfig(config: OutcomeBonusConfig): Promise<void> {
+    const key = this.key(KEYS.marketplaceBonusConfig);
+    // TTL = 0 means persist indefinitely, so we don't use EX option
+    await this.client.set(key, JSON.stringify(config));
+  }
 }
 
 // ============================================================
@@ -1460,6 +1511,10 @@ export class InMemoryStateStore implements IStateStore {
   private goalDlqItems: GoalDlqItem[] = [];
   private goalIdempotencyRecords: Map<string, GoalIdempotencyRecord> = new Map();
   private goalLearningEpisodes: GoalLearningEpisode[] = [];
+
+  // Marketplace Configuration
+  private marketplacePricingConfig: MarketplacePricingConfig | null = null;
+  private marketplaceBonusConfig: OutcomeBonusConfig | null = null;
 
   // --- Metrics Buffer ---
 
@@ -2196,6 +2251,28 @@ export class InMemoryStateStore implements IStateStore {
 
   async getLifetimeStats(instanceId: string): Promise<LifetimeStats | null> {
     return this.lifetimeStatsMap.get(instanceId) ?? null;
+  }
+
+  // --- Marketplace Configuration ---
+
+  async getMarketplacePricingConfig(
+    defaultConfig: MarketplacePricingConfig
+  ): Promise<MarketplacePricingConfig> {
+    return this.marketplacePricingConfig ?? defaultConfig;
+  }
+
+  async setMarketplacePricingConfig(config: MarketplacePricingConfig): Promise<void> {
+    this.marketplacePricingConfig = config;
+  }
+
+  async getMarketplaceBonusConfig(
+    defaultConfig: OutcomeBonusConfig
+  ): Promise<OutcomeBonusConfig> {
+    return this.marketplaceBonusConfig ?? defaultConfig;
+  }
+
+  async setMarketplaceBonusConfig(config: OutcomeBonusConfig): Promise<void> {
+    this.marketplaceBonusConfig = config;
   }
 
   // --- Connection Management ---
