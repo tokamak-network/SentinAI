@@ -1011,6 +1011,9 @@ export async function GET(request: Request) {
             // === Anomaly Detection Fields ===
             anomalies: detectedAnomalies,
             activeAnomalyEventId,
+            // === Client Profile Fields ===
+            clientMode: clientProfile.clientFamily === 'unknown' ? 'partial' : 'full',
+            clientFamily: clientProfile.clientFamily,
         });
 
         // Disable caching
