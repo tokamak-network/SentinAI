@@ -66,12 +66,14 @@ let reportTask: ScheduledTask | null = null;
 let scheduledScalingTask: ScheduledTask | null = null;
 let watchdogTask: ScheduledTask | null = null;
 let anomalyTriggerTask: ScheduledTask | null = null;
+let patternMinerTask: ScheduledTask | null = null;
 let agentTaskRunning = false;
 let snapshotTaskRunning = false;
 let reportTaskRunning = false;
 let scheduledScalingTaskRunning = false;
 let watchdogTaskRunning = false;
 let anomalyTriggerTaskRunning = false;
+let patternMinerTaskRunning = false;
 let watchdogRecoveryRunning = false;
 let watchdogFailureStreak = 0;
 let watchdogLastError: string | null = null;
@@ -618,6 +620,47 @@ export async function initializeScheduler(): Promise<void> {
     }
   }, { timezone: 'Asia/Seoul' });
 
+  // PatternMiner: daily at 00:05 UTC — analyze operation ledger → generate/evolve playbooks (Proposal 32)
+  patternMinerTask = cron.schedule('5 0 * * *', async () => {
+    if (patternMinerTaskRunning) return;
+    patternMinerTaskRunning = true;
+    try {
+      const instanceId = process.env.SENTINAI_INSTANCE_ID ?? 'default';
+      const { listOperationLedger, listPlaybooks, upsertPlaybook } = await import('@/core/playbook-system/store');
+      const { analyzeIncidentPatterns } = await import('@/core/playbook-system/incident-analyzer');
+      const { generatePlaybookFromPattern, mergePatternIntoPlaybook } = await import('@/core/playbook-system/playbook-generator');
+
+      const { records } = await listOperationLedger(instanceId, { limit: 200 });
+      const patterns = analyzeIncidentPatterns(records, { minOccurrences: 3, windowDays: 30 });
+
+      if (patterns.length === 0) {
+        logger.info(`[PatternMiner] No recurring patterns found for instance=${instanceId}`);
+        return;
+      }
+
+      const existing = await listPlaybooks(instanceId);
+      let saved = 0;
+
+      for (const pattern of patterns) {
+        const candidate = existing.find(
+          p => p.triggerSignature === pattern.triggerSignature && p.action === pattern.action
+        );
+        const next = candidate
+          ? mergePatternIntoPlaybook({ playbook: candidate, pattern })
+          : generatePlaybookFromPattern({ instanceId, pattern });
+        await upsertPlaybook(instanceId, next);
+        saved++;
+      }
+
+      logger.info(`[PatternMiner] Completed — patterns=${patterns.length} saved=${saved} instance=${instanceId}`);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[PatternMiner] Error: ' + msg);
+    } finally {
+      patternMinerTaskRunning = false;
+    }
+  });
+
   // AgentOrchestrator v2 (AGENT_V2=true 시 활성화)
   if (isAgentV2Enabled() && isAgentLoopEnabled()) {
     const orchestrator = getAgentOrchestrator();
@@ -645,7 +688,7 @@ export async function initializeScheduler(): Promise<void> {
   const watchdogStatus = isHeartbeatWatchdogEnabled() ? WATCHDOG_SCHEDULE : 'off';
   initialized = true;
   logger.info(
-    `Initialized — snapshot: */5 * * * *, report: ${reportSchedule}, scheduled-scaling: 0 * * * * (KST), watchdog: ${watchdogStatus}`
+    `Initialized — snapshot: */5 * * * *, report: ${reportSchedule}, scheduled-scaling: 0 * * * * (KST), watchdog: ${watchdogStatus}, pattern-miner: 5 0 * * *`
   );
 }
 
@@ -686,12 +729,17 @@ export function stopScheduler(): void {
     anomalyTriggerTask.stop();
     anomalyTriggerTask = null;
   }
+  if (patternMinerTask) {
+    patternMinerTask.stop();
+    patternMinerTask = null;
+  }
   agentTaskRunning = false;
   snapshotTaskRunning = false;
   reportTaskRunning = false;
   scheduledScalingTaskRunning = false;
   watchdogTaskRunning = false;
   anomalyTriggerTaskRunning = false;
+  patternMinerTaskRunning = false;
   watchdogRecoveryRunning = false;
   watchdogFailureStreak = 0;
   watchdogLastError = null;

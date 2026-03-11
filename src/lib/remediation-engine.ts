@@ -10,16 +10,86 @@ import type {
   CircuitBreakerState,
   ActionResult,
   ExecutionStatus,
+  Playbook,
 } from '@/types/remediation';
 import { matchPlaybook, getPlaybookByName } from '@/lib/playbook-matcher';
 import { executeAction } from '@/lib/action-executor';
 import * as store from '@/lib/remediation-store';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 import logger from '@/lib/logger';
+import { appendOperationRecord } from '@/core/playbook-system/store';
+import type { LedgerOutcome } from '@/core/playbook-system/types';
 
 // ============================================================
 // UUID Generator
 // ============================================================
+
+const INSTANCE_ID = process.env.SENTINAI_INSTANCE_ID ?? 'default';
+
+/**
+ * Map ExecutionStatus to LedgerOutcome for operation ledger.
+ */
+function toLedgerOutcome(status: ExecutionStatus): LedgerOutcome | null {
+  switch (status) {
+    case 'success': return 'success';
+    case 'failed':  return 'failure';
+    case 'running': return 'partial';
+    case 'skipped': return null; // skipped executions are not recorded
+    default:        return null;
+  }
+}
+
+/**
+ * Write a completed remediation execution to the operation ledger.
+ * Powers the PatternMiner learning loop (Proposal 32).
+ * Failures are swallowed — learning is best-effort and must not affect remediation.
+ */
+async function writeToOperationLedger(
+  execution: RemediationExecution,
+  event: AnomalyEvent,
+  playbook: Playbook
+): Promise<void> {
+  const outcome = toLedgerOutcome(execution.status);
+  if (!outcome) return;
+
+  const primaryAnomaly = event.anomalies[0];
+  if (!primaryAnomaly) return;
+
+  const primaryAction =
+    playbook.actions.find(a => a.safetyLevel !== 'safe')?.type ??
+    playbook.actions[0]?.type ??
+    'unknown';
+
+  const startMs = new Date(execution.startedAt).getTime();
+  const endMs = execution.completedAt ? new Date(execution.completedAt).getTime() : Date.now();
+
+  const record = {
+    operationId: execution.id,
+    instanceId: INSTANCE_ID,
+    timestamp: execution.startedAt,
+    trigger: {
+      anomalyType: primaryAnomaly.rule.replace('monotonic-increase', 'monotonic').replace('threshold-breach', 'threshold').replace('zero-drop', 'z-score'),
+      metricName: primaryAnomaly.metric,
+      zScore: primaryAnomaly.zScore,
+      metricValue: primaryAnomaly.value,
+    },
+    playbookId: playbook.name,
+    action: primaryAction,
+    outcome,
+    resolutionMs: Math.max(0, endMs - startMs),
+    verificationPassed: execution.status === 'success',
+    failureReason: execution.status !== 'success'
+      ? execution.actions.find(a => a.status === 'failed')?.error
+      : undefined,
+  };
+
+  try {
+    await appendOperationRecord(INSTANCE_ID, record);
+    logger.debug(`[Remediation] Ledger written: op=${execution.id} outcome=${outcome}`);
+  } catch (err) {
+    logger.warn('[Remediation] Failed to write operation ledger (non-critical)', { error: err });
+  }
+}
 
 function generateUUID(): string {
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
@@ -289,6 +359,7 @@ export async function executeRemediation(
     }
   }
 
+  void writeToOperationLedger(execution, event, playbook);
   return execution;
 }
 

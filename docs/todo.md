@@ -11,6 +11,11 @@
 
 ## Active (Max 5)
 
+### 0) Abstract Playbook Layer
+→ Plan: `docs/plans/2026-03-11-abstract-playbook-layer.md`
+→ Depends on: `feat/l1-evm-plugin` (진행 중), proposal-32 (Self-Evolving Playbook)
+→ Phase 1–2는 현재 브랜치와 병행 가능. Phase 3 이후 proposal-32 선행 필요.
+
 ### 1) Verifiable Accountability Framework (proposal-29)
 → Contract: `docs/contracts/proposal-29-CONTRACT.md`
 

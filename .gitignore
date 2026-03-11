@@ -52,3 +52,4 @@ memory/dev/
 website/.claude/
 .worktrees/
 *.png
+.superpowers/

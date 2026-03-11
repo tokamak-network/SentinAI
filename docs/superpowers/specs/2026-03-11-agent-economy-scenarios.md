@@ -34,6 +34,60 @@ The monitoring data is already collected. Serving it via HTTP adds no meaningful
 
 ---
 
+## Acceptable Use Policy
+
+All agents accessing the marketplace must agree to the following terms at registration
+(enforced via signed ERC-8004 capability claim, stored on-chain).
+
+### Permitted Uses
+
+- **Network health monitoring**: Checking congestion or degradation before executing protocol operations.
+- **Infrastructure safety gating**: Pausing or delaying operations when the node is in a degraded state.
+- **Risk modeling**: Pricing insurance premiums, adjusting bridge parameters, or setting protocol thresholds.
+- **Operational automation**: Triggering alerts, scaling decisions, or operational workflows based on aggregate metrics.
+
+### Prohibited Uses
+
+- **MEV extraction targeting individual users**: Using txpool data to front-run, sandwich, or otherwise extract value from pending user transactions.
+- **Transaction ordering manipulation**: Using block timing or txpool state to influence the ordering of transactions for profit at the expense of other users.
+- **Re-selling raw data without transformation**: Redistributing raw txpool or metrics data as a data feed to third parties without adding meaningful processing or analysis.
+- **High-frequency arbitrage against public RPC lag**: Exploiting the time delta between node-internal state and public RPC propagation to gain trading advantages over users relying on public endpoints.
+
+### Txpool Data Constraints
+
+The `/marketplace/txpool` endpoint deliberately exposes **aggregate counts only**, not individual transaction details:
+
+```json
+{
+  "pending": 312,
+  "queued": 47,
+  "timestamp": "2026-03-11T09:00:00Z"
+}
+```
+
+**Not exposed:**
+- Individual transaction hashes, senders, or recipients
+- Gas prices of pending transactions
+- Contract call data or decoded function signatures
+- Any data that would allow identifying or targeting a specific pending transaction
+
+This design ensures txpool data is useful for **congestion-aware routing** but not for **transaction-targeting MEV**.
+
+### Enforcement
+
+| Mechanism | How |
+|-----------|-----|
+| Registration claim | Agent signs `{ permitted_uses: [...] }` payload on-chain at ERC-8004 identity registration |
+| Rate limiting | Requests exceeding 10/minute per agent ID are throttled (prevents high-frequency MEV scanning patterns) |
+| Anomaly detection | Operator's SentinAI monitors for usage patterns inconsistent with declared purpose |
+| Revocation | Operator can revoke marketplace access by invalidating the agent's NFT capability claim |
+
+> **Note:** On-chain enforcement is not possible for all violations. The primary mechanism is
+> social/reputational: agents with revoked access lose discoverability via ERC-8004 registry
+> queries across all operators using SentinAI marketplace.
+
+---
+
 ## Scenario 1: DeFi Protocol Agent — Pre-Trade Health Check
 
 **Who:** An automated trading agent for a DeFi protocol on Thanos L2.
@@ -112,6 +166,18 @@ and alerts its protocol's operations team — preventing stuck withdrawals entir
 ---
 
 ## Scenario 3: MEV Bot — Block Timing Arbitrage
+
+> ⚠️ **Acceptable Use Boundary**
+> This scenario is included to illustrate the demand pattern, but the use case
+> described below **partially violates the Acceptable Use Policy** above.
+>
+> - **Permitted**: Using block interval stats to calibrate *when to scan for open arbitrage*
+>   between DEX pairs (price discrepancy between protocols — does not target individual users).
+> - **Prohibited**: Using node-internal data lag vs public RPC to front-run *individual user
+>   transactions* that are already in the mempool.
+>
+> Operators who do not wish to serve MEV bots can set `MARKETPLACE_DENY_CATEGORIES=mev`
+> in their SentinAI config to reject registration claims declaring `purpose: mev_arbitrage`.
 
 **Who:** An MEV searcher bot targeting Thanos L2 block production gaps.
 **Problem:** When block intervals spike, certain arbitrage opportunities open
@@ -240,14 +306,15 @@ twice this week — expect higher gas competition over the next 48 hours."
 
 Assuming all 5 agents above are active simultaneously:
 
-| Agent | Monthly Revenue |
-|-------|----------------|
-| DeFi Protocol Agent | 600 TON |
-| Bridge Agent | 300 TON |
-| MEV Bot | 522 TON |
-| Insurance Protocol | 3.5 TON |
-| Cross-Protocol Monitor | 3.4 TON |
-| **Total** | **~1,429 TON/month** |
+| Agent | Monthly Revenue | AUP Status |
+|-------|----------------|------------|
+| DeFi Protocol Agent | 600 TON | ✅ Permitted |
+| Bridge Agent | 300 TON | ✅ Permitted |
+| MEV Bot | 522 TON | ⚠️ Partial — permitted only for DEX-to-DEX arbitrage; front-running prohibited |
+| Insurance Protocol | 3.5 TON | ✅ Permitted |
+| Cross-Protocol Monitor | 3.4 TON | ✅ Permitted |
+| **Total (AUP-compliant)** | **~907 TON/month** | (excl. prohibited MEV patterns) |
+| **Total (all scenarios)** | **~1,429 TON/month** | |
 
 At a conservative TON price of $2 USD:
 ```
