@@ -381,6 +381,9 @@ export default function Dashboard() {
   // --- Agent Experience State ---
   const [experience, setExperience] = useState<ExperienceData | null>(null);
 
+  // --- Playbook Evolution State ---
+  const [needsReviewCount, setNeedsReviewCount] = useState(0);
+
   // --- Seed Injection Trigger (forces immediate metrics re-fetch) ---
   const [seedTrigger, setSeedTrigger] = useState(0);
   const handleSeedInjected = useCallback(() => {
@@ -395,6 +398,21 @@ export default function Dashboard() {
       chatMessagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages]);
+
+  // --- Playbook Evolution Polling ---
+  useEffect(() => {
+    const fetchPlaybookStatus = () => {
+      fetch('/api/playbook-evolution?action=status')
+        .then(r => r.json())
+        .then((d: { playbooks?: { needsReview?: number } }) => {
+          setNeedsReviewCount(d.playbooks?.needsReview ?? 0);
+        })
+        .catch(() => {});
+    };
+    fetchPlaybookStatus();
+    const id = setInterval(fetchPlaybookStatus, 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const generateMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -872,6 +890,7 @@ export default function Dashboard() {
     { label: 'vCPU', value: `${vcpu} ACTIVE`, warn: vcpu >= 4 },
     { label: 'ANOMALIES', value: `${anomalyEvents.filter(e => e.status === 'active').length} OPEN`, neg: anomalyEvents.filter(e => e.status === 'active').length > 0 },
     { label: 'SCORE', value: String(scalingScore) },
+    { label: 'AUTO-LEARNED', value: needsReviewCount > 0 ? `${needsReviewCount} REVIEW` : 'LEARNING', warn: needsReviewCount > 0 },
   ];
   const tickerAll = [...tickerItems, ...tickerItems]; // duplicate for seamless loop
 

@@ -1,5 +1,8 @@
 'use client';
 
+import { useState } from 'react';
+import { PlaybooksTab } from '@/components/playbooks-tab';
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 interface MetricData {
@@ -113,6 +116,7 @@ function MetricRow({ label, pct, value, color }: { label: string; pct: number; v
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function OperationsPanel({ metrics, scalerState, agentFleet, l1Failover, scalingScore, currentVcpu: vcpuProp }: OperationsPanelProps) {
+  const [activeTab, setActiveTab] = useState<'ops' | 'playbooks'>('ops');
   const vcpu = vcpuProp ?? scalerState?.currentVcpu ?? 2;
   const tierIdx = currentTierIndex(vcpu);
   const txMin = agentFleet?.kpi.throughputPerMin ?? 0;
@@ -137,6 +141,33 @@ export function OperationsPanel({ metrics, scalerState, agentFleet, l1Failover, 
         </span>
       </div>
 
+      {/* Tab bar */}
+      <div style={{ display: 'flex', borderBottom: '1px solid #D0D0D0', background: '#F0F0F0', flexShrink: 0 }}>
+        {(['ops', 'playbooks'] as const).map(tab => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            style={{
+              fontFamily: FONT,
+              fontSize: 10,
+              fontWeight: 600,
+              letterSpacing: '0.05em',
+              padding: '4px 12px',
+              border: 'none',
+              borderRight: '1px solid #D0D0D0',
+              cursor: 'pointer',
+              textTransform: 'uppercase' as const,
+              background: activeTab === tab ? '#FAFAFA' : '#F0F0F0',
+              color: activeTab === tab ? '#0A0A0A' : '#888',
+              borderBottom: activeTab === tab ? '2px solid #D40000' : '2px solid transparent',
+            }}
+          >
+            {tab === 'ops' ? 'OPS' : 'PLAYBOOKS'}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'ops' ? (
       <div style={{ flex: 1, overflowY: 'auto' }}>
         {/* KPI strip */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #D0D0D0' }}>
@@ -295,6 +326,9 @@ export function OperationsPanel({ metrics, scalerState, agentFleet, l1Failover, 
         )}
 
       </div>
+      ) : (
+        <PlaybooksTab />
+      )}
     </div>
   );
 }
