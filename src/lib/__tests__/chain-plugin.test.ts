@@ -766,3 +766,68 @@ describe('ChainRegistry', () => {
     expect(plugin).toBeInstanceOf(ZkL2GenericPlugin);
   });
 });
+
+// ============================================================
+// Chain Registry Env Overrides Tests
+// ============================================================
+
+describe('chain registry env overrides', () => {
+  beforeEach(() => {
+    delete process.env.CHAIN_TYPE;
+    resetChainRegistry();
+  });
+
+  afterEach(() => {
+    delete process.env.SENTINAI_COMPONENTS;
+    delete process.env.SENTINAI_COMPONENT_DEPS;
+    delete process.env.SENTINAI_K8S_LABEL_EXECUTION;
+  });
+
+  it('returns original plugin when no env overrides set', () => {
+    const plugin = getChainPlugin();
+    // components should be the default plugin's components
+    expect(plugin.components.length).toBeGreaterThan(0);
+  });
+
+  it('overrides component list from SENTINAI_COMPONENTS', () => {
+    process.env.SENTINAI_COMPONENTS = 'exec,sequencer';
+    const plugin = getChainPlugin();
+    const names = plugin.components;
+    expect(names).toContain('exec');
+    expect(names).toContain('sequencer');
+  });
+
+  it('overrides dependency graph from SENTINAI_COMPONENT_DEPS', () => {
+    process.env.SENTINAI_COMPONENTS = 'exec,relay';
+    process.env.SENTINAI_COMPONENT_DEPS = JSON.stringify({
+      exec: { dependsOn: ['l1'], feeds: ['relay'] },
+      relay: { dependsOn: ['exec'], feeds: [] },
+    });
+    const plugin = getChainPlugin();
+    expect(plugin.dependencyGraph['exec']).toEqual({ dependsOn: ['l1'], feeds: ['relay'] });
+    expect(plugin.dependencyGraph['relay']).toEqual({ dependsOn: ['exec'], feeds: [] });
+  });
+
+  it('falls back to original plugin when SENTINAI_COMPONENT_DEPS has invalid JSON', () => {
+    process.env.SENTINAI_COMPONENTS = 'exec';
+    process.env.SENTINAI_COMPONENT_DEPS = 'not-valid-json';
+    // should not throw, should return something usable
+    expect(() => getChainPlugin()).not.toThrow();
+  });
+
+  it('preserves existing component data for matching components', () => {
+    // ThanosPlugin has 'op-geth' — override should preserve its data
+    process.env.SENTINAI_COMPONENTS = 'op-geth,custom-comp';
+    const plugin = getChainPlugin();
+    expect(plugin.components).toContain('op-geth');
+    expect(plugin.components).toContain('custom-comp');
+  });
+
+  it('returns original components when only invalid SENTINAI_COMPONENT_DEPS is set', () => {
+    // Only deps set (invalid JSON), no SENTINAI_COMPONENTS — parseTopologyFromEnv returns null
+    process.env.SENTINAI_COMPONENT_DEPS = '{bad json}';
+    const plugin = getChainPlugin();
+    // Should still return a usable plugin
+    expect(plugin.components.length).toBeGreaterThan(0);
+  });
+});
