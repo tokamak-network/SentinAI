@@ -27,7 +27,7 @@ const C = {
 
 type NodeType = "ethereum-el" | "opstack-l2" | "arbitrum-nitro" | "zkstack";
 type AiProvider = "none" | "qwen" | "anthropic" | "openai" | "gemini" | "gateway";
-type DeployTarget = "eks" | "docker";
+type DeployTarget = "local" | "eks" | "docker";
 
 interface NodeConfig {
   type: NodeType;
@@ -657,6 +657,13 @@ export default function ConnectPage() {
               <div style={{ padding: 16, display: "flex", flexDirection: "column", gap: 8 }}>
                 {[
                   {
+                    value: "local" as DeployTarget,
+                    label: "Local / Try It Out",
+                    sub: "Quick local eval · no K8s · localhost supported",
+                    badge: "QUICKSTART",
+                    badgeColor: "#006600",
+                  },
+                  {
                     value: "eks" as DeployTarget,
                     label: "AWS EKS / Kubernetes",
                     sub: "Full auto-scaling · pod monitoring · RCA · remediation",
@@ -676,7 +683,7 @@ export default function ConnectPage() {
                     <button
                       key={value}
                       type="button"
-                      onClick={() => { setDeployTarget(value); if (value === "docker") { setAwsClusterName(""); } resetOutput(); }}
+                      onClick={() => { setDeployTarget(value); if (value === "docker" || value === "local") { setAwsClusterName(""); } resetOutput(); }}
                       style={{
                         display: "flex", alignItems: "center", justifyContent: "space-between",
                         padding: "10px 12px", textAlign: "left", cursor: "pointer",
