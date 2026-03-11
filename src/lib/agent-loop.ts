@@ -34,6 +34,7 @@ import { buildRollbackPlan, runRollbackPlan } from '@/lib/rollback-runner';
 import { tickGoalManager, dispatchTopGoal } from '@/lib/goal-manager';
 import { checkAndTrackClientVersion } from '@/lib/client-version-tracker';
 import { detectExecutionClient } from '@/lib/client-detector';
+import { resolveClientProfile, parseTxPoolPendingCount, getValueByPath } from '@/lib/client-profile';
 import { collectL1NodeMetrics } from '@/lib/l1-node-metrics';
 import { getCoreRedis } from '@/core/redis';
 import { DEFAULT_SCALING_CONFIG, type TargetVcpu, type TargetMemoryGiB, type ScalingDecision } from '@/types/scaling';
@@ -360,28 +361,35 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     }
   }
 
-  // TxPool pending count (with timeout)
+  // TxPool pending count — use ClientProfile-configured method and parser
+  const clientProfile = resolveClientProfile();
   let txPoolPending = 0;
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
-    const txPoolResponse = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'txpool_status',
-        params: [],
-        id: 1,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    const txPoolData = await txPoolResponse.json();
-    if (txPoolData.result?.pending) {
-      txPoolPending = parseInt(txPoolData.result.pending, 16);
+  if (clientProfile.methods.txPool) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+      const txPoolResponse = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: clientProfile.methods.txPool.method,
+          params: clientProfile.methods.txPool.params ?? [],
+          id: 1,
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timeoutId);
+      const txPoolData = (await txPoolResponse.json()) as { result?: unknown };
+      txPoolPending = parseTxPoolPendingCount(
+        txPoolData.result,
+        clientProfile.parsers.txPool,
+        clientProfile.methods.txPool.responsePath,
+      );
+    } catch {
+      txPoolPending = block.transactions.length;
     }
-  } catch {
+  } else {
     txPoolPending = block.transactions.length;
   }
 
@@ -418,6 +426,33 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
   }
   await getStore().setLastBlock(String(blockNumber), String(now));
 
+  // Collect custom metrics from ClientProfile
+  const customMetrics: Record<string, number> = {};
+  for (const cm of clientProfile.customMetrics) {
+    try {
+      const cmController = new AbortController();
+      const cmTimer = setTimeout(() => cmController.abort(), RPC_TIMEOUT_MS);
+      const cmRes = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: cm.method,
+          params: cm.params ?? [],
+          id: 1,
+        }),
+        signal: cmController.signal,
+      });
+      clearTimeout(cmTimer);
+      const cmData = (await cmRes.json()) as { result?: unknown };
+      const raw = cm.responsePath ? getValueByPath(cmData.result, cm.responsePath) : cmData.result;
+      const value = typeof raw === 'number' ? raw : parseFloat(String(raw ?? '0'));
+      if (Number.isFinite(value)) customMetrics[cm.name] = value;
+    } catch {
+      // silent failure — missing custom metric does not degrade the cycle
+    }
+  }
+
   const dataPoint: MetricDataPoint = {
     timestamp: new Date().toISOString(),
     cpuUsage,
@@ -426,6 +461,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     blockHeight: Number(blockNumber),
     blockInterval,
     currentVcpu,
+    ...(Object.keys(customMetrics).length > 0 ? { customMetrics } : {}),
   };
 
   // Push to metrics store and record usage (non-blocking).

@@ -507,6 +507,100 @@ describe('agent-loop', () => {
       expect(result.metrics?.l2BlockHeight).toBe(1000);
       expect(recordUsage).toHaveBeenCalledTimes(1);
     });
+
+    it('uses parity parser when SENTINAI_OVERRIDE_TXPOOL_PARSER=parity is set', async () => {
+      process.env.SENTINAI_OVERRIDE_TXPOOL_METHOD = 'parity_pendingTransactions';
+      process.env.SENTINAI_OVERRIDE_TXPOOL_PARSER = 'parity';
+
+      // parity returns an array — mock fetch to return an array of 5 items
+      vi.mocked(mockFetch).mockResolvedValueOnce({
+        json: () => Promise.resolve({ result: [1, 2, 3, 4, 5] }),
+      } as never);
+
+      const { pushMetric } = await import('@/lib/metrics-store');
+      await runAgentCycle();
+
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.txPoolPending).toBe(5);
+
+      delete process.env.SENTINAI_OVERRIDE_TXPOOL_METHOD;
+      delete process.env.SENTINAI_OVERRIDE_TXPOOL_PARSER;
+    });
+
+    it('falls back to block.transactions.length when txPool method is null', async () => {
+      // Use an unknown family — resolveClientProfile falls back to a custom empty profile
+      // which has txPool: null, causing the agent-loop to use block.transactions.length
+      process.env.SENTINAI_CLIENT_FAMILY = 'unknown-no-txpool-family';
+
+      const { pushMetric } = await import('@/lib/metrics-store');
+      await runAgentCycle();
+
+      // block.transactions has 2 items from the mock: ['0x1', '0x2']
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.txPoolPending).toBe(2);
+
+      delete process.env.SENTINAI_CLIENT_FAMILY;
+    });
+  });
+
+  describe('custom metrics collection', () => {
+    afterEach(() => {
+      for (let i = 1; i <= 3; i++) {
+        delete process.env[`SENTINAI_CUSTOM_METRIC_${i}_NAME`];
+        delete process.env[`SENTINAI_CUSTOM_METRIC_${i}_METHOD`];
+        delete process.env[`SENTINAI_CUSTOM_METRIC_${i}_PATH`];
+      }
+    });
+
+    it('collects custom metric when SENTINAI_CUSTOM_METRIC_1_* is set', async () => {
+      process.env.SENTINAI_CUSTOM_METRIC_1_NAME = 'myMetric';
+      process.env.SENTINAI_CUSTOM_METRIC_1_METHOD = 'custom_getMetric';
+      process.env.SENTINAI_CUSTOM_METRIC_1_PATH = 'value';
+
+      // First call is for txpool, second call is for custom metric
+      vi.mocked(mockFetch)
+        .mockResolvedValueOnce({
+          json: () => Promise.resolve({ result: { pending: '0xa' } }),
+        } as never)
+        .mockResolvedValueOnce({
+          json: () => Promise.resolve({ result: { value: 42 } }),
+        } as never);
+
+      const { pushMetric } = await import('@/lib/metrics-store');
+      await runAgentCycle();
+
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.customMetrics?.myMetric).toBe(42);
+    });
+
+    it('excludes customMetrics from dataPoint when none configured', async () => {
+      // No SENTINAI_CUSTOM_METRIC_* env vars set
+      const { pushMetric } = await import('@/lib/metrics-store');
+      await runAgentCycle();
+
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.customMetrics).toBeUndefined();
+    });
+
+    it('silently skips custom metric when RPC call fails', async () => {
+      process.env.SENTINAI_CUSTOM_METRIC_1_NAME = 'failMetric';
+      process.env.SENTINAI_CUSTOM_METRIC_1_METHOD = 'bad_method';
+      process.env.SENTINAI_CUSTOM_METRIC_1_PATH = 'result.value';
+
+      // First call for txpool succeeds, second for custom metric throws
+      vi.mocked(mockFetch)
+        .mockResolvedValueOnce({
+          json: () => Promise.resolve({ result: { pending: '0xa' } }),
+        } as never)
+        .mockRejectedValueOnce(new Error('RPC method not found'));
+
+      const { pushMetric } = await import('@/lib/metrics-store');
+      const result = await runAgentCycle();
+
+      expect(result.phase).toBe('complete');
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.customMetrics?.failMetric).toBeUndefined();
+    });
   });
 
   describe('isAgentRunning', () => {
