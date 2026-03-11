@@ -200,8 +200,8 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
       if (versionCheck.changed) {
         logger.warn('[AgentLoop] L1 client version changed — capabilities cache invalidated');
       }
-    } catch {
-      // Version tracking failure must not degrade the observe cycle
+    } catch (err) {
+      logger.warn({ err }, '[AgentLoop] L1 client version check failed');
     }
 
     const l1Metrics = await collectL1NodeMetrics(l1Url, detectedClient, deploymentType);
