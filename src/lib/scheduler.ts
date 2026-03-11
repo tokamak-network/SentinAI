@@ -16,7 +16,7 @@ import { applyScheduledScaling, buildScheduleProfile } from '@/lib/scheduled-sca
 import { cleanupExpiredAgentMemory } from '@/lib/agent-memory';
 import { getStore } from '@/lib/redis-store';
 import { createLogger } from '@/lib/logger';
-import { getAgentOrchestrator, isAgentV2Enabled } from '@/core/agent-orchestrator';
+import { getAgentOrchestrator } from '@/core/agent-orchestrator';
 
 const logger = createLogger('Scheduler');
 
@@ -193,8 +193,8 @@ export async function initializeScheduler(): Promise<void> {
     }
   });
 
-  // AgentOrchestrator v2 (AGENT_V2=true 시 활성화)
-  if (isAgentV2Enabled() && isAgentLoopEnabled()) {
+  // AgentOrchestrator v2 — always active (V1 removed)
+  if (isAgentLoopEnabled()) {
     const orchestrator = getAgentOrchestrator();
     const instancesEnv = process.env.SENTINAI_INSTANCES;
     if (instancesEnv) {
@@ -203,7 +203,7 @@ export async function initializeScheduler(): Promise<void> {
         for (const inst of instances) {
           orchestrator.startInstance(inst.instanceId, inst.protocolId, inst.rpcUrl);
         }
-        logger.info(`AgentOrchestrator v2 started ${instances.length} instances`);
+        logger.info(`AgentOrchestrator started ${instances.length} instances`);
       } catch {
         logger.warn('Failed to parse SENTINAI_INSTANCES env var');
       }
@@ -213,13 +213,13 @@ export async function initializeScheduler(): Promise<void> {
       const defaultProtocolId = process.env.SENTINAI_DEFAULT_PROTOCOL_ID ?? 'opstack-l2';
       const defaultRpcUrl = process.env.L2_RPC_URL;
       orchestrator.startInstance(defaultInstanceId, defaultProtocolId, defaultRpcUrl);
-      logger.info(`AgentOrchestrator v2 started default instance (instanceId=${defaultInstanceId})`);
+      logger.info(`AgentOrchestrator started default instance (instanceId=${defaultInstanceId})`);
     }
   }
 
   initialized = true;
   logger.info(
-    `Initialized — snapshot: */5 * * * *, report: ${reportSchedule}, scheduled-scaling: 0 * * * * (KST), agent-v2: ${isAgentV2Enabled() && isAgentLoopEnabled()}, pattern-miner: 5 0 * * *`
+    `Initialized — snapshot: */5 * * * *, report: ${reportSchedule}, scheduled-scaling: 0 * * * * (KST), pattern-miner: 5 0 * * *`
   );
 }
 
@@ -227,13 +227,11 @@ export async function initializeScheduler(): Promise<void> {
  * Stop all cron jobs (for testing).
  */
 export function stopScheduler(): void {
-  // Stop AgentOrchestrator v2 if running
-  if (isAgentV2Enabled()) {
-    try {
-      getAgentOrchestrator().stopAll();
-    } catch {
-      // Non-fatal
-    }
+  // Stop AgentOrchestrator (always active)
+  try {
+    getAgentOrchestrator().stopAll();
+  } catch {
+    // Non-fatal
   }
 
   if (snapshotTask) {
@@ -274,7 +272,7 @@ export function getSchedulerStatus(): {
   return {
     initialized,
     agentLoopEnabled: isAgentLoopEnabled(),
-    agentV2Enabled: isAgentV2Enabled(),
+    agentV2Enabled: true, // V2 is always active (V1 removed)
     snapshotTaskRunning,
     reportTaskRunning,
     scheduledScalingTaskRunning,

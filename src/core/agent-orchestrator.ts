@@ -295,11 +295,12 @@ export class AgentOrchestrator {
 // ============================================================
 
 /**
- * Check whether the parallel agent system (AGENT_V2) is enabled.
- * Single source of truth — use this instead of raw `process.env.AGENT_V2 === 'true'`.
+ * V2 event-driven parallel agent system is now the only mode.
+ * V1 serial agent loop has been removed entirely.
+ * This function is kept for backward compatibility but always returns true.
  */
 export function isAgentV2Enabled(): boolean {
-  return process.env.AGENT_V2 === 'true';
+  return true;
 }
 
 // ============================================================
