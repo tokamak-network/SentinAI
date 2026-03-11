@@ -33,6 +33,12 @@ export interface MetricDataPoint {
 
   /** Optional: seed data TTL expiry timestamp (ISO 8601) */
   seedTtlExpiry?: string;
+
+  /**
+   * Custom metrics collected via SENTINAI_CUSTOM_METRIC_N_* env vars.
+   * Key: metric name (e.g. 'proofGenTime'), Value: numeric reading.
+   */
+  customMetrics?: Record<string, number>;
 }
 
 /**
