@@ -4,6 +4,11 @@ import { useEffect, useState, useCallback } from 'react';
 import type { EvolvedPlaybook, OperationRecord } from '@/core/playbook-system/types';
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || '';
+const API_KEY = process.env.NEXT_PUBLIC_SENTINAI_API_KEY || '';
+
+function authHeaders(): HeadersInit {
+  return API_KEY ? { 'x-api-key': API_KEY } : {};
+}
 
 // ─── Label Maps ─────────────────────────────────────────────────────────────
 
@@ -636,9 +641,12 @@ export function PlaybooksTab() {
       try {
         const res = await fetch(
           `${BASE_PATH}/api/playbook-evolution?action=${action}&id=${encodeURIComponent(id)}`,
-          { method: 'POST' }
+          { method: 'POST', headers: authHeaders() }
         );
-        if (!res.ok) throw new Error(`Action ${action} failed`);
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new Error(body.error || `Action ${action} failed (${res.status})`);
+        }
         await fetchAll();
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
@@ -650,8 +658,14 @@ export function PlaybooksTab() {
   const handleRunNow = useCallback(async () => {
     setRunning(true);
     try {
-      const res = await fetch(`${BASE_PATH}/api/playbook-evolution?action=mine`, { method: 'POST' });
-      if (!res.ok) throw new Error('Mine operation failed');
+      const res = await fetch(`${BASE_PATH}/api/playbook-evolution?action=mine`, {
+        method: 'POST',
+        headers: authHeaders(),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Mine operation failed (${res.status})`);
+      }
       await fetchAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
