@@ -4,353 +4,345 @@ System architecture and component interactions for autonomous L2/Rollup operatio
 
 ---
 
-## High-Level Architecture
+## High-Level Data Flow
 
+```mermaid
+flowchart TD
+    L1["L1 RPC (viem)"]
+    L2["L2 RPC (viem)"]
+    K8s["K8s API (EKS)"]
+
+    subgraph AgentLoop["Agent Loop — 60s cycle (agent-loop.ts)"]
+        Observe["1. Observe\nCollect L1/L2 metrics from RPC"]
+        Detect["2. Detect\nRun 4-layer anomaly pipeline"]
+        Decide["3. Decide\nCalculate scaling score + predictive override"]
+        Act["4. Act\nAuto-execute if conditions met"]
+        Observe --> Detect --> Decide --> Act
+    end
+
+    L1 --> Observe
+    L2 --> Observe
+    K8s --> Observe
+
+    Act --> KScaler["K8s Scaler\n(k8s-scaler.ts)"]
+    Act --> Remediation["Remediation Engine\n(remediation-engine.ts)"]
+
+    KScaler --> K8s
+    Remediation --> K8s
+
+    MetricsStore["MetricsStore\n(ring buffer, 60 pts)"]
+    Observe --> MetricsStore
+    MetricsStore --> Detect
+    MetricsStore --> Decide
+
+    UI["Dashboard UI\n(page.tsx)"]
+    MetricsStore --> UI
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        SentinAI Dashboard                        │
-│                      (Next.js 16 / React)                        │
-└───────────────┬─────────────────────────────────┬───────────────┘
-                │                                 │
-                ▼                                 ▼
-    ┌───────────────────────┐         ┌──────────────────────┐
-    │  Telemetry Collector  │         │   API Gateway        │
-    │  - L2 RPC Polling     │         │   - REST endpoints   │
-    │  - K8s Metrics        │         │   - MCP Server       │
-    │  - Component Logs     │         │   - Authentication   │
-    └───────────┬───────────┘         └──────────┬───────────┘
-                │                                │
-                ▼                                ▼
-    ┌─────────────────────────────────────────────────────────┐
-    │              Core Processing Engine                      │
-    ├─────────────────────────────────────────────────────────┤
-    │  • Anomaly Detection (Z-score, AI analysis)             │
-    │  • Root Cause Analysis (Claude Haiku 4.5)               │
-    │  • Predictive Scaling (Time-series forecasting)         │
-    │  • Action Planning (Policy-based decision trees)        │
-    │  • Execution Engine (K8s API, safe rollback)            │
-    └───────────┬─────────────────────────────────────────────┘
-                │
-                ▼
-    ┌───────────────────────────────────────────────────────┐
-    │                  State Management                      │
-    │  • In-Memory Ring Buffer (60 data points)             │
-    │  • Redis (optional, multi-instance state sync)        │
-    │  • Audit Trail (decision history, action logs)        │
-    └───────────────────────────────────────────────────────┘
-```
+
+The Agent Loop runs server-side every 60 seconds with no browser dependency. It is enabled automatically when `L2_RPC_URL` is set; override with `AGENT_LOOP_ENABLED=true|false`.
 
 ---
 
-## Component Details
+## 4-Layer Anomaly Detection Pipeline
 
-### 1. Telemetry Collector
+```mermaid
+flowchart LR
+    Input["Metric Stream\n(MetricsStore)"]
 
-**Responsibilities:**
-- Poll L2 RPC for block height, gas usage, transaction pool metrics
-- Query AWS EKS for CPU, memory, pod status via K8s API
-- Aggregate component logs (op-geth, op-node, op-batcher, op-proposer)
+    subgraph L1["Layer 1 — Statistical"]
+        ZScore["Z-Score Analysis\nanomaly-detector.ts\nThreshold: Z > 3.0"]
+    end
 
-**Data Flow:**
+    subgraph L2["Layer 2 — AI Semantic"]
+        AI["AI Log Analysis\nanomaly-ai-analyzer.ts\nLog context + cross-component patterns"]
+    end
+
+    subgraph L3["Layer 3 — Alert Dispatch"]
+        Alert["Alert Dispatcher\nalert-dispatcher.ts\nSlack / Webhook"]
+    end
+
+    subgraph L4["Layer 4 — Auto-Remediation"]
+        Remediation["Playbook Execution\nremediation-engine.ts\nRequires AUTO_REMEDIATION_ENABLED=true"]
+    end
+
+    Input --> ZScore
+    ZScore -- "anomaly detected" --> AI
+    AI -- "severity + context" --> Alert
+    Alert -- "if enabled" --> Remediation
 ```
-L2 RPC → Metrics API → In-Memory Buffer (60 points, 5-min window)
-                    ↓
-                Time-series analysis (anomaly detection input)
-```
 
-**Key Metrics:**
-- `blockHeight`: Current L2 block number
-- `cpuUsage`: Percentage (0-100)
-- `txPoolCount`: Pending transaction count
-- `gasUsedRatio`: Gas consumption rate
-- `blockInterval`: Time between blocks (ms)
+**Layer 1** computes Z-scores over the 60-point ring buffer (mean, stdDev). Threshold `Z > 3.0` generates an anomaly event.
+
+**Layer 2** passes anomaly metrics and recent logs to an AI model for semantic cross-component pattern analysis — detecting non-obvious causal chains (e.g., L1 RPC lag causing batcher backpressure).
+
+**Layer 3** dispatches alerts to configured Slack or webhook endpoints via `ALERT_WEBHOOK_URL`.
+
+**Layer 4** selects and executes a playbook via `playbook-matcher.ts` and `action-executor.ts`. Gated by `AUTO_REMEDIATION_ENABLED=true` (default: `false`).
 
 ---
 
-### 2. Anomaly Detection Engine
+## Hybrid Scoring and Scaling Tiers
 
-**Algorithm:**
-- **Z-score calculation** on windowed metrics (mean, stddev)
-- **Threshold**: |z-score| > 2.0 triggers alert
-- **AI enhancement**: Claude Haiku 4.5 analyzes log context for cross-component patterns
+```mermaid
+flowchart LR
+    CPU["CPU Usage\n× 30%"]
+    Gas["Gas Used Ratio\n× 30%"]
+    TxPool["TxPool Count\n× 20%"]
+    AISev["AI Severity\n× 20%"]
 
-**Detection Flow:**
-```
-Metric Stream → Statistical Analysis → Z-score > 2.0?
-                                            ↓ Yes
-                                      AI Log Analysis
-                                            ↓
-                                    Anomaly Event Created
-                                            ↓
-                                    RCA Engine Triggered
+    Score["Hybrid Score\n0 – 100"]
+
+    CPU --> Score
+    Gas --> Score
+    TxPool --> Score
+    AISev --> Score
+
+    Score --> Idle["Idle\nScore < 30\n→ 1 vCPU"]
+    Score --> Normal["Normal\n30 ≤ Score < 70\n→ 2 vCPU"]
+    Score --> High["High\n70 ≤ Score < 77\n→ 4 vCPU"]
+    Score --> Emergency["Emergency\nScore ≥ 77\n→ 8 vCPU"]
 ```
 
-**Output:**
-```json
-{
-  "metric": "cpuUsage",
-  "value": 87.3,
-  "zScore": 3.2,
-  "direction": "up",
-  "severity": "medium",
-  "description": "CPU spike detected: 87.3% (3.2σ above baseline)"
-}
-```
+A 5-minute cooldown (`SCALING_COOLDOWN_SECONDS=300`) prevents oscillation between tiers. Simulation mode (`SCALING_SIMULATION_MODE=true`, default) logs decisions without making real K8s changes.
+
+### Scaling Mode Priority
+
+`k8s-scaler.ts` attempts each mode in order, falling back on failure:
+
+1. **Simulation** — Log only (default)
+2. **In-Place Resize** — `kubectl patch pod --subresource resize` (K8s 1.27+, ~1–3s, zero downtime)
+3. **Zero-Downtime Pod Swap** — State machine (see below)
+4. **Docker** — Container restart with new resource limits
+5. **Legacy kubectl patch** — Deployment spec update
 
 ---
 
-### 3. Root Cause Analysis (RCA) Engine
+## Zero-Downtime Pod Swap State Machine
 
-**Model:** Claude Haiku 4.5 (via LiteLLM AI Gateway)
-
-**Input Context:**
-- Recent anomaly metrics
-- Component logs (last 50 lines each: op-geth, op-node, op-batcher, op-proposer)
-- Historical incident patterns
-
-**Prompt Strategy:**
-```
-You are a Senior Protocol Engineer analyzing Optimism Rollup health.
-
-Metrics: [anomaly summary]
-Logs: [aggregated component logs]
-
-Diagnose the root cause and provide:
-1. Probable cause (1-2 sentences)
-2. Affected components
-3. Risk level (low/medium/high/critical)
-4. Recommended action plan
+```mermaid
+stateDiagram-v2
+    [*] --> idle
+    idle --> creating_standby : scale triggered
+    creating_standby --> waiting_ready : standby pod created
+    waiting_ready --> switching_traffic : safety gates pass
+    waiting_ready --> rolling_back : safety gate failure
+    switching_traffic --> cleanup : traffic switched
+    switching_traffic --> rolling_back : switch failure
+    cleanup --> syncing_statefulset
+    syncing_statefulset --> completed
+    completed --> [*]
+    rolling_back --> failed
+    failed --> [*]
 ```
 
-**Output:**
+**Safety gates** (evaluated in `waiting_ready`):
+
+| Gate | Condition | Config |
+|------|-----------|--------|
+| Block Sync | Standby block height gap ≤ max | `ZERO_DOWNTIME_MAX_BLOCK_GAP` (default: `2`) |
+| TX Drain | `txpool_status` pending + queued → 0 | `ZERO_DOWNTIME_TX_DRAIN_TIMEOUT_MS` (default: `60000`) |
+
+If either gate fails or any state transition errors, the machine transitions to `rolling_back` and the original pod is restored.
+
+---
+
+## Chain Plugin Architecture
+
+```mermaid
+flowchart TD
+    Env["CHAIN_TYPE env var\n(default: thanos)"]
+    Registry["Plugin Registry\nsrc/chains/registry.ts\ngetChainPlugin()"]
+
+    Env --> Registry
+
+    Registry --> Thanos["Thanos\n(default)"]
+    Registry --> Optimism["Optimism"]
+    Registry --> Arbitrum["Arbitrum / Orbit"]
+    Registry --> ZKStack["ZK Stack"]
+    Registry --> L1EVM["L1 EVM"]
+
+    subgraph PluginShape["Each plugin provides"]
+        Components["components.ts\nComponent topology"]
+        Prompts["prompts.ts\nAI prompt fragments"]
+        Playbooks["playbooks.ts\nRemediation playbooks"]
+        K8sCfg["index.ts\nK8s configs + viem chains"]
+    end
+
+    Thanos --> PluginShape
+
+    subgraph Consumers["Consumers (20+ modules)"]
+        RCA["rca-engine.ts\ndependencyGraph"]
+        NLOps["nlops-engine.ts\nAI prompts"]
+        Remediation2["remediation-engine.ts\nplaybooks"]
+        Metrics["metrics API\ncomponent list"]
+    end
+
+    PluginShape --> Consumers
+```
+
+Adding a new chain requires 4 files under `src/chains/<chain>/`: `components.ts`, `prompts.ts`, `playbooks.ts`, `index.ts`. The registry lazy-loads plugins — only the active chain's code is imported at runtime.
+
+---
+
+## AI Client Priority
+
+```mermaid
+flowchart LR
+    Gateway["LiteLLM Gateway\nAI_GATEWAY_URL\n(optional)"]
+    Qwen["Qwen\nQWEN_API_KEY\nPriority 1"]
+    Anthropic["Anthropic\nANTHROPIC_API_KEY\nPriority 2"]
+    OpenAI["OpenAI\nOPENAI_API_KEY\nPriority 3"]
+    Gemini["Gemini\nGEMINI_API_KEY\nPriority 4"]
+
+    Gateway --> Qwen
+    Qwen --> Anthropic
+    Anthropic --> OpenAI
+    OpenAI --> Gemini
+
+    subgraph FastTier["Fast Tier"]
+        F1["Anomaly detection (L2)"]
+        F2["NLOps intent classification"]
+        F3["Log analysis"]
+        F4["Predictive scaling"]
+    end
+
+    subgraph BestTier["Best Tier"]
+        B1["RCA (root cause analysis)"]
+        B2["Daily reports"]
+        B3["Cost optimization"]
+    end
+```
+
+### AI Model Reference
+
+| Priority | Provider | Fast Model | Best Model |
+|----------|----------|------------|------------|
+| 0 | LiteLLM Gateway | (provider-detected) | (provider-detected) |
+| 1 | Qwen | `qwen3-80b-next` | `qwen3-80b-next` |
+| 2 | Anthropic | `claude-haiku-4-5-20251001` | `claude-sonnet-4-5-20250929` |
+| 3 | OpenAI | `gpt-5.2` | `gpt-5.2-codex` |
+| 4 | Gemini | `gemini-2.5-flash-lite` | `gemini-2.5-pro` |
+
+Every AI feature has a non-AI fallback path — the system degrades gracefully if no API key is configured.
+
+---
+
+## L1 RPC Failover
+
+`l1-rpc-failover.ts` monitors L1 RPC health and automatically rotates endpoints:
+
+- **Trigger**: ≥ 3 consecutive failures on the current endpoint
+- **Action**: Switch to the next URL in `L1_RPC_URLS` (comma-separated list)
+- **Cooldown**: 5 minutes per endpoint before retry
+- **K8s propagation**: Updates downstream components via `kubectl set env`
+- **Proxyd**: If `L1_PROXYD_ENABLED=true`, also updates the Proxyd ConfigMap
+
+Fallback for single-endpoint setups: `SENTINAI_L1_RPC_URL` (defaults to publicnode.com).
+
+---
+
+## RCA Engine
+
+`rca-engine.ts` traces fault propagation using the active chain plugin's `dependencyGraph`. The graph encodes which components depend on which (e.g., op-batcher depends on op-node, op-node depends on L1 RPC). When an anomaly is detected, the engine walks the graph to identify upstream root causes rather than treating each symptom independently.
+
+**RCA output schema:**
 ```json
 {
   "rootCause": "Derivation lag: op-node falling behind L1",
   "affectedComponents": ["op-node", "op-batcher"],
   "riskLevel": "high",
-  "actionPlan": "Increase op-node CPU allocation; verify L1 RPC health"
+  "actionPlan": "Increase op-node CPU; verify L1 RPC health"
 }
 ```
 
 ---
 
-### 4. Predictive Scaling Engine
+## NLOps Chat Interface
 
-**Model:** Tier-based AI selection
-- **Fast Tier**: qwen3-80b-next (1.8s latency, real-time analysis)
-- **Best Tier**: qwen3-235b (11s latency, complex pattern recognition)
+`nlops-engine.ts` exposes a natural language operations interface with:
 
-**Data Input:**
-- In-memory ring buffer (60 data points)
-- Statistical summary: min, max, mean, stddev, trend
-- Recent 15 data points (granular pattern analysis)
-
-**Prediction Flow:**
-```
-Time-Series Data → AI Analysis → Predicted vCPU (1/2/4)
-                               ↓
-                         Confidence Score (0-100)
-                               ↓
-                         Trend Direction (stable/rising/falling)
-                               ↓
-                         Key Factors (reasoning)
-```
-
-**Output:**
-```json
-{
-  "predictedVCpu": 4,
-  "confidence": 85,
-  "trend": "rising",
-  "keyFactors": ["TxPool growth", "Block interval variance"],
-  "reasoning": "Traffic surge pattern detected; recommend scaling to 4 vCPU"
-}
-```
+- **9 AI function-calling tools**: metrics lookup, scaling, RCA trigger, remediation, cost analysis, log search, config query, EOA balance, component restart
+- **7 intent types**: query, scale, diagnose, remediate, cost, config, status
+- **Safety gate**: Dangerous actions (`scale_node`, `update_config`) require explicit user confirmation before execution
 
 ---
 
-### 5. Action Planning & Execution
+## State Management
 
-**Policy Framework:**
+`state-store.ts` defines an abstract interface with two implementations:
 
-```
-Risk Tier       Auto-Execute    Approval Required    Examples
-────────────────────────────────────────────────────────────────
-Low             ✓               ✗                    Increase CPU 1→2
-Medium          ✓               ✗                    Restart component
-High            ✗               ✓ (ChatOps)          Downscale 4→1
-Critical        ✗               ✓ (Multi-approval)   DB migration
-```
+| Mode | Implementation | When Used |
+|------|---------------|-----------|
+| In-Memory | Default | Single instance, no `REDIS_URL` |
+| Redis | `redis-state-store.ts` | Multi-instance, `REDIS_URL` set |
 
-**Execution Safety:**
-- **Cooldown**: 5-minute window after any scaling action
-- **Simulation Mode**: Default dry-run; requires explicit `SCALING_SIMULATION_MODE=false`
-- **Rollback**: Automatic rollback on health check failure within 2 minutes
-- **Audit Trail**: Every action logged with timestamp, decision reasoning, outcome
-
-**K8s Deployment Update:**
-```typescript
-await k8s.apps.v1.patchNamespacedDeployment(
-  'op-geth',
-  'default',
-  {
-    spec: {
-      template: {
-        spec: {
-          containers: [{ resources: { requests: { cpu: '4000m' } } }]
-        }
-      }
-    }
-  }
-);
-```
+The MetricsStore ring buffer holds 60 data points per metric and computes rolling statistics (mean, stdDev, trend, slope) used by both the detection pipeline and the predictive scaler.
 
 ---
 
-### 6. MCP Integration Layer
+## API Routes
 
-**MCP Server:** Model Context Protocol for external AI agents (Claude Desktop, Claude Code)
-
-**Exposed Tools:**
-- `sentinai.getMetrics`: Current system metrics + anomaly status
-- `sentinai.getRca`: Latest root cause analysis
-- `sentinai.getPrediction`: Predictive scaling forecast
-- `sentinai.executeAction`: Execute approved action (policy-gated)
-- `sentinai.getAuditTrail`: Decision history and action logs
-
-**Authentication:**
-- API key via `x-api-key` header
-- Configurable via `SENTINAI_API_KEY` environment variable
-
-**Example Invocation (Claude Desktop):**
-```json
-{
-  "tool": "sentinai.getMetrics",
-  "arguments": {
-    "includeAnomalies": true
-  }
-}
-```
+| Route | Methods | Purpose |
+|-------|---------|---------|
+| `metrics/route.ts` | GET | L1/L2 blocks, K8s pods, anomaly pipeline |
+| `scaler/route.ts` | GET/POST/PATCH | Scaling state + AI prediction / execute / configure |
+| `anomalies/route.ts` | GET | Anomaly event list |
+| `nlops/route.ts` | GET/POST | NLOps chat |
+| `rca/route.ts` | GET/POST | Root cause analysis |
+| `remediation/route.ts` | GET/POST/PATCH | Remediation execution and status |
+| `agent-loop/route.ts` | GET | Agent loop status and control |
+| `eoa-balance/route.ts` | GET/POST | EOA balance status / refill |
+| `mcp/route.ts` | GET/POST | MCP tool execution |
+| `health/route.ts` | GET | Docker healthcheck |
 
 ---
 
-## Data Flow: Incident to Resolution
+## Deployment
 
-```
-1. Metric Anomaly Detected (cpuUsage spike)
-         ↓
-2. RCA Engine Analyzes Logs
-         ↓
-3. Action Plan Generated ("Increase CPU to 4 vCPU")
-         ↓
-4. Policy Check (Low risk → auto-execute)
-         ↓
-5. K8s API Call (patch deployment)
-         ↓
-6. Verification Poll (2-minute health window)
-         ↓
-7. Outcome Logged (success/rollback)
-         ↓
-8. Cooldown Period (5 minutes, no further scaling)
-```
+Docker container only — **Vercel/serverless not supported** (requires `kubectl` + `aws` CLI at runtime).
 
----
-
-## Deployment Architecture
+3-stage Dockerfile: `deps` → `builder` → `runner` (node:20-alpine). Healthcheck: `GET /api/health`.
 
 ### Local Development
 ```
 Docker Compose
-├── sentinai (Next.js app, port 3002)
-├── redis (optional state store, port 6379)
+├── sentinai (Next.js, port 3002)
+├── redis (optional, port 6379)
 └── Local L2 RPC (optional, port 8545)
 ```
 
 ### Production (AWS EKS)
 ```
 AWS EKS Cluster
-├── sentinai Deployment (2 replicas, autoscaling)
-├── Redis StatefulSet (persistence enabled)
-├── L2 RPC Connection (external, load-balanced)
+├── sentinai Deployment
+├── Redis StatefulSet (optional)
+├── L2 RPC (external, load-balanced)
 └── IAM Role (EKS read/write permissions)
 ```
-
-**Network:**
-- Public: Dashboard UI (behind CloudFront/CDN)
-- Internal: K8s API, Redis, internal metrics endpoints
 
 ---
 
 ## Security Model
 
-### Authentication Layers
-1. **API Key**: Required for write operations (`SENTINAI_API_KEY`)
-2. **Read-Only Mode**: Optional lockdown via `SENTINAI_READ_ONLY_MODE=true`
-3. **AWS IAM**: EKS cluster access via IAM roles (least privilege)
-
-### Forbidden Actions (Hard-coded Blacklist)
-- Database DROP/DELETE statements
-- Service account deletion
-- Namespace-wide resource deletion
-- Manual pod exec/debug without approval
-
-### Audit Controls
-- All actions logged with: timestamp, user context, decision reasoning, execution outcome
-- Logs persist to Redis (if enabled) or in-memory audit trail (last 100 events)
-- Export via `/api/agent-decisions` endpoint
+- **API key auth**: Required for write endpoints (`SENTINAI_API_KEY` via `x-api-key` header)
+- **Simulation mode**: `SCALING_SIMULATION_MODE=true` by default — no real K8s mutations
+- **NLOps confirmation gate**: Dangerous operations require explicit user approval
+- **AWS IAM**: EKS cluster access uses least-privilege IAM roles
+- **Audit trail**: All actions logged with timestamp, decision reasoning, and outcome (Redis or in-memory, last 100 events)
 
 ---
 
-## Scalability & Performance
+## Tech Stack
 
-### Metrics Collection
-- **Polling Interval**: 30 seconds (configurable)
-- **Buffer Size**: 60 data points (30 minutes rolling window)
-- **Memory Footprint**: ~2MB per buffer (5 metrics × 60 points × 8 bytes)
-
-### AI Model Latency
-| Model            | Latency | Use Case                    |
-|------------------|---------|-----------------------------|
-| qwen3-80b-next   | 1.8s    | Real-time anomaly detection |
-| qwen3-235b       | 11s     | Deep pattern analysis       |
-| Claude Haiku 4.5 | 3-5s    | RCA log analysis            |
-
-### Horizontal Scaling
-- **Stateless**: Dashboard frontend (Next.js)
-- **Stateful**: Redis for multi-instance state sync
-- **Read Replicas**: Multiple dashboard instances can poll same Redis
-
----
-
-## Monitoring & Observability
-
-### Health Endpoints
-- `/api/health`: System status (L2 connected, K8s accessible)
-- `/api/metrics`: Current metrics + anomaly status
-- `/api/agent-decisions`: Recent decision history
-
-### Dashboards
-- **Main Dashboard**: Real-time metrics, anomaly alerts, action history
-- **v2 Dashboard**: Advanced analytics, cost tracking, predictive charts
-
-### Logging
-- **Structured Logs**: JSON format via console (Next.js middleware)
-- **Log Levels**: debug, info, warn, error
-- **Aggregation**: Compatible with CloudWatch Logs, Datadog, Sentry
-
----
-
-## Future Architecture Enhancements
-
-### Planned (Q1 2026)
-- Multi-cluster support (manage multiple L2 networks from one dashboard)
-- Prometheus metrics export (Grafana integration)
-- Webhook notifications (Slack, Discord, PagerDuty)
-
-### Researching (Q2 2026)
-- Self-healing feedback loop (auto-tune anomaly thresholds based on false positive rate)
-- Cost optimization engine (recommend cheaper instance types based on usage patterns)
-- Multi-model ensemble (combine predictions from multiple AI models for higher confidence)
+| Layer | Technology |
+|-------|-----------|
+| Framework | Next.js 16, React 19 |
+| Language | TypeScript (strict) |
+| Blockchain RPC | viem |
+| Charts | Recharts |
+| Styling | Tailwind CSS 4, Lucide icons |
+| Testing | Vitest |
+| State (optional) | ioredis |
 
 ---
 

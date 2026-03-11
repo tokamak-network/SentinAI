@@ -5,6 +5,7 @@ import rehypeHighlight from 'rehype-highlight';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
 import 'highlight.js/styles/github-dark.css';
+import MermaidBlock from './MermaidBlock';
 
 interface MarkdownRendererProps {
   content: string;
@@ -14,7 +15,7 @@ interface MarkdownRendererProps {
 export default function MarkdownRenderer({ content, skipFirstH1 = false }: MarkdownRendererProps) {
   const firstH1Skipped = { current: false };
   return (
-    <div className="prose prose-slate max-w-none prose-sm lg:prose-base prose-headings:scroll-mt-20 prose-a:text-blue-600 hover:prose-a:text-blue-500 prose-code:text-xs prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-[''] prose-code:after:content-[''] prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-p:leading-relaxed prose-li:leading-relaxed">
+    <div className="prose prose-slate max-w-none prose-base prose-headings:scroll-mt-20 prose-a:text-blue-600 hover:prose-a:text-blue-500 prose-code:text-xs prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-[''] prose-code:after:content-[''] prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-p:leading-relaxed prose-li:leading-relaxed">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw, rehypeHighlight]}
@@ -67,6 +68,9 @@ export default function MarkdownRenderer({ content, skipFirstH1 = false }: Markd
             </a>
           ),
           code: ({ className, children, ...props }) => {
+            if (className === 'language-mermaid') {
+              return <MermaidBlock chart={String(children)} />;
+            }
             const inline = !className;
             return inline ? (
               <code
