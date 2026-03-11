@@ -557,14 +557,10 @@ describe('agent-loop', () => {
       process.env.SENTINAI_CUSTOM_METRIC_1_METHOD = 'custom_getMetric';
       process.env.SENTINAI_CUSTOM_METRIC_1_PATH = 'value';
 
-      // First call is for txpool, second call is for custom metric
-      vi.mocked(mockFetch)
-        .mockResolvedValueOnce({
-          json: () => Promise.resolve({ result: { pending: '0xa' } }),
-        } as never)
-        .mockResolvedValueOnce({
-          json: () => Promise.resolve({ result: { value: 42 } }),
-        } as never);
+      // Default profile has txPool: null, so only custom metric triggers a fetch call
+      vi.mocked(mockFetch).mockResolvedValueOnce({
+        json: () => Promise.resolve({ result: { value: 42 } }),
+      } as never);
 
       const { pushMetric } = await import('@/lib/metrics-store');
       await runAgentCycle();
@@ -585,14 +581,10 @@ describe('agent-loop', () => {
     it('silently skips custom metric when RPC call fails', async () => {
       process.env.SENTINAI_CUSTOM_METRIC_1_NAME = 'failMetric';
       process.env.SENTINAI_CUSTOM_METRIC_1_METHOD = 'bad_method';
-      process.env.SENTINAI_CUSTOM_METRIC_1_PATH = 'result.value';
+      process.env.SENTINAI_CUSTOM_METRIC_1_PATH = 'value';
 
-      // First call for txpool succeeds, second for custom metric throws
-      vi.mocked(mockFetch)
-        .mockResolvedValueOnce({
-          json: () => Promise.resolve({ result: { pending: '0xa' } }),
-        } as never)
-        .mockRejectedValueOnce(new Error('RPC method not found'));
+      // Default profile has txPool: null, so only custom metric triggers a fetch call
+      vi.mocked(mockFetch).mockRejectedValueOnce(new Error('RPC method not found'));
 
       const { pushMetric } = await import('@/lib/metrics-store');
       const result = await runAgentCycle();

@@ -446,7 +446,8 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
       clearTimeout(cmTimer);
       const cmData = (await cmRes.json()) as { result?: unknown };
       const raw = cm.responsePath ? getValueByPath(cmData.result, cm.responsePath) : cmData.result;
-      const value = typeof raw === 'number' ? raw : parseFloat(String(raw ?? '0'));
+      if (raw === null || raw === undefined) continue;
+      const value = typeof raw === 'number' ? raw : parseFloat(String(raw));
       if (Number.isFinite(value)) customMetrics[cm.name] = value;
     } catch {
       // silent failure — missing custom metric does not degrade the cycle
