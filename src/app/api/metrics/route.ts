@@ -27,6 +27,7 @@ import logger from '@/lib/logger';
 import { buildChainOptionalSections } from './payload';
 import { fetchZkstackMetricFields } from './zkstack';
 import { resolveClientProfile, parseTxPoolPendingCount } from '@/lib/client-profile';
+import { getOrDetectL2Client } from '@/lib/l2-client-cache';
 
 // Whether anomaly detection is enabled (default: enabled)
 const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'false';
@@ -656,11 +657,27 @@ export async function GET(request: Request) {
         ]);
         const blockNumber = block.number;
 
-        // Get actual TxPool pending count via ClientProfile-resolved method
+        // Get actual TxPool pending count — prefer probe-detected namespace, fall back to ClientProfile
         const clientProfile = resolveClientProfile();
+        // Use probe-detected namespace if available, otherwise fall back to env-based profile
+        let detectedL2ClientNamespace: 'txpool' | 'parity' | null = null;
+        try {
+            const detectedL2Client = await getOrDetectL2Client(rpcUrl);
+            detectedL2ClientNamespace = detectedL2Client.txpoolNamespace;
+        } catch {
+            // Non-blocking: probe failure falls through to profile-based method selection
+        }
+        const txpoolNamespace = detectedL2ClientNamespace;
+        const txpoolMethod = txpoolNamespace === 'txpool' ? 'txpool_status'
+            : txpoolNamespace === 'parity' ? 'parity_pendingTransactions'
+            : clientProfile.methods.txPool?.method ?? null;
+        const txpoolParserType: 'txpool' | 'parity' | 'custom' | null = txpoolNamespace !== null
+            ? txpoolNamespace
+            : (clientProfile.parsers?.txPool ?? null);
+
         let txPoolPending = 0;
         let txPoolTimeoutId: ReturnType<typeof setTimeout> | null = null;
-        if (clientProfile.methods.txPool) {
+        if (txpoolMethod) {
             try {
                 const controller = new AbortController();
                 txPoolTimeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
@@ -669,8 +686,8 @@ export async function GET(request: Request) {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         jsonrpc: '2.0',
-                        method: clientProfile.methods.txPool.method,
-                        params: clientProfile.methods.txPool.params ?? [],
+                        method: txpoolMethod,
+                        params: clientProfile.methods.txPool?.params ?? [],
                         id: 1,
                     }),
                     signal: controller.signal,
@@ -678,8 +695,8 @@ export async function GET(request: Request) {
                 const txPoolData = (await txPoolResponse.json()) as { result?: unknown };
                 txPoolPending = parseTxPoolPendingCount(
                     txPoolData.result,
-                    clientProfile.parsers.txPool,
-                    clientProfile.methods.txPool.responsePath,
+                    txpoolParserType,
+                    clientProfile.methods.txPool?.responsePath,
                 );
             } catch {
                 // Fallback: use current block tx count if txpool method is unsupported
@@ -690,7 +707,7 @@ export async function GET(request: Request) {
                 }
             }
         } else {
-            // ClientProfile has no txPool method configured — fall back to block tx count
+            // Neither probe nor profile has a txPool method — fall back to block tx count
             txPoolPending = block.transactions.length;
         }
         const zkstackMetrics = await fetchZkstackMetricFields(plugin.chainType, rpcUrl, RPC_TIMEOUT_MS);
