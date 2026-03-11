@@ -37,12 +37,7 @@ export async function GET(request: Request) {
       scheduler: {
         initialized: scheduler.initialized,
         agentLoopEnabled: scheduler.agentLoopEnabled,
-        agentTaskRunning: scheduler.agentTaskRunning,
-        watchdogEnabled: scheduler.watchdogEnabled,
-        watchdogTaskRunning: scheduler.watchdogTaskRunning,
-        watchdogFailureStreak: scheduler.watchdogFailureStreak,
-        watchdogLastError: scheduler.watchdogLastError,
-        watchdogLastRecoveryStatus: scheduler.watchdogLastRecoveryStatus,
+        agentV2Enabled: scheduler.agentV2Enabled,
       },
       agentV2,
       lastCycle,
