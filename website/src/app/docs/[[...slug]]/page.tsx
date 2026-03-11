@@ -123,19 +123,49 @@ function DocsLandingPage() {
 // So ../docs = /vercel/path0/docs/ (full repo is cloned)
 const DOCS_ROOT = path.join(process.cwd(), '../docs');
 
+// Flat ordered list used for prev/next navigation
+const NAV_ORDER = [
+  { href: '/docs/guide/overview', label: 'Overview' },
+  { href: '/docs/guide/quickstart', label: 'Quick Start' },
+  { href: '/docs/guide/demo-scenarios', label: 'Demo Scenarios' },
+  { href: '/docs/guide/troubleshooting', label: 'Troubleshooting' },
+  { href: '/docs/guide/setup', label: 'Setup Guide' },
+  { href: '/docs/guide/ec2-setup-guide', label: 'EC2 Deployment' },
+  { href: '/docs/guide/opstack-example-runbook', label: 'OP Stack Runbook' },
+  { href: '/docs/guide/runbook/agentic-q1-operations-runbook', label: 'Daily Operations' },
+  { href: '/docs/guide/autonomy-cockpit-user-guide', label: 'Autonomy Cockpit' },
+  { href: '/docs/guide/sentinai-mcp-user-guide', label: 'MCP User Guide' },
+  { href: '/docs/guide/architecture', label: 'Architecture' },
+  { href: '/docs/guide/api-reference', label: 'API Reference' },
+  { href: '/docs/spec/anomaly-detection-guide', label: 'Anomaly Detection' },
+  { href: '/docs/spec/rca-engine-guide', label: 'RCA Engine' },
+];
+
 type PageProps = {
   params: Promise<{ slug?: string[] }>;
 };
 
-function safeResolveDocPath(slug?: string[]) {
+// Try multiple candidate paths for a slug (handles directory-level slugs)
+async function readDocFile(slug?: string[]): Promise<string | null> {
   const joined = (slug ?? []).join('/');
-  const normalized = joined || 'README.md';
-  const withExtension = normalized.endsWith('.md') ? normalized : `${normalized}.md`;
-  const resolved = path.resolve(DOCS_ROOT, withExtension);
+  const candidates = joined
+    ? [
+        joined.endsWith('.md') ? joined : `${joined}.md`,
+        `${joined}/README.md`,
+        `${joined}/overview.md`,
+      ]
+    : ['README.md'];
 
-  if (!resolved.startsWith(DOCS_ROOT)) return null;
-
-  return { resolved, relativePath: withExtension };
+  for (const candidate of candidates) {
+    const resolved = path.resolve(DOCS_ROOT, candidate);
+    if (!resolved.startsWith(DOCS_ROOT)) return null;
+    try {
+      return await fs.readFile(resolved, 'utf8');
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
 }
 
 function extractTitle(content: string): string {
@@ -170,8 +200,21 @@ export async function generateStaticParams() {
   return files.map((file) => {
     const withoutExt = file.replace(/\.md$/, '');
     if (withoutExt === 'README') return { slug: [] };
+    // Expose directory README.md files as directory-level slugs too
+    if (withoutExt.endsWith('/README')) {
+      return { slug: withoutExt.replace('/README', '').split('/') };
+    }
     return { slug: withoutExt.split('/') };
   });
+}
+
+function buildBreadcrumbs(slug: string[], title: string) {
+  const crumbs: { label: string; href?: string }[] = [{ label: 'Docs', href: '/docs' }];
+  if (slug[0] === 'guide') crumbs.push({ label: 'Guide', href: '/docs/guide' });
+  else if (slug[0] === 'spec') crumbs.push({ label: 'Spec' });
+  else if (slug[0] === 'verification') crumbs.push({ label: 'Verification' });
+  crumbs.push({ label: title });
+  return crumbs;
 }
 
 export default async function DocsPage({ params }: PageProps) {
@@ -182,50 +225,82 @@ export default async function DocsPage({ params }: PageProps) {
     return <DocsLandingPage />;
   }
 
-  const target = safeResolveDocPath(slug);
-
-  if (!target) notFound();
-
-  let content = '';
-  try {
-    content = await fs.readFile(target.resolved, 'utf8');
-  } catch {
-    notFound();
-  }
+  const content = await readDocFile(slug);
+  if (!content) notFound();
 
   const title = extractTitle(content);
+  const currentHref = `/docs/${slug.join('/')}`;
+  const navIdx = NAV_ORDER.findIndex((n) => n.href === currentHref);
+  const prevPage = navIdx > 0 ? NAV_ORDER[navIdx - 1] : null;
+  const nextPage = navIdx >= 0 && navIdx < NAV_ORDER.length - 1 ? NAV_ORDER[navIdx + 1] : null;
+  const breadcrumbs = buildBreadcrumbs(slug, title);
 
   return (
     <div className="flex min-h-screen">
       <DocsSidebar />
 
-      <main className="flex-1 px-3 sm:px-4 lg:px-6 py-8 lg:ml-0">
+      <main className="flex-1 px-3 sm:px-4 lg:px-10 py-8 lg:ml-0">
         <div className="mx-auto max-w-4xl xl:max-w-5xl">
-          <div className="mb-6 flex flex-col sm:flex-row items-start justify-between gap-3 sm:gap-4">
-            <div className="flex-1 w-full">
-              <p className="text-[10px] uppercase tracking-[0.15em] text-slate-500 mb-1.5">
-                SentinAI Docs
-              </p>
-              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 break-words leading-tight">
-                {title}
-              </h1>
-            </div>
-            <div className="flex items-center gap-2 w-full sm:w-auto">
-              <Link
-                href="/"
-                className="whitespace-nowrap rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                ← Home
-              </Link>
-            </div>
-          </div>
+          {/* Breadcrumb */}
+          <nav className="flex items-center gap-1.5 text-xs text-slate-500 mb-4" aria-label="Breadcrumb">
+            {breadcrumbs.map((crumb, i) => (
+              <span key={i} className="flex items-center gap-1.5">
+                {i > 0 && <span className="text-slate-300">/</span>}
+                {crumb.href ? (
+                  <Link href={crumb.href} className="hover:text-slate-700 transition-colors">
+                    {crumb.label}
+                  </Link>
+                ) : (
+                  <span className="text-slate-700">{crumb.label}</span>
+                )}
+              </span>
+            ))}
+          </nav>
 
-          <div className="flex flex-col xl:flex-row gap-6">
-            <article className="flex-1 rounded-xl border border-slate-200 bg-white px-6 py-5 sm:px-8 sm:py-6 shadow-sm overflow-hidden">
+          {/* Page title */}
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 break-words leading-tight mb-6">
+            {title}
+          </h1>
+
+          {/* Content + TOC */}
+          <div className="flex flex-col lg:flex-row gap-8">
+            <article className="flex-1 min-w-0">
               <MarkdownRenderer content={content} skipFirstH1 />
+
+              {/* Prev / Next navigation */}
+              {(prevPage || nextPage) && (
+                <div className="flex items-center justify-between gap-4 mt-12 pt-6 border-t border-slate-200">
+                  {prevPage ? (
+                    <Link
+                      href={prevPage.href}
+                      className="group flex flex-col items-start gap-0.5 max-w-[45%]"
+                    >
+                      <span className="text-[10px] uppercase tracking-wider text-slate-400">Previous</span>
+                      <span className="text-sm font-medium text-blue-600 group-hover:text-blue-500 transition-colors">
+                        ← {prevPage.label}
+                      </span>
+                    </Link>
+                  ) : (
+                    <div />
+                  )}
+                  {nextPage ? (
+                    <Link
+                      href={nextPage.href}
+                      className="group flex flex-col items-end gap-0.5 max-w-[45%]"
+                    >
+                      <span className="text-[10px] uppercase tracking-wider text-slate-400">Next</span>
+                      <span className="text-sm font-medium text-blue-600 group-hover:text-blue-500 transition-colors">
+                        {nextPage.label} →
+                      </span>
+                    </Link>
+                  ) : (
+                    <div />
+                  )}
+                </div>
+              )}
             </article>
 
-            <div className="xl:w-52">
+            <div className="lg:w-52 lg:flex-shrink-0">
               <TableOfContents content={content} />
             </div>
           </div>

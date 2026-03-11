@@ -40,7 +40,7 @@ export default function MarkdownRenderer({ content, skipFirstH1 = false }: Markd
               .replace(/[^\w\s-]/g, '')
               .replace(/\s+/g, '-');
             return (
-              <h2 id={id} className="text-2xl lg:text-3xl font-semibold text-slate-800 mb-3.5 mt-7 border-b border-slate-200 pb-2 leading-tight">
+              <h2 id={id} className="text-xl lg:text-2xl font-semibold text-slate-800 mb-3 mt-7 border-b border-slate-200 pb-2 leading-tight">
                 {children}
               </h2>
             );
@@ -51,7 +51,7 @@ export default function MarkdownRenderer({ content, skipFirstH1 = false }: Markd
               .replace(/[^\w\s-]/g, '')
               .replace(/\s+/g, '-');
             return (
-              <h3 id={id} className="text-xl lg:text-2xl font-semibold text-slate-800 mb-2.5 mt-5 leading-snug">
+              <h3 id={id} className="text-base lg:text-lg font-semibold text-slate-800 mb-2 mt-5 leading-snug">
                 {children}
               </h3>
             );

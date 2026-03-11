@@ -37,7 +37,7 @@ const docStructure: DocSection[] = [
   {
     title: 'Operations',
     items: [
-      { title: 'Daily Operations', href: '/docs/guide/agentic-q1-operations-runbook' },
+      { title: 'Daily Operations', href: '/docs/guide/runbook/agentic-q1-operations-runbook' },
       { title: 'Autonomy Cockpit', href: '/docs/guide/autonomy-cockpit-user-guide' },
       { title: 'MCP User Guide', href: '/docs/guide/sentinai-mcp-user-guide' },
     ],
@@ -118,7 +118,11 @@ export default function DocsSidebar() {
               <div key={section.title}>
                 <button
                   onClick={() => toggleSection(section.title)}
-                  className="flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-wider text-slate-500 hover:text-slate-700 mb-1.5"
+                  className={`flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-wider mb-1.5 ${
+                    section.items.some((item) => pathname.startsWith(item.href))
+                      ? 'text-blue-600'
+                      : 'text-slate-500 hover:text-slate-700'
+                  }`}
                 >
                   <span className="break-words text-left">{section.title}</span>
                   <ChevronRight

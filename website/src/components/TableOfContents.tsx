@@ -56,7 +56,7 @@ export default function TableOfContents({ content }: TableOfContentsProps) {
   if (toc.length === 0) return null;
 
   return (
-    <nav className="sticky top-20 hidden xl:block">
+    <nav className="sticky top-20 hidden lg:block">
       <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500">
         On this page
       </p>
