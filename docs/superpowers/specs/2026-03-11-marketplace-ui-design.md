@@ -19,7 +19,8 @@ These must exist before the marketplace UI functions end-to-end:
 | Agent economy backend (`src/app/api/marketplace/`) | In plan | 9-task plan at `docs/superpowers/plans/2026-03-11-agent-economy.md` |
 | x402 TON facilitator | **Phase 0 blocker** | Coinbase's x402 only supports Base/Solana. A custom TON ERC-20 facilitator must be deployed (or `MARKETPLACE_PAYMENT_MODE=verify` used as stub) |
 | ERC-8004 Registry contract | **Phase 0 blocker** | Registry must be deployed on Ethereum L1 (mainnet or testnet). Contract address stored in `MARKETPLACE_REGISTRY_ADDRESS`. Phase 1 defaults to a testnet deployment |
-| L1 RPC for Vercel app | Required for website Browse Registry | `website/` needs `L1_RPC_URL` env var in Vercel settings for viem `getLogs` to read ERC-8004 events. Falls back to showing 0 instances if missing |
+| L1 RPC for Vercel app | Required for website Browse Registry | `website/` needs `L1_RPC_URL` env var in Vercel settings for viem `getLogs` to read AgentRegistry events. Falls back to showing 0 instances if missing |
+| `NEXT_PUBLIC_OPERATOR_ENDPOINT` | Required for website This Instance tab | Vercel env var pointing to the operator's dashboard URL (e.g., `https://sentinai.operator.xyz`). If unset, the This Instance tab shows a setup instruction instead of service cards |
 
 ## Design Decisions
 
@@ -47,10 +48,7 @@ NEW:
     ConnectGuide.tsx            — Static x402 code examples (curl + SDK)
 
   src/app/marketplace/
-    page.tsx                    — Operator dashboard page
-
-  src/components/
-    MarketplaceDashboard.tsx    — 4-stat header + services/buyers 2-column + recent sales
+    page.tsx                    — Operator dashboard page (UI inlined per existing pattern; no separate component file)
 
   src/app/api/marketplace/stats/
     route.ts                    — GET: aggregated marketplace stats for dashboard
@@ -58,6 +56,12 @@ NEW:
 MODIFIED:
   src/app/layout.tsx (or top bar component)   — Add MARKETPLACE nav link
   website/src/app/layout.tsx (or Navbar)      — Add MARKETPLACE nav link
+  src/app/api/marketplace/catalog/route.ts    — Add Access-Control-Allow-Origin: * header (public read-only route)
+
+DEPENDENCY ORDER:
+  The agent economy backend (src/app/api/marketplace/) must be implemented first.
+  catalog/route.ts must exist before website's This Instance tab and CORS modification are meaningful.
+  stats/route.ts must exist before the dashboard page renders real data.
 ```
 
 ## Website Marketplace Page
@@ -75,17 +79,21 @@ MODIFIED:
 ├─────────────────────────────────────────────────────────────────┤
 │                     BROWSE REGISTRY TAB                         │
 │                                                                 │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐         │
-│  │  12          │  │  8           │  │  5           │         │
-│  │  registered  │  │  online      │  │  chains      │         │
-│  └──────────────┘  └──────────────┘  └──────────────┘         │
+│  ┌──────────────┐  ┌──────────────┐                            │
+│  │  12          │  │  5           │                            │
+│  │  registered  │  │  chains      │                            │
+│  └──────────────┘  └──────────────┘                            │
 │                                                                 │
-│  ● SentinAI #4521   Thanos L2 · ethrex    8 services           │
-│  ● SentinAI #4522   OP Mainnet · geth     6 services           │
-│  ○ SentinAI #4523   Base · reth           offline              │
-│  ○ SentinAI #4524   Arbitrum · nethermind offline              │
+│  SentinAI #4521   Thanos L2 · ethrex    8 services              │
+│  SentinAI #4522   OP Mainnet · geth     6 services              │
+│  SentinAI #4523   Base · reth           4 services              │
+│  SentinAI #4524   Arbitrum · nethermind 3 services              │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+**Phase 1 liveness:** No live health check per instance. Online/offline status dot is **not shown** in Phase 1 — all registered instances are displayed uniformly. Global stats show only "registered" and "chains" counts (no "online" count). Liveness polling per instance is Phase 2.
+
+**`InstanceCard.tsx`** renders: `name`, `chainId` (from `agentURI`), `nodeClient`, `capabilities.length` as service count. It does **not** display individual capability names — only the count.
 
 ### This Instance Tab
 
@@ -103,6 +111,10 @@ MODIFIED:
 │  Clicking a service card → shows endpoint URL + sample response│
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+**Cross-origin data source:** The website (Vercel) fetches `GET {NEXT_PUBLIC_OPERATOR_ENDPOINT}/api/marketplace/catalog`. The operator configures `NEXT_PUBLIC_OPERATOR_ENDPOINT` in Vercel settings (e.g., `https://sentinai.operator.xyz`). If not set, the tab shows: `"Set NEXT_PUBLIC_OPERATOR_ENDPOINT to your SentinAI instance URL to display services."` The dashboard app allows CORS from any origin for `/api/marketplace/catalog` only (read-only, public data). `/api/marketplace/stats` does NOT need CORS (internal use only).
+
+**ERC-8004 / registry unreachable:** If the L1 RPC call fails or returns no logs, `RegistryBrowser.tsx` shows 0 instances with no error message — just an empty list. No retry button in Phase 1.
 
 ### Connect Guide Tab
 
@@ -134,7 +146,7 @@ Static content — no API calls needed:
 `/marketplace` in the dashboard app (`src/app/`)
 
 ### Navigation
-Add "MARKETPLACE" to the existing top bar — same style as other nav items. Red underline when active.
+Add "MARKETPLACE" to the existing top bar alongside the existing nav items. "DASHBOARD" (or a home link) must also be present so users can return from `/marketplace`. Red underline on the active link. Returning to dashboard = navigating to `/`.
 
 ### Layout
 
@@ -160,7 +172,7 @@ Add "MARKETPLACE" to the existing top bar — same style as other nav items. Red
 │  └─────────────────────────┘  └─────────────────────────────┘  │
 │                                                                 │
 │  RECENT SALES                                                  │
-│  DeFi #21 · txpool · 0.1 TON · 2m ago                         │
+│  DeFi #21 · txpool · 0.1 TON · 2m ago  (relative time)        │
 │  MEV #44  · metrics · 0.05 TON · 5m ago                       │
 │  Bridge #07 · eoa · 0.2 TON · 12m ago                         │
 └─────────────────────────────────────────────────────────────────┘
@@ -174,8 +186,8 @@ Add "MARKETPLACE" to the existing top bar — same style as other nav items. Red
 │                                                                 │
 │  Required env vars:                                            │
 │  MARKETPLACE_ENABLED=true                                      │
-│  MARKETPLACE_WALLET_KEY=0x...                                  │
-│  MARKETPLACE_TON_ADDRESS=0x...                                 │
+│  MARKETPLACE_WALLET_KEY=0x...  (private key for ERC-8004 reg)  │
+│  MARKETPLACE_RECEIVER_ADDRESS=0x...  (Ethereum addr for TON ERC-20) │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -188,28 +200,35 @@ Returns aggregated stats for the dashboard page. Reads from existing marketplace
 ```typescript
 interface MarketplaceStats {
   enabled: boolean;               // Maps to STATUS: true → "ACTIVE", false → "DISABLED"
-  totalEarnedThisMonth: string;   // TON in wei string (gross amount received from all buyers)
-  totalCallsToday: number;
+  totalEarnedThisMonth: string;   // TON in wei string (gross amount received from all buyers); UI divides by 10^18 to display
+  totalCallsToday: number;        // Past 24 hours UTC
   activeBuyerCount: number;
   services: Array<{
-    key: string;                  // Internal ServiceKey (e.g. "scaling_history")
-    priceWei: string;
-    callsToday: number;
+    key: string;                  // Underscore ServiceKey as-is (e.g. "scaling_history") — UI converts to kebab for display
+    priceWei: string;             // UI displays as TON: divide by 10^18
+    callsToday: number;           // Past 24h UTC
   }>;
+  // Note: the route does NOT convert services[].key — the UI calls key.replaceAll('_', '-') for display
   topBuyers: Array<{
     agentId: string;              // Ethereum address (0x...) of the paying agent
-    spentThisMonth: string;       // TON in wei string (gross amount paid by this buyer)
+    spentThisMonth: string;       // TON in wei string (gross amount paid by this buyer); UI divides by 10^18
   }>;
   recentSales: Array<{
     agentId: string;              // Ethereum address (0x...) of the paying agent
     service: string;              // kebab-case route key (e.g. "scaling-history")
     amountWei: string;
-    timestamp: string;            // ISO 8601
+    timestamp: string;            // ISO 8601; UI renders as relative time ("2m ago") via Date.now() diff
   }>;
 }
 ```
 
-**When disabled:** returns `{ enabled: false }` — dashboard shows the disabled banner.
+**HTTP status:** always returns `200 OK`. The `enabled` field signals state; no 4xx/5xx used for disabled/no-data states.
+
+**When disabled:** returns all fields as zero/empty with `enabled: false`:
+```json
+{ "enabled": false, "totalEarnedThisMonth": "0", "totalCallsToday": 0, "activeBuyerCount": 0, "services": [], "topBuyers": [], "recentSales": [] }
+```
+Dashboard shows the disabled banner.
 
 **Phase 1 limitation:** All revenue and usage fields require a payment log store that is **not yet implemented**. Phase 1 returns hard-coded zeros:
 - `totalEarnedThisMonth: "0"`
@@ -227,12 +246,14 @@ When implemented, the payment log store records each verified x402 payment:
 
 ```typescript
 interface PaymentLogEntry {
-  agentId: string;      // from X-PAYMENT header (ERC-8004 NFT ID)
-  service: string;      // e.g. "txpool"
+  agentId: string;      // Ethereum address from X-PAYMENT header `from` field (EIP-3009 authorizer)
+  service: string;      // Internal ServiceKey with underscore (e.g. "scaling_history")
   amountWei: string;    // e.g. "100000000000000000" (0.1 TON)
   timestamp: string;    // ISO 8601
 }
 ```
+
+**Conversion responsibility:** `PaymentLogEntry.service` stores the raw underscore key. `GET /api/marketplace/stats` (the route, not the log store) converts to kebab-case before returning in `recentSales[].service`. The log store is never modified.
 
 `agentId` is stored as the **Ethereum address** from the `X-PAYMENT` header's `from` field (the EIP-3009 authorizer). For display, the dashboard truncates to `0xabcd...ef12` format. Full ERC-8004 NFT ID resolution (matching address → `#{nftId}`) is a Phase 2 enhancement requiring a registry lookup.
 
