@@ -12,6 +12,7 @@ import { ArbitrumPlugin } from './arbitrum';
 import { ZkL2GenericPlugin } from './zkl2-generic';
 import { L1EVMPlugin } from './l1-evm';
 import logger from '@/lib/logger';
+import { parseTopologyFromEnv } from '@/lib/client-profile';
 
 let activePlugin: ChainPlugin | null = null;
 
@@ -52,15 +53,36 @@ function resolvePluginFromEnv(): ChainPlugin {
 }
 
 /**
+ * Apply SENTINAI_COMPONENTS / SENTINAI_COMPONENT_DEPS topology overrides to a plugin.
+ * Returns the original plugin unchanged when no relevant env vars are set or on parse error.
+ * Never throws.
+ */
+function applyTopologyEnvOverrides(plugin: ChainPlugin): ChainPlugin {
+  const topology = parseTopologyFromEnv();
+
+  if (!topology) return plugin;
+  if (topology.components.length === 0) return plugin;
+
+  return {
+    ...plugin,
+    components: topology.components,
+    dependencyGraph: Object.keys(topology.dependencyGraph).length > 0
+      ? topology.dependencyGraph
+      : plugin.dependencyGraph,
+  };
+}
+
+/**
  * Get the currently active chain plugin.
  * Auto-loads from CHAIN_TYPE if no plugin has been registered.
+ * Applies SENTINAI_COMPONENTS / SENTINAI_COMPONENT_DEPS topology overrides on each call.
  */
 export function getChainPlugin(): ChainPlugin {
   if (!activePlugin) {
     activePlugin = resolvePluginFromEnv();
     logger.info(`[ChainRegistry] Auto-loaded default: ${activePlugin.displayName}`);
   }
-  return activePlugin;
+  return applyTopologyEnvOverrides(activePlugin);
 }
 
 /**

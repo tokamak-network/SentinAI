@@ -128,6 +128,27 @@ vi.mock('@/lib/goal-manager', () => ({
   }),
 }));
 
+vi.mock('@/lib/client-version-tracker', () => ({
+  checkAndTrackClientVersion: vi.fn().mockResolvedValue({ changed: false, currentVersion: 'Geth/v1.13.0', previousVersion: 'Geth/v1.13.0' }),
+}));
+
+vi.mock('@/core/redis', () => ({
+  getCoreRedis: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock('@/lib/client-detector', () => ({
+  detectExecutionClient: vi.fn().mockResolvedValue({ family: 'geth', version: 'Geth/v1.13.0' }),
+}));
+
+vi.mock('@/lib/l1-node-metrics', () => ({
+  collectL1NodeMetrics: vi.fn().mockResolvedValue({
+    blockHeight: 2000,
+    blockInterval: 12.0,
+    txPoolPending: 5,
+    baseFee: BigInt(50_000_000_000),
+  }),
+}));
+
 // Mock global fetch for txpool_status
 const mockFetch = vi.fn().mockResolvedValue({
   json: () => Promise.resolve({ result: { pending: '0xa' } }), // 10 pending
@@ -143,6 +164,9 @@ import { analyzeLogChunk } from '@/lib/ai-analyzer';
 import * as failoverModule from '@/lib/l1-rpc-failover';
 import { tickGoalManager, dispatchTopGoal } from '@/lib/goal-manager';
 import { recordUsage } from '@/lib/usage-tracker';
+import { checkAndTrackClientVersion } from '@/lib/client-version-tracker';
+import { detectExecutionClient } from '@/lib/client-detector';
+import { resetChainRegistry } from '@/chains/registry';
 
 describe('agent-loop', () => {
   beforeEach(async () => {
@@ -507,6 +531,112 @@ describe('agent-loop', () => {
       expect(result.metrics?.l2BlockHeight).toBe(1000);
       expect(recordUsage).toHaveBeenCalledTimes(1);
     });
+
+    it('uses parity parser when SENTINAI_OVERRIDE_TXPOOL_PARSER=parity is set', async () => {
+      process.env.SENTINAI_OVERRIDE_TXPOOL_METHOD = 'parity_pendingTransactions';
+      process.env.SENTINAI_OVERRIDE_TXPOOL_PARSER = 'parity';
+
+      // parity returns an array — mock fetch to return an array of 5 items
+      vi.mocked(mockFetch).mockResolvedValueOnce({
+        json: () => Promise.resolve({ result: [1, 2, 3, 4, 5] }),
+      } as never);
+
+      const { pushMetric } = await import('@/lib/metrics-store');
+      await runAgentCycle();
+
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.txPoolPending).toBe(5);
+
+      delete process.env.SENTINAI_OVERRIDE_TXPOOL_METHOD;
+      delete process.env.SENTINAI_OVERRIDE_TXPOOL_PARSER;
+    });
+
+    it('falls back to block.transactions.length when txPool RPC call throws', async () => {
+      // geth profile supports txPool, so it will attempt a fetch call
+      process.env.SENTINAI_CLIENT_FAMILY = 'geth';
+
+      // Simulate a network error / timeout on the txpool RPC call
+      vi.mocked(mockFetch).mockRejectedValueOnce(new Error('network error: connection refused'));
+
+      const { pushMetric } = await import('@/lib/metrics-store');
+      const result = await runAgentCycle();
+
+      // Cycle should complete successfully despite the txPool fetch failure
+      expect(result.phase).toBe('complete');
+
+      // txPoolPending should fall back to block.transactions.length (2 items: ['0x1', '0x2'])
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.txPoolPending).toBe(2);
+
+      delete process.env.SENTINAI_CLIENT_FAMILY;
+    });
+
+    it('falls back to block.transactions.length when txPool method is null', async () => {
+      // Use an unknown family — resolveClientProfile falls back to a custom empty profile
+      // which has txPool: null, causing the agent-loop to use block.transactions.length
+      process.env.SENTINAI_CLIENT_FAMILY = 'unknown-no-txpool-family';
+
+      const { pushMetric } = await import('@/lib/metrics-store');
+      await runAgentCycle();
+
+      // block.transactions has 2 items from the mock: ['0x1', '0x2']
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.txPoolPending).toBe(2);
+
+      delete process.env.SENTINAI_CLIENT_FAMILY;
+    });
+  });
+
+  describe('custom metrics collection', () => {
+    afterEach(() => {
+      for (let i = 1; i <= 3; i++) {
+        delete process.env[`SENTINAI_CUSTOM_METRIC_${i}_NAME`];
+        delete process.env[`SENTINAI_CUSTOM_METRIC_${i}_METHOD`];
+        delete process.env[`SENTINAI_CUSTOM_METRIC_${i}_PATH`];
+      }
+    });
+
+    it('collects custom metric when SENTINAI_CUSTOM_METRIC_1_* is set', async () => {
+      process.env.SENTINAI_CUSTOM_METRIC_1_NAME = 'myMetric';
+      process.env.SENTINAI_CUSTOM_METRIC_1_METHOD = 'custom_getMetric';
+      process.env.SENTINAI_CUSTOM_METRIC_1_PATH = 'value';
+
+      // Default profile has txPool: null, so only custom metric triggers a fetch call
+      vi.mocked(mockFetch).mockResolvedValueOnce({
+        json: () => Promise.resolve({ result: { value: 42 } }),
+      } as never);
+
+      const { pushMetric } = await import('@/lib/metrics-store');
+      await runAgentCycle();
+
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.customMetrics?.myMetric).toBe(42);
+    });
+
+    it('excludes customMetrics from dataPoint when none configured', async () => {
+      // No SENTINAI_CUSTOM_METRIC_* env vars set
+      const { pushMetric } = await import('@/lib/metrics-store');
+      await runAgentCycle();
+
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.customMetrics).toBeUndefined();
+    });
+
+    it('silently skips custom metric when RPC call fails', async () => {
+      process.env.SENTINAI_CUSTOM_METRIC_1_NAME = 'failMetric';
+      process.env.SENTINAI_CUSTOM_METRIC_1_METHOD = 'bad_method';
+      process.env.SENTINAI_CUSTOM_METRIC_1_PATH = 'value';
+
+      // Default profile has txPool: null, so only custom metric triggers a fetch call
+      vi.mocked(mockFetch).mockRejectedValueOnce(new Error('RPC method not found'));
+
+      const { pushMetric } = await import('@/lib/metrics-store');
+      const result = await runAgentCycle();
+
+      expect(result.phase).toBe('complete');
+      const calledWith = vi.mocked(pushMetric).mock.calls[0]?.[0];
+      expect(calledWith?.customMetrics?.failMetric).toBeUndefined();
+    });
   });
 
   describe('isAgentRunning', () => {
@@ -519,6 +649,51 @@ describe('agent-loop', () => {
     it('should reset running state', () => {
       resetAgentState();
       expect(isAgentRunning()).toBe(false);
+    });
+  });
+
+  describe('client version tracking in L1 observe cycle', () => {
+    beforeEach(() => {
+      // Switch to L1-only mode
+      delete process.env.L2_RPC_URL;
+      process.env.L1_RPC_URL = 'http://mock-l1-rpc:8545';
+      process.env.CHAIN_TYPE = 'l1-evm';
+      // Reset singleton so CHAIN_TYPE is re-read
+      resetChainRegistry();
+    });
+
+    afterEach(() => {
+      delete process.env.L1_RPC_URL;
+      delete process.env.CHAIN_TYPE;
+      // Restore default plugin for other test suites
+      resetChainRegistry();
+    });
+
+    it('calls checkAndTrackClientVersion with detected version on L1 observe path', async () => {
+      vi.mocked(detectExecutionClient).mockResolvedValueOnce({ family: 'geth', version: 'Geth/v1.14.0' });
+      vi.mocked(checkAndTrackClientVersion).mockResolvedValueOnce({
+        changed: false,
+        currentVersion: 'Geth/v1.14.0',
+        previousVersion: 'Geth/v1.14.0',
+      });
+
+      await runAgentCycle();
+
+      expect(checkAndTrackClientVersion).toHaveBeenCalledWith(
+        null, // getCoreRedis() returns null by default
+        expect.stringContaining('inst:'),
+        'Geth/v1.14.0',
+      );
+    });
+
+    it('does not degrade the observe cycle when version tracking throws', async () => {
+      vi.mocked(detectExecutionClient).mockResolvedValueOnce({ family: 'geth', version: 'Geth/v1.14.0' });
+      vi.mocked(checkAndTrackClientVersion).mockRejectedValueOnce(new Error('Redis unavailable'));
+
+      const result = await runAgentCycle();
+
+      expect(result.phase).toBe('complete');
+      expect(result.metrics).not.toBeNull();
     });
   });
 });

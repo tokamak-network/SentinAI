@@ -9,5 +9,5 @@ export {
   resolveClientProfile,
 } from './env-overrides';
 export type { TopologyConfig } from './env-overrides';
-export { parseSyncStatus, getValueByPath } from './sync-parsers';
+export { parseSyncStatus, getValueByPath, parseTxPoolPendingCount } from './sync-parsers';
 export type { NormalizedSyncStatus } from './sync-parsers';

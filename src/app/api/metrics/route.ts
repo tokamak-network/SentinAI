@@ -26,6 +26,7 @@ import type { AnomalyResult } from '@/types/anomaly';
 import logger from '@/lib/logger';
 import { buildChainOptionalSections } from './payload';
 import { fetchZkstackMetricFields } from './zkstack';
+import { resolveClientProfile, parseTxPoolPendingCount } from '@/lib/client-profile';
 
 // Whether anomaly detection is enabled (default: enabled)
 const ANOMALY_DETECTION_ENABLED = process.env.ANOMALY_DETECTION_ENABLED !== 'false';
@@ -655,34 +656,42 @@ export async function GET(request: Request) {
         ]);
         const blockNumber = block.number;
 
-        // Get actual TxPool pending count via txpool_status RPC
+        // Get actual TxPool pending count via ClientProfile-resolved method
+        const clientProfile = resolveClientProfile();
         let txPoolPending = 0;
         let txPoolTimeoutId: ReturnType<typeof setTimeout> | null = null;
-        try {
-            const controller = new AbortController();
-            txPoolTimeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
-            const txPoolResponse = await fetch(rpcUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'txpool_status',
-                    params: [],
-                    id: 1,
-                }),
-                signal: controller.signal,
-            });
-            const txPoolData = await txPoolResponse.json();
-            if (txPoolData.result?.pending) {
-                txPoolPending = parseInt(txPoolData.result.pending, 16);
+        if (clientProfile.methods.txPool) {
+            try {
+                const controller = new AbortController();
+                txPoolTimeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+                const txPoolResponse = await fetch(rpcUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: '2.0',
+                        method: clientProfile.methods.txPool.method,
+                        params: clientProfile.methods.txPool.params ?? [],
+                        id: 1,
+                    }),
+                    signal: controller.signal,
+                });
+                const txPoolData = (await txPoolResponse.json()) as { result?: unknown };
+                txPoolPending = parseTxPoolPendingCount(
+                    txPoolData.result,
+                    clientProfile.parsers.txPool,
+                    clientProfile.methods.txPool.responsePath,
+                );
+            } catch {
+                // Fallback: use current block tx count if txpool method is unsupported
+                txPoolPending = block.transactions.length;
+            } finally {
+                if (txPoolTimeoutId) {
+                    clearTimeout(txPoolTimeoutId);
+                }
             }
-        } catch {
-            // Fallback: use current block tx count if txpool_status not supported
+        } else {
+            // ClientProfile has no txPool method configured — fall back to block tx count
             txPoolPending = block.transactions.length;
-        } finally {
-            if (txPoolTimeoutId) {
-                clearTimeout(txPoolTimeoutId);
-            }
         }
         const zkstackMetrics = await fetchZkstackMetricFields(plugin.chainType, rpcUrl, RPC_TIMEOUT_MS);
 
@@ -1002,6 +1011,9 @@ export async function GET(request: Request) {
             // === Anomaly Detection Fields ===
             anomalies: detectedAnomalies,
             activeAnomalyEventId,
+            // === Client Profile Fields ===
+            clientMode: clientProfile.clientFamily === 'unknown' ? 'partial' : 'full',
+            clientFamily: clientProfile.clientFamily,
         });
 
         // Disable caching

@@ -84,6 +84,8 @@ interface MetricData {
     postingLagSec: number;
     healthy: boolean;
   };
+  clientMode?: 'partial' | 'full';
+  clientFamily?: string;
 }
 
 interface L1FailoverStatus {
@@ -953,6 +955,15 @@ export default function Dashboard() {
           ))}
         </div>
       </div>
+
+      {/* ── Partial Mode Banner ── */}
+      {current?.clientMode === 'partial' && (
+        <div className="mx-4 mb-2 rounded border border-yellow-600/50 bg-yellow-900/20 px-4 py-2 text-sm text-yellow-400">
+          ⚠️ Client detection unavailable. Running in basic monitoring mode. Set{' '}
+          <code className="font-mono text-yellow-300">SENTINAI_CLIENT_FAMILY</code> to enable full
+          capabilities.
+        </div>
+      )}
 
       {/* ── Main 3-column ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '240px 1fr 280px', flex: 1, overflow: 'hidden', borderTop: '1px solid #D0D0D0' }}>

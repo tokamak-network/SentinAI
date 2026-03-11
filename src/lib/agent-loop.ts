@@ -34,6 +34,7 @@ import { buildRollbackPlan, runRollbackPlan } from '@/lib/rollback-runner';
 import { tickGoalManager, dispatchTopGoal } from '@/lib/goal-manager';
 import { checkAndTrackClientVersion } from '@/lib/client-version-tracker';
 import { detectExecutionClient } from '@/lib/client-detector';
+import { resolveClientProfile, parseTxPoolPendingCount, getValueByPath } from '@/lib/client-profile';
 import { collectL1NodeMetrics } from '@/lib/l1-node-metrics';
 import { getCoreRedis } from '@/core/redis';
 import { DEFAULT_SCALING_CONFIG, type TargetVcpu, type TargetMemoryGiB, type ScalingDecision } from '@/types/scaling';
@@ -190,6 +191,19 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
 
     const deploymentType = (process.env.L1_DEPLOYMENT_TYPE ?? 'external') as 'k8s' | 'docker' | 'external';
     const detectedClient = await detectExecutionClient({ rpcUrl: l1Url });
+
+    // Non-blocking: track L1 client version changes, invalidate capabilities cache on upgrade
+    try {
+      const instanceId = process.env.SENTINAI_INSTANCE_ID ?? 'default';
+      const keyPrefix = `inst:${instanceId}`;
+      const versionCheck = await checkAndTrackClientVersion(getCoreRedis(), keyPrefix, detectedClient.version);
+      if (versionCheck.changed) {
+        logger.warn('[AgentLoop] L1 client version changed — capabilities cache invalidated');
+      }
+    } catch (err) {
+      logger.warn({ err }, '[AgentLoop] L1 client version check failed');
+    }
+
     const l1Metrics = await collectL1NodeMetrics(l1Url, detectedClient, deploymentType);
 
     // Try to get CPU usage from K8s if available
@@ -360,28 +374,36 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     }
   }
 
-  // TxPool pending count (with timeout)
+  // TxPool pending count — use ClientProfile-configured method and parser
+  const clientProfile = resolveClientProfile();
   let txPoolPending = 0;
-  try {
+  if (clientProfile.methods.txPool) {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
-    const txPoolResponse = await fetch(rpcUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        jsonrpc: '2.0',
-        method: 'txpool_status',
-        params: [],
-        id: 1,
-      }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-    const txPoolData = await txPoolResponse.json();
-    if (txPoolData.result?.pending) {
-      txPoolPending = parseInt(txPoolData.result.pending, 16);
+    try {
+      const txPoolResponse = await fetch(rpcUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: clientProfile.methods.txPool.method,
+          params: clientProfile.methods.txPool.params ?? [],
+          id: 1,
+        }),
+        signal: controller.signal,
+      });
+      const txPoolData = (await txPoolResponse.json()) as { result?: unknown };
+      txPoolPending = parseTxPoolPendingCount(
+        txPoolData.result,
+        clientProfile.parsers.txPool,
+        clientProfile.methods.txPool.responsePath,
+      );
+    } catch {
+      txPoolPending = block.transactions.length;
+    } finally {
+      clearTimeout(timeoutId);
     }
-  } catch {
+  } else {
     txPoolPending = block.transactions.length;
   }
 
@@ -418,6 +440,35 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
   }
   await getStore().setLastBlock(String(blockNumber), String(now));
 
+  // Collect custom metrics from ClientProfile — run all fetches in parallel
+  const customMetrics: Record<string, number> = {};
+  const cmResults = await Promise.allSettled(
+    clientProfile.customMetrics.map(async (cm) => {
+      const cmController = new AbortController();
+      const cmTimer = setTimeout(() => cmController.abort(), RPC_TIMEOUT_MS);
+      try {
+        const cmResponse = await fetch(rpcUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: cm.method, params: cm.params ?? [], id: 1 }),
+          signal: cmController.signal,
+        });
+        const cmData = (await cmResponse.json()) as { result?: unknown };
+        const raw = cm.responsePath ? getValueByPath(cmData.result, cm.responsePath) : cmData.result;
+        const value = typeof raw === 'number' ? raw : parseFloat(String(raw));
+        if (raw === null || raw === undefined || !Number.isFinite(value)) return;
+        return { name: cm.name, value };
+      } finally {
+        clearTimeout(cmTimer);
+      }
+    }),
+  );
+  for (const result of cmResults) {
+    if (result.status === 'fulfilled' && result.value) {
+      customMetrics[result.value.name] = result.value.value;
+    }
+  }
+
   const dataPoint: MetricDataPoint = {
     timestamp: new Date().toISOString(),
     cpuUsage,
@@ -426,6 +477,7 @@ async function collectMetrics(): Promise<CollectedMetrics | null> {
     blockHeight: Number(blockNumber),
     blockInterval,
     currentVcpu,
+    ...(Object.keys(customMetrics).length > 0 ? { customMetrics } : {}),
   };
 
   // Push to metrics store and record usage (non-blocking).

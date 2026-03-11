@@ -104,6 +104,47 @@ function parseCustom(
 }
 
 /**
+ * Parse a txpool RPC response into a pending transaction count.
+ * Returns 0 for unsupported clients (parserType null).
+ */
+export function parseTxPoolPendingCount(
+  result: unknown,
+  parserType: 'txpool' | 'parity' | 'custom' | null,
+  countPath?: string,
+): number {
+  try {
+    if (parserType === null) return 0;
+
+    if (parserType === 'txpool') {
+      if (result === null || result === undefined || typeof result !== 'object') return 0;
+      const obj = result as Record<string, unknown>;
+      const pending = obj.pending;
+      if (pending === undefined || pending === null) return 0;
+      const n = typeof pending === 'string' ? Number.parseInt(pending, 16) : Number(pending);
+      return Number.isFinite(n) && !Number.isNaN(n) ? n : 0;
+    }
+
+    if (parserType === 'parity') {
+      if (Array.isArray(result)) return result.length;
+      if (result !== null && typeof result === 'object') return Object.keys(result).length;
+      return 0;
+    }
+
+    if (parserType === 'custom') {
+      if (!countPath) return 0;
+      const value = getValueByPath(result, countPath);
+      if (value === undefined || value === null) return 0;
+      const n = Number(value);
+      return Number.isFinite(n) && !Number.isNaN(n) ? n : 0;
+    }
+
+    return 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
  * Normalize an eth_syncing raw response into a standard SentinAI format.
  * Supports 5 parser types: standard, nethermind, op-geth, nitro, custom.
  */
