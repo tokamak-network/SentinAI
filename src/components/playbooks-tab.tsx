@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import type { EvolvedPlaybook, OperationRecord } from '@/core/playbook-system/types';
 
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH || '';
+
 // ─── Label Maps ─────────────────────────────────────────────────────────────
 
 const METRIC_LABEL: Record<string, string> = {
@@ -599,9 +601,9 @@ export function PlaybooksTab() {
   const fetchAll = useCallback(async () => {
     try {
       const [statusRes, playbooksRes, ledgerRes] = await Promise.all([
-        fetch('/api/playbook-evolution?action=status'),
-        fetch('/api/playbook-evolution?action=playbooks'),
-        fetch('/api/playbook-evolution?action=ledger&limit=20'),
+        fetch(`${BASE_PATH}/api/playbook-evolution?action=status`),
+        fetch(`${BASE_PATH}/api/playbook-evolution?action=playbooks`),
+        fetch(`${BASE_PATH}/api/playbook-evolution?action=ledger&limit=20`),
       ]);
 
       if (!statusRes.ok || !playbooksRes.ok || !ledgerRes.ok) {
@@ -633,7 +635,7 @@ export function PlaybooksTab() {
     async (id: string, action: 'approve' | 'promote' | 'suspend') => {
       try {
         const res = await fetch(
-          `/api/playbook-evolution?action=${action}&id=${encodeURIComponent(id)}`,
+          `${BASE_PATH}/api/playbook-evolution?action=${action}&id=${encodeURIComponent(id)}`,
           { method: 'POST' }
         );
         if (!res.ok) throw new Error(`Action ${action} failed`);
@@ -648,7 +650,7 @@ export function PlaybooksTab() {
   const handleRunNow = useCallback(async () => {
     setRunning(true);
     try {
-      const res = await fetch('/api/playbook-evolution?action=mine', { method: 'POST' });
+      const res = await fetch(`${BASE_PATH}/api/playbook-evolution?action=mine`, { method: 'POST' });
       if (!res.ok) throw new Error('Mine operation failed');
       await fetchAll();
     } catch (err) {
