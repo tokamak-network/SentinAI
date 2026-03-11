@@ -3,17 +3,6 @@ import { resolveFeatures } from '@/lib/resolved-features';
 import type { ResolvedFeatures } from '@/lib/resolved-features';
 
 // Minimal mocks matching the actual types
-const makeChainCaps = (overrides = {}) => ({
-  l1Failover: false,
-  eoaBalanceMonitoring: false,
-  disputeGameMonitoring: false,
-  proofMonitoring: false,
-  settlementMonitoring: false,
-  autonomousIntents: [],
-  autonomousActions: [],
-  ...overrides,
-});
-
 const makeDetected = (overrides = {}) => ({
   capabilities: ['block-production'] as any[],
   supportsTxPool: false,
@@ -47,7 +36,6 @@ const makeProfile = (overrides = {}) => ({
 describe('resolveFeatures', () => {
   it('txpoolMonitoring: true only when both stack and runtime support it', () => {
     const result = resolveFeatures(
-      makeChainCaps(),
       makeDetected({ supportsTxPool: true }),
       makeProfile({ capabilities: { supportsTxPool: true, supportsPeerCount: false, supportsL2SyncStatus: false, supportsDebugNamespace: false } }),
     );
@@ -56,7 +44,6 @@ describe('resolveFeatures', () => {
 
   it('txpoolMonitoring: false when runtime does not detect txpool', () => {
     const result = resolveFeatures(
-      makeChainCaps(),
       makeDetected({ supportsTxPool: false }),
       makeProfile(),
     );
@@ -65,7 +52,6 @@ describe('resolveFeatures', () => {
 
   it('txpoolMonitoring: false when profile says no txpool support', () => {
     const result = resolveFeatures(
-      makeChainCaps(),
       makeDetected({ supportsTxPool: true }),
       makeProfile({ capabilities: { supportsTxPool: false, supportsPeerCount: true, supportsL2SyncStatus: false, supportsDebugNamespace: false } }),
     );
@@ -73,15 +59,14 @@ describe('resolveFeatures', () => {
   });
 
   it('peerMonitoring: reflects detected.supportsPeerCount', () => {
-    const yes = resolveFeatures(makeChainCaps(), makeDetected({ supportsPeerCount: true }), makeProfile());
-    const no = resolveFeatures(makeChainCaps(), makeDetected({ supportsPeerCount: false }), makeProfile());
+    const yes = resolveFeatures(makeDetected({ supportsPeerCount: true }), makeProfile());
+    const no = resolveFeatures(makeDetected({ supportsPeerCount: false }), makeProfile());
     expect(yes.peerMonitoring).toBe(true);
     expect(no.peerMonitoring).toBe(false);
   });
 
   it('l2SyncMonitoring: reflects profile.capabilities.supportsL2SyncStatus', () => {
     const yes = resolveFeatures(
-      makeChainCaps(),
       makeDetected(),
       makeProfile({ capabilities: { supportsTxPool: false, supportsPeerCount: false, supportsL2SyncStatus: true, supportsDebugNamespace: false } }),
     );
@@ -90,7 +75,6 @@ describe('resolveFeatures', () => {
 
   it('customMetricsCount: reflects profile.customMetrics.length', () => {
     const result = resolveFeatures(
-      makeChainCaps(),
       makeDetected(),
       makeProfile({ customMetrics: [{ name: 'a', displayName: 'A', method: 'm', responsePath: 'r' }] }),
     );
@@ -99,7 +83,6 @@ describe('resolveFeatures', () => {
 
   it('partialSupport: true when clientFamily is unknown', () => {
     const result = resolveFeatures(
-      makeChainCaps(),
       makeDetected(),
       makeProfile({ clientFamily: 'unknown' }),
     );
@@ -107,7 +90,7 @@ describe('resolveFeatures', () => {
   });
 
   it('partialSupport: false for known clients', () => {
-    const result = resolveFeatures(makeChainCaps(), makeDetected(), makeProfile({ clientFamily: 'geth' }));
+    const result = resolveFeatures(makeDetected(), makeProfile({ clientFamily: 'geth' }));
     expect(result.partialSupport).toBe(false);
   });
 });

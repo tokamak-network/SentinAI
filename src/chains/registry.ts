@@ -63,12 +63,9 @@ function applyTopologyEnvOverrides(plugin: ChainPlugin): ChainPlugin {
   if (!topology) return plugin;
   if (topology.components.length === 0) return plugin;
 
-  const existingByName = new Map(plugin.components.map((c) => [c, c]));
-  const overriddenComponents = topology.components.map((name) => existingByName.get(name) ?? name);
-
   return {
     ...plugin,
-    components: overriddenComponents,
+    components: topology.components,
     dependencyGraph: Object.keys(topology.dependencyGraph).length > 0
       ? topology.dependencyGraph
       : plugin.dependencyGraph,

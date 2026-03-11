@@ -1,4 +1,3 @@
-import type { ChainCapabilities } from '@/chains/types';
 import type { CapabilityMapping } from '@/lib/capability-mapper';
 import type { ClientProfile } from '@/lib/client-profile/types';
 
@@ -16,7 +15,6 @@ export interface ResolvedFeatures {
 }
 
 export function resolveFeatures(
-  _chainCapabilities: ChainCapabilities,
   detected: CapabilityMapping,
   profile: ClientProfile,
 ): ResolvedFeatures {

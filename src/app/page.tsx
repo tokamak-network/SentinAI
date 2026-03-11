@@ -938,7 +938,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Partial Mode Banner ── */}
-      {metrics?.clientMode === 'partial' && (
+      {current?.clientMode === 'partial' && (
         <div className="mx-4 mb-2 rounded border border-yellow-600/50 bg-yellow-900/20 px-4 py-2 text-sm text-yellow-400">
           ⚠️ Client detection unavailable. Running in basic monitoring mode. Set{' '}
           <code className="font-mono text-yellow-300">SENTINAI_CLIENT_FAMILY</code> to enable full
