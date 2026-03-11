@@ -18,7 +18,7 @@ export default function MarkdownRenderer({ content, skipFirstH1 = false }: Markd
     <div className="prose prose-slate max-w-none prose-base prose-headings:scroll-mt-20 prose-a:text-blue-600 hover:prose-a:text-blue-500 prose-code:text-xs prose-code:bg-slate-100 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-[''] prose-code:after:content-[''] prose-pre:bg-slate-900 prose-pre:text-slate-100 prose-p:leading-relaxed prose-li:leading-relaxed">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[[rehypeHighlight, { ignoreMissing: true }], rehypeRaw]}
+        rehypePlugins={[[rehypeHighlight, { ignoreMissing: true, detect: false }], rehypeRaw]}
         components={{
           h1: ({ children }) => {
             if (skipFirstH1 && !firstH1Skipped.current) {
@@ -68,13 +68,26 @@ export default function MarkdownRenderer({ content, skipFirstH1 = false }: Markd
             </a>
           ),
           pre: ({ children }) => {
-            // Intercept mermaid code blocks before they render as dark <pre>
             const child = Array.isArray(children) ? children[0] : children;
             const childClassName = (child as { props?: { className?: string } })?.props?.className ?? '';
+
+            // Mermaid: render as diagram
             if (childClassName.includes('language-mermaid')) {
               const chart = String((child as { props?: { children?: unknown } })?.props?.children ?? '').trim();
               return <MermaidBlock chart={chart} />;
             }
+
+            // No language specified: plain monospace block, light background
+            const hasLanguage = childClassName.includes('language-');
+            if (!hasLanguage) {
+              return (
+                <pre className="bg-slate-50 border border-slate-200 text-slate-700 rounded-lg p-4 overflow-x-auto my-6 text-sm font-mono leading-relaxed">
+                  {children}
+                </pre>
+              );
+            }
+
+            // Known language: dark syntax-highlighted block
             return (
               <pre className="bg-slate-900 text-slate-100 rounded-lg p-4 overflow-x-auto my-6">
                 {children}
