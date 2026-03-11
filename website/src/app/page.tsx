@@ -125,7 +125,7 @@ function Hero() {
       </div>
 
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: '48px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 60 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 60 }}>
           {/* Left: text */}
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* Badge */}
@@ -233,7 +233,7 @@ function Hero() {
           </div>
 
           {/* Right: dashboard miniature */}
-          <div style={{ flexShrink: 0 }} className="hidden lg:block">
+          <div style={{ flex: 1, minWidth: 0, maxWidth: 520 }} className="hidden lg:block">
             <HeroMiniature />
           </div>
         </div>
