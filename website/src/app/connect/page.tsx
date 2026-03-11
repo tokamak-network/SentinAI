@@ -231,6 +231,7 @@ function buildEnvLocal(cfg: BuildConfig, featureSnippets: string[] = [], deployT
     : rawUrl;
   const lines: string[] = [];
 
+  lines.push(`AGENT_V2=true`);
   if (cfg.networkName.trim()) lines.push(`NEXT_PUBLIC_NETWORK_NAME=${cfg.networkName.trim()}`);
   lines.push(`${primary}=${u}`);
   if (optional) lines.push(`${optional}=<optional-l1-rpc-url>`);
