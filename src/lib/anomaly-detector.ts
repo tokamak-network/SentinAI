@@ -399,7 +399,19 @@ export function detectAnomalies(
   );
   if (intervalAnomaly) anomalies.push(intervalAnomaly);
 
-  // 5. EOA Balance threshold detection (not Z-Score based)
+  // 5. Custom metrics Z-Score detection (from ClientProfile / chain plugins)
+  if (current.customMetrics) {
+    for (const [name, value] of Object.entries(current.customMetrics)) {
+      const customHistory = history
+        .map(p => p.customMetrics?.[name])
+        .filter((v): v is number => typeof v === 'number');
+      if (customHistory.length < MIN_HISTORY_POINTS) continue;
+      const anomaly = detectZScoreAnomaly(name, value, customHistory);
+      if (anomaly) anomalies.push(anomaly);
+    }
+  }
+
+  // 6. EOA Balance threshold detection (not Z-Score based)
   if (balances) {
     const batcherAnomaly = detectLowBalance(balances.batcherBalanceEth, 'batcherBalance');
     if (batcherAnomaly) anomalies.push(batcherAnomaly);

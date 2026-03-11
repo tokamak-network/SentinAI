@@ -538,7 +538,140 @@ describe('anomaly-detector', () => {
   });
 
   // ========================================================================
-  // Test Suite 7: Configuration
+  // Test Suite 7: Custom Metrics Z-Score Detection
+  // ========================================================================
+
+  describe('custom metrics Z-Score detection', () => {
+    it('detects anomaly in custom metric when value spikes', () => {
+      const normalValue = 100;
+      const now = Date.now();
+      const history: MetricDataPoint[] = Array.from({ length: 20 }, (_, i) => ({
+        timestamp: now - (20 - i) * 60000,
+        l1BlockNumber: 1000,
+        l1BlockTime: 12,
+        cpuUsage: 20,
+        txPoolPending: 100,
+        gasUsedRatio: 0.5,
+        blockHeight: 1000 + i,
+        blockInterval: 2.0,
+        customMetrics: { proofGenTime: normalValue + (i % 3) }, // slight variation
+      }));
+
+      const current: MetricDataPoint = {
+        timestamp: now,
+        l1BlockNumber: 1000,
+        l1BlockTime: 12,
+        cpuUsage: 20,
+        txPoolPending: 100,
+        gasUsedRatio: 0.5,
+        blockHeight: 1021,
+        blockInterval: 2.0,
+        customMetrics: { proofGenTime: 5000 }, // huge spike
+      };
+
+      // Sustained threshold for custom metrics uses DEFAULT_SUSTAINED_COUNT (3)
+      let result: ReturnType<typeof detectAnomalies> = [];
+      for (let i = 0; i < 3; i++) {
+        result = detectAnomalies(current, history);
+      }
+      const customAnomalies = result.filter(a => a.metric === 'proofGenTime');
+      expect(customAnomalies.length).toBeGreaterThan(0);
+    });
+
+    it('does not detect anomaly when custom metric is stable', () => {
+      const now = Date.now();
+      const history: MetricDataPoint[] = Array.from({ length: 20 }, (_, i) => ({
+        timestamp: now - (20 - i) * 60000,
+        l1BlockNumber: 1000,
+        l1BlockTime: 12,
+        cpuUsage: 20,
+        txPoolPending: 100,
+        gasUsedRatio: 0.5,
+        blockHeight: 1000 + i,
+        blockInterval: 2.0,
+        customMetrics: { stableMetric: 100 + (i % 5) },
+      }));
+
+      const current: MetricDataPoint = {
+        timestamp: now,
+        l1BlockNumber: 1000,
+        l1BlockTime: 12,
+        cpuUsage: 20,
+        txPoolPending: 100,
+        gasUsedRatio: 0.5,
+        blockHeight: 1021,
+        blockInterval: 2.0,
+        customMetrics: { stableMetric: 102 },
+      };
+
+      const result = detectAnomalies(current, history);
+      const customAnomalies = result.filter(a => a.metric === 'stableMetric');
+      expect(customAnomalies.length).toBe(0);
+    });
+
+    it('skips custom metric detection when customMetrics is undefined', () => {
+      const now = Date.now();
+      const history: MetricDataPoint[] = Array.from({ length: 20 }, (_, i) => ({
+        timestamp: now - (20 - i) * 60000,
+        l1BlockNumber: 1000,
+        l1BlockTime: 12,
+        cpuUsage: 20,
+        txPoolPending: 100,
+        gasUsedRatio: 0.5,
+        blockHeight: 1000 + i,
+        blockInterval: 2.0,
+      }));
+
+      const current: MetricDataPoint = {
+        timestamp: now,
+        l1BlockNumber: 1000,
+        l1BlockTime: 12,
+        cpuUsage: 20,
+        txPoolPending: 100,
+        gasUsedRatio: 0.5,
+        blockHeight: 1021,
+        blockInterval: 2.0,
+      };
+
+      expect(() => detectAnomalies(current, history)).not.toThrow();
+    });
+
+    it('skips custom metric if insufficient history points have that metric', () => {
+      const now = Date.now();
+      // Only 3 history points have the custom metric (< MIN_HISTORY_POINTS = 5)
+      const history: MetricDataPoint[] = Array.from({ length: 20 }, (_, i) => ({
+        timestamp: now - (20 - i) * 60000,
+        l1BlockNumber: 1000,
+        l1BlockTime: 12,
+        cpuUsage: 20,
+        txPoolPending: 100,
+        gasUsedRatio: 0.5,
+        blockHeight: 1000 + i,
+        blockInterval: 2.0,
+        // Only the last 3 points have the metric
+        ...(i >= 17 ? { customMetrics: { newMetric: 100 } } : {}),
+      }));
+
+      const current: MetricDataPoint = {
+        timestamp: now,
+        l1BlockNumber: 1000,
+        l1BlockTime: 12,
+        cpuUsage: 20,
+        txPoolPending: 100,
+        gasUsedRatio: 0.5,
+        blockHeight: 1021,
+        blockInterval: 2.0,
+        customMetrics: { newMetric: 9999 }, // extreme spike but insufficient history
+      };
+
+      const result = detectAnomalies(current, history);
+      const customAnomalies = result.filter(a => a.metric === 'newMetric');
+      expect(customAnomalies.length).toBe(0);
+    });
+  });
+
+  // ========================================================================
+  // Test Suite 8: Configuration
   // ========================================================================
 
   describe('Configuration', () => {
