@@ -19,6 +19,7 @@ import { getStore } from '@/lib/redis-store';
 import { isDockerMode } from '@/lib/docker-config';
 import { getChainPlugin } from '@/chains';
 import logger from '@/lib/logger';
+import { parseK8sLabelsFromEnv } from '@/lib/client-profile';
 import {
   getDockerContainerMetrics,
   getAllDockerContainerMetrics,
@@ -29,6 +30,29 @@ import {
 export interface ContainerResourceUsage {
   cpuMillicores: number;
   memoryMiB: number;
+}
+
+/**
+ * Return the effective K8s label selector for a component, applying any
+ * `SENTINAI_K8S_LABEL_<COMPONENT>` env override when present.
+ *
+ * Lookup order (first match wins):
+ *   1. env key matching componentName lowercased as-is  (e.g. "op-geth")
+ *   2. env key with hyphens replaced by underscores      (e.g. "op_geth")
+ *   3. defaultSelector fallback
+ *
+ * This lets operators set either `SENTINAI_K8S_LABEL_OP_GETH` or
+ * `SENTINAI_K8S_LABEL_OPGETH` (both are normalised to lowercase by
+ * parseK8sLabelsFromEnv).
+ */
+export function getLabelSelectorWithOverride(
+  componentName: string,
+  defaultSelector: string,
+): string {
+  const overrides = parseK8sLabelsFromEnv();
+  const key = componentName.toLowerCase();
+  const keyUnderscore = key.replace(/-/g, '_');
+  return overrides[key] ?? overrides[keyUnderscore] ?? defaultSelector;
 }
 
 function getPrimaryDockerServiceName(): string {

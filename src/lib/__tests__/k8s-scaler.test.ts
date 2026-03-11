@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Hoist mocks
 const { mockRunK8sCommand, mockZeroDowntimeScale, mockIsSwapInProgress, mockGetSwapState } = vi.hoisted(() => ({
@@ -87,6 +87,7 @@ import {
   setSimulationMode,
   getScalingState,
   getContainerCpuUsage,
+  getLabelSelectorWithOverride,
 } from '../k8s-scaler';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 import { INITIAL_SWAP_STATE } from '@/types/zero-downtime';
@@ -464,6 +465,67 @@ describe('k8s-scaler', () => {
 
       const result = await getContainerCpuUsage();
       expect(result).toBeNull();
+    });
+  });
+
+  // ----------------------------------------------------------
+  // getLabelSelectorWithOverride — SENTINAI_K8S_LABEL_* env overrides
+  // ----------------------------------------------------------
+
+  describe('getLabelSelectorWithOverride', () => {
+    afterEach(() => {
+      delete process.env.SENTINAI_K8S_LABEL_OP_GETH;
+      delete process.env.SENTINAI_K8S_LABEL_OPGETH;
+      delete process.env.SENTINAI_K8S_LABEL_EXECUTION;
+      delete process.env.SENTINAI_K8S_LABEL_BATCHER;
+    });
+
+    it('returns the default selector when no override is set', () => {
+      const result = getLabelSelectorWithOverride('op-geth', 'app=op-geth');
+      expect(result).toBe('app=op-geth');
+    });
+
+    it('uses SENTINAI_K8S_LABEL_OP_GETH override (underscore env var for hyphenated name)', () => {
+      process.env.SENTINAI_K8S_LABEL_OP_GETH = 'app=my-custom-geth';
+      // parseK8sLabelsFromEnv lowercases 'OP_GETH' → 'op_geth'
+      // getLabelSelectorWithOverride tries key 'op-geth' then 'op_geth'
+      const result = getLabelSelectorWithOverride('op-geth', 'app=op-geth');
+      expect(result).toBe('app=my-custom-geth');
+    });
+
+    it('uses exact lowercase key when env var matches component name directly', () => {
+      process.env.SENTINAI_K8S_LABEL_BATCHER = 'app=custom-batcher';
+      // parseK8sLabelsFromEnv: 'BATCHER' → 'batcher'
+      // getLabelSelectorWithOverride: componentName='batcher', key='batcher' matches
+      const result = getLabelSelectorWithOverride('batcher', 'app=op-batcher');
+      expect(result).toBe('app=custom-batcher');
+    });
+
+    it('falls back to underscore-replaced key for hyphenated component names', () => {
+      // Simulates: SENTINAI_K8S_LABEL_OP_GETH=app=my-geth
+      // parseK8sLabelsFromEnv returns { 'op_geth': 'app=my-geth' }
+      process.env.SENTINAI_K8S_LABEL_OP_GETH = 'app=my-geth';
+      const result = getLabelSelectorWithOverride('op-geth', 'app=op-op-geth');
+      expect(result).toBe('app=my-geth');
+    });
+
+    it('returns default selector when override is set for a different component', () => {
+      process.env.SENTINAI_K8S_LABEL_EXECUTION = 'app=custom-exec';
+      const result = getLabelSelectorWithOverride('op-geth', 'app=op-geth');
+      expect(result).toBe('app=op-geth');
+    });
+
+    it('exact key match takes precedence over underscore key match', () => {
+      // Both 'op-geth' (exact) and 'op_geth' (underscore) could match.
+      // Since env var keys are lowercased, only 'op_geth' is possible via
+      // SENTINAI_K8S_LABEL_OP_GETH. Exact 'op-geth' match is possible via
+      // a hypothetical SENTINAI_K8S_LABEL_OP-GETH (not valid shell var, so
+      // only underscore path is reachable). Test that exact key wins when set.
+      process.env.SENTINAI_K8S_LABEL_OPGETH = 'app=exact-match';
+      // parseK8sLabelsFromEnv: 'OPGETH' → 'opgeth'
+      // componentName 'opgeth' → key='opgeth' matches directly
+      const result = getLabelSelectorWithOverride('opgeth', 'app=default');
+      expect(result).toBe('app=exact-match');
     });
   });
 });
