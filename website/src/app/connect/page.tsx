@@ -221,9 +221,12 @@ interface BuildConfig {
   gatewayApiKey: string;
 }
 
-function buildEnvLocal(cfg: BuildConfig, featureSnippets: string[] = []): string {
+function buildEnvLocal(cfg: BuildConfig, featureSnippets: string[] = [], deployTarget?: DeployTarget | null): string {
   const { primary, optional } = ENV_MAP[cfg.nodeType];
-  const u = cfg.url.trim() || "<your-url>";
+  const rawUrl = cfg.url.trim() || "<your-url>";
+  const u = deployTarget === "local"
+    ? rawUrl.replace(/localhost/g, "host.docker.internal").replace(/127\.0\.0\.1/g, "host.docker.internal")
+    : rawUrl;
   const lines: string[] = [];
 
   if (cfg.networkName.trim()) lines.push(`NEXT_PUBLIC_NETWORK_NAME=${cfg.networkName.trim()}`);
@@ -457,7 +460,7 @@ export default function ConnectPage() {
         (!f.deployTargets || !deployTarget || f.deployTargets.includes(deployTarget))
       )
       .map(f => f.snippet);
-    return buildEnvLocal(buildCfg, featureSnippets);
+    return buildEnvLocal(buildCfg, featureSnippets, deployTarget);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeType, url, authToken, networkName, aiProvider, aiApiKey, awsClusterName, alertWebhookUrl, gatewayUrl, gatewayApiKey, deployTarget, enabledFeatures]);
 
@@ -778,7 +781,7 @@ export default function ConnectPage() {
                   <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
                     Sent to server only during connection test.
                   </p>
-                  {isLocalUrl && (
+                  {isLocalUrl && deployTarget !== "local" && (
                     <div style={{ background: "#FFF0F0", border: `1px solid #E08080`, padding: "8px 10px", marginTop: 6 }}>
                       <p style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: "#8B0000", margin: "0 0 2px" }}>
                         ✕ LOCAL URL NOT SUPPORTED
@@ -786,6 +789,17 @@ export default function ConnectPage() {
                       <p style={{ fontFamily: FONT, fontSize: 9, color: "#6B0000", margin: 0 }}>
                         SentinAI runs inside Docker and cannot reach <code style={{ background: "#FFD0D0", padding: "0 3px" }}>localhost</code> on your machine.
                         Use a network-accessible IP or hostname instead.
+                      </p>
+                    </div>
+                  )}
+                  {isLocalUrl && deployTarget === "local" && (
+                    <div style={{ background: "#F0FFF0", border: `1px solid #80C080`, padding: "8px 10px", marginTop: 6 }}>
+                      <p style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, color: "#005500", margin: "0 0 2px" }}>
+                        ✓ LOCAL URL DETECTED
+                      </p>
+                      <p style={{ fontFamily: FONT, fontSize: 9, color: "#005500", margin: 0 }}>
+                        <code style={{ background: "#C8E8C8", padding: "0 3px" }}>localhost</code> will be written as{" "}
+                        <code style={{ background: "#C8E8C8", padding: "0 3px" }}>host.docker.internal</code> in the generated config.
                       </p>
                     </div>
                   )}
