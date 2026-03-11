@@ -666,7 +666,7 @@ export default function ConnectPage() {
                     label: "Local / Try It Out",
                     sub: "Quick local eval · no K8s · localhost supported",
                     badge: "QUICKSTART",
-                    badgeColor: "#006600",
+                    badgeColor: "#00796B",
                   },
                   {
                     value: "eks" as DeployTarget,
@@ -1145,14 +1145,11 @@ export default function ConnectPage() {
                 {isLocal && (
                   <DeployStep number={2} title="EDIT DOCKER-COMPOSE.YML" font={FONT} colors={C}>
                     <CodeBlock
-                      title="docker-compose.yml diff"
+                      title="docker-compose.yml — add to sentinai service"
                       content={
-                        "# Under the sentinai: service block, add:\n" +
-                        "  sentinai:\n" +
-                        "    image: ghcr.io/tokamak-network/sentinai:latest\n" +
-                        "+   extra_hosts:\n" +
-                        '+     - "host.docker.internal:host-gateway"\n' +
-                        "    env_file: .env.local"
+                        "# Paste inside the sentinai: service block:\n" +
+                        "extra_hosts:\n" +
+                        '  - "host.docker.internal:host-gateway"'
                       }
                       copyId="compose-diff"
                       copiedId={copiedId}
