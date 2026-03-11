@@ -4,42 +4,75 @@ System architecture and component interactions for autonomous L2/Rollup operatio
 
 ---
 
-## High-Level Data Flow
+## Agent v2 — Event-Driven Architecture
+
+SentinAI uses a role-based, event-driven agent architecture (`src/core/agent-orchestrator.ts`). Instead of a serial 60s loop, specialized agents run on independent intervals and communicate via an internal event bus (`agent-event-bus.ts`).
+
+**Critical path**: `anomaly-detected` → ExecutorAgent → K8s patch ≈ **2s** (vs. 10s+ serial pipeline)
 
 ```mermaid
 flowchart TD
-    L1["L1 RPC (viem)"]
-    L2["L2 RPC (viem)"]
-    K8s["K8s API (EKS)"]
-
-    subgraph AgentLoop["Agent Loop — 60s cycle (agent-loop.ts)"]
-        Observe["1. Observe\nCollect L1/L2 metrics from RPC"]
-        Detect["2. Detect\nRun 4-layer anomaly pipeline"]
-        Decide["3. Decide\nCalculate scaling score + predictive override"]
-        Act["4. Act\nAuto-execute if conditions met"]
-        Observe --> Detect --> Decide --> Act
+    subgraph Sources["Data Sources"]
+        L1["L1 RPC"]
+        L2["L2 RPC"]
+        K8s["K8s API"]
     end
 
-    L1 --> Observe
-    L2 --> Observe
-    K8s --> Observe
+    subgraph Pipeline["Pipeline Agents"]
+        Collector["CollectorAgent\nEvery 5s\nIngests L1 / L2 / K8s metrics"]
+        Detector["DetectorAgent\nEvery 10s\n4-layer anomaly detection"]
+        Analyzer["AnalyzerAgent\nAsync AI deep analysis"]
+        Executor["ExecutorAgent\nImmediate K8s action"]
+        Verifier["VerifierAgent\nPost-condition checks"]
+    end
 
-    Act --> KScaler["K8s Scaler\n(k8s-scaler.ts)"]
-    Act --> Remediation["Remediation Engine\n(remediation-engine.ts)"]
+    subgraph Domain["Domain Agents (event-driven)"]
+        Scaling["ScalingAgent"]
+        Security["SecurityAgent"]
+        Reliability["ReliabilityAgent"]
+        RCAAgent["RCADomainAgent"]
+        Cost["CostAgent"]
+    end
 
-    KScaler --> K8s
-    Remediation --> K8s
+    subgraph Action["Action Agents"]
+        Remediation["RemediationAgent\nPlaybook execution"]
+        Notifier["NotifierAgent\nSlack / Webhook"]
+    end
 
-    MetricsStore["MetricsStore\n(ring buffer, 60 pts)"]
-    Observe --> MetricsStore
-    MetricsStore --> Detect
-    MetricsStore --> Decide
+    L1 & L2 & K8s --> Collector
+    Collector -->|metrics-collected| Detector
 
-    UI["Dashboard UI\n(page.tsx)"]
-    MetricsStore --> UI
+    Detector -->|anomaly-detected| Analyzer
+    Detector -->|anomaly-detected| Executor
+
+    Analyzer & Executor -->|parallel| Verifier
+    Verifier -->|verification-complete| Notifier
+
+    Detector --> Domain
+    Domain -->|rca-result / security-alert / reliability-issue| Remediation
+    Domain -->|cost-insight| Notifier
 ```
 
-The Agent Loop runs server-side every 60 seconds with no browser dependency. It is enabled automatically when `L2_RPC_URL` is set; override with `AGENT_LOOP_ENABLED=true|false`.
+### Agent Roles
+
+| Group | Agent | Interval / Trigger | Responsibility |
+|-------|-------|--------------------|----------------|
+| Pipeline | CollectorAgent | every 5s | Fetch L1/L2 metrics, K8s pod state |
+| Pipeline | DetectorAgent | every 10s | Run 4-layer anomaly pipeline, emit events |
+| Pipeline | AnalyzerAgent | on `anomaly-detected` | AI deep analysis, RCA (async, parallel) |
+| Pipeline | ExecutorAgent | on `anomaly-detected` | K8s scaling action (~2s critical path) |
+| Pipeline | VerifierAgent | on `execution-complete` | Post-condition health verification |
+| Domain | ScalingAgent | event-driven | Scaling signal aggregation |
+| Domain | SecurityAgent | event-driven | Security anomaly classification |
+| Domain | ReliabilityAgent | event-driven | Reliability pattern detection |
+| Domain | RCADomainAgent | event-driven | Root cause graph traversal |
+| Domain | CostAgent | event-driven | Cost insight generation |
+| Action | RemediationAgent | on `rca-result / security-alert` | Playbook selection and execution |
+| Action | NotifierAgent | on `verification-complete / cost-insight` | Slack / webhook dispatch |
+
+The orchestrator starts one full agent set per node instance (`AgentOrchestrator.startInstance(instanceId, protocolId)`). Each instance is isolated — multi-chain setups run independent agent sets.
+
+> **Legacy**: `src/lib/agent-loop.ts` (the serial 60s loop) remains available and is used in single-instance mode when the v2 orchestrator is not initialized. Enabled automatically when `L2_RPC_URL` is set; override with `AGENT_LOOP_ENABLED=true|false`.
 
 ---
 
