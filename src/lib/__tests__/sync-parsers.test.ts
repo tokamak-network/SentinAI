@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSyncStatus, getValueByPath } from '@/lib/client-profile/sync-parsers';
+import { parseSyncStatus, getValueByPath, parseTxPoolPendingCount } from '@/lib/client-profile/sync-parsers';
 
 // ─── getValueByPath ──────────────────────────────────────────────────────────
 
@@ -147,5 +147,34 @@ describe('parseSyncStatus — custom', () => {
     });
     expect(result.currentBlock).toBeNull();
     expect(result.highestBlock).toBeNull();
+  });
+});
+
+// ─── parseTxPoolPendingCount ──────────────────────────────────────────────────
+
+describe('parseTxPoolPendingCount', () => {
+  it('txpool: parses hex pending field', () => {
+    expect(parseTxPoolPendingCount({ pending: '0x1f4', queued: '0xa' }, 'txpool')).toBe(500);
+  });
+  it('txpool: returns 0 for missing pending', () => {
+    expect(parseTxPoolPendingCount({}, 'txpool')).toBe(0);
+  });
+  it('parity: counts array elements', () => {
+    expect(parseTxPoolPendingCount([{}, {}, {}], 'parity')).toBe(3);
+  });
+  it('parity: counts object keys', () => {
+    expect(parseTxPoolPendingCount({ a: 1, b: 2 }, 'parity')).toBe(2);
+  });
+  it('custom: extracts value by path', () => {
+    expect(parseTxPoolPendingCount({ result: { pending: 42 } }, 'custom', 'result.pending')).toBe(42);
+  });
+  it('custom: missing path returns 0', () => {
+    expect(parseTxPoolPendingCount({ x: 1 }, 'custom', 'missing.path')).toBe(0);
+  });
+  it('null: always returns 0', () => {
+    expect(parseTxPoolPendingCount({ pending: '0xff' }, null)).toBe(0);
+  });
+  it('handles undefined result gracefully', () => {
+    expect(parseTxPoolPendingCount(undefined, 'txpool')).toBe(0);
   });
 });
