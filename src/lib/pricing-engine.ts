@@ -18,8 +18,11 @@
 
 import { generateResume } from '@/lib/agent-resume';
 import { getExperienceByInstance } from '@/lib/experience-store';
+import { getMarketplaceStore } from '@/lib/marketplace-store';
 import type { ExperienceTier } from '@/types/agent-resume';
+import type { MarketplacePricingConfig } from '@/types/marketplace';
 import type { OutcomeBonus, PricingResult } from '@/types/billing';
+import logger from '@/lib/logger';
 
 /** Monthly rate per chain by tier (USD). */
 export const TIER_PRICING: Record<ExperienceTier, number> = {
@@ -33,11 +36,28 @@ export const TIER_PRICING: Record<ExperienceTier, number> = {
 const AUTO_RESOLVE_BONUS = 100;
 
 /**
+ * Load outcome bonus configuration from marketplace store or return defaults.
+ */
+async function loadBonusConfig() {
+  try {
+    return await getMarketplaceStore().getBonusConfig();
+  } catch {
+    // Fallback to hardcoded values
+    return {
+      autoResolveBonusPerIncident: AUTO_RESOLVE_BONUS,
+      uptimeBonusThreshold: 30,
+      uptimeBonusAmount: 500,
+    };
+  }
+}
+
+/**
  * Calculate outcome bonuses from this month's experience entries.
  */
-export function calculateOutcomeBonuses(
+export async function calculateOutcomeBonuses(
   entries: Array<{ outcome: string; category: string; resolutionMs: number }>,
-): OutcomeBonus[] {
+): Promise<OutcomeBonus[]> {
+  const bonusConfig = await loadBonusConfig();
   const bonuses: OutcomeBonus[] = [];
 
   // Count auto-resolved incidents this month
@@ -47,19 +67,19 @@ export function calculateOutcomeBonuses(
   if (autoResolved.length > 0) {
     bonuses.push({
       type: 'auto-resolved',
-      amount: autoResolved.length * AUTO_RESOLVE_BONUS,
-      description: `${autoResolved.length} auto-resolved incidents @ $${AUTO_RESOLVE_BONUS} each`,
+      amount: autoResolved.length * (bonusConfig.autoResolveBonusPerIncident / 100),
+      description: `${autoResolved.length} auto-resolved incidents @ $${(bonusConfig.autoResolveBonusPerIncident / 100).toFixed(2)} each`,
     });
   }
 
   // Uptime bonus: if no failures in remediation/scaling this month
   const failures = entries.filter((e) => e.outcome === 'failure');
   const totalOps = entries.length;
-  if (totalOps >= 30 && failures.length === 0) {
+  if (totalOps >= bonusConfig.uptimeBonusThreshold && failures.length === 0) {
     bonuses.push({
       type: 'uptime-bonus',
-      amount: 500,
-      description: 'Perfect operations month (0 failures, 30+ operations)',
+      amount: bonusConfig.uptimeBonusAmount / 100,
+      description: `Perfect operations month (0 failures, ${bonusConfig.uptimeBonusThreshold}+ operations)`,
     });
   }
 
@@ -81,8 +101,23 @@ export async function calculatePricing(
   const allEntries = await getExperienceByInstance(instanceId, 5000);
   const monthEntries = allEntries.filter((e) => new Date(e.timestamp) >= monthStart);
 
-  const monthlyRate = TIER_PRICING[resume.tier];
-  const outcomeBonuses = calculateOutcomeBonuses(monthEntries);
+  // Load pricing from marketplace store (with fallback to TIER_PRICING)
+  let monthlyRate = TIER_PRICING[resume.tier];
+  try {
+    const pricingConfig = await getMarketplaceStore().getPricingConfig();
+    const tierPriceMap: Record<ExperienceTier, number> = {
+      trainee: pricingConfig.traineePrice / 100,  // Convert cents to dollars
+      junior: pricingConfig.juniorPrice / 100,
+      senior: pricingConfig.seniorPrice / 100,
+      expert: pricingConfig.expertPrice / 100,
+    };
+    monthlyRate = tierPriceMap[resume.tier] ?? monthlyRate;
+  } catch (error) {
+    logger.warn('[pricing-engine] Failed to load marketplace pricing, using defaults:', error);
+    // Fall back to TIER_PRICING constant
+  }
+
+  const outcomeBonuses = await calculateOutcomeBonuses(monthEntries);
   const bonusTotal = outcomeBonuses.reduce((sum, b) => sum + b.amount, 0);
 
   return {

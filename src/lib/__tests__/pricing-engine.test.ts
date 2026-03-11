@@ -28,6 +28,23 @@ vi.mock('@/lib/logger', () => ({
   default: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }));
 
+vi.mock('@/lib/marketplace-store', () => ({
+  getMarketplaceStore: () => ({
+    getPricingConfig: async () => ({
+      traineePrice: 0,
+      juniorPrice: 19900,
+      seniorPrice: 49900,
+      expertPrice: 79900,
+      updatedAt: new Date().toISOString(),
+    }),
+    getBonusConfig: async () => ({
+      autoResolveBonusPerIncident: 100,
+      uptimeBonusThreshold: 30,
+      uptimeBonusAmount: 500,
+    }),
+  }),
+}));
+
 import { calculatePricing, calculateOutcomeBonuses, TIER_PRICING } from '@/lib/pricing-engine';
 
 const makeEntry = (overrides: Partial<ExperienceEntry> = {}): ExperienceEntry => ({
@@ -59,47 +76,47 @@ describe('pricing-engine', () => {
   });
 
   describe('calculateOutcomeBonuses', () => {
-    it('should return empty array for no entries', () => {
-      const result = calculateOutcomeBonuses([]);
+    it('should return empty array for no entries', async () => {
+      const result = await calculateOutcomeBonuses([]);
       expect(result).toEqual([]);
     });
 
-    it('should calculate auto-resolved bonus', () => {
+    it('should calculate auto-resolved bonus', async () => {
       const entries = Array.from({ length: 3 }, () => ({
         outcome: 'success',
         category: 'anomaly-resolution',
         resolutionMs: 30000,
       }));
-      const result = calculateOutcomeBonuses(entries);
+      const result = await calculateOutcomeBonuses(entries);
       const autoBonus = result.find(b => b.type === 'auto-resolved');
       expect(autoBonus).toBeDefined();
-      expect(autoBonus!.amount).toBe(300); // 3 × $100
+      expect(autoBonus!.amount).toBe(3); // 3 × $1.00 (100 cents / 100)
     });
 
-    it('should not count non-anomaly successes as auto-resolved', () => {
+    it('should not count non-anomaly successes as auto-resolved', async () => {
       const entries = Array.from({ length: 5 }, () => ({
         outcome: 'success',
         category: 'scaling-action',
         resolutionMs: 30000,
       }));
-      const result = calculateOutcomeBonuses(entries);
+      const result = await calculateOutcomeBonuses(entries);
       const autoBonus = result.find(b => b.type === 'auto-resolved');
       expect(autoBonus).toBeUndefined();
     });
 
-    it('should award uptime bonus for 30+ ops with zero failures', () => {
+    it('should award uptime bonus for 30+ ops with zero failures', async () => {
       const entries = Array.from({ length: 30 }, () => ({
         outcome: 'success',
         category: 'scaling-action',
         resolutionMs: 30000,
       }));
-      const result = calculateOutcomeBonuses(entries);
+      const result = await calculateOutcomeBonuses(entries);
       const uptimeBonus = result.find(b => b.type === 'uptime-bonus');
       expect(uptimeBonus).toBeDefined();
-      expect(uptimeBonus!.amount).toBe(500);
+      expect(uptimeBonus!.amount).toBe(5); // $5.00 (500 cents / 100)
     });
 
-    it('should not award uptime bonus when failures exist', () => {
+    it('should not award uptime bonus when failures exist', async () => {
       const entries = [
         ...Array.from({ length: 29 }, () => ({
           outcome: 'success',
@@ -108,18 +125,18 @@ describe('pricing-engine', () => {
         })),
         { outcome: 'failure', category: 'scaling-action', resolutionMs: 30000 },
       ];
-      const result = calculateOutcomeBonuses(entries);
+      const result = await calculateOutcomeBonuses(entries);
       const uptimeBonus = result.find(b => b.type === 'uptime-bonus');
       expect(uptimeBonus).toBeUndefined();
     });
 
-    it('should not award uptime bonus for fewer than 30 ops', () => {
+    it('should not award uptime bonus for fewer than 30 ops', async () => {
       const entries = Array.from({ length: 10 }, () => ({
         outcome: 'success',
         category: 'scaling-action',
         resolutionMs: 30000,
       }));
-      const result = calculateOutcomeBonuses(entries);
+      const result = await calculateOutcomeBonuses(entries);
       const uptimeBonus = result.find(b => b.type === 'uptime-bonus');
       expect(uptimeBonus).toBeUndefined();
     });
