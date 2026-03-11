@@ -71,3 +71,31 @@
 - [x] Remove docs search UI/component usage from the docs page and keep docs navigation intact.
 - [x] Write the Redis Streams EventBus design document under `docs/plans/`.
 - [x] Run focused verification and review the resulting diff.
+
+## Session Checklist (2026-03-11)
+
+### Agent Economy Docs Review
+
+- [x] Review agent economy design, scenarios, and implementation-plan docs under `docs/superpowers/`.
+- [x] Remove `txpool` as a marketplace product due to abuse potential.
+- [x] Replace the lead DeFi-facing product with `sequencer-health`.
+- [x] Add `incident-summary` and `batch-submission-status` as agent-friendly marketplace products.
+- [x] Refresh the implementation plan to match the revised marketplace surface.
+
+## Review (2026-03-11)
+
+- Agent economy docs were updated to prioritize high-demand, low-abuse operational signals over order-flow-adjacent data.
+- `sequencer-health` is now the primary DeFi-facing marketplace product, with a documented response schema for direct agent consumption.
+- Scenario and implementation-plan docs were rewritten to remove `txpool` and add `incident-summary` plus `batch-submission-status`.
+
+### TON x402 Facilitator Design
+
+- [x] Define a TON settlement approach that works without EIP-3009 and without token contract upgrades.
+- [x] Choose approval-based pull facilitator as the Phase 1 settlement model.
+- [x] Write facilitator design and implementation plan docs under `docs/plans/`.
+
+## Review (2026-03-11, TON Facilitator)
+
+- Designed a TON-specific x402 settlement path using ERC-20 `approve + transferFrom` with facilitator-side EIP-712 authorization checks.
+- Captured the buyer, merchant, facilitator, nonce, receipt-signing, and mainnet/sepolia profile model in a dedicated design doc.
+- Wrote a concrete implementation plan covering typed data, nonce store, settlement executor, facilitator HTTP API, and merchant integration.

@@ -1,0 +1,693 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SentinAI Marketplace — Wireframe</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'IBM Plex Mono', monospace;
+    background: #F0F0F0;
+    color: #0A0A0A;
+    padding: 32px;
+  }
+
+  /* ── Layout ── */
+  .page-selector {
+    display: flex; gap: 0; margin-bottom: 32px;
+    border: 1px solid #D0D0D0; width: fit-content;
+  }
+  .page-btn {
+    padding: 8px 20px; font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+    border: none; cursor: pointer; background: white; color: #555;
+    border-right: 1px solid #D0D0D0;
+    transition: all 0.1s;
+  }
+  .page-btn:last-child { border-right: none; }
+  .page-btn.active { background: #D40000; color: white; }
+
+  .frame { display: none; }
+  .frame.active { display: block; }
+
+  /* ── App Shell ── */
+  .app {
+    border: 1px solid #C0C0C0;
+    background: white;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.12);
+    max-width: 1100px;
+    overflow: hidden;
+  }
+
+  /* ── Top Bar (Dashboard) ── */
+  .topbar {
+    background: #D40000; color: white; height: 28px;
+    display: flex; align-items: center;
+    border-bottom: 2px solid #8B0000; flex-shrink: 0;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.06em;
+  }
+  .topbar-brand {
+    background: #8B0000; padding: 0 14px; height: 100%;
+    display: flex; align-items: center;
+    border-right: 2px solid #6B0000; flex-shrink: 0;
+    font-weight: 700; font-size: 13px; letter-spacing: 0.05em;
+  }
+  .topbar-item {
+    padding: 0 14px; height: 100%; display: flex; align-items: center;
+    border-right: 1px solid rgba(255,255,255,0.2);
+    cursor: pointer; color: rgba(255,255,255,0.8);
+    text-decoration: none;
+  }
+  .topbar-item.active {
+    border-bottom: 2px solid white; color: white; font-weight: 700;
+  }
+  .topbar-item .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: #00FF88; margin-right: 6px;
+    box-shadow: 0 0 4px #00FF88;
+    display: inline-block;
+  }
+  .topbar-right { margin-left: auto; padding: 0 14px; color: rgba(255,255,255,0.7); }
+
+  /* ── Navbar (Website) ── */
+  .navbar {
+    background: white; border-bottom: 1px solid #D0D0D0;
+    height: 40px; display: flex; align-items: stretch;
+    position: sticky; top: 0; z-index: 10;
+  }
+  .navbar-brand {
+    background: #D40000; color: white; padding: 0 18px;
+    display: flex; align-items: center; font-weight: 700;
+    font-size: 13px; letter-spacing: 0.05em;
+    border-right: 2px solid #8B0000;
+  }
+  .navbar-link {
+    display: flex; align-items: center; padding: 0 16px;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.1em;
+    color: #3A3A3A; text-decoration: none;
+    border-right: 1px solid #E8E8E8;
+  }
+  .navbar-link.active {
+    color: #D40000; border-bottom: 2px solid #D40000;
+  }
+  .navbar-cta {
+    margin-left: auto; background: #D40000; color: white;
+    padding: 0 20px; display: flex; align-items: center;
+    font-size: 10px; font-weight: 700; letter-spacing: 0.1em;
+    border-left: 2px solid #8B0000; cursor: pointer;
+  }
+
+  /* ── Tabs ── */
+  .tabs {
+    display: flex; border-bottom: 2px solid #D0D0D0;
+    background: white;
+  }
+  .tab {
+    padding: 10px 20px; font-size: 10px; font-weight: 700;
+    letter-spacing: 0.1em; cursor: pointer; color: #777;
+    border-bottom: 3px solid transparent; margin-bottom: -2px;
+    transition: all 0.1s;
+    user-select: none;
+  }
+  .tab.active { color: #D40000; border-bottom-color: #D40000; }
+
+  /* ── Stat Cards ── */
+  .stats-row {
+    display: flex; gap: 8px; padding: 20px 24px;
+    background: #FAFAFA; border-bottom: 1px solid #E8E8E8;
+  }
+  .stat-card {
+    background: white; border: 1px solid #D0D0D0;
+    padding: 10px 14px; flex: 1;
+  }
+  .stat-label {
+    font-size: 9px; color: #888; font-weight: 700;
+    letter-spacing: 0.12em; margin-bottom: 4px;
+  }
+  .stat-value {
+    font-size: 18px; font-weight: 700;
+  }
+  .stat-sub { font-size: 9px; color: #888; margin-top: 2px; }
+
+  /* ── Two Column ── */
+  .two-col {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 16px; padding: 20px 24px;
+  }
+  .panel {
+    background: white; border: 1px solid #D0D0D0;
+  }
+  .panel-header {
+    padding: 8px 14px; background: #F5F5F5;
+    border-bottom: 1px solid #D0D0D0;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.12em;
+  }
+  .panel-row {
+    display: flex; justify-content: space-between;
+    padding: 8px 14px; border-bottom: 1px solid #F0F0F0;
+    font-size: 12px; align-items: center;
+  }
+  .panel-row:last-child { border-bottom: none; }
+  .panel-empty {
+    padding: 20px 14px; font-size: 11px; color: #999;
+    font-style: italic;
+  }
+
+  /* ── Service Grid ── */
+  .service-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+    gap: 8px; padding: 20px 24px;
+  }
+  .service-card {
+    background: white; border: 1px solid #D0D0D0;
+    border-top: 3px solid #D40000; padding: 12px;
+  }
+  .service-card.tier2 { border-top-color: #0055AA; }
+  .service-name { font-size: 11px; color: #555; margin-bottom: 5px; }
+  .service-price { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .service-status { font-size: 10px; color: #27ae60; font-weight: 600; }
+
+  /* ── Instance List ── */
+  .instance-list { padding: 0 24px 24px; }
+  .instance-row {
+    background: white; border: 1px solid #D0D0D0;
+    padding: 10px 14px; display: flex; align-items: center;
+    gap: 10px; font-size: 12px; margin-bottom: 4px;
+  }
+  .instance-name { font-weight: 700; }
+  .instance-chain { color: #0055AA; font-size: 11px; }
+  .instance-client { color: #777; font-size: 11px; }
+  .instance-svc { margin-left: auto; font-size: 11px; color: #555; }
+  .instance-x402 { font-size: 10px; color: #27ae60; font-weight: 600; }
+
+  /* ── Recent Sales ── */
+  .recent-sales { padding: 0 24px 24px; }
+  .section-title {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.12em;
+    color: #888; margin-bottom: 8px; padding-bottom: 6px;
+    border-bottom: 1px solid #E8E8E8;
+  }
+  .sale-row {
+    display: flex; gap: 10px; align-items: center;
+    padding: 7px 0; border-bottom: 1px solid #F0F0F0;
+    font-size: 11px;
+  }
+  .sale-row:last-child { border-bottom: none; }
+  .sale-agent { color: #0055AA; }
+  .sale-sep { color: #D0D0D0; }
+  .sale-svc { }
+  .sale-amt { color: #D40000; font-weight: 600; }
+  .sale-time { margin-left: auto; color: #AAA; }
+
+  /* ── Disabled Banner ── */
+  .disabled-banner {
+    margin: 32px 24px; border: 1px solid #D0D0D0;
+    padding: 24px; background: #FFF8F8; max-width: 520px;
+  }
+  .disabled-title { font-size: 13px; font-weight: 700; color: #D40000; margin-bottom: 10px; }
+  .disabled-desc { font-size: 11px; color: #666; margin-bottom: 14px; }
+  .env-block {
+    background: #F0F0F0; padding: 10px 14px;
+    font-size: 10px; line-height: 1.8;
+  }
+
+  /* ── Connect Guide ── */
+  .guide { padding: 24px; max-width: 680px; }
+  .guide-title { font-size: 12px; font-weight: 700; letter-spacing: 0.1em; margin-bottom: 20px; }
+  .guide-step { margin-bottom: 20px; }
+  .guide-step-label { font-size: 10px; font-weight: 600; color: #777; margin-bottom: 6px; }
+  .code-block {
+    background: #F5F5F5; border: 1px solid #D0D0D0;
+    padding: 10px 14px; font-size: 10px; line-height: 1.7;
+    white-space: pre-wrap; word-break: break-all;
+  }
+
+  /* ── Page header (website) ── */
+  .page-hero {
+    background: #FAFAFA; border-bottom: 1px solid #D0D0D0;
+    padding: 28px 48px 0;
+  }
+  .page-hero-tag {
+    font-size: 9px; font-weight: 700; letter-spacing: 0.2em;
+    color: #D40000; margin-bottom: 6px;
+  }
+  .page-hero h1 {
+    font-size: 22px; font-weight: 700; margin-bottom: 4px;
+    letter-spacing: -0.02em;
+  }
+  .page-hero p { font-size: 11px; color: #666; margin-bottom: 20px; }
+
+  /* ── Content wrapper ── */
+  .content { padding: 24px 48px; max-width: 1100px; }
+  .content-inner { max-width: 1000px; }
+
+  /* ── Toggle for disabled state ── */
+  .toggle-row {
+    display: flex; align-items: center; gap: 12px;
+    padding: 10px 24px; border-bottom: 1px solid #E8E8E8;
+    background: #FAFAFA; font-size: 11px;
+  }
+  .toggle-label { color: #555; font-weight: 600; letter-spacing: 0.06em; }
+  .toggle-switch {
+    padding: 4px 10px; font-size: 9px; font-weight: 700;
+    letter-spacing: 0.1em; border: none; cursor: pointer;
+    background: #E0E0E0; color: #555; font-family: 'IBM Plex Mono', monospace;
+  }
+  .toggle-switch.on { background: #27ae60; color: white; }
+</style>
+</head>
+<body>
+
+<div style="font-size:10px;color:#888;letter-spacing:0.1em;font-weight:700;margin-bottom:12px;">
+  SENTINAI MARKETPLACE — WIREFRAME
+</div>
+
+<!-- Page Switcher -->
+<div class="page-selector">
+  <button class="page-btn active" onclick="showPage('dashboard')">DASHBOARD /marketplace</button>
+  <button class="page-btn" onclick="showPage('website')">WEBSITE /marketplace</button>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════
+     FRAME 1: Dashboard /marketplace
+     ═══════════════════════════════════════════════════════ -->
+<div id="frame-dashboard" class="frame active">
+  <div class="app">
+
+    <!-- Top Bar -->
+    <div class="topbar">
+      <div class="topbar-brand">SENTINAI</div>
+      <div class="topbar-item">
+        <span class="dot"></span>CLUSTER ONLINE
+      </div>
+      <div class="topbar-item">
+        <span class="dot"></span>L2 SYNC
+      </div>
+      <div class="topbar-item">THANOS-L2</div>
+      <a class="topbar-item" href="#" onclick="return false;">DASHBOARD</a>
+      <a class="topbar-item active" href="#" onclick="return false;">MARKETPLACE</a>
+      <div class="topbar-right">2026-03-11 09:00:00 UTC</div>
+    </div>
+
+    <!-- Enabled/Disabled Toggle (wireframe control) -->
+    <div class="toggle-row">
+      <span class="toggle-label">MARKETPLACE STATE:</span>
+      <button id="dashboard-toggle" class="toggle-switch on" onclick="toggleDashboard()">ENABLED</button>
+      <span style="font-size:10px;color:#999;">(click to preview disabled state)</span>
+    </div>
+
+    <!-- ENABLED STATE -->
+    <div id="dashboard-enabled">
+      <!-- 4-stat header -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-label">STATUS</div>
+          <div class="stat-value" style="color:#27ae60;font-size:14px;margin-top:2px;">ACTIVE ●</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">EARNED / MO</div>
+          <div class="stat-value">1,429 <span style="font-size:11px;font-weight:400;">TON</span></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">CALLS TODAY</div>
+          <div class="stat-value">623</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">BUYERS</div>
+          <div class="stat-value">5</div>
+        </div>
+      </div>
+
+      <!-- 2-column: services / top buyers -->
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-header">SERVICES</div>
+          <div class="panel-row">
+            <span>txpool</span>
+            <span style="color:#D40000;">0.1 TON</span>
+          </div>
+          <div class="panel-row">
+            <span>anomalies</span>
+            <span style="color:#D40000;">0.2 TON</span>
+          </div>
+          <div class="panel-row">
+            <span>rca</span>
+            <span style="color:#D40000;">0.5 TON</span>
+          </div>
+          <div class="panel-row">
+            <span>eoa</span>
+            <span style="color:#D40000;">0.2 TON</span>
+          </div>
+          <div class="panel-row">
+            <span>resources</span>
+            <span style="color:#D40000;">0.1 TON</span>
+          </div>
+          <div class="panel-row">
+            <span>metrics</span>
+            <span style="color:#D40000;">0.05 TON</span>
+          </div>
+          <div class="panel-row" style="color:#999;font-size:11px;">
+            <span>scaling-history</span>
+            <span style="color:#D40000;">0.1 TON</span>
+          </div>
+          <div class="panel-row" style="color:#999;font-size:11px;">
+            <span>sync-trend</span>
+            <span style="color:#D40000;">0.1 TON</span>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-header">TOP BUYERS</div>
+          <div class="panel-row">
+            <span style="color:#0055AA;">0xDeFi...A21</span>
+            <span>600 TON</span>
+          </div>
+          <div class="panel-row">
+            <span style="color:#0055AA;">0xMEV...B44</span>
+            <span>522 TON</span>
+          </div>
+          <div class="panel-row">
+            <span style="color:#0055AA;">0xBri...C07</span>
+            <span>300 TON</span>
+          </div>
+          <div class="panel-row">
+            <span style="color:#0055AA;">0xIns...D12</span>
+            <span>3.5 TON</span>
+          </div>
+          <div class="panel-row">
+            <span style="color:#0055AA;">0xCro...E33</span>
+            <span>3.4 TON</span>
+          </div>
+          <div class="panel-empty" style="font-size:9px;color:#BBB;padding:8px 14px;font-style:normal;">
+            agentId from X-PAYMENT header
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Sales -->
+      <div class="recent-sales">
+        <div class="section-title">RECENT SALES</div>
+        <div class="sale-row">
+          <span class="sale-agent">0xDeFi...A21</span>
+          <span class="sale-sep">·</span>
+          <span class="sale-svc">txpool</span>
+          <span class="sale-sep">·</span>
+          <span class="sale-amt">0.1 TON</span>
+          <span class="sale-time">2m ago</span>
+        </div>
+        <div class="sale-row">
+          <span class="sale-agent">0xMEV...B44</span>
+          <span class="sale-sep">·</span>
+          <span class="sale-svc">metrics</span>
+          <span class="sale-sep">·</span>
+          <span class="sale-amt">0.05 TON</span>
+          <span class="sale-time">5m ago</span>
+        </div>
+        <div class="sale-row">
+          <span class="sale-agent">0xBri...C07</span>
+          <span class="sale-sep">·</span>
+          <span class="sale-svc">eoa</span>
+          <span class="sale-sep">·</span>
+          <span class="sale-amt">0.2 TON</span>
+          <span class="sale-time">12m ago</span>
+        </div>
+        <div class="sale-row">
+          <span class="sale-agent">0xDeFi...A21</span>
+          <span class="sale-sep">·</span>
+          <span class="sale-svc">txpool</span>
+          <span class="sale-sep">·</span>
+          <span class="sale-amt">0.1 TON</span>
+          <span class="sale-time">18m ago</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- DISABLED STATE -->
+    <div id="dashboard-disabled" style="display:none;">
+      <div class="disabled-banner">
+        <div class="disabled-title">⚠ MARKETPLACE DISABLED</div>
+        <div class="disabled-desc">Set MARKETPLACE_ENABLED=true to start earning TON.</div>
+        <div class="env-block">
+          MARKETPLACE_ENABLED=true<br>
+          MARKETPLACE_WALLET_KEY=0x...&nbsp;&nbsp;(Ethereum private key for ERC-8004 reg)<br>
+          MARKETPLACE_RECEIVER_ADDRESS=0x...&nbsp;&nbsp;(Ethereum addr for TON ERC-20)
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /app -->
+</div><!-- /frame-dashboard -->
+
+
+<!-- ═══════════════════════════════════════════════════════
+     FRAME 2: Website /marketplace
+     ═══════════════════════════════════════════════════════ -->
+<div id="frame-website" class="frame">
+  <div class="app">
+
+    <!-- Navbar -->
+    <div class="navbar">
+      <div class="navbar-brand">SENTINAI</div>
+      <a class="navbar-link" href="#" onclick="return false;">DOCS</a>
+      <a class="navbar-link active" href="#" onclick="return false;">MARKETPLACE</a>
+      <a class="navbar-link" href="#" onclick="return false;">DEPLOY</a>
+      <a class="navbar-link" href="#" onclick="return false;" style="gap:6px;">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+        GITHUB
+      </a>
+      <div class="navbar-cta">CONNECT NODE →</div>
+    </div>
+
+    <!-- Page Hero -->
+    <div class="page-hero">
+      <div style="max-width:1000px;">
+        <div class="page-hero-tag">AGENT ECONOMY</div>
+        <h1>SentinAI Marketplace</h1>
+        <p>Discover SentinAI instances selling L2 monitoring data to AI agents via x402.</p>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tabs" style="max-width:1000px;">
+        <div class="tab" onclick="showWebsiteTab('instance')" id="tab-instance">THIS INSTANCE</div>
+        <div class="tab active" onclick="showWebsiteTab('registry')" id="tab-registry">BROWSE REGISTRY</div>
+        <div class="tab" onclick="showWebsiteTab('guide')" id="tab-guide">CONNECT GUIDE</div>
+      </div>
+    </div>
+
+    <!-- Tab: Browse Registry -->
+    <div id="ws-registry" class="content" style="display:block;">
+      <div class="content-inner">
+        <!-- Global Stats -->
+        <div style="display:flex;gap:8px;margin-bottom:24px;">
+          <div class="stat-card" style="flex:0 0 auto;min-width:130px;">
+            <div class="stat-label">REGISTERED</div>
+            <div class="stat-value">12</div>
+            <div class="stat-sub">instances</div>
+          </div>
+          <div class="stat-card" style="flex:0 0 auto;min-width:130px;">
+            <div class="stat-label">CHAINS</div>
+            <div class="stat-value">5</div>
+            <div class="stat-sub">L2 networks</div>
+          </div>
+        </div>
+
+        <!-- Instance List -->
+        <div class="instance-list" style="padding:0;">
+          <div class="instance-row">
+            <span class="instance-name">SentinAI #4521</span>
+            <span class="instance-chain">eip155:55004</span>
+            <span class="instance-client">· ethrex</span>
+            <span class="instance-svc">8 services</span>
+            <span class="instance-x402">x402 ✓</span>
+          </div>
+          <div class="instance-row">
+            <span class="instance-name">SentinAI #4522</span>
+            <span class="instance-chain">eip155:10</span>
+            <span class="instance-client">· geth</span>
+            <span class="instance-svc">6 services</span>
+            <span class="instance-x402">x402 ✓</span>
+          </div>
+          <div class="instance-row" style="opacity:0.55;">
+            <span class="instance-name">SentinAI #4523</span>
+            <span class="instance-chain">eip155:8453</span>
+            <span class="instance-client">· reth</span>
+            <span class="instance-svc">4 services</span>
+          </div>
+          <div class="instance-row" style="opacity:0.55;">
+            <span class="instance-name">SentinAI #4524</span>
+            <span class="instance-chain">eip155:42161</span>
+            <span class="instance-client">· nethermind</span>
+            <span class="instance-svc">3 services</span>
+          </div>
+        </div>
+
+        <div style="font-size:10px;color:#BBB;margin-top:12px;">
+          Phase 1: no liveness check — all registered instances displayed. Online/offline status is Phase 2.
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: This Instance -->
+    <div id="ws-instance" style="display:none;">
+      <!-- Instance Header -->
+      <div style="padding:16px 48px 0;border-bottom:1px solid #E8E8E8;background:#FAFAFA;">
+        <div style="max-width:1000px;display:flex;align-items:center;gap:10px;padding-bottom:14px;">
+          <div style="width:8px;height:8px;border-radius:50%;background:#27ae60;flex-shrink:0;"></div>
+          <span style="font-weight:700;font-size:13px;">SentinAI @ Thanos-L2</span>
+          <span style="color:#0055AA;font-size:11px;">eip155:55004</span>
+          <span style="margin-left:auto;color:#D40000;font-size:11px;font-weight:600;">x402 ✓</span>
+        </div>
+      </div>
+
+      <!-- Service Grid -->
+      <div class="content">
+        <div class="content-inner">
+          <div style="font-size:9px;color:#888;font-weight:700;letter-spacing:0.12em;margin-bottom:10px;">
+            TIER 1 — <span style="color:#D40000;">high-value data</span>
+          </div>
+          <div class="service-grid" style="padding:0;margin-bottom:20px;">
+            <div class="service-card">
+              <div class="service-name">txpool</div>
+              <div class="service-price">0.1 TON</div>
+              <div class="service-status">live ●</div>
+            </div>
+            <div class="service-card">
+              <div class="service-name">anomalies</div>
+              <div class="service-price">0.2 TON</div>
+              <div class="service-status">live ●</div>
+            </div>
+            <div class="service-card">
+              <div class="service-name">rca</div>
+              <div class="service-price">0.5 TON</div>
+              <div class="service-status">live ●</div>
+            </div>
+            <div class="service-card">
+              <div class="service-name">eoa</div>
+              <div class="service-price">0.2 TON</div>
+              <div class="service-status">live ●</div>
+            </div>
+            <div class="service-card">
+              <div class="service-name">resources</div>
+              <div class="service-price">0.1 TON</div>
+              <div class="service-status">live ●</div>
+            </div>
+          </div>
+
+          <div style="font-size:9px;color:#888;font-weight:700;letter-spacing:0.12em;margin-bottom:10px;">
+            TIER 2 — <span style="color:#0055AA;">standard metrics</span>
+          </div>
+          <div class="service-grid" style="padding:0;">
+            <div class="service-card tier2">
+              <div class="service-name">metrics</div>
+              <div class="service-price">0.05 TON</div>
+              <div class="service-status">live ●</div>
+            </div>
+            <div class="service-card tier2">
+              <div class="service-name">scaling-history</div>
+              <div class="service-price">0.1 TON</div>
+              <div class="service-status">live ●</div>
+            </div>
+            <div class="service-card tier2">
+              <div class="service-name">sync-trend</div>
+              <div class="service-price">0.1 TON</div>
+              <div class="service-status">live ●</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Connect Guide -->
+    <div id="ws-guide" style="display:none;">
+      <div class="content">
+        <div class="content-inner">
+          <div class="guide">
+            <div class="guide-title">HOW TO BUY DATA WITH x402</div>
+
+            <div class="guide-step">
+              <div class="guide-step-label">1. Discover via AgentRegistry catalog</div>
+              <div class="code-block">GET /api/marketplace/catalog
+← 200 {
+    "services": [
+      { "key": "txpool", "priceWei": "100000000000000000", "tier": 1 },
+      { "key": "anomalies", "priceWei": "200000000000000000", "tier": 1 },
+      ...
+    ]
+  }</div>
+            </div>
+
+            <div class="guide-step">
+              <div class="guide-step-label">2. Send request — get 402 back</div>
+              <div class="code-block">curl https://sentinai.operator.xyz/api/marketplace/txpool
+← 402 {
+    "x402Version": 1,
+    "accepts": [{
+      "scheme": "eip3009",
+      "network": "ethereum",
+      "maxAmountRequired": "100000000000000000",
+      "asset": { "symbol": "TON", "decimals": 18 },
+      "payTo": "0xOperatorReceiverAddress..."
+    }]
+  }</div>
+            </div>
+
+            <div class="guide-step">
+              <div class="guide-step-label">3. Sign EIP-3009 authorization + retry with X-PAYMENT header</div>
+              <div class="code-block">// Sign transferWithAuthorization
+const sig = await signTypedData(wallet, {
+  domain: { name: "Tokamak Network Token", chainId: 1, verifyingContract: TON_ADDRESS },
+  types: { TransferWithAuthorization: [...] },
+  message: { from, to: payTo, value, validBefore, nonce }
+});
+
+curl https://sentinai.operator.xyz/api/marketplace/txpool \
+  -H "X-PAYMENT: &lt;base64-encoded-payment-payload&gt;"
+
+← 200 OK  { "pending": 312, "queued": 47, "timestamp": "2026-03-11T09:00:00Z" }</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /app -->
+</div><!-- /frame-website -->
+
+
+<script>
+function showPage(page) {
+  document.querySelectorAll('.frame').forEach(f => f.classList.remove('active'));
+  document.querySelectorAll('.page-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('frame-' + page).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function toggleDashboard() {
+  const btn = document.getElementById('dashboard-toggle');
+  const enabled = document.getElementById('dashboard-enabled');
+  const disabled = document.getElementById('dashboard-disabled');
+  const isOn = btn.classList.contains('on');
+  if (isOn) {
+    btn.classList.remove('on'); btn.textContent = 'DISABLED';
+    enabled.style.display = 'none'; disabled.style.display = 'block';
+  } else {
+    btn.classList.add('on'); btn.textContent = 'ENABLED';
+    enabled.style.display = 'block'; disabled.style.display = 'none';
+  }
+}
+
+function showWebsiteTab(tab) {
+  ['registry', 'instance', 'guide'].forEach(t => {
+    document.getElementById('ws-' + t).style.display = 'none';
+    document.getElementById('tab-' + t).classList.remove('active');
+  });
+  document.getElementById('ws-' + tab).style.display = 'block';
+  document.getElementById('tab-' + tab).classList.add('active');
+}
+</script>
+
+</body>
+</html>

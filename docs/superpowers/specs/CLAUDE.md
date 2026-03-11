@@ -7,5 +7,6 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #5960 | 2:31 PM | 🔵 | Agent economy design specification for AI-to-AI marketplace | ~834 |
 | #5912 | 1:45 PM | 🔵 | Plan document review found null-safety issue in agent economy implementation | ~633 |
 </claude-mem-context>

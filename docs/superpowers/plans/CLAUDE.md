@@ -7,5 +7,6 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
+| #6011 | 2:44 PM | 🔵 | Marketplace UI implementation plan for agent economy | ~976 |
 | #5912 | 1:45 PM | 🔵 | Plan document review found null-safety issue in agent economy implementation | ~633 |
 </claude-mem-context>

@@ -14,3 +14,5 @@
 - When a user selects among architectural recommendations, update the report to record the chosen direction explicitly instead of leaving it as an open option.
 - Remove misleading UI affordances with a regression test first; a search box that does not search is worse than no search box.
 - When an architectural direction is selected but not yet implemented, capture the target design in a dedicated plan/design document before touching runtime code.
+- For marketplace-style operational data products, prefer decision-ready safety signals over order-flow-adjacent raw signals when both monetization and abuse resistance matter.
+- When an ERC-20 payment asset lacks EIP-3009, the least invasive x402-compatible path is usually facilitator-side EIP-712 authorization plus ERC-20 `approve/transferFrom`, not token replacement.
