@@ -735,3 +735,503 @@ Premium 상세:
 3. 비EVM 체인 범용 자동 감지
 4. 다중 인스턴스(HA) 집계 — Phase 3 멀티테넌트 설계에서 다룸
 5. 신규 결제/요금제 정책 변경
+
+---
+
+## 14) 현재 구현 상태 (2026-03-11)
+
+### 완료된 항목 (Week 1~3 해당)
+
+| 컴포넌트 | 파일 | 상태 |
+|---------|------|------|
+| ClientProfile 타입 시스템 | `src/lib/client-profile/types.ts` | ✅ |
+| Built-in Profiles 7개 | `src/lib/client-profile/builtin-profiles.ts` | ✅ geth/reth/nethermind/besu/erigon/op-geth/nitro-node |
+| Env Var 오버라이드 전체 | `src/lib/client-profile/env-overrides.ts` | ✅ SENTINAI_OVERRIDE_*, SENTINAI_CAPABILITY_*, SENTINAI_CUSTOM_METRIC_1~10, SENTINAI_COMPONENTS, SENTINAI_K8S_LABEL_* |
+| Sync 상태 파서 5종 | `src/lib/client-profile/sync-parsers.ts` | ✅ standard/nethermind/op-geth/nitro/custom |
+| JSON 파일 기반 커스텀 프로파일 | `src/lib/client-profile/custom-profiles.ts` | ✅ CLIENT_PROFILES_PATH 지원 |
+| Auto-detection | `src/lib/client-detector.ts` | ✅ web3_clientVersion + L2 fingerprint probe (arb/optimism) |
+| Capability 매핑 | `src/lib/capability-mapper.ts` | ✅ DetectedClient → CapabilityMapping |
+| First-Run Bootstrap | `src/lib/first-run-bootstrap.ts` | ✅ detect → NodeInstance 생성 |
+| Client 버전 추적기 | `src/lib/client-version-tracker.ts` | ✅ Redis 기반 버전 변경 감지 및 캐시 무효화 |
+| API v2 라우트 | `src/app/api/v2/instances/[id]/validate/`, `profile/`, `onboarding/complete/` | ✅ |
+
+이상 탐지 임계값 env var도 `anomaly-detector.ts`에서 이미 지원한다 (`ANOMALY_Z_SCORE_THRESHOLD`, `ANOMALY_BLOCK_PLATEAU_SECONDS` 등). 제안서의 §4.6 네이밍(`SENTINAI_THRESHOLD_*`)과 다르므로 env var 레퍼런스 문서 업데이트가 필요하다.
+
+### 미연결 Gap
+
+| Gap | 영향 파일 | 영향 |
+|-----|----------|------|
+| L2 agent-loop txpool 하드코딩 | `src/lib/agent-loop.ts:373` | Nethermind/커스텀 클라이언트 L2 연결 시 txpool 수집 실패 |
+| L2 metrics/route txpool 하드코딩 | `src/app/api/metrics/route.ts:669` | 대시보드 txpool 카드 오작동 |
+| `customMetrics` 수집 루프 없음 | agent-loop, metrics route | `SENTINAI_CUSTOM_METRIC_*` 설정해도 실제 수집 안 됨 |
+| `MetricDataPoint` 확장 없음 | `src/types/prediction.ts` | custom metrics을 ring buffer에 저장할 필드 없음 |
+| 토폴로지 오버라이드 미연결 | `src/chains/registry.ts` | `SENTINAI_COMPONENTS` 설정해도 RCA 엔진이 무시 |
+| K8s 레이블 오버라이드 미연결 | `src/lib/k8s-scaler.ts` | `SENTINAI_K8S_LABEL_*` 설정해도 k8s-scaler가 무시 |
+| `ResolvedFeatures` 미구현 | 없음 (신규 파일 필요) | NLOps/playbook-matcher가 runtime capability 확인 불가 |
+| 버전 트래커 agent-loop 미연결 | `src/lib/agent-loop.ts` | 클라이언트 업그레이드 자동 감지 안 됨 |
+
+---
+
+## 15) 잔여 구현 계획
+
+> **구현 전제**: 이 계획은 이미 완성된 `src/lib/client-profile/` 시스템 위에서 진행한다.
+> 각 Phase는 독립적으로 테스트 가능하며, Phase 1이 가장 높은 우선순위다.
+
+---
+
+### Phase 1: L2 수집 경로에 ClientProfile 연결 (우선순위 P0)
+
+> **목적**: Nethermind나 커스텀 클라이언트를 L2_RPC_URL로 연결했을 때 txpool 수집이 작동해야 한다.
+
+#### Task 1-1: `sync-parsers.ts`에 txpool 파서 함수 추가
+
+**파일**: `src/lib/client-profile/sync-parsers.ts` (수정)
+**테스트**: `src/lib/__tests__/sync-parsers.test.ts` (수정)
+
+기존 `parseSyncStatus()`와 동일한 패턴으로 txpool 응답을 파싱하는 함수를 추가한다.
+
+```typescript
+/**
+ * Parse a txpool RPC response into a pending transaction count.
+ * Returns 0 for unsupported clients (parserType null).
+ */
+export function parseTxPoolPendingCount(
+  result: unknown,
+  parserType: 'txpool' | 'parity' | 'custom' | null,
+  countPath?: string,
+): number {
+  if (parserType === null) return 0;
+
+  if (parserType === 'txpool') {
+    // txpool_status → { pending: '0x...', queued: '0x...' }
+    const obj = result as Record<string, unknown>;
+    const hex = String(obj?.pending ?? '0');
+    return parseInt(hex, 16) || 0;
+  }
+
+  if (parserType === 'parity') {
+    // parity_pendingTransactions → array or object
+    if (Array.isArray(result)) return result.length;
+    if (typeof result === 'object' && result !== null) return Object.keys(result).length;
+    return 0;
+  }
+
+  if (parserType === 'custom' && countPath) {
+    const val = getValueByPath(result, countPath);
+    if (typeof val === 'number') return val;
+    return parseInt(String(val ?? '0'), 10) || 0;
+  }
+
+  return 0;
+}
+```
+
+`index.ts`에 `parseTxPoolPendingCount` re-export 추가.
+
+**테스트 케이스**:
+```typescript
+it('txpool parser: hex pending', () => {
+  expect(parseTxPoolPendingCount({ pending: '0x1f4', queued: '0xa' }, 'txpool')).toBe(500);
+});
+it('parity parser: array', () => {
+  expect(parseTxPoolPendingCount([{}, {}, {}], 'parity')).toBe(3);
+});
+it('custom parser: path extraction', () => {
+  expect(parseTxPoolPendingCount({ result: { pending: 42 } }, 'custom', 'result.pending')).toBe(42);
+});
+it('null parser: returns 0', () => {
+  expect(parseTxPoolPendingCount({ pending: '0xff' }, null)).toBe(0);
+});
+```
+
+**커밋**: `feat(client-profile): add parseTxPoolPendingCount to sync-parsers`
+
+---
+
+#### Task 1-2: `agent-loop.ts` L2 txpool 호출 교체
+
+**파일**: `src/lib/agent-loop.ts` (수정)
+**테스트**: `src/lib/__tests__/agent-loop.test.ts` (수정)
+
+상단 import 추가:
+```typescript
+import { resolveClientProfile, parseTxPoolPendingCount } from '@/lib/client-profile';
+```
+
+`collectL2ObservationMetrics()` 함수 (또는 해당 관찰 경로) 내 txpool 블록을 교체:
+
+**교체 전** (`src/lib/agent-loop.ts:363-386`):
+```typescript
+let txPoolPending = 0;
+try {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+  const txPoolResponse = await fetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'txpool_status', params: [], id: 1 }),
+    signal: controller.signal,
+  });
+  clearTimeout(timeoutId);
+  const txPoolData = await txPoolResponse.json();
+  if (txPoolData.result?.pending) {
+    txPoolPending = parseInt(txPoolData.result.pending, 16);
+  }
+} catch {
+  txPoolPending = block.transactions.length;
+}
+```
+
+**교체 후**:
+```typescript
+const clientProfile = resolveClientProfile();
+let txPoolPending = 0;
+if (clientProfile.methods.txPool) {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+    const txPoolResponse = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        method: clientProfile.methods.txPool.method,
+        params: clientProfile.methods.txPool.params ?? [],
+        id: 1,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    const txPoolData = (await txPoolResponse.json()) as { result?: unknown };
+    txPoolPending = parseTxPoolPendingCount(
+      txPoolData.result,
+      clientProfile.parsers.txPool,
+      (clientProfile.methods.txPool as { responsePath?: string }).responsePath,
+    );
+  } catch {
+    txPoolPending = block.transactions.length;
+  }
+} else {
+  // Client does not support txpool — use block tx count as proxy
+  txPoolPending = block.transactions.length;
+}
+```
+
+**주의**: `resolveClientProfile()`은 매 사이클마다 호출되지 않도록 모듈 레벨 캐시를 고려한다. env var는 런타임에 변경되지 않으므로 process-level 싱글턴이 적합하다. 단, 테스트에서 env 격리가 필요하므로 lazy init + reset hook을 둔다.
+
+**테스트**:
+- `SENTINAI_OVERRIDE_TXPOOL_METHOD=parity_pendingTransactions`, `SENTINAI_OVERRIDE_TXPOOL_PARSER=parity` 설정 시 parity 파서로 파싱되는지 확인
+- `clientProfile.methods.txPool === null` 시 `block.transactions.length`로 fallback되는지 확인
+
+**커밋**: `feat(agent-loop): use ClientProfile for L2 txpool RPC method and parser`
+
+---
+
+#### Task 1-3: `metrics/route.ts` L2 txpool 호출 교체
+
+**파일**: `src/app/api/metrics/route.ts` (수정)
+**테스트**: `src/app/api/metrics/route.isolation.test.ts` (수정)
+
+Task 1-2와 동일한 패턴으로 `src/app/api/metrics/route.ts:658-686` 교체.
+
+상단 import 추가:
+```typescript
+import { resolveClientProfile, parseTxPoolPendingCount } from '@/lib/client-profile';
+```
+
+기존 `txpool_status` 하드코딩 블록을 Task 1-2와 동일한 ClientProfile 기반 코드로 교체.
+
+**커밋**: `feat(metrics-api): use ClientProfile for L2 txpool RPC method`
+
+---
+
+### Phase 2: Custom Metrics 수집 (우선순위 P1)
+
+> **목적**: `SENTINAI_CUSTOM_METRIC_1_*` 설정만으로 임의 RPC → 대시보드 메트릭이 동작해야 한다.
+
+#### Task 2-1: `MetricDataPoint`에 `customMetrics` 필드 추가
+
+**파일**: `src/types/prediction.ts` (수정)
+
+```typescript
+export interface MetricDataPoint {
+  // ... 기존 필드 ...
+
+  /**
+   * Custom metrics collected via SENTINAI_CUSTOM_METRIC_N_* env vars.
+   * Key: metric name (e.g. 'proofGenTime'), Value: numeric reading.
+   */
+  customMetrics?: Record<string, number>;
+}
+```
+
+**커밋**: `feat(types): add customMetrics field to MetricDataPoint`
+
+---
+
+#### Task 2-2: agent-loop L1 관찰 경로에 custom metrics 수집 추가
+
+**파일**: `src/lib/agent-loop.ts` (수정)
+
+`collectL1ObservationMetrics()` 내 data point 생성 직전에 추가:
+
+```typescript
+// Collect custom metrics from ClientProfile
+const customMetrics: Record<string, number> = {};
+const profile = resolveClientProfile();
+for (const cm of profile.customMetrics) {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), RPC_TIMEOUT_MS);
+    const res = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: cm.method, params: cm.params ?? [], id: 1 }),
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    const data = (await res.json()) as { result?: unknown };
+    const raw = cm.responsePath ? getValueByPath(data.result, cm.responsePath) : data.result;
+    const value = typeof raw === 'number' ? raw : parseFloat(String(raw ?? '0'));
+    if (Number.isFinite(value)) customMetrics[cm.name] = value;
+  } catch {
+    // silent failure — missing custom metric does not degrade the cycle
+  }
+}
+```
+
+`dataPoint` 생성 시 `customMetrics` 포함:
+```typescript
+const dataPoint: MetricDataPoint = {
+  // ... 기존 필드 ...
+  ...(Object.keys(customMetrics).length > 0 ? { customMetrics } : {}),
+};
+```
+
+L2 관찰 경로도 동일하게 추가.
+
+**커밋**: `feat(agent-loop): collect custom metrics from ClientProfile`
+
+---
+
+#### Task 2-3: anomaly-detector에 custom metrics Z-Score 등록
+
+**파일**: `src/lib/anomaly-detector.ts` (수정)
+
+`runAnomalyDetection()` 내에서 `dataPoint.customMetrics`의 각 키를 기존 메트릭과 동일한 Z-Score 파이프라인에 투입:
+
+```typescript
+// Custom metrics from ClientProfile
+if (dataPoint.customMetrics) {
+  for (const [name, value] of Object.entries(dataPoint.customMetrics)) {
+    const customHistory = history.map(p => p.customMetrics?.[name] ?? 0);
+    const anomaly = detectZScoreAnomaly(name, value, customHistory);
+    if (anomaly) anomalies.push(anomaly);
+  }
+}
+```
+
+**커밋**: `feat(anomaly-detector): auto-register custom metrics for Z-Score detection`
+
+---
+
+### Phase 3: Topology & K8s 오버라이드 연결 (우선순위 P1)
+
+> **목적**: `SENTINAI_COMPONENTS` + `SENTINAI_K8S_LABEL_*` 설정이 실제 동작에 반영되어야 한다.
+
+#### Task 3-1: chain registry에 topology override 적용
+
+**파일**: `src/chains/registry.ts` (수정)
+
+`getChainPlugin()` 반환 전에 `parseTopologyFromEnv()`를 호출하고, 결과가 있으면 plugin의 `components`와 `dependencyGraph`를 교체하는 어댑터 래퍼를 적용한다.
+
+```typescript
+import { parseTopologyFromEnv, parseK8sLabelsFromEnv } from '@/lib/client-profile';
+
+function applyEnvOverrides(plugin: ChainPlugin): ChainPlugin {
+  const topology = parseTopologyFromEnv();
+  const k8sLabels = parseK8sLabelsFromEnv();
+
+  if (!topology && Object.keys(k8sLabels).length === 0) return plugin;
+
+  return {
+    ...plugin,
+    ...(topology ? {
+      components: topology.components.map(name => ({
+        name,
+        displayName: name,
+        // K8s config from label overrides
+        k8sLabelSelector: k8sLabels[name.toLowerCase()],
+      })),
+      dependencyGraph: topology.dependencyGraph,
+    } : {}),
+  };
+}
+```
+
+**주의**: `ChainPlugin.components` 타입이 `ChainComponent[]`이므로 기존 필드 구조에 맞게 병합해야 한다. 오버라이드되지 않은 필드는 기존 plugin 값을 유지한다.
+
+**커밋**: `feat(registry): apply SENTINAI_COMPONENTS and K8s label overrides to chain plugin`
+
+---
+
+#### Task 3-2: k8s-scaler에 K8s 레이블 오버라이드 주입
+
+**파일**: `src/lib/k8s-scaler.ts` (수정)
+
+pod selector 결정 지점에서 `parseK8sLabelsFromEnv()`를 확인하고, 해당 component의 오버라이드 레이블이 있으면 사용:
+
+```typescript
+import { parseK8sLabelsFromEnv } from '@/lib/client-profile';
+
+function getLabelSelectorForComponent(componentName: string, defaultSelector: string): string {
+  const overrides = parseK8sLabelsFromEnv();
+  return overrides[componentName.toLowerCase()] ?? defaultSelector;
+}
+```
+
+**커밋**: `feat(k8s-scaler): apply SENTINAI_K8S_LABEL_* env overrides for pod selection`
+
+---
+
+### Phase 4: ResolvedFeatures + 버전 추적 연결 (우선순위 P2)
+
+#### Task 4-1: `resolved-features.ts` 구현
+
+**파일**: `src/lib/resolved-features.ts` (신규)
+**테스트**: `src/lib/__tests__/resolved-features.test.ts` (신규)
+
+```typescript
+import type { ClientProfile } from '@/lib/client-profile';
+import type { ChainCapabilities } from '@/chains/types';
+import type { CapabilityMapping } from '@/lib/capability-mapper';
+
+export interface ResolvedFeatures {
+  /** txpool 모니터링 가능 여부 (stack capability AND runtime detection) */
+  txpoolMonitoring: boolean;
+  /** peer 모니터링 가능 여부 */
+  peerMonitoring: boolean;
+  /** L2 sync status 사용 가능 여부 */
+  l2SyncMonitoring: boolean;
+  /** 커스텀 메트릭 수 (0이면 비활성) */
+  customMetricsCount: number;
+  /** 클라이언트 미감지 여부 (partial support mode) */
+  partialSupport: boolean;
+}
+
+export function resolveFeatures(
+  chainCapabilities: ChainCapabilities,
+  detected: CapabilityMapping,
+  profile: ClientProfile,
+): ResolvedFeatures {
+  return {
+    txpoolMonitoring: detected.supportsTxPool && profile.capabilities.supportsTxPool,
+    peerMonitoring: detected.supportsPeerCount,
+    l2SyncMonitoring: profile.capabilities.supportsL2SyncStatus,
+    customMetricsCount: profile.customMetrics.length,
+    partialSupport: profile.clientFamily === 'unknown',
+  };
+}
+```
+
+metrics API 응답에 `resolvedFeatures` 필드 포함, 프론트엔드가 카드 활성화/비활성화에 사용.
+
+**커밋**: `feat: add ResolvedFeatures combining stack and runtime capabilities`
+
+---
+
+#### Task 4-2: agent-loop observe 사이클에 버전 트래커 연결
+
+**파일**: `src/lib/agent-loop.ts` (수정)
+
+`collectL1ObservationMetrics()` 또는 메인 observe 사이클 끝에 추가:
+
+```typescript
+import { checkAndTrackClientVersion } from '@/lib/client-version-tracker';
+import { getCoreRedis } from '@/core/redis';
+
+// After collecting metrics, check client version (non-blocking)
+try {
+  const redis = getCoreRedis();
+  if (redis && l1Metrics.clientVersion) {
+    const versionCheck = await checkAndTrackClientVersion(
+      redis,
+      'agent:default',
+      l1Metrics.clientVersion,
+    );
+    if (versionCheck.changed) {
+      logger.warn('[AgentLoop] Client version changed — capabilities cache invalidated');
+    }
+  }
+} catch {
+  // version tracking failure does not degrade observe
+}
+```
+
+**커밋**: `feat(agent-loop): connect client version tracker to observe cycle`
+
+---
+
+### Phase 5: 대시보드 Partial Support Mode UX (우선순위 P3)
+
+#### Task 5-1: metrics API 응답에 `clientMode` 필드 추가
+
+**파일**: `src/app/api/metrics/route.ts` (수정)
+
+응답 JSON에 추가:
+```typescript
+clientMode: profile.clientFamily === 'unknown' ? 'partial' : 'full',
+clientFamily: profile.clientFamily,
+```
+
+#### Task 5-2: 대시보드에 partial support 배너 추가
+
+**파일**: `src/app/page.tsx` (수정)
+
+metrics 응답에서 `clientMode === 'partial'` 시 상단에 배너 표시:
+```
+⚠️ Client detection unavailable. Running in basic monitoring mode.
+Set SENTINAI_CLIENT_FAMILY to enable full capabilities.
+```
+
+**커밋**: `feat(dashboard): show partial support mode banner for unknown EL clients`
+
+---
+
+### 구현 순서 요약
+
+```
+Phase 1 (P0, 1-2일)
+  Task 1-1: parseTxPoolPendingCount 추가
+  Task 1-2: agent-loop txpool → ClientProfile
+  Task 1-3: metrics/route txpool → ClientProfile
+
+Phase 2 (P1, 1-2일)
+  Task 2-1: MetricDataPoint.customMetrics 필드
+  Task 2-2: agent-loop custom metrics 수집
+  Task 2-3: anomaly-detector custom metrics 등록
+
+Phase 3 (P1, 1일)
+  Task 3-1: registry topology override 연결
+  Task 3-2: k8s-scaler K8s 레이블 오버라이드
+
+Phase 4 (P2, 1일)
+  Task 4-1: ResolvedFeatures 구현
+  Task 4-2: agent-loop 버전 트래커 연결
+
+Phase 5 (P3, 0.5일)
+  Task 5-1: metrics API clientMode 필드
+  Task 5-2: 대시보드 partial support 배너
+```
+
+### Acceptance Criteria (Phase별)
+
+**Phase 1 완료 조건**: Nethermind를 `L2_RPC_URL`로 연결하고 `SENTINAI_CLIENT_FAMILY=nethermind` 설정 시 txpool 카운트가 대시보드에 표시된다.
+
+**Phase 2 완료 조건**: `SENTINAI_CUSTOM_METRIC_1_METHOD=mychain_foo`, `SENTINAI_CUSTOM_METRIC_1_PATH=result.value` 설정 후 agent-loop 1 사이클 실행 시 해당 메트릭이 MetricsStore에 저장되고 이상 탐지 대상에 등록된다.
+
+**Phase 3 완료 조건**: `SENTINAI_COMPONENTS=exec,seq` + `SENTINAI_COMPONENT_DEPS={...}` 설정 시 RCA 엔진이 해당 토폴로지를 사용한다.
+
+**Phase 4 완료 조건**: `GET /api/v2/instances/{id}/capabilities`가 `ResolvedFeatures`를 반환한다. reth → reth v2.0 버전 업그레이드 시 agent-loop 다음 사이클에서 capabilities 캐시가 삭제된다.
+
+**Phase 5 완료 조건**: `web3_clientVersion` 미노출 노드 연결 시 대시보드 상단에 partial support 배너가 표시된다.
