@@ -348,6 +348,4 @@ If problems persist:
 ## Still stuck?
 
 - Review [Setup Guide](setup.md) for correct configuration
-- Try [Demo Scenarios](demo-scenarios.md) in simulation mode first
 - Check [EC2 Setup Guide](ec2-setup-guide.md) for production deployment
-- See [Operations Runbook](agentic-q1-operations-runbook.md) for operational procedures

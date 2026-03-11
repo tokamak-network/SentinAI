@@ -60,9 +60,8 @@ See [EC2 Setup Guide](ec2-setup-guide.md) for detailed instructions.
 
 After setup:
 
-1. **Run a demo**: [Demo Scenarios](demo-scenarios.md)
-2. **Configure scaling**: [Autonomy Cockpit User Guide](autonomy-cockpit-user-guide.md)
-3. **Production operations**: [Daily Operations Runbook](agentic-q1-operations-runbook.md)
+1. **Production deployment**: [EC2 Setup Guide](ec2-setup-guide.md)
+2. **Connect your chain**: [OP Stack](opstack-example-runbook.md) or [Arbitrum Orbit](arbitrum-orbit-local-setup.md)
 
 ---
 
@@ -73,7 +72,7 @@ By default, SentinAI runs in **simulation mode** (dry-run). Scaling decisions ar
 To enable live execution:
 1. Set `SCALING_SIMULATION_MODE=false` in `.env.local`
 2. Ensure AWS credentials have EKS write permissions
-3. Review [Autonomy Cockpit User Guide](autonomy-cockpit-user-guide.md) for safety controls
+3. Set `SCALING_SIMULATION_MODE=false` and verify no unexpected scaling events
 
 ---
 
@@ -92,6 +91,4 @@ To enable live execution:
 ### Scaling Not Triggered
 - Confirm `SCALING_SIMULATION_MODE=false` for live execution
 - Check cooldown period (5 minutes by default)
-- Review [Testing Guide](../verification/testing-guide.md)
-
-For more issues, see [Redis Setup](redis-setup.md) and component-specific guides.
+- See [Troubleshooting](troubleshooting.md) for common issues

@@ -381,5 +381,4 @@ AWS EKS Cluster
 
 For implementation details, see:
 - [API Reference](api-reference.md)
-- [MCP User Guide](sentinai-mcp-user-guide.md)
-- [Testing Guide](../verification/testing-guide.md)
+- [MCP Integration](sentinai-mcp-user-guide.md)

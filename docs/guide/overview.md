@@ -66,5 +66,4 @@ Adding a new chain requires 4 files. The engine modules (RCA, anomaly detection,
 ---
 
 For setup instructions, see [Setup Guide](setup.md).
-For hands-on demos, see [Demo Scenarios](demo-scenarios.md).
 For the full architecture diagram, see [Architecture](architecture.md).
