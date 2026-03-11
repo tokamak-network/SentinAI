@@ -3,35 +3,33 @@
  *
  * GET  - Fetch current pricing configuration (public)
  * PUT  - Update pricing (requires SENTINAI_API_KEY)
- * OPTIONS - CORS preflight
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { RedisMarketplaceStore } from '@/lib/redis-marketplace-store';
-import { setMarketplaceStore } from '@/lib/marketplace-store';
-import type {
-  PricingUpdateRequest,
-  MarketplacePricingConfig,
-} from '@/types/marketplace';
+import type { MarketplacePricingConfig, PricingUpdateRequest } from '@/types/marketplace';
 import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
-// Initialize store singleton on import
-const marketplaceStore = new RedisMarketplaceStore();
-setMarketplaceStore(marketplaceStore);
+// Default pricing configuration
+const DEFAULT_PRICING: MarketplacePricingConfig = {
+  traineePrice: 0,
+  juniorPrice: 19900,   // $199
+  seniorPrice: 49900,   // $499
+  expertPrice: 79900,   // $799
+  updatedAt: new Date().toISOString(),
+};
+
+// In-memory store (replace with Redis in production)
+let pricingConfig = DEFAULT_PRICING;
 
 /**
  * GET /api/marketplace/pricing
- *
- * Fetch current pricing configuration (public endpoint).
- *
- * @returns JSON response with current pricing tiers
+ * Returns current pricing configuration
  */
 export async function GET(): Promise<NextResponse> {
   try {
-    const config = await marketplaceStore.getPricingConfig();
-    return NextResponse.json({ data: config });
+    return NextResponse.json({ data: pricingConfig });
   } catch (error) {
     logger.error('[marketplace/pricing GET] error:', error);
     return NextResponse.json(
@@ -43,117 +41,53 @@ export async function GET(): Promise<NextResponse> {
 
 /**
  * PUT /api/marketplace/pricing
+ * Update pricing configuration (requires API key authentication)
  *
- * Update pricing configuration (requires SENTINAI_API_KEY authorization).
- * Supports partial updates — only specified tiers are modified.
- *
- * Authorization: Bearer {SENTINAI_API_KEY}
- *
- * @param request - NextRequest with Bearer token and pricing update payload
- * @returns JSON response with updated pricing configuration or error
+ * Body:
+ * {
+ *   "traineePrice": 0,      // optional, in cents
+ *   "juniorPrice": 19900,   // optional, in cents
+ *   "seniorPrice": 49900,   // optional, in cents
+ *   "expertPrice": 79900    // optional, in cents
+ * }
  */
 export async function PUT(request: NextRequest): Promise<NextResponse> {
   try {
-    // Extract and validate API key from Authorization header
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader) {
+    // Check API key
+    const apiKey = request.headers.get('Authorization')?.replace('Bearer ', '');
+    const expectedKey = process.env.SENTINAI_API_KEY;
+
+    if (!expectedKey || !apiKey || apiKey !== expectedKey) {
       return NextResponse.json(
-        { error: 'Missing Authorization header' },
+        { error: 'Unauthorized: invalid or missing API key' },
         { status: 401 }
       );
     }
 
-    const bearerToken = authHeader.startsWith('Bearer ')
-      ? authHeader.slice(7)
-      : authHeader;
+    const body: PricingUpdateRequest = await request.json();
 
-    const apiKey = process.env.SENTINAI_API_KEY;
-    if (!apiKey) {
-      logger.error('[marketplace/pricing PUT] SENTINAI_API_KEY not configured');
-      return NextResponse.json(
-        { error: 'API key not configured on server' },
-        { status: 500 }
-      );
-    }
-
-    // Constant-time comparison to prevent timing attacks
-    if (bearerToken !== apiKey) {
-      return NextResponse.json(
-        { error: 'Invalid API key' },
-        { status: 401 }
-      );
-    }
-
-    // Parse request body
-    let update: PricingUpdateRequest;
-    try {
-      update = await request.json();
-    } catch {
-      return NextResponse.json(
-        { error: 'Invalid JSON in request body' },
-        { status: 400 }
-      );
-    }
-
-    if (!update || typeof update !== 'object') {
-      return NextResponse.json(
-        { error: 'Request body must be a JSON object' },
-        { status: 400 }
-      );
-    }
-
-    // Validate pricing fields: must be non-negative integers (cents)
-    const priceFields = [
-      'traineePrice',
-      'juniorPrice',
-      'seniorPrice',
-      'expertPrice',
-    ] as const;
-
-    for (const field of priceFields) {
-      const value = update[field];
-
-      if (value !== undefined) {
-        if (!Number.isInteger(value)) {
-          return NextResponse.json(
-            {
-              error: `${field} must be an integer (cents), got ${typeof value}`,
-            },
-            { status: 400 }
-          );
-        }
-
-        if (value < 0) {
-          return NextResponse.json(
-            { error: `${field} must be non-negative, got ${value}` },
-            { status: 400 }
-          );
-        }
-
-        // Sanity check: price should not exceed $100,000 (10,000,000 cents)
-        if (value > 10000000) {
-          return NextResponse.json(
-            {
-              error: `${field} exceeds maximum allowed price ($100,000), got ${(value / 100).toFixed(2)}`,
-            },
-            { status: 400 }
-          );
-        }
+    // Validate: all prices must be non-negative integers
+    for (const [key, value] of Object.entries(body)) {
+      if (value !== undefined && (typeof value !== 'number' || value < 0 || !Number.isInteger(value))) {
+        return NextResponse.json(
+          { error: `Invalid ${key}: must be a non-negative integer (cents)` },
+          { status: 400 }
+        );
       }
     }
 
-    // Update pricing configuration
-    const updated = await marketplaceStore.updatePricing(update);
+    // Update pricing
+    pricingConfig = {
+      ...pricingConfig,
+      ...body,
+      updatedAt: new Date().toISOString(),
+    };
 
-    logger.info('[marketplace/pricing PUT] Pricing updated successfully', {
-      traineePrice: updated.traineePrice,
-      juniorPrice: updated.juniorPrice,
-      seniorPrice: updated.seniorPrice,
-      expertPrice: updated.expertPrice,
-    });
+    logger.info('[marketplace/pricing PUT] Pricing updated successfully', body);
 
     return NextResponse.json({
-      data: updated,
+      data: pricingConfig,
+      message: 'Pricing configuration updated',
     });
   } catch (error) {
     logger.error('[marketplace/pricing PUT] error:', error);
@@ -166,13 +100,10 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
 
 /**
  * OPTIONS /api/marketplace/pricing
- *
- * Handle CORS preflight requests.
- *
- * @returns Empty 204 response with CORS headers
+ * CORS preflight
  */
-export async function OPTIONS(): Promise<NextResponse> {
-  return new NextResponse(null, {
+export async function OPTIONS(): Promise<Response> {
+  return new Response(null, {
     status: 204,
     headers: {
       'Access-Control-Allow-Origin': '*',
