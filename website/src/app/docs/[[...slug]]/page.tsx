@@ -14,44 +14,32 @@ const CARDS = [
   {
     emoji: '🚀',
     title: 'Get Started',
-    description: 'Install, connect, and run your first simulation.',
+    description: 'Understand what SentinAI does and get it running in 5 minutes.',
     links: [
       { label: 'Overview', href: '/docs/guide/overview' },
       { label: 'Quick Start (5 min)', href: '/docs/guide/quickstart' },
-      { label: 'Demo Scenarios', href: '/docs/guide/demo-scenarios' },
       { label: 'Troubleshooting', href: '/docs/guide/troubleshooting' },
     ],
   },
   {
     emoji: '⚙️',
     title: 'Deploy',
-    description: 'Run SentinAI on Docker, EC2, or alongside your OP Stack node.',
+    description: 'Run SentinAI on Docker, EC2, or alongside your chain node.',
     links: [
-      { label: 'Local Setup (Docker)', href: '/docs/guide/setup' },
+      { label: 'Docker Setup', href: '/docs/guide/setup' },
       { label: 'EC2 Deployment', href: '/docs/guide/ec2-setup-guide' },
-      { label: 'OP Stack Runbook', href: '/docs/guide/opstack-example-runbook' },
-      { label: 'Environment Variables', href: '/docs/guide/setup' },
+      { label: 'OP Stack', href: '/docs/guide/opstack-example-runbook' },
+      { label: 'Arbitrum Orbit', href: '/docs/guide/arbitrum-orbit-local-setup' },
     ],
   },
   {
-    emoji: '🔌',
-    title: 'Integrate & Extend',
-    description: 'Connect via API or MCP, understand the architecture, add custom chains.',
+    emoji: '📚',
+    title: 'Reference',
+    description: 'Architecture deep-dive, REST API, and external integrations.',
     links: [
       { label: 'Architecture', href: '/docs/guide/architecture' },
       { label: 'API Reference', href: '/docs/guide/api-reference' },
-      { label: 'MCP Setup', href: '/docs/guide/sentinai-mcp-user-guide' },
-      { label: 'Anomaly Detection', href: '/docs/spec/anomaly-detection-guide' },
-    ],
-  },
-  {
-    emoji: '✅',
-    title: 'Verify',
-    description: 'Run the test suite, review integration reports, and validate your deployment.',
-    links: [
-      { label: 'Testing Guide', href: '/docs/verification/testing-guide' },
-      { label: 'Integration Tests', href: '/docs/verification/integration-test-report' },
-      { label: 'Dashboard UI Testing', href: '/docs/verification/dashboard-ui-testing-guide' },
+      { label: 'MCP Integration', href: '/docs/guide/sentinai-mcp-user-guide' },
     ],
   },
 ];
@@ -87,7 +75,7 @@ function DocsLandingPage() {
               </Link>
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {CARDS.map((card) => (
               <div
                 key={card.title}
@@ -123,22 +111,18 @@ function DocsLandingPage() {
 // So ../docs = /vercel/path0/docs/ (full repo is cloned)
 const DOCS_ROOT = path.join(process.cwd(), '../docs');
 
-// Flat ordered list used for prev/next navigation
+// Flat ordered list used for prev/next navigation (matches sidebar structure)
 const NAV_ORDER = [
   { href: '/docs/guide/overview', label: 'Overview' },
   { href: '/docs/guide/quickstart', label: 'Quick Start' },
-  { href: '/docs/guide/demo-scenarios', label: 'Demo Scenarios' },
   { href: '/docs/guide/troubleshooting', label: 'Troubleshooting' },
-  { href: '/docs/guide/setup', label: 'Setup Guide' },
+  { href: '/docs/guide/setup', label: 'Docker Setup' },
   { href: '/docs/guide/ec2-setup-guide', label: 'EC2 Deployment' },
-  { href: '/docs/guide/opstack-example-runbook', label: 'OP Stack Runbook' },
-  { href: '/docs/guide/runbook/agentic-q1-operations-runbook', label: 'Daily Operations' },
-  { href: '/docs/guide/autonomy-cockpit-user-guide', label: 'Autonomy Cockpit' },
-  { href: '/docs/guide/sentinai-mcp-user-guide', label: 'MCP User Guide' },
+  { href: '/docs/guide/opstack-example-runbook', label: 'OP Stack' },
+  { href: '/docs/guide/arbitrum-orbit-local-setup', label: 'Arbitrum Orbit' },
   { href: '/docs/guide/architecture', label: 'Architecture' },
   { href: '/docs/guide/api-reference', label: 'API Reference' },
-  { href: '/docs/spec/anomaly-detection-guide', label: 'Anomaly Detection' },
-  { href: '/docs/spec/rca-engine-guide', label: 'RCA Engine' },
+  { href: '/docs/guide/sentinai-mcp-user-guide', label: 'MCP Integration' },
 ];
 
 type PageProps = {

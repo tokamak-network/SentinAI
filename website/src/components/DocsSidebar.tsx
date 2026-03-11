@@ -22,24 +22,16 @@ const docStructure: DocSection[] = [
     items: [
       { title: 'Overview', href: '/docs/guide/overview', emoji: '📖' },
       { title: 'Quick Start', href: '/docs/guide/quickstart', emoji: '⚡' },
-      { title: 'Demo Scenarios', href: '/docs/guide/demo-scenarios' },
       { title: 'Troubleshooting', href: '/docs/guide/troubleshooting', emoji: '🔧' },
     ],
   },
   {
     title: 'Deploy',
     items: [
-      { title: 'Setup Guide', href: '/docs/guide/setup' },
+      { title: 'Docker Setup', href: '/docs/guide/setup' },
       { title: 'EC2 Deployment', href: '/docs/guide/ec2-setup-guide' },
-      { title: 'OP Stack Runbook', href: '/docs/guide/opstack-example-runbook' },
-    ],
-  },
-  {
-    title: 'Operations',
-    items: [
-      { title: 'Daily Operations', href: '/docs/guide/runbook/agentic-q1-operations-runbook' },
-      { title: 'Autonomy Cockpit', href: '/docs/guide/autonomy-cockpit-user-guide' },
-      { title: 'MCP User Guide', href: '/docs/guide/sentinai-mcp-user-guide' },
+      { title: 'OP Stack', href: '/docs/guide/opstack-example-runbook' },
+      { title: 'Arbitrum Orbit', href: '/docs/guide/arbitrum-orbit-local-setup' },
     ],
   },
   {
@@ -47,8 +39,7 @@ const docStructure: DocSection[] = [
     items: [
       { title: 'Architecture', href: '/docs/guide/architecture', emoji: '🏗️' },
       { title: 'API Reference', href: '/docs/guide/api-reference', emoji: '📡' },
-      { title: 'Anomaly Detection', href: '/docs/spec/anomaly-detection-guide' },
-      { title: 'RCA Engine', href: '/docs/spec/rca-engine-guide' },
+      { title: 'MCP Integration', href: '/docs/guide/sentinai-mcp-user-guide' },
     ],
   },
 ];
