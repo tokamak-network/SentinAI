@@ -7,6 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #6117 | 1:22 PM | 🔄 | Remove Obsolete V1 Agent Loop Logging from Scheduler | ~251 |
-| #6114 | " | 🔵 | Scheduler Architecture and V1 to V2 Agent Migration | ~619 |
+| #6125 | 1:23 PM | 🔄 | Simplify Public Status API by Removing V1/V2 Conditionals | ~303 |
 </claude-mem-context>

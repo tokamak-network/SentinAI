@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAgentOrchestrator, isAgentV2Enabled } from '@/core/agent-orchestrator';
+import { getAgentOrchestrator } from '@/core/agent-orchestrator';
 import { getCycleHistory } from '@/lib/cycle-store';
 import type { AgentCycleResult } from '@/types/agent-cycle';
 import { buildAgentFleetSnapshot } from '@/lib/agent-fleet';
@@ -13,8 +13,6 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const limitParam = parseInt(url.searchParams.get('limit') || '120', 10);
     const limit = Math.min(Math.max(10, limitParam), 500);
-
-    const agentV2 = isAgentV2Enabled();
 
     const [statuses, recentCycles] = await Promise.all([
       Promise.resolve(getAgentOrchestrator().getStatuses()),
@@ -31,32 +29,27 @@ export async function GET(request: Request) {
       })),
     }));
 
-    // In V2, only collector and detector run on a fixed schedule.
-    // All other roles are event-driven and should not be marked stale
-    // just because no events have occurred.
-    const scheduledRoles = agentV2
-      ? new Set(['collector', 'detector'])
-      : undefined;
+    // V2 orchestrator: only collector and detector run on fixed schedule.
+    // All other roles are event-driven and should not be marked stale.
+    const scheduledRoles = new Set(['collector', 'detector']);
     const snapshot = buildAgentFleetSnapshot({ statuses, cycles, scheduledRoles });
 
-    // In Agent V2 mode, enrich KPIs from experience store
-    if (agentV2) {
-      try {
-        const expStats = await getExperienceStats();
-        if (expStats.totalOperations > 0) {
-          snapshot.kpi.successRate = Number((expStats.successRate * 100).toFixed(2));
-          snapshot.kpi.p95CycleMs = Math.round(expStats.avgResolutionMs);
-          snapshot.kpi.criticalPathPhase = expStats.topCategories[0]?.category ?? 'unknown';
-          // throughput: total ops / operating days → ops per minute
-          if (expStats.operatingDays > 0) {
-            const opsPerDay = expStats.totalOperations / expStats.operatingDays;
-            snapshot.kpi.throughputPerMin = Number((opsPerDay / (24 * 60)).toFixed(2));
-          }
+    // Enrich KPIs from experience store
+    try {
+      const expStats = await getExperienceStats();
+      if (expStats.totalOperations > 0) {
+        snapshot.kpi.successRate = Number((expStats.successRate * 100).toFixed(2));
+        snapshot.kpi.p95CycleMs = Math.round(expStats.avgResolutionMs);
+        snapshot.kpi.criticalPathPhase = expStats.topCategories[0]?.category ?? 'unknown';
+        // throughput: total ops / operating days → ops per minute
+        if (expStats.operatingDays > 0) {
+          const opsPerDay = expStats.totalOperations / expStats.operatingDays;
+          snapshot.kpi.throughputPerMin = Number((opsPerDay / (24 * 60)).toFixed(2));
         }
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : 'unknown';
-        logger.warn(`[API] Agent fleet: experience stats fallback — ${msg}`);
       }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'unknown';
+      logger.warn(`[API] Agent fleet: experience stats fallback — ${msg}`);
     }
 
     const costAgent = statuses.find(s => s.role === 'cost');
@@ -64,7 +57,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       ...snapshot,
-      agentV2,
+      agentV2: true,
       agents: statuses,
       lastCostScalingAt,
       updatedAt: new Date().toISOString(),

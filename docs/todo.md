@@ -93,9 +93,26 @@
 - [x] Define a TON settlement approach that works without EIP-3009 and without token contract upgrades.
 - [x] Choose approval-based pull facilitator as the Phase 1 settlement model.
 - [x] Write facilitator design and implementation plan docs under `docs/plans/`.
+- [x] Add Korean versions of the TON facilitator design and implementation plan docs.
+
+### Marketplace Pricing Findings Remediation
+
+- [x] Add route regression tests proving `/api/marketplace/pricing` uses the shared marketplace store.
+- [x] Wire pricing route reads/writes through `MarketplaceStore` instead of module-local in-memory state.
+- [x] Reject unknown pricing keys in API payload validation.
+- [x] Re-run focused pricing tests and production build after the fix.
 
 ## Review (2026-03-11, TON Facilitator)
 
 - Designed a TON-specific x402 settlement path using ERC-20 `approve + transferFrom` with facilitator-side EIP-712 authorization checks.
 - Captured the buyer, merchant, facilitator, nonce, receipt-signing, and mainnet/sepolia profile model in a dedicated design doc.
 - Wrote a concrete implementation plan covering typed data, nonce store, settlement executor, facilitator HTTP API, and merchant integration.
+- Constrained Phase 1 deployment to a same-app facilitator model with internal routes and explicit internal auth boundaries.
+- Added explicit on-chain settlement verification and reconciliation requirements to the facilitator design and plan.
+- Added Korean companion docs for the TON facilitator design and implementation plan.
+
+## Review (2026-03-11, Marketplace Pricing Findings)
+
+- Added route-level regression tests for `/api/marketplace/pricing` covering shared store reads, shared store writes, unknown-key rejection, and OPTIONS behavior.
+- Replaced module-local pricing state with shared `MarketplaceStore` access so the pricing API and pricing engine now resolve the same persistence path.
+- Added strict request-key validation for pricing updates and re-verified focused pricing tests plus production build.

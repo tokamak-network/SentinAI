@@ -2,7 +2,7 @@
 
 > Date: 2026-03-11
 > Status: Draft
-> Scope: TON ERC-20 on Ethereum mainnet/sepolia, without token contract upgrades
+> Scope: TON ERC-20 on Ethereum mainnet/sepolia, without token contract upgrades, using a same-app facilitator deployment
 
 ---
 
@@ -26,7 +26,7 @@ This means the standard EIP-3009 settlement path is unavailable. A custom facili
 
 ## 2. Decision
 
-Use an **approval-based pull facilitator**.
+Use an **approval-based pull facilitator** deployed inside the same SentinAI app.
 
 Summary:
 - Buyer performs a one-time `approve()` on the TON ERC-20 contract for the facilitator spender.
@@ -37,7 +37,7 @@ Summary:
 Why this is the chosen design:
 - No changes to the deployed TON token contract
 - Merchant receives real TON ERC-20 directly
-- Preserves the x402 HTTP flow and facilitator role
+- Preserves the x402 HTTP flow and facilitator role without requiring a separate service for Phase 1
 - Keeps custody low compared with a prefunded balance model
 
 ---
@@ -98,18 +98,18 @@ Buyer Wallet
   └─ Sign EIP-712 PaymentAuthorization
            │
            ▼
-Merchant API (/api/marketplace/*)
-  ├─ Returns 402 with facilitator metadata
-  ├─ Receives X-PAYMENT header
-  └─ Calls facilitator settle API
-           │
-           ▼
-TON Facilitator
-  ├─ Verify EIP-712 signature
-  ├─ Validate nonce / deadline / resource / amount / merchant / asset
-  ├─ Check allowance and balance
-  ├─ Execute transferFrom(buyer, merchant, amount)
-  └─ Return signed settlement proof
+SentinAI App
+  ├─ Marketplace API (/api/marketplace/*)
+  │   ├─ Returns 402 with facilitator metadata
+  │   ├─ Receives X-PAYMENT header
+  │   └─ Calls internal facilitator route or orchestrator
+  │
+  └─ Facilitator API (/api/facilitator/v1/*)
+      ├─ Verify EIP-712 signature
+      ├─ Validate nonce / deadline / resource / amount / merchant / asset
+      ├─ Check allowance and balance
+      ├─ Execute transferFrom(buyer, merchant, amount)
+      └─ Return signed settlement proof
            │
            ▼
 TON ERC-20 Contract
@@ -118,7 +118,7 @@ TON ERC-20 Contract
 Trust boundary:
 - Buyer trusts facilitator only within the limits of ERC-20 allowance and signed authorization policy.
 - Merchant trusts facilitator settlement proofs.
-- Facilitator must be policy-constrained and auditable.
+- Facilitator must be policy-constrained and auditable even though it is co-located in the same app runtime.
 
 ---
 
@@ -142,7 +142,7 @@ This may be exact-per-purchase, bounded, or high allowance. Phase 1 should suppo
    - `asset`
    - `amount`
    - `payTo`
-   - `facilitatorUrl`
+   - `facilitatorPath`
    - `facilitatorAddress`
    - `settlementMethod=evm-approval-transferFrom`
 
@@ -150,12 +150,12 @@ This may be exact-per-purchase, bounded, or high allowance. Phase 1 should suppo
 
 Buyer signs a facilitator-specific EIP-712 message.
 
-### 5.4 Merchant Calls Facilitator
+### 5.4 Marketplace Calls Facilitator
 
-Merchant sends the authorization to facilitator:
+Marketplace sends the authorization to the internal facilitator component:
 - signature
 - typed data payload
-- merchant authentication
+- internal merchant authentication
 
 ### 5.5 Facilitator Settles
 
@@ -168,9 +168,9 @@ Facilitator:
 - checks balance and allowance
 - executes `transferFrom`
 
-### 5.6 Merchant Releases Resource
+### 5.6 Marketplace Releases Resource
 
-Merchant only returns the protected resource after facilitator confirms settlement acceptance.
+Marketplace only returns the protected resource after facilitator confirms settlement acceptance.
 
 ---
 
@@ -218,7 +218,7 @@ Important design rule:
 
 ## 7. HTTP API Contract
 
-### 7.1 Merchant 402 Response
+### 7.1 Marketplace 402 Response
 
 Example:
 
@@ -236,7 +236,7 @@ Example:
       "asset": "0x2be5e8c109e2197D077D13A82dAead6a9b3433C5",
       "extra": {
         "settlementMethod": "evm-approval-transferFrom",
-        "facilitatorUrl": "https://facilitator.example.com",
+        "facilitatorPath": "/api/facilitator/v1/settle",
         "facilitatorAddress": "0xFacilitator...",
         "requiredAllowanceTarget": "0xFacilitator..."
       }
@@ -270,15 +270,43 @@ Example payload before base64 encoding:
 }
 ```
 
-### 7.3 Facilitator API
+### 7.3 Internal Facilitator API
 
-`POST /v1/settle`
-- Input: authorization, signature, merchant auth
+`POST /api/facilitator/v1/settle`
+- Input: authorization, signature, internal merchant auth
 - Output: settlement acceptance + signed proof
 
-`GET /v1/settlements/:settlementId`
+`GET /api/facilitator/v1/settlements/:settlementId`
 - Input: settlement id
 - Output: `pending | settled | failed` plus proof details
+
+Design rule:
+- Buyer never calls facilitator routes directly.
+- Facilitator routes are internal payment endpoints exposed only to marketplace handlers or allowlisted internal callers.
+
+### 7.4 On-Chain Verification
+
+Facilitator acceptance is not sufficient by itself. Settlement must also be verifiable on-chain.
+
+Minimum on-chain verification steps:
+- Confirm the transaction `to` address is the configured TON ERC-20 contract for the selected profile
+- Decode calldata and confirm the call is `transferFrom(buyer, merchant, amount)`
+- Confirm transaction receipt `status == 1`
+- Decode the ERC-20 `Transfer` event and confirm:
+  - `from == buyer`
+  - `to == merchant`
+  - `value == amount`
+
+Settlement lifecycle:
+- `submitted`: transaction broadcast successfully
+- `mined`: transaction included on-chain
+- `settled`: mined and decoded transfer matches expected buyer, merchant, and amount
+- `failed`: revert, timeout, replacement failure, or decoded mismatch
+
+Phase 1 recommendation:
+- Marketplace routes may use `submitted` in sync mode for low latency
+- Facilitator must continue background verification until final `settled` or `failed`
+- `GET /api/facilitator/v1/settlements/:settlementId` must expose the latest on-chain verified state
 
 ---
 
@@ -304,9 +332,28 @@ Minimum facilitator response:
 
 Recommended:
 - Facilitator signs this response with its own service key
-- Merchant verifies the facilitator signature
+- Marketplace verifies the facilitator signature
 
-Merchant minimum checks:
+Recommended persisted settlement fields:
+
+```json
+{
+  "settlementId": "stl_123",
+  "chainId": 1,
+  "asset": "0x2be5e8c109e2197D077D13A82dAead6a9b3433C5",
+  "buyer": "0xBuyer...",
+  "merchant": "0xMerchant...",
+  "amount": "100000000000000000",
+  "resource": "/api/marketplace/sequencer-health",
+  "txHash": "0x...",
+  "txStatus": "submitted",
+  "receiptStatus": null,
+  "confirmedBlock": null,
+  "transferVerified": false
+}
+```
+
+Marketplace minimum checks:
 - `success === true`
 - `asset`, `amount`, `merchant`, and `resource` match exactly
 - `txHash` exists
@@ -324,6 +371,8 @@ Merchant minimum checks:
 - Resource spoofing
 - Facilitator compromise
 - Gas griefing / failed settlement loops
+- Same-app runtime compromise reaching payment code
+- On-chain tx success mismatch versus expected settlement parameters
 
 ### 9.2 Required Controls
 
@@ -334,12 +383,16 @@ Merchant minimum checks:
 - `amount` must be exact
 - `asset` must be chain/profile constrained
 - Facilitator only transfers the exact requested amount
-- Facilitator timeout must fail closed on merchant side
+- Facilitator timeout must fail closed on marketplace side
+- Facilitator routes require internal auth and must not be exposed as buyer-facing endpoints
+- Nonce and settlement state must live in Redis or equivalent external state, never process memory
+- Settlement must not be marked final until calldata and `Transfer` event are verified against expected buyer, merchant, and amount
 
 ### 9.3 Operational Controls
 
 - Redis-backed nonce store
 - Relayer wallet separated from merchant wallet
+- Receipt signing key separated from relayer key
 - Structured audit logs for every settlement attempt
 - Rate limiting per buyer, merchant, and IP
 - Support circuit-breaker by asset or merchant
@@ -366,7 +419,7 @@ Design rule:
 
 ### Sync Mode
 
-Merchant returns resource once facilitator submits the settlement transaction successfully.
+Marketplace returns resource once facilitator submits the settlement transaction successfully.
 
 Pros:
 - Lower latency
@@ -377,7 +430,7 @@ Cons:
 
 ### Strict Mode
 
-Merchant waits for at least 1 confirmation before returning resource.
+Marketplace waits for at least 1 confirmation before returning resource.
 
 Pros:
 - Stronger correctness
@@ -390,7 +443,8 @@ Cons:
 Use **sync mode** in Phase 1, but include:
 - signed facilitator receipt
 - optional settlement status polling
-- merchant-side ability to switch selective routes to strict mode later
+- marketplace-side ability to switch selective routes to strict mode later
+- mandatory background on-chain verification after submission
 
 ---
 
@@ -403,7 +457,7 @@ The facilitator takes over the missing authorization layer:
 - facilitator verifies off-chain payment authorization
 - buyer’s prior `approve()` makes token movement possible
 
-This shifts authorization logic from the token contract to the facilitator service while preserving direct TON settlement.
+This shifts authorization logic from the token contract to the co-located facilitator component while preserving direct TON settlement.
 
 ---
 
@@ -423,4 +477,3 @@ This shifts authorization logic from the token contract to the facilitator servi
 - x402 facilitator concepts: `https://docs.x402.org/core-concepts/facilitator`
 - x402 network/token support: `https://docs.x402.org/core-concepts/network-and-token-support`
 - approval/relayer-style x402 example: `https://github.com/ChaosChain/chaoschain-x402`
-

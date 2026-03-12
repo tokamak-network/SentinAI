@@ -7,6 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #6117 | 1:22 PM | 🔄 | Remove Obsolete V1 Agent Loop Logging from Scheduler | ~251 |
-| #6114 | " | 🔵 | Scheduler Architecture and V1 to V2 Agent Migration | ~619 |
+| #6129 | 1:24 PM | 🔄 | Remove isAgentV2Enabled Mock from Agent Fleet Tests | ~216 |
 </claude-mem-context>

@@ -6,22 +6,18 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import type { MarketplacePricingConfig, PricingUpdateRequest } from '@/types/marketplace';
+import type { PricingUpdateRequest } from '@/types/marketplace';
+import { getMarketplaceStore } from '@/lib/marketplace-store';
 import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
 
-// Default pricing configuration
-const DEFAULT_PRICING: MarketplacePricingConfig = {
-  traineePrice: 0,
-  juniorPrice: 19900,   // $199
-  seniorPrice: 49900,   // $499
-  expertPrice: 79900,   // $799
-  updatedAt: new Date().toISOString(),
-};
-
-// In-memory store (replace with Redis in production)
-let pricingConfig = DEFAULT_PRICING;
+const ALLOWED_PRICE_KEYS = new Set([
+  'traineePrice',
+  'juniorPrice',
+  'seniorPrice',
+  'expertPrice',
+]);
 
 /**
  * GET /api/marketplace/pricing
@@ -29,6 +25,7 @@ let pricingConfig = DEFAULT_PRICING;
  */
 export async function GET(): Promise<NextResponse> {
   try {
+    const pricingConfig = await getMarketplaceStore().getPricingConfig();
     return NextResponse.json({ data: pricingConfig });
   } catch (error) {
     logger.error('[marketplace/pricing GET] error:', error);
@@ -66,6 +63,15 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
 
     const body: PricingUpdateRequest = await request.json();
 
+    for (const key of Object.keys(body)) {
+      if (!ALLOWED_PRICE_KEYS.has(key)) {
+        return NextResponse.json(
+          { error: `Invalid ${key}: unsupported pricing field` },
+          { status: 400 }
+        );
+      }
+    }
+
     // Validate: all prices must be non-negative integers
     for (const [key, value] of Object.entries(body)) {
       if (value !== undefined && (typeof value !== 'number' || value < 0 || !Number.isInteger(value))) {
@@ -76,12 +82,7 @@ export async function PUT(request: NextRequest): Promise<NextResponse> {
       }
     }
 
-    // Update pricing
-    pricingConfig = {
-      ...pricingConfig,
-      ...body,
-      updatedAt: new Date().toISOString(),
-    };
+    const pricingConfig = await getMarketplaceStore().updatePricing(body);
 
     logger.info('[marketplace/pricing PUT] Pricing updated successfully', body);
 

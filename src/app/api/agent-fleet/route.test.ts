@@ -3,18 +3,22 @@ import { GET } from '@/app/api/agent-fleet/route';
 
 const hoisted = vi.hoisted(() => ({
   getStatusesMock: vi.fn(),
-  getHistoryMock: vi.fn(),
+  getCycleHistoryMock: vi.fn(),
+  getExperienceStatsMock: vi.fn(),
 }));
 
 vi.mock('@/core/agent-orchestrator', () => ({
   getAgentOrchestrator: () => ({
     getStatuses: hoisted.getStatusesMock,
   }),
-  isAgentV2Enabled: () => false,
 }));
 
-vi.mock('@/lib/agent-loop', () => ({
-  getAgentCycleHistory: hoisted.getHistoryMock,
+vi.mock('@/lib/cycle-store', () => ({
+  getCycleHistory: hoisted.getCycleHistoryMock,
+}));
+
+vi.mock('@/lib/experience-store', () => ({
+  getExperienceStats: hoisted.getExperienceStatsMock,
 }));
 
 describe('/api/agent-fleet', () => {
@@ -30,7 +34,7 @@ describe('/api/agent-fleet', () => {
       { role: 'collector', instanceId: 'inst-a', running: true, lastActivityAt: t2 },
       { role: 'detector', instanceId: 'inst-a', running: true, lastActivityAt: t3 },
     ]);
-    hoisted.getHistoryMock.mockResolvedValue([
+    hoisted.getCycleHistoryMock.mockResolvedValue([
       {
         timestamp: t3,
         phase: 'complete',
@@ -40,6 +44,13 @@ describe('/api/agent-fleet', () => {
         ],
       },
     ]);
+    hoisted.getExperienceStatsMock.mockResolvedValue({
+      totalOperations: 100,
+      successRate: 1.0,
+      avgResolutionMs: 5000,
+      operatingDays: 10,
+      topCategories: [{ category: 'observe', count: 40 }],
+    });
   });
 
   it('returns aggregated fleet snapshot', async () => {
@@ -51,12 +62,13 @@ describe('/api/agent-fleet', () => {
     expect(body.summary.instanceCount).toBe(1);
     expect(body.kpi.successRate).toBe(100);
     expect(body.agents).toHaveLength(2);
+    expect(body.agentV2).toBe(true);
     expect(typeof body.updatedAt).toBe('string');
-    expect(hoisted.getHistoryMock).toHaveBeenCalledWith(120);
+    expect(hoisted.getCycleHistoryMock).toHaveBeenCalledWith(120);
   });
 
-  it('returns 500 when provider fails', async () => {
-    hoisted.getHistoryMock.mockRejectedValueOnce(new Error('history unavailable'));
+  it('returns 500 when cycle history fails', async () => {
+    hoisted.getCycleHistoryMock.mockRejectedValueOnce(new Error('history unavailable'));
 
     const response = await GET(new Request('http://localhost/api/agent-fleet'));
     const body = await response.json();

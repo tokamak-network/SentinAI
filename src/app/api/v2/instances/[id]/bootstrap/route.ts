@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getInstance, updateInstance } from '@/core/instance-registry';
-import { getAgentOrchestrator, isAgentV2Enabled } from '@/core/agent-orchestrator';
+import { getAgentOrchestrator } from '@/core/agent-orchestrator';
 import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
@@ -29,10 +29,9 @@ function meta() {
 }
 
 /**
- * Start agents for an instance if AGENT_V2 is enabled and not already running.
+ * Start agents for an instance if not already running.
  */
 function ensureAgentsRunning(instanceId: string, protocolId: string, rpcUrl: string): void {
-  if (!isAgentV2Enabled()) return;
   const orchestrator = getAgentOrchestrator();
   if (!orchestrator.isInstanceRunning(instanceId)) {
     orchestrator.startInstance(instanceId, protocolId, rpcUrl);

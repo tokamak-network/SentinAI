@@ -7,6 +7,5 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #6117 | 1:22 PM | 🔄 | Remove Obsolete V1 Agent Loop Logging from Scheduler | ~251 |
-| #6114 | " | 🔵 | Scheduler Architecture and V1 to V2 Agent Migration | ~619 |
+| #6127 | 1:24 PM | 🔄 | Remove V1 Staleness Detection from Health API | ~319 |
 </claude-mem-context>

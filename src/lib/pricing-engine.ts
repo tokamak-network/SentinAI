@@ -20,7 +20,6 @@ import { generateResume } from '@/lib/agent-resume';
 import { getExperienceByInstance } from '@/lib/experience-store';
 import { getMarketplaceStore } from '@/lib/marketplace-store';
 import type { ExperienceTier } from '@/types/agent-resume';
-import type { MarketplacePricingConfig } from '@/types/marketplace';
 import type { OutcomeBonus, PricingResult } from '@/types/billing';
 import logger from '@/lib/logger';
 

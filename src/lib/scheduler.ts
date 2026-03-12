@@ -20,13 +20,6 @@ import { getAgentOrchestrator } from '@/core/agent-orchestrator';
 
 const logger = createLogger('Scheduler');
 
-type AgentCycleSource = 'seed'; // V1 sources ('schedule', 'watchdog-recovery', 'anomaly-event') removed
-
-interface AgentCycleExecutionResult {
-  outcome: 'completed' | 'error' | 'failed' | 'skipped';
-  detail: string;
-}
-
 let initialized = false;
 let snapshotTask: ScheduledTask | null = null;
 let reportTask: ScheduledTask | null = null;
@@ -36,30 +29,6 @@ let snapshotTaskRunning = false;
 let reportTaskRunning = false;
 let scheduledScalingTaskRunning = false;
 let patternMinerTaskRunning = false;
-
-// V1 watchdog and heartbeat management functions removed
-
-// Agent loop enable check — defaults to true if L2_RPC_URL is set
-function isAgentLoopEnabled(): boolean {
-  if (process.env.AGENT_LOOP_ENABLED === 'false') return false;
-  if (process.env.AGENT_LOOP_ENABLED === 'true') return true;
-  // Auto-enable if L2_RPC_URL is configured
-  return !!process.env.L2_RPC_URL;
-}
-
-/**
- * @deprecated V1 agent cycle removed — kept as stub for backward compatibility (seed API only)
- * V2 event-driven orchestrator handles all observe-detect-decide-act cycles
- */
-export async function executeAgentCycle(source: AgentCycleSource): Promise<AgentCycleExecutionResult> {
-  logger.debug(`[V1-STUB] executeAgentCycle(${source}) called but V1 removed; V2 orchestrator is active`);
-  return {
-    outcome: 'skipped',
-    detail: 'V1 agent cycle removed — V2 orchestrator is active',
-  };
-}
-
-// V1 watchdog and anomaly trigger functionality removed — V2 uses event-driven orchestrator
 
 /**
  * Initialize cron jobs. Idempotent — safe to call multiple times.
@@ -72,11 +41,6 @@ export async function initializeScheduler(): Promise<void> {
 
   // Initialize accumulator for today
   await initializeAccumulator();
-
-  // V1 serial agent loop removed — V2 event-driven orchestrator handles observe-detect-decide-act
-  if (!isAgentLoopEnabled()) {
-    logger.info('Agent loop disabled (set AGENT_LOOP_ENABLED=true or L2_RPC_URL to enable)');
-  }
 
   // 5-minute snapshot cron
   snapshotTask = cron.schedule('*/5 * * * *', async () => {
@@ -193,28 +157,26 @@ export async function initializeScheduler(): Promise<void> {
     }
   });
 
-  // AgentOrchestrator v2 — always active (V1 removed)
-  if (isAgentLoopEnabled()) {
-    const orchestrator = getAgentOrchestrator();
-    const instancesEnv = process.env.SENTINAI_INSTANCES;
-    if (instancesEnv) {
-      try {
-        const instances = JSON.parse(instancesEnv) as Array<{ instanceId: string; protocolId: string; rpcUrl?: string }>;
-        for (const inst of instances) {
-          orchestrator.startInstance(inst.instanceId, inst.protocolId, inst.rpcUrl);
-        }
-        logger.info(`AgentOrchestrator started ${instances.length} instances`);
-      } catch {
-        logger.warn('Failed to parse SENTINAI_INSTANCES env var');
+  // AgentOrchestrator v2 — always active
+  const orchestrator = getAgentOrchestrator();
+  const instancesEnv = process.env.SENTINAI_INSTANCES;
+  if (instancesEnv) {
+    try {
+      const instances = JSON.parse(instancesEnv) as Array<{ instanceId: string; protocolId: string; rpcUrl?: string }>;
+      for (const inst of instances) {
+        orchestrator.startInstance(inst.instanceId, inst.protocolId, inst.rpcUrl);
       }
-    } else {
-      // Default: start a single instance using L2_RPC_URL
-      const defaultInstanceId = process.env.SENTINAI_DEFAULT_INSTANCE_ID ?? 'default';
-      const defaultProtocolId = process.env.SENTINAI_DEFAULT_PROTOCOL_ID ?? 'opstack-l2';
-      const defaultRpcUrl = process.env.L2_RPC_URL;
-      orchestrator.startInstance(defaultInstanceId, defaultProtocolId, defaultRpcUrl);
-      logger.info(`AgentOrchestrator started default instance (instanceId=${defaultInstanceId})`);
+      logger.info(`AgentOrchestrator started ${instances.length} instances`);
+    } catch {
+      logger.warn('Failed to parse SENTINAI_INSTANCES env var');
     }
+  } else {
+    // Default: start a single instance using L2_RPC_URL
+    const defaultInstanceId = process.env.SENTINAI_DEFAULT_INSTANCE_ID ?? 'default';
+    const defaultProtocolId = process.env.SENTINAI_DEFAULT_PROTOCOL_ID ?? 'opstack-l2';
+    const defaultRpcUrl = process.env.L2_RPC_URL;
+    orchestrator.startInstance(defaultInstanceId, defaultProtocolId, defaultRpcUrl);
+    logger.info(`AgentOrchestrator started default instance (instanceId=${defaultInstanceId})`);
   }
 
   initialized = true;
@@ -271,8 +233,8 @@ export function getSchedulerStatus(): {
 } {
   return {
     initialized,
-    agentLoopEnabled: isAgentLoopEnabled(),
-    agentV2Enabled: true, // V2 is always active (V1 removed)
+    agentLoopEnabled: true, // V2 orchestrator always active
+    agentV2Enabled: true,
     snapshotTaskRunning,
     reportTaskRunning,
     scheduledScalingTaskRunning,

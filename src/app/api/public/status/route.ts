@@ -11,7 +11,6 @@ import { getChainPlugin } from '@/chains';
 import { getRecentMetrics } from '@/lib/metrics-store';
 import { getEvents } from '@/lib/anomaly-event-store';
 import { getLastCycle, getCycleCount } from '@/lib/cycle-store';
-import { isAgentV2Enabled } from '@/core/agent-orchestrator';
 import { getGoalManagerConfig } from '@/lib/goal-manager';
 import { getExperienceStats } from '@/lib/experience-store';
 import { getAgentOrchestrator } from '@/core/agent-orchestrator';
@@ -184,7 +183,6 @@ export async function GET(): Promise<NextResponse<PublicStatusResponse | { error
     // Fetch in parallel
     // Fetch enough events to cover the 7-day window accurately.
     // 500 is a safe upper bound for typical L2 deployments.
-    const agentV2 = isAgentV2Enabled();
     const [recentMetrics, anomalyResult, totalCycles, lastCycle] = await Promise.all([
       getRecentMetrics(1),
       getEvents(500, 0),
@@ -213,31 +211,27 @@ export async function GET(): Promise<NextResponse<PublicStatusResponse | { error
       .slice(0, 5)
       .map(buildIncidentSummary);
 
-    // Agent loop info — Agent V2 uses Goal Manager instead of cron-based agent loop
-    const agentRunning = agentV2
-      ? getGoalManagerConfig().enabled
-      : (lastCycle !== null && (now - new Date(lastCycle.timestamp).getTime()) < 120_000);
+    // Agent V2 orchestrator status
+    const agentRunning = getGoalManagerConfig().enabled;
 
-    // V2: derive totalOps and lastActivityAt from experience store + agent statuses
+    // Derive totalOps and lastActivityAt from experience store + agent statuses
     let totalOps: number | undefined;
     let lastActivityAt: string | undefined;
-    if (agentV2) {
-      try {
-        const [expStats, statuses] = await Promise.all([
-          getExperienceStats(),
-          Promise.resolve(getAgentOrchestrator().getStatuses()),
-        ]);
-        totalOps = expStats.totalOperations;
-        // Find most recent activity across all agents
-        const activityTimes = statuses
-          .map(s => s.lastActivityAt)
-          .filter((t): t is string => t !== null)
-          .sort()
-          .reverse();
-        lastActivityAt = activityTimes[0];
-      } catch {
-        // Non-critical — fall back to undefined
-      }
+    try {
+      const [expStats, statuses] = await Promise.all([
+        getExperienceStats(),
+        Promise.resolve(getAgentOrchestrator().getStatuses()),
+      ]);
+      totalOps = expStats.totalOperations;
+      // Find most recent activity across all agents
+      const activityTimes = statuses
+        .map(s => s.lastActivityAt)
+        .filter((t): t is string => t !== null)
+        .sort()
+        .reverse();
+      lastActivityAt = activityTimes[0];
+    } catch {
+      // Non-critical — fall back to undefined
     }
 
     const response: PublicStatusResponse = {

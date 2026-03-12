@@ -11,6 +11,7 @@ import type {
   PricingUpdateRequest,
   OutcomeBonusConfig,
 } from '@/types/marketplace';
+import { RedisMarketplaceStore } from '@/lib/redis-marketplace-store';
 
 /**
  * Default pricing configuration (in USD cents).
@@ -111,9 +112,7 @@ export function setMarketplaceStore(store: IMarketplaceStore): void {
  */
 export function getMarketplaceStore(): IMarketplaceStore {
   if (!marketplaceStore) {
-    throw new Error(
-      'MarketplaceStore not initialized. Call setMarketplaceStore() first.'
-    );
+    marketplaceStore = new RedisMarketplaceStore();
   }
   return marketplaceStore;
 }
