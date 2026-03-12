@@ -12,7 +12,11 @@ npm run verify                       # E2E 검증 (6단계)
 
 ## Architecture
 
-**Agent Loop** (60초 주기): RPC → metrics API → 4-layer 이상탐지 → Scaling → K8s 자동 실행
+**Agent Orchestrator (V2)** — 12개 병렬 에이전트, 이벤트 기반 실행:
+- **Pipeline**: Collector (5s) → Detector (10s) → [Analyzer/Executor/RCA (병렬, 이벤트)] → Verifier
+- **Domain**: Scaling (30s), Security (60s), Reliability (30s), Cost (5min)
+- **Action**: Remediation, Notifier (이벤트 기반)
+- **Scheduler cron** (별도): 5분 snapshot, 23:55 daily report, 매시 scheduled-scaling, 00:05 pattern-miner
 
 **Core**: Scaling Engine (hybrid score 0-100), Zero-Downtime Pod Swap, RCA Engine, Chain Plugin System (thanos/optimism/zkstack/arbitrum), NLOps Chat (9 tools), AI Client (Gateway/Qwen/Anthropic/OpenAI/Gemini, fallback O), State Management (Redis optional)
 

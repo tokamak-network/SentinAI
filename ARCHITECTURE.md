@@ -9,7 +9,7 @@ Scope: This document reflects the current implementation in `main` (not historic
 
 SentinAI is a Next.js 16 full-stack control plane for L2 operations:
 - HTTP APIs and dashboards (`src/app`, `src/app/api`)
-- Background automation loop (`src/lib/scheduler.ts`, `src/lib/agent-loop.ts`)
+- Background agent orchestration (`src/lib/scheduler.ts`, `src/core/agent-orchestrator.ts`)
 - Stateful operations and policy guards (`src/lib/redis-store.ts`, `src/lib/policy-engine.ts`)
 
 Core operational goals:
@@ -32,7 +32,7 @@ Core operational goals:
           │                             │                             │
           ▼                             ▼                             ▼
   HTTP APIs (/api/*)            Scheduler Runtime              Public UI Pages
-  - metrics/health/scaler        - agent loop (60s)            - dashboard
+  - metrics/health/scaler        - agent orchestrator           - dashboard
   - anomalies/remediation         - watchdog (30s)              - status/docs
   - goals/goal-manager            - snapshot (5m)
   - mcp/policy/ai-routing         - report (daily)
@@ -82,25 +82,41 @@ Related modules:
 - `src/lib/l1-rpc-failover.ts`
 - `src/lib/eoa-balance-monitor.ts`
 
-### 4.2 Autonomous Agent Loop (Server-Side)
+### 4.2 Agent Orchestrator (V2)
 
 Primary modules:
-- `src/lib/scheduler.ts`
-- `src/lib/agent-loop.ts`
+- `src/core/agent-orchestrator.ts` — orchestrates 12 agents
+- `src/core/agents/` — individual agent implementations
+- `src/lib/scheduler.ts` — cron jobs + agent startup
 
-Scheduler tasks (actual implementation):
-- Agent cycle: every 60s
-- Heartbeat watchdog: every 30s
+**Agent Structure:**
+
+**Pipeline** (sequential execution):
+- `CollectorAgent` (5s interval) — collect L1/L2/K8s metrics
+- `DetectorAgent` (10s interval) — anomaly detection (Z-score, AI semantic analysis)
+- `AnalyzerAgent` (event-driven) — analyze root causes
+- `ExecutorAgent` (event-driven) — execute remediation/scaling
+- `RCADomainAgent` (event-driven) — domain-specific RCA
+- `VerifierAgent` (event-driven) — post-execution verification
+
+**Domain Agents** (parallel, interval-based):
+- `ScalingAgent` (30s) — compute scaling decisions + execute K8s changes
+- `SecurityAgent` (60s) — security audit + threat detection
+- `ReliabilityAgent` (30s) — reliability checks + failover management
+- `CostAgent` (5min) — cost optimization analysis
+- `RemediationAgent` (event-driven) — execute remediation playbooks
+- `NotifierAgent` (event-driven) — send alerts (Slack/webhook)
+
+**Scheduler Cron Jobs** (separate from agents):
 - Metrics snapshot: every 5min
-- Daily report: cron (`DAILY_REPORT_SCHEDULE`, default `55 23 * * *` KST)
-- Scheduled scaling profile/application: hourly
-- Agent loop enable rule: `AGENT_LOOP_ENABLED=true` forces on, `false` forces off, otherwise auto-enabled when `L2_RPC_URL` is set
+- Daily report: `55 23 * * *` KST
+- Scheduled scaling: hourly
+- Pattern miner: `00 05 * * *` KST
 
-Agent loop phases:
-- `observe -> detect -> analyze -> plan -> act -> verify`
-- Produces cycle result + decision artifacts
-- Persists cycle history + decision artifacts via `agent-loop`
-- Updates heartbeat key via scheduler after each cycle
+**Enable Rule:**
+- Agents auto-start when `L2_RPC_URL` is set.
+- Override with `AGENT_LOOP_ENABLED=true|false` (legacy var, now controls orchestrator).
+- All agents run in parallel; critical path (anomaly → remediation) completes in ~2s vs. V1's 60s serial cycle.
 
 ### 4.3 Heartbeat Watchdog + Auto-Recovery
 
@@ -409,8 +425,8 @@ test-results/
 
 ## 12. Quick File References
 
-- Scheduler + watchdog: `src/lib/scheduler.ts`
-- Agent loop: `src/lib/agent-loop.ts`
+- Scheduler + agent orchestrator: `src/lib/scheduler.ts`, `src/core/agent-orchestrator.ts`
+- Agent implementations: `src/core/agents/` (Collector, Detector, Analyzer, Executor, Verifier, Scaling, Security, Reliability, Cost, Remediation, Notifier, RCADomain)
 - Metrics API: `src/app/api/metrics/route.ts`
 - Health API: `src/app/api/health/route.ts`
 - Detection pipeline: `src/lib/detection-pipeline.ts`
