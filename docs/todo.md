@@ -116,3 +116,11 @@
 - Added route-level regression tests for `/api/marketplace/pricing` covering shared store reads, shared store writes, unknown-key rejection, and OPTIONS behavior.
 - Replaced module-local pricing state with shared `MarketplaceStore` access so the pricing API and pricing engine now resolve the same persistence path.
 - Added strict request-key validation for pricing updates and re-verified focused pricing tests plus production build.
+
+## Session Checklist (2026-03-12)
+
+### TON x402 Facilitator Plan Review
+
+- [x] Review `docs/plans/2026-03-11-ton-x402-facilitator.md` for implementation readiness.
+- [x] Review `docs/plans/2026-03-11-ton-x402-facilitator-design.md` for implementation readiness.
+- [x] Summarize blockers, ambiguities, and missing verification detail for direct Codex execution.

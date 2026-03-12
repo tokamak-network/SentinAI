@@ -17,3 +17,4 @@
 - For marketplace-style operational data products, prefer decision-ready safety signals over order-flow-adjacent raw signals when both monetization and abuse resistance matter.
 - When an ERC-20 payment asset lacks EIP-3009, the least invasive x402-compatible path is usually facilitator-side EIP-712 authorization plus ERC-20 `approve/transferFrom`, not token replacement.
 - When a config-driven feature introduces a shared store abstraction, every runtime write/read surface must use that same store path; route-level regression tests should prove the API is not silently using a separate in-memory fallback.
+- When a plan introduces async settlement states, it must name the settlement store, write/read owner, and reconciliation trigger explicitly; otherwise route implementation stalls on hidden infrastructure decisions.
