@@ -61,6 +61,8 @@ describe('agent-marketplace agent-registry', () => {
         eventName: 'AgentRegistered',
         args: {
           agentId: 123n,
+          agent: '0x00000000000000000000000000000000000000a1',
+          agentURI: 'https://sentinai.example.com/api/agent-marketplace/agent.json',
         },
       },
     ]);

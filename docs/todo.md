@@ -146,6 +146,8 @@
 - [x] Write the ERC-8004 registry deployment scope design for Phase 1 marketplace discovery.
 - [x] Write the minimal ERC-8004 registry contract spec and deployment alignment plan.
 - [x] Add a Phase 1 ERC-8004 registry Solidity draft to the repository.
+- [x] Add a Foundry workspace and contract tests for the ERC-8004 registry draft.
+- [x] Align the app registry ABI module to the canonical `AgentRegistered(agentId, agent, agentURI)` shape.
 
 ### TON x402 Facilitator Plan Review
 

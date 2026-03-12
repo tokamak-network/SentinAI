@@ -30,3 +30,4 @@
 - When a marketplace browse surface depends on an on-chain registry, do not start the discovery UI before the registry deployment source-of-truth exists; otherwise the UI plan outruns the contract reality.
 - When contract-backed product features are already partially wired in app code, freeze the minimal contract spec before deployment work starts; otherwise app ABI guesses become de facto requirements by accident.
 - When a repo has no contract toolchain yet but contract work must move forward, add a repository-tracked Solidity draft first and treat compile/deploy verification as a separate explicit phase instead of hand-waving the missing workspace.
+- When adding Foundry to an existing app repo, commit the workspace inputs and tests but ignore `cache/` and `out/`; otherwise contract artifacts create avoidable repository noise.

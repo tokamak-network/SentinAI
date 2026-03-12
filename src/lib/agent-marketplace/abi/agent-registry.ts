@@ -1,5 +1,8 @@
 import { parseAbi } from 'viem';
 
+export const agentMarketplaceRegistryCanonicalEvent =
+  'event AgentRegistered(uint256 indexed agentId, address indexed agent, string agentURI)';
+
 export const agentMarketplaceRegistryEventNames = [
   'AgentRegistered',
   'Register',
@@ -7,12 +10,13 @@ export const agentMarketplaceRegistryEventNames = [
 
 export const agentMarketplaceRegistryAbi = parseAbi([
   'function register(string agentURI)',
-  'event AgentRegistered(uint256 indexed agentId)',
+  agentMarketplaceRegistryCanonicalEvent,
   'event Register(address indexed agent, string agentURI)',
 ]);
 
 export const agentMarketplaceRegistryContract = {
   name: 'ERC8004 Agent Registry',
   abi: agentMarketplaceRegistryAbi,
+  canonicalEvent: agentMarketplaceRegistryCanonicalEvent,
   eventNames: [...agentMarketplaceRegistryEventNames],
 } as const;

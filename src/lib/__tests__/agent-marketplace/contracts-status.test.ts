@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   agentMarketplaceRegistryContract,
+  agentMarketplaceRegistryCanonicalEvent,
   agentMarketplaceRegistryEventNames,
 } from '@/lib/agent-marketplace/abi/agent-registry';
 import {
@@ -17,6 +18,12 @@ describe('agent-marketplace contracts-status', () => {
 
   it('exports canonical ABI metadata for registry and reputation contracts', () => {
     expect(agentMarketplaceRegistryContract.name).toBe('ERC8004 Agent Registry');
+    expect(agentMarketplaceRegistryCanonicalEvent).toBe(
+      'event AgentRegistered(uint256 indexed agentId, address indexed agent, string agentURI)'
+    );
+    expect(agentMarketplaceRegistryContract.canonicalEvent).toBe(
+      agentMarketplaceRegistryCanonicalEvent
+    );
     expect(agentMarketplaceRegistryEventNames).toEqual([
       'AgentRegistered',
       'Register',
