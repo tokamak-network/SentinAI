@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import React, { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, 
@@ -60,12 +61,35 @@ const LOGS = [
 
 // --- Components ---
 
-const SidebarItem = ({ icon: Icon, label, active = false }: { icon: any, label: string, active?: boolean }) => (
-  <div className={`flex items-center gap-3 px-4 py-3 rounded-lg cursor-pointer transition-colors ${active ? 'bg-cyan-500/10 text-cyan-400 border-r-2 border-cyan-400' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`}>
-    <Icon size={20} />
-    <span className="font-medium">{label}</span>
-  </div>
-);
+const SidebarItem = ({
+  icon: Icon,
+  label,
+  active = false,
+  href,
+}: {
+  icon: any,
+  label: string,
+  active?: boolean,
+  href?: string,
+}) => {
+  const className = `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${active ? 'bg-cyan-500/10 text-cyan-400 border-r-2 border-cyan-400' : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'}`;
+
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        <Icon size={20} />
+        <span className="font-medium">{label}</span>
+      </Link>
+    );
+  }
+
+  return (
+    <div className={`${className} cursor-pointer`}>
+      <Icon size={20} />
+      <span className="font-medium">{label}</span>
+    </div>
+  );
+};
 
 const StatCard = ({ title, value, subtext, icon: Icon, trend, status = 'neutral' }: { title: string, value: string, subtext: string, icon: any, trend?: string, status?: 'neutral' | 'success' | 'warning' | 'danger' }) => {
   const statusColor = {
@@ -122,6 +146,7 @@ export default function DashboardV2() {
           <SidebarItem icon={Server} label={isSidebarOpen ? "Nodes" : ""} />
           <SidebarItem icon={Activity} label={isSidebarOpen ? "Analytics" : ""} />
           <SidebarItem icon={DollarSign} label={isSidebarOpen ? "Cost" : ""} />
+          <SidebarItem icon={Terminal} label={isSidebarOpen ? "Marketplace" : ""} href="/v2/marketplace" />
           <div className="my-4 border-t border-slate-800" />
           <SidebarItem icon={MessageSquare} label={isSidebarOpen ? "NLOps" : ""} />
           <SidebarItem icon={Settings} label={isSidebarOpen ? "Settings" : ""} />

@@ -1,0 +1,74 @@
+import type {
+  AgentMarketplaceCatalog,
+  AgentMarketplaceServiceDefinition,
+  AgentMarketplaceServiceKey,
+} from '@/types/agent-marketplace';
+
+const DEFAULT_UPDATED_AT = '2026-03-12T00:00:00.000Z';
+const DEFAULT_AUP_VERSION = '2026-03-11';
+
+export const defaultAgentMarketplaceCatalog: AgentMarketplaceCatalog = {
+  agent: {
+    id: 'sentinai-agent-marketplace',
+    status: 'active',
+    version: '2026-03-12',
+    operator: 'sentinai-operator',
+  },
+  services: [
+    {
+      key: 'sequencer_health',
+      state: 'active',
+      displayName: 'Sequencer Health',
+      description: 'Decision-ready execution health snapshot for agent gating',
+      payment: {
+        scheme: 'exact',
+        network: 'eip155:1',
+        token: 'ton',
+        amount: '100000000000000000',
+      },
+    },
+    {
+      key: 'incident_summary',
+      state: 'active',
+      displayName: 'Incident Summary',
+      description: 'Current incident state and recent reliability summary',
+      payment: {
+        scheme: 'exact',
+        network: 'eip155:1',
+        token: 'ton',
+        amount: '150000000000000000',
+      },
+    },
+    {
+      key: 'batch_submission_status',
+      state: 'active',
+      displayName: 'Batch Submission Status',
+      description: 'Recent batch posting health, lag, and settlement risk',
+      payment: {
+        scheme: 'exact',
+        network: 'eip155:1',
+        token: 'ton',
+        amount: '150000000000000000',
+      },
+    },
+  ],
+  updatedAt: DEFAULT_UPDATED_AT,
+  acceptableUsePolicyVersion: DEFAULT_AUP_VERSION,
+};
+
+export const agentMarketplaceCatalog = defaultAgentMarketplaceCatalog;
+
+export function getAgentMarketplaceCatalog(): AgentMarketplaceCatalog {
+  return agentMarketplaceCatalog;
+}
+
+export function getAgentMarketplaceService(
+  key: AgentMarketplaceServiceKey
+): AgentMarketplaceServiceDefinition {
+  const service = agentMarketplaceCatalog.services.find((entry) => entry.key === key);
+  if (!service) {
+    throw new Error(`Unknown agent marketplace service: ${key}`);
+  }
+
+  return service;
+}

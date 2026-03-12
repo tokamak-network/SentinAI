@@ -67,7 +67,7 @@ Priority: Gateway > Qwen > Anthropic > OpenAI > Gemini. Set only the API key for
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `REDIS_URL` | — | Redis state store (in-memory if unset) |
+| `REDIS_URL` | — | Redis state store. Required for production and fail-closed for agent marketplace reputation publishing. |
 
 ### Alerts
 
@@ -121,6 +121,24 @@ When `AGENT_V2=true`, the serial agent-loop (60s cron) is replaced by a parallel
 | `MCP_AUTH_MODE` | `api-key` | `api-key` / `approval-token` / `dual` |
 | `MCP_APPROVAL_REQUIRED` | `true` | Require approval token for write tools |
 | `MCP_APPROVAL_TTL_SECONDS` | `300` | One-time approval token TTL |
+
+### Agent Marketplace
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MARKETPLACE_ENABLED` | `false` | Enable standalone agent marketplace routes and bootstrap registration hook |
+| `MARKETPLACE_PAYMENT_MODE` | `facilitated` | `open` / `stub` / `facilitated` payment verification mode |
+| `MARKETPLACE_RATE_LIMIT_MAX_REQUESTS` | `60` | Max requests per agent and service within the rate-limit window |
+| `MARKETPLACE_RATE_LIMIT_WINDOW_MS` | `60000` | Rate-limit window in milliseconds |
+| `MARKETPLACE_AGENT_URI_BASE` | — | Public base URL used to build agent marketplace metadata and registration URL |
+| `MARKETPLACE_WALLET_KEY` | — | Marketplace signer key used for ERC-8004 registration |
+| `ERC8004_REGISTRY_ADDRESS` | — | Target ERC-8004 registry contract address |
+| `MARKETPLACE_REPUTATION_REGISTRY_ADDRESS` | — | Reputation registry contract address for `submitMerkleRoot` |
+| `MARKETPLACE_IPFS_MODE` | — | `stub` or `http` IPFS publishing mode |
+| `MARKETPLACE_IPFS_UPLOAD_URL` | — | HTTP endpoint used to pin reputation batch payloads |
+| `MARKETPLACE_IPFS_AUTH_TOKEN` | — | Bearer token for the IPFS upload endpoint |
+| `MARKETPLACE_REPUTATION_ENABLED` | `false` | Enable daily scheduler-based reputation batch publishing. Requires `REDIS_URL`. |
+| `MARKETPLACE_REPUTATION_SCHEDULE` | `10 0 * * *` | UTC cron expression for daily reputation batch publish |
 
 ### AI Routing Policy
 

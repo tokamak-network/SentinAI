@@ -14,9 +14,9 @@ import { generateDailyReport } from '@/lib/daily-report-generator';
 import { deliverDailyReport } from '@/lib/daily-report-mailer';
 import { applyScheduledScaling, buildScheduleProfile } from '@/lib/scheduled-scaler';
 import { cleanupExpiredAgentMemory } from '@/lib/agent-memory';
-import { getStore } from '@/lib/redis-store';
 import { createLogger } from '@/lib/logger';
 import { getAgentOrchestrator } from '@/core/agent-orchestrator';
+import { publishDailyAgentMarketplaceReputationBatch } from '@/lib/agent-marketplace/reputation-job';
 
 const logger = createLogger('Scheduler');
 
@@ -25,10 +25,12 @@ let snapshotTask: ScheduledTask | null = null;
 let reportTask: ScheduledTask | null = null;
 let scheduledScalingTask: ScheduledTask | null = null;
 let patternMinerTask: ScheduledTask | null = null;
+let reputationBatchTask: ScheduledTask | null = null;
 let snapshotTaskRunning = false;
 let reportTaskRunning = false;
 let scheduledScalingTaskRunning = false;
 let patternMinerTaskRunning = false;
+let reputationBatchTaskRunning = false;
 
 /**
  * Initialize cron jobs. Idempotent — safe to call multiple times.
@@ -157,6 +159,39 @@ export async function initializeScheduler(): Promise<void> {
     }
   });
 
+  if (process.env.MARKETPLACE_REPUTATION_ENABLED === 'true') {
+    const reputationSchedule = process.env.MARKETPLACE_REPUTATION_SCHEDULE || '10 0 * * *';
+    reputationBatchTask = cron.schedule(reputationSchedule, async () => {
+      if (reputationBatchTaskRunning) return;
+      reputationBatchTaskRunning = true;
+      try {
+        const now = new Date();
+        const from = new Date(now);
+        from.setUTCDate(now.getUTCDate() - 1);
+        from.setUTCHours(0, 0, 0, 0);
+        const to = new Date(from);
+        to.setUTCHours(23, 59, 59, 999);
+
+        const result = await publishDailyAgentMarketplaceReputationBatch({
+          fromIso: from.toISOString(),
+          toIso: to.toISOString(),
+          batchTimestamp: Math.floor(now.getTime() / 1000),
+        });
+
+        if (result.ok) {
+          logger.info(`Agent marketplace reputation batch published: ${result.txHash}`);
+        } else {
+          logger.warn(`Agent marketplace reputation batch skipped: ${result.error}`);
+        }
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : 'Unknown error';
+        logger.error('[AgentMarketplaceReputation] Error: ' + msg);
+      } finally {
+        reputationBatchTaskRunning = false;
+      }
+    }, { timezone: 'UTC' });
+  }
+
   // AgentOrchestrator v2 — always active
   const orchestrator = getAgentOrchestrator();
   const instancesEnv = process.env.SENTINAI_INSTANCES;
@@ -212,10 +247,15 @@ export function stopScheduler(): void {
     patternMinerTask.stop();
     patternMinerTask = null;
   }
+  if (reputationBatchTask) {
+    reputationBatchTask.stop();
+    reputationBatchTask = null;
+  }
   snapshotTaskRunning = false;
   reportTaskRunning = false;
   scheduledScalingTaskRunning = false;
   patternMinerTaskRunning = false;
+  reputationBatchTaskRunning = false;
   initialized = false;
   logger.info('Stopped');
 }

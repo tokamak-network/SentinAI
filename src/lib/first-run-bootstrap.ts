@@ -4,6 +4,7 @@ import { validateRpcConnection } from '@/core/collectors/connection-validator';
 import { getCoreRedis } from '@/core/redis';
 import { detectClient } from '@/lib/client-detector';
 import { mapDetectedClientToCapabilities } from '@/lib/capability-mapper';
+import { registerAgentMarketplaceIdentity } from '@/lib/agent-marketplace/agent-registry';
 
 export interface FirstRunBootstrapResult {
   ok: boolean;
@@ -60,6 +61,31 @@ export async function firstRunBootstrap(options?: {
 
   const { protocolId, connectionConfig } = env;
 
+  async function maybeRegisterMarketplaceIdentity(): Promise<void> {
+    if (process.env.MARKETPLACE_ENABLED !== 'true') {
+      return;
+    }
+
+    const agentUriBase = normalizeUrl(process.env.MARKETPLACE_AGENT_URI_BASE);
+    const walletKey = normalizeUrl(process.env.MARKETPLACE_WALLET_KEY);
+    const registryAddress = normalizeUrl(process.env.ERC8004_REGISTRY_ADDRESS);
+
+    if (!agentUriBase || !walletKey || !registryAddress) {
+      warnings.push('marketplace registration skipped: missing MARKETPLACE_AGENT_URI_BASE, MARKETPLACE_WALLET_KEY, or ERC8004_REGISTRY_ADDRESS');
+      return;
+    }
+
+    const registration = await registerAgentMarketplaceIdentity({
+      agentUriBase,
+      walletKey,
+      registryAddress,
+    });
+
+    if (!registration.ok) {
+      warnings.push(`marketplace registration failed: ${registration.error}`);
+    }
+  }
+
   // Validate
   const validation = await validateRpcConnection(connectionConfig);
 
@@ -109,6 +135,10 @@ export async function firstRunBootstrap(options?: {
       warnings.push(`Failed to set instance active: ${String(e)}`);
     });
 
+    await maybeRegisterMarketplaceIdentity().catch((error) => {
+      warnings.push(`marketplace registration failed: ${String(error)}`);
+    });
+
     return {
       ok: true,
       instanceId,
@@ -120,6 +150,9 @@ export async function firstRunBootstrap(options?: {
     };
   } catch (e) {
     warnings.push(`Detection/mapping failed: ${String(e)}`);
+    await maybeRegisterMarketplaceIdentity().catch((error) => {
+      warnings.push(`marketplace registration failed: ${String(error)}`);
+    });
     return {
       ok: true,
       instanceId,
