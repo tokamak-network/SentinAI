@@ -35,6 +35,7 @@
 - ERC-8004 등록용 wallet key
 - ERC-8004 registry address
 - facilitated payment backend
+- Foundry (`forge`) for registry deployment
 
 ## 핵심 환경변수
 
@@ -67,6 +68,12 @@ MARKETPLACE_PAYMENT_MODE=open
 
 `open` 모드는 결제 정산 없이도 protected route를 확인할 수 있으므로 첫 배포 검증에 유용하다.
 
+registry deployment용:
+
+```bash
+DEPLOYER_PRIVATE_KEY=0x...
+```
+
 ## 배포 순서
 
 1. 환경변수 설정
@@ -77,6 +84,22 @@ MARKETPLACE_PAYMENT_MODE=open
 6. protected route 402 challenge 확인
 7. `open` 모드 또는 실제 facilitator 경로로 200 응답 확인
 8. bootstrap 실행 시 registration warning/success 로그 확인
+
+### ERC-8004 registry 배포
+
+```bash
+cd contracts/agent-marketplace
+forge test
+forge script script/DeploySentinAIERC8004Registry.s.sol:DeploySentinAIERC8004Registry \
+  --rpc-url "$SENTINAI_L1_RPC_URL" \
+  --broadcast
+```
+
+기대 결과:
+
+- registry contract address 출력
+- 이후 `ERC8004_REGISTRY_ADDRESS`에 배포 address 반영
+- bootstrap registration 또는 direct `register(agentURI)` smoke test 가능
 
 ## 운영 검증 체크리스트
 
