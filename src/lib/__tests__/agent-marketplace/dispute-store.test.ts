@@ -74,11 +74,33 @@ describe('agent-marketplace dispute-store', () => {
       reason: 'score mismatch after incident resolution',
     });
 
-    const reviewed = await updateAgentMarketplaceDisputeStatus(created.id, 'reviewed');
+    const reviewed = await updateAgentMarketplaceDisputeStatus(created.id, 'reviewed', {
+      reviewedBy: 'ops@sentinai',
+      reviewerNote: 'validated against latest SLA snapshot',
+    });
     const resolved = await updateAgentMarketplaceDisputeStatus(created.id, 'resolved');
 
     expect(reviewed.status).toBe('reviewed');
+    expect(reviewed.reviewedBy).toBe('ops@sentinai');
+    expect(reviewed.reviewerNote).toBe('validated against latest SLA snapshot');
+    expect(reviewed.history).toEqual([
+      expect.objectContaining({
+        fromStatus: 'open',
+        toStatus: 'reviewed',
+        reviewedBy: 'ops@sentinai',
+        reviewerNote: 'validated against latest SLA snapshot',
+      }),
+    ]);
     expect(resolved.status).toBe('resolved');
+    expect(resolved.history).toHaveLength(2);
+    expect(resolved.history[1]).toEqual(
+      expect.objectContaining({
+        fromStatus: 'reviewed',
+        toStatus: 'resolved',
+        reviewedBy: null,
+        reviewerNote: null,
+      })
+    );
   });
 
   it('rejects invalid status transitions', async () => {

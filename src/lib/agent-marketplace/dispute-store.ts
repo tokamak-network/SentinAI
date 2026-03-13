@@ -2,6 +2,14 @@ import Redis from 'ioredis';
 
 export type AgentMarketplaceDisputeStatus = 'open' | 'reviewed' | 'resolved' | 'rejected';
 
+export interface AgentMarketplaceDisputeHistoryEntry {
+  fromStatus: AgentMarketplaceDisputeStatus;
+  toStatus: AgentMarketplaceDisputeStatus;
+  reviewedBy: string | null;
+  reviewerNote: string | null;
+  changedAt: string;
+}
+
 export interface AgentMarketplaceDisputeRecord {
   id: string;
   agentId: string;
@@ -11,6 +19,9 @@ export interface AgentMarketplaceDisputeRecord {
   expectedScore: number;
   reason: string;
   status: AgentMarketplaceDisputeStatus;
+  reviewerNote?: string | null;
+  reviewedBy?: string | null;
+  history?: AgentMarketplaceDisputeHistoryEntry[];
   createdAt: string;
   updatedAt: string;
 }
@@ -93,6 +104,7 @@ export async function createAgentMarketplaceDispute(input: {
     expectedScore: input.expectedScore,
     reason: input.reason,
     status: 'open',
+    history: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -105,7 +117,11 @@ export async function createAgentMarketplaceDispute(input: {
 
 export async function updateAgentMarketplaceDisputeStatus(
   id: string,
-  status: AgentMarketplaceDisputeStatus
+  status: AgentMarketplaceDisputeStatus,
+  metadata?: {
+    reviewerNote?: string;
+    reviewedBy?: string;
+  }
 ): Promise<AgentMarketplaceDisputeRecord> {
   const disputes = await readDisputes();
   const dispute = disputes.find((entry) => entry.id === id);
@@ -115,8 +131,26 @@ export async function updateAgentMarketplaceDisputeStatus(
   }
 
   assertValidTransition(dispute.status, status);
+  const previousStatus = dispute.status;
   dispute.status = status;
-  dispute.updatedAt = new Date().toISOString();
+  if (metadata?.reviewerNote !== undefined) {
+    dispute.reviewerNote = metadata.reviewerNote || null;
+  }
+  if (metadata?.reviewedBy !== undefined) {
+    dispute.reviewedBy = metadata.reviewedBy || null;
+  }
+  const changedAt = new Date().toISOString();
+  dispute.history = [
+    ...(dispute.history ?? []),
+    {
+      fromStatus: previousStatus,
+      toStatus: status,
+      reviewedBy: metadata?.reviewedBy || null,
+      reviewerNote: metadata?.reviewerNote || null,
+      changedAt,
+    },
+  ];
+  dispute.updatedAt = changedAt;
   await writeDisputes(disputes);
   return dispute;
 }

@@ -18,7 +18,22 @@ function formatTonAmount(amount: string | null): string {
   return `${whole}${fraction ? `.${fraction}` : ''} TON`;
 }
 
-export default async function MarketplaceOpsPage() {
+const disputeStatusOptions = ['open', 'reviewed', 'resolved', 'rejected'] as const;
+
+function resolveAgentManifestUri(): string {
+  const agentUriBase = process.env.MARKETPLACE_AGENT_URI_BASE?.trim();
+  if (!agentUriBase) {
+    return 'missing';
+  }
+
+  return `${agentUriBase.replace(/\/+$/, '')}/api/agent-marketplace/agent.json`;
+}
+
+export default async function MarketplaceOpsPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ dispute?: string; batch?: string }>;
+}) {
   const toIso = new Date().toISOString();
   const fromIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
   const [summary, disputes, contracts] = await Promise.all([
@@ -26,6 +41,18 @@ export default async function MarketplaceOpsPage() {
     listAgentMarketplaceDisputes(),
     Promise.resolve(getAgentMarketplaceContractsStatus()),
   ]);
+  const resolvedSearchParams = await searchParams;
+  const selectedDisputeId = resolvedSearchParams?.dispute;
+  const selectedBatchTimestamp = resolvedSearchParams?.batch;
+  const selectedDispute = disputes.find((dispute) => dispute.id === selectedDisputeId) ?? disputes[0] ?? null;
+  const selectedDisputeSla = selectedDispute
+    ? summary.slaAgents.find((agent) => agent.agentId === selectedDispute.agentId) ?? null
+    : null;
+  const selectedBatch =
+    summary.batchHistory.find((batch) => batch.publishedAt === selectedBatchTimestamp) ??
+    summary.batchHistory[0] ??
+    null;
+  const manifestUri = resolveAgentManifestUri();
 
   if (!summary.enabled) {
     return (
@@ -119,6 +146,26 @@ export default async function MarketplaceOpsPage() {
         </section>
 
         <section className="px-6 pb-6">
+          <div className="border border-[#D0D0D0] bg-white">
+            <div className="border-b border-[#D0D0D0] bg-[#F5F5F5] px-4 py-2 text-[9px] font-bold tracking-[0.12em]">
+              REGISTRY REGISTRATION
+            </div>
+            <div className="space-y-3 px-4 py-3 text-[11px]">
+              <div><span className="text-[#888]">registry:</span> {contracts.registry.address ?? 'missing'}</div>
+              <div><span className="text-[#888]">agent.json:</span> {manifestUri}</div>
+              <form action="/api/agent-marketplace/ops/register" method="post">
+                <button
+                  type="submit"
+                  className="border border-[#8B0000] bg-[#D40000] px-3 py-2 text-[10px] font-bold tracking-[0.08em] text-white"
+                >
+                  Register to Registry
+                </button>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <section className="px-6 pb-6">
           <div className="mb-3 border-b border-[#E8E8E8] pb-2 text-[9px] font-bold tracking-[0.12em] text-[#888]">
             RECENT VERIFIED REQUESTS
           </div>
@@ -161,6 +208,169 @@ export default async function MarketplaceOpsPage() {
                   <span className="font-semibold uppercase text-[#D40000]">{dispute.status}</span>
                   <span className="ml-auto text-[#AAA]">{dispute.updatedAt}</span>
                 </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="grid gap-4 px-6 pb-6 md:grid-cols-2">
+          <div className="border border-[#D0D0D0] bg-white">
+            <div className="border-b border-[#D0D0D0] bg-[#F5F5F5] px-4 py-2 text-[9px] font-bold tracking-[0.12em]">
+              DISPUTE DETAIL
+            </div>
+            {selectedDispute ? (
+              <div className="space-y-2 px-4 py-3 text-[11px]">
+                <div><span className="text-[#888]">id:</span> {selectedDispute.id}</div>
+                <div><span className="text-[#888]">agent:</span> {selectedDispute.agentId}</div>
+                <div><span className="text-[#888]">status:</span> <span className="font-semibold uppercase text-[#D40000]">{selectedDispute.status}</span></div>
+                <div><span className="text-[#888]">reason:</span> {selectedDispute.reason}</div>
+                <div><span className="text-[#888]">batch hash:</span> {selectedDispute.batchHash}</div>
+                <div><span className="text-[#888]">merkle root:</span> {selectedDispute.merkleRoot}</div>
+                <div><span className="text-[#888]">requested score:</span> {selectedDispute.requestedScore}</div>
+                <div><span className="text-[#888]">expected score:</span> {selectedDispute.expectedScore}</div>
+                <div><span className="text-[#888]">score delta:</span> {selectedDispute.expectedScore - selectedDispute.requestedScore}</div>
+                <div><span className="text-[#888]">created:</span> {selectedDispute.createdAt}</div>
+                <div><span className="text-[#888]">updated:</span> {selectedDispute.updatedAt}</div>
+                <div><span className="text-[#888]">reviewed by:</span> {selectedDispute.reviewedBy ?? 'none'}</div>
+                <div><span className="text-[#888]">reviewer note:</span> {selectedDispute.reviewerNote ?? 'none'}</div>
+                <div className="border-t border-[#F0F0F0] pt-2 text-[#555]">
+                  {selectedDisputeSla ? (
+                    <>
+                      <div>SLA {selectedDisputeSla.successRate}%</div>
+                      <div>latency {selectedDisputeSla.averageLatencyMs}ms</div>
+                      <div>score {selectedDisputeSla.newScore}</div>
+                    </>
+                  ) : (
+                    <div>No matching SLA summary.</div>
+                  )}
+                </div>
+                <form
+                  action={`/api/agent-marketplace/ops/disputes/${selectedDispute.id}`}
+                  method="post"
+                  className="space-y-3 border-t border-[#F0F0F0] pt-3"
+                >
+                  <input type="hidden" name="redirectTo" value={`/v2/marketplace?dispute=${selectedDispute.id}`} />
+                  <div className="text-[10px] font-bold tracking-[0.1em] text-[#888]">UPDATE DISPUTE</div>
+                  <label className="block space-y-1">
+                    <span className="block text-[10px] text-[#666]">status</span>
+                    <select
+                      name="status"
+                      defaultValue={selectedDispute.status}
+                      className="w-full border border-[#D0D0D0] bg-white px-2 py-2 text-[11px]"
+                    >
+                      {disputeStatusOptions.map((status) => (
+                        <option key={status} value={status}>
+                          {status}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="block text-[10px] text-[#666]">reviewed by</span>
+                    <input
+                      type="text"
+                      name="reviewedBy"
+                      defaultValue={selectedDispute.reviewedBy ?? ''}
+                      className="w-full border border-[#D0D0D0] bg-white px-2 py-2 text-[11px]"
+                    />
+                  </label>
+                  <label className="block space-y-1">
+                    <span className="block text-[10px] text-[#666]">reviewer note</span>
+                    <textarea
+                      name="reviewerNote"
+                      defaultValue={selectedDispute.reviewerNote ?? ''}
+                      rows={4}
+                      className="w-full border border-[#D0D0D0] bg-white px-2 py-2 text-[11px]"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    className="border border-[#8B0000] bg-[#D40000] px-3 py-2 text-[10px] font-bold tracking-[0.08em] text-white"
+                  >
+                    Save Review
+                  </button>
+                </form>
+                <div className="space-y-2 border-t border-[#F0F0F0] pt-3">
+                  <div className="text-[10px] font-bold tracking-[0.1em] text-[#888]">REVIEW HISTORY</div>
+                  {selectedDispute.history && selectedDispute.history.length > 0 ? (
+                    <div className="border border-[#E8E8E8] bg-[#FAFAFA]">
+                      {selectedDispute.history.map((entry) => (
+                        <div
+                          key={`${entry.changedAt}-${entry.fromStatus}-${entry.toStatus}`}
+                          className="grid gap-1 border-b border-[#E8E8E8] px-3 py-2 text-[10px] last:border-b-0"
+                        >
+                          <div className="font-semibold text-[#333]">
+                            {entry.fromStatus} → {entry.toStatus}
+                          </div>
+                          <div className="text-[#666]">{entry.changedAt}</div>
+                          <div className="text-[#666]">reviewed by: {entry.reviewedBy ?? 'none'}</div>
+                          <div className="text-[#666]">note: {entry.reviewerNote ?? 'none'}</div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-[10px] italic text-[#999]">No review history recorded yet.</div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="px-4 py-5 text-[11px] italic text-[#999]">No dispute selected.</div>
+            )}
+          </div>
+
+          <div className="border border-[#D0D0D0] bg-white">
+            <div className="border-b border-[#D0D0D0] bg-[#F5F5F5] px-4 py-2 text-[9px] font-bold tracking-[0.12em]">
+              LAST BATCH DETAIL
+            </div>
+            {selectedBatch === null ? (
+              <div className="px-4 py-5 text-[11px] italic text-[#999]">
+                No reputation batch has been published yet.
+              </div>
+            ) : (
+              <div className="space-y-2 px-4 py-3 text-[11px]">
+                <div><span className="text-[#888]">status:</span> <span className="font-semibold uppercase text-[#D40000]">{selectedBatch.status}</span></div>
+                <div><span className="text-[#888]">published:</span> {selectedBatch.publishedAt}</div>
+                <div><span className="text-[#888]">window:</span> {selectedBatch.window.fromIso} → {selectedBatch.window.toIso}</div>
+                <div><span className="text-[#888]">batch hash:</span> {selectedBatch.batchHash ?? 'N/A'}</div>
+                <div><span className="text-[#888]">tx hash:</span> {selectedBatch.txHash ?? 'N/A'}</div>
+                <div><span className="text-[#888]">error:</span> {selectedBatch.error ?? 'none'}</div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="px-6 pb-6">
+          <div className="mb-3 border-b border-[#E8E8E8] pb-2 text-[9px] font-bold tracking-[0.12em] text-[#888]">
+            LAST BATCH HISTORY
+          </div>
+          {summary.batchHistory.length === 0 ? (
+            <div className="border border-[#D0D0D0] bg-white px-4 py-5 text-[11px] italic text-[#999]">
+              No batch history recorded yet.
+            </div>
+          ) : (
+            <div className="border border-[#D0D0D0] bg-white">
+              {summary.batchHistory.slice(0, 5).map((batch) => (
+                <a
+                  key={`${batch.publishedAt}-${batch.batchHash ?? batch.error ?? 'batch'}`}
+                  href={`/v2/marketplace?${new URLSearchParams({
+                    ...(selectedDispute ? { dispute: selectedDispute.id } : {}),
+                    batch: batch.publishedAt,
+                  }).toString()}`}
+                  className="grid gap-1 border-b border-[#F0F0F0] px-4 py-3 text-[11px] last:border-b-0"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold uppercase text-[#D40000]">{batch.status}</span>
+                    <span className="text-[#D0D0D0]">·</span>
+                    <span className="text-[#AAA]">{batch.publishedAt}</span>
+                  </div>
+                  <div className="text-[#555]">
+                    window {batch.window.fromIso} → {batch.window.toIso}
+                  </div>
+                  <div className="text-[#555]">batch hash: {batch.batchHash ?? 'N/A'}</div>
+                  <div className="text-[#555]">
+                    {batch.txHash ? `tx hash: ${batch.txHash}` : `error: ${batch.error ?? 'none'}`}
+                  </div>
+                </a>
               ))}
             </div>
           )}
