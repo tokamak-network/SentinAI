@@ -5,6 +5,7 @@ const hoisted = vi.hoisted(() => ({
   buildBatchMock: vi.fn(),
   publishBatchMock: vi.fn(),
   setScoresMock: vi.fn(),
+  appendBatchHistoryMock: vi.fn(),
   getScoresMock: vi.fn(() => ({
     '0x00000000000000000000000000000000000000a1': 90,
   })),
@@ -25,6 +26,10 @@ vi.mock('@/lib/agent-marketplace/reputation-publisher', () => ({
 vi.mock('@/lib/agent-marketplace/reputation-state-store', () => ({
   setAgentMarketplaceReputationScores: hoisted.setScoresMock,
   getAgentMarketplaceReputationScores: hoisted.getScoresMock,
+}));
+
+vi.mock('@/lib/agent-marketplace/batch-history-store', () => ({
+  appendAgentMarketplaceBatchHistory: hoisted.appendBatchHistoryMock,
 }));
 
 const { publishDailyAgentMarketplaceReputationBatch } = await import('@/lib/agent-marketplace/reputation-job');
@@ -74,6 +79,7 @@ describe('agent-marketplace reputation-job', () => {
       batchHash: 'QmBatchCid',
       txHash: '0xtxhash',
     });
+    hoisted.appendBatchHistoryMock.mockResolvedValue(undefined);
   });
 
   it('builds and publishes a daily reputation batch from SLA summaries', async () => {
@@ -106,6 +112,18 @@ describe('agent-marketplace reputation-job', () => {
     expect(hoisted.publishBatchMock).toHaveBeenCalledTimes(1);
     expect(hoisted.setScoresMock).toHaveBeenCalledWith({
       '0x00000000000000000000000000000000000000a1': 92,
+    });
+    expect(hoisted.appendBatchHistoryMock).toHaveBeenCalledWith({
+      status: 'success',
+      publishedAt: expect.any(String),
+      window: {
+        fromIso: '2026-03-12T00:00:00.000Z',
+        toIso: '2026-03-12T23:59:59.999Z',
+      },
+      batchHash: 'QmBatchCid',
+      txHash: '0xtxhash',
+      merkleRoot: '0x' + 'a'.repeat(64),
+      error: null,
     });
   });
 
@@ -186,6 +204,65 @@ describe('agent-marketplace reputation-job', () => {
     expect(result).toEqual({
       ok: false,
       error: 'Failed to persist agent marketplace reputation scores to Redis: Redis write failed',
+    });
+  });
+
+  it('records failed batch publish attempts in history', async () => {
+    process.env.MARKETPLACE_WALLET_KEY = '0x' + '1'.repeat(64);
+    process.env.MARKETPLACE_REPUTATION_REGISTRY_ADDRESS = '0x00000000000000000000000000000000000000c1';
+    process.env.REDIS_URL = 'redis://localhost:6379';
+
+    hoisted.publishBatchMock.mockResolvedValueOnce({
+      ok: false,
+      error: 'submit failed',
+    });
+
+    const result = await publishDailyAgentMarketplaceReputationBatch({
+      fromIso: '2026-03-12T00:00:00.000Z',
+      toIso: '2026-03-12T23:59:59.999Z',
+      previousScores: {
+        '0x00000000000000000000000000000000000000a1': 90,
+      },
+      batchTimestamp: 1710201600,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'submit failed',
+    });
+    expect(hoisted.appendBatchHistoryMock).toHaveBeenCalledWith({
+      status: 'failed',
+      publishedAt: expect.any(String),
+      window: {
+        fromIso: '2026-03-12T00:00:00.000Z',
+        toIso: '2026-03-12T23:59:59.999Z',
+      },
+      batchHash: null,
+      txHash: null,
+      merkleRoot: '0x' + 'a'.repeat(64),
+      error: 'submit failed',
+    });
+  });
+
+  it('fails closed when history persistence fails after publish succeeds', async () => {
+    process.env.MARKETPLACE_WALLET_KEY = '0x' + '1'.repeat(64);
+    process.env.MARKETPLACE_REPUTATION_REGISTRY_ADDRESS = '0x00000000000000000000000000000000000000c1';
+    process.env.REDIS_URL = 'redis://localhost:6379';
+
+    hoisted.appendBatchHistoryMock.mockRejectedValueOnce(new Error('Redis history write failed'));
+
+    const result = await publishDailyAgentMarketplaceReputationBatch({
+      fromIso: '2026-03-12T00:00:00.000Z',
+      toIso: '2026-03-12T23:59:59.999Z',
+      previousScores: {
+        '0x00000000000000000000000000000000000000a1': 90,
+      },
+      batchTimestamp: 1710201600,
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      error: 'Failed to persist agent marketplace batch history to Redis: Redis history write failed',
     });
   });
 });

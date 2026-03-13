@@ -34,8 +34,10 @@ describe('/api/agent-marketplace/ops/summary', () => {
         publishedAt: null,
         batchHash: null,
         txHash: null,
+        merkleRoot: null,
         error: null,
       },
+      batchHistory: [],
     });
 
     const response = await GET(new Request('http://localhost/api/agent-marketplace/ops/summary'));
@@ -45,6 +47,7 @@ describe('/api/agent-marketplace/ops/summary', () => {
     expect(body.enabled).toBe(true);
     expect(body.requestTotals.total).toBe(4);
     expect(body.lastBatch.status).toBe('never');
+    expect(body.batchHistory).toEqual([]);
     expect(hoisted.buildSummaryMock).toHaveBeenCalledTimes(1);
   });
 });

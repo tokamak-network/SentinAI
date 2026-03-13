@@ -1,4 +1,5 @@
 import { buildAgentMarketplaceReputationBatch } from '@/lib/agent-marketplace/reputation-batch';
+import { appendAgentMarketplaceBatchHistory } from '@/lib/agent-marketplace/batch-history-store';
 import { publishAgentMarketplaceReputationBatch } from '@/lib/agent-marketplace/reputation-publisher';
 import {
   getAgentMarketplaceReputationScores,
@@ -60,7 +61,29 @@ export async function publishDailyAgentMarketplaceReputationBatch(input: {
     batch,
   });
 
+  const publishedAt = new Date().toISOString();
+
   if (publishResult.ok) {
+    try {
+      await appendAgentMarketplaceBatchHistory({
+        status: 'success',
+        publishedAt,
+        window: {
+          fromIso: input.fromIso,
+          toIso: input.toIso,
+        },
+        batchHash: publishResult.batchHash,
+        txHash: publishResult.txHash,
+        merkleRoot: batch.root,
+        error: null,
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        error: `Failed to persist agent marketplace batch history to Redis: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+
     try {
       await setAgentMarketplaceReputationScores(
         Object.fromEntries(
@@ -71,6 +94,28 @@ export async function publishDailyAgentMarketplaceReputationBatch(input: {
       return {
         ok: false,
         error: `Failed to persist agent marketplace reputation scores to Redis: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
+  if (!publishResult.ok) {
+    try {
+      await appendAgentMarketplaceBatchHistory({
+        status: 'failed',
+        publishedAt,
+        window: {
+          fromIso: input.fromIso,
+          toIso: input.toIso,
+        },
+        batchHash: null,
+        txHash: null,
+        merkleRoot: batch.root,
+        error: publishResult.error,
+      });
+    } catch (error) {
+      return {
+        ok: false,
+        error: `Failed to persist agent marketplace batch history to Redis: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   }

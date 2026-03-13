@@ -1,4 +1,5 @@
 import { getAgentMarketplaceCatalog } from '@/lib/agent-marketplace/catalog';
+import { getAgentMarketplaceBatchHistory } from '@/lib/agent-marketplace/batch-history-store';
 import { getAgentMarketplaceRequestLogsByWindow } from '@/lib/agent-marketplace/request-log-store';
 import { summarizeAgentMarketplaceSla } from '@/lib/agent-marketplace/sla-tracker';
 
@@ -41,8 +42,21 @@ export interface AgentMarketplaceOpsSummary {
     publishedAt: string | null;
     batchHash: string | null;
     txHash: string | null;
+    merkleRoot: string | null;
     error: string | null;
   };
+  batchHistory: Array<{
+    status: 'success' | 'failed';
+    publishedAt: string;
+    window: {
+      fromIso: string;
+      toIso: string;
+    };
+    batchHash: string | null;
+    txHash: string | null;
+    merkleRoot: string | null;
+    error: string | null;
+  }>;
 }
 
 export async function buildAgentMarketplaceOpsSummary(input: {
@@ -69,13 +83,16 @@ export async function buildAgentMarketplaceOpsSummary(input: {
         publishedAt: null,
         batchHash: null,
         txHash: null,
+        merkleRoot: null,
         error: null,
       },
+      batchHistory: [],
     };
   }
 
   const catalog = getAgentMarketplaceCatalog();
   const logs = await getAgentMarketplaceRequestLogsByWindow(input);
+  const batchHistory = await getAgentMarketplaceBatchHistory();
   const serviceNames = new Map(catalog.services.map((service) => [service.key, service.displayName]));
 
   const verified = logs.filter((log) => log.verificationResult === 'verified');
@@ -126,6 +143,8 @@ export async function buildAgentMarketplaceOpsSummary(input: {
     previousScores: {},
   });
 
+  const latestBatch = batchHistory[0];
+
   return {
     enabled: true,
     window: input,
@@ -145,12 +164,23 @@ export async function buildAgentMarketplaceOpsSummary(input: {
     topBuyers,
     recentRequests,
     slaAgents: slaSummary.agents,
-    lastBatch: {
-      status: 'never',
-      publishedAt: null,
-      batchHash: null,
-      txHash: null,
-      error: null,
-    },
+    lastBatch: latestBatch
+      ? {
+          status: latestBatch.status,
+          publishedAt: latestBatch.publishedAt,
+          batchHash: latestBatch.batchHash,
+          txHash: latestBatch.txHash,
+          merkleRoot: latestBatch.merkleRoot,
+          error: latestBatch.error,
+        }
+      : {
+          status: 'never',
+          publishedAt: null,
+          batchHash: null,
+          txHash: null,
+          merkleRoot: null,
+          error: null,
+        },
+    batchHistory,
   };
 }

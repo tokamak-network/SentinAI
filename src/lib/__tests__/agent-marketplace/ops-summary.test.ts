@@ -4,6 +4,7 @@ const hoisted = vi.hoisted(() => ({
   getCatalogMock: vi.fn(),
   getLogsByWindowMock: vi.fn(),
   summarizeSlaMock: vi.fn(),
+  getBatchHistoryMock: vi.fn(),
 }));
 
 vi.mock('@/lib/agent-marketplace/catalog', () => ({
@@ -16,6 +17,10 @@ vi.mock('@/lib/agent-marketplace/request-log-store', () => ({
 
 vi.mock('@/lib/agent-marketplace/sla-tracker', () => ({
   summarizeAgentMarketplaceSla: hoisted.summarizeSlaMock,
+}));
+
+vi.mock('@/lib/agent-marketplace/batch-history-store', () => ({
+  getAgentMarketplaceBatchHistory: hoisted.getBatchHistoryMock,
 }));
 
 const { buildAgentMarketplaceOpsSummary } = await import('@/lib/agent-marketplace/ops-summary');
@@ -58,6 +63,7 @@ describe('agent-marketplace ops-summary', () => {
       updatedAt: '2026-03-12T00:00:00.000Z',
       acceptableUsePolicyVersion: '2026-03-11',
     });
+    hoisted.getBatchHistoryMock.mockResolvedValue([]);
   });
 
   it('returns zeroed summary when marketplace is disabled', async () => {
@@ -134,6 +140,20 @@ describe('agent-marketplace ops-summary', () => {
         },
       ],
     });
+    hoisted.getBatchHistoryMock.mockResolvedValue([
+      {
+        status: 'success',
+        publishedAt: '2026-03-12T04:00:00.000Z',
+        window: {
+          fromIso: '2026-03-11T00:00:00.000Z',
+          toIso: '2026-03-12T00:00:00.000Z',
+        },
+        batchHash: 'QmBatchCid',
+        txHash: '0xtxbatch',
+        merkleRoot: '0x' + 'c'.repeat(64),
+        error: null,
+      },
+    ]);
 
     const summary = await buildAgentMarketplaceOpsSummary({
       fromIso: '2026-03-11T00:00:00.000Z',
@@ -165,7 +185,20 @@ describe('agent-marketplace ops-summary', () => {
     expect(summary.slaAgents).toEqual([
       expect.objectContaining({ agentId: 'agent-1', newScore: 92 }),
     ]);
-    expect(summary.lastBatch.status).toBe('never');
+    expect(summary.lastBatch).toEqual({
+      status: 'success',
+      publishedAt: '2026-03-12T04:00:00.000Z',
+      batchHash: 'QmBatchCid',
+      txHash: '0xtxbatch',
+      merkleRoot: '0x' + 'c'.repeat(64),
+      error: null,
+    });
+    expect(summary.batchHistory).toEqual([
+      expect.objectContaining({
+        status: 'success',
+        batchHash: 'QmBatchCid',
+      }),
+    ]);
     expect(hoisted.summarizeSlaMock).toHaveBeenCalledWith({
       fromIso: '2026-03-11T00:00:00.000Z',
       toIso: '2026-03-12T00:00:00.000Z',
