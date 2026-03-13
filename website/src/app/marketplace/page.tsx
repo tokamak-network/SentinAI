@@ -15,9 +15,27 @@ interface CatalogEntry {
   description: string;
 }
 
+const DEFAULT_CATALOG: CatalogEntry[] = [
+  {
+    id: 'sequencer-health',
+    name: 'Sequencer Health Monitor',
+    description: 'Real-time health monitoring and metrics for L2 sequencers with performance indicators',
+  },
+  {
+    id: 'incident-summary',
+    name: 'Incident Summary & Analysis',
+    description: 'Comprehensive incident detection, categorization, and root cause analysis reports',
+  },
+  {
+    id: 'batch-submission',
+    name: 'Batch Submission Tracker',
+    description: 'Track batch processing status, submission history, and completion metrics',
+  },
+];
+
 export default function MarketplacePage() {
   const [activeTab, setActiveTab] = useState<'CATALOG' | 'AGENT' | 'SERVICES' | 'ABOUT'>('CATALOG');
-  const [catalog, setCatalog] = useState<CatalogEntry[]>([]);
+  const [catalog, setCatalog] = useState<CatalogEntry[]>(DEFAULT_CATALOG);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,10 +46,10 @@ export default function MarketplacePage() {
         const response = await fetch('/api/agent-marketplace/catalog', { next: { revalidate: 60 } });
         if (!response.ok) throw new Error(`Failed to fetch catalog: ${response.status}`);
         const data = await response.json();
-        setCatalog(Array.isArray(data) ? data : []);
+        setCatalog(Array.isArray(data) ? data : DEFAULT_CATALOG);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Unknown error');
-        setCatalog([]);
+        setError(err instanceof Error ? err.message : 'Using default catalog (root app unavailable)');
+        setCatalog(DEFAULT_CATALOG);
       } finally {
         setLoading(false);
       }
