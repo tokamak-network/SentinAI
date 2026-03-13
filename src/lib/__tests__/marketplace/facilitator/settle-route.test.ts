@@ -64,7 +64,7 @@ const BASE_CONFIG = {
   merchantAllowlist: [
     {
       merchantId: 'sequencer-health',
-      address: '0x4444444444444444444444444444444444444444',
+      address: '0x2222222222222222222222222222222222222222',
       resources: ['/api/marketplace/sequencer-health'],
       networks: ['eip155:1'],
     },
@@ -107,7 +107,7 @@ function createSettleRequest(overrides?: Record<string, unknown>, headers?: Reco
       network: 'eip155:1',
       authorization: {
         buyer: '0x1111111111111111111111111111111111111111',
-        merchant: '0x4444444444444444444444444444444444444444',
+        merchant: '0x2222222222222222222222222222222222222222',
         asset: '0x2be5e8c109e2197D077D13A82dAead6a9b3433C5',
         amount: '100000000000000000',
         resource: '/api/marketplace/sequencer-health',
@@ -146,7 +146,7 @@ describe('/api/facilitator/v1/settle', () => {
         asset: '0x2be5e8c109e2197D077D13A82dAead6a9b3433C5',
         amount: '100000000000000000',
         buyer: '0x1111111111111111111111111111111111111111',
-        merchant: '0x4444444444444444444444444444444444444444',
+        merchant: '0x2222222222222222222222222222222222222222',
         resource: '/api/marketplace/sequencer-health',
         txHash: '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
         blockNumber: null,
@@ -228,6 +228,38 @@ describe('/api/facilitator/v1/settle', () => {
     );
 
     expect(response.status).toBe(403);
+    expect(hoisted.verifyPaymentAuthorization).not.toHaveBeenCalled();
+  });
+
+  it('rejects configs where the allowlisted merchant does not equal the facilitator spender', async () => {
+    hoisted.loadFacilitatorConfig.mockReturnValueOnce({
+      ...BASE_CONFIG,
+      merchantAllowlist: [
+        {
+          merchantId: 'sequencer-health',
+          address: '0x4444444444444444444444444444444444444444',
+          resources: ['/api/marketplace/sequencer-health'],
+          networks: ['eip155:1'],
+        },
+      ],
+    });
+
+    const response = await POST(createSettleRequest({
+      authorization: {
+        buyer: '0x1111111111111111111111111111111111111111',
+        merchant: '0x4444444444444444444444444444444444444444',
+        asset: '0x2be5e8c109e2197D077D13A82dAead6a9b3433C5',
+        amount: '100000000000000000',
+        resource: '/api/marketplace/sequencer-health',
+        nonce: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        validAfter: '1741680000',
+        validBefore: '1741680300',
+      },
+    }));
+    const body = await response.json();
+
+    expect(response.status).toBe(403);
+    expect(body.error).toContain('Merchant must equal facilitator spender');
     expect(hoisted.verifyPaymentAuthorization).not.toHaveBeenCalled();
   });
 

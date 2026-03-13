@@ -54,6 +54,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     if (!allowlistedMerchant.networks.includes(body.network)) {
       return unauthorized('Merchant is not allowed on this network', 403);
     }
+    if (getAddress(allowlistedMerchant.address) !== getAddress(profile.facilitatorAddress)) {
+      return unauthorized('Merchant must equal facilitator spender for this network', 403);
+    }
 
     const authorization: PaymentAuthorization = {
       ...body.authorization,

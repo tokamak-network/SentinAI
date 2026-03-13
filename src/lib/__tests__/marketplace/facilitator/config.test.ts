@@ -22,9 +22,9 @@ describe('facilitator config', () => {
     process.env.TON_FACILITATOR_MERCHANT_ALLOWLIST = JSON.stringify([
       {
         merchantId: 'sequencer-health',
-        address: '0x4444444444444444444444444444444444444444',
+        address: '0x2222222222222222222222222222222222222222',
         resources: ['/api/marketplace/sequencer-health'],
-        networks: ['eip155:1', 'eip155:11155111'],
+        networks: ['eip155:11155111'],
       },
     ]);
     process.env.TON_FACILITATOR_RECONCILER_ENABLED = 'true';
@@ -52,5 +52,22 @@ describe('facilitator config', () => {
     expect(config.profiles.sepolia.tonAssetAddress).toBe('0xa30fe40285b8f5c0457dbc3b7c8a280373c40044');
     expect(config.merchantAllowlist).toHaveLength(1);
     expect(config.merchantAllowlist[0]?.merchantId).toBe('sequencer-health');
+  });
+
+  it('rejects allowlist addresses that do not match the facilitator spender for the configured network', async () => {
+    process.env.TON_FACILITATOR_MERCHANT_ALLOWLIST = JSON.stringify([
+      {
+        merchantId: 'sequencer-health',
+        address: '0x4444444444444444444444444444444444444444',
+        resources: ['/api/marketplace/sequencer-health'],
+        networks: ['eip155:11155111'],
+      },
+    ]);
+
+    const { loadFacilitatorConfig } = await import('@/lib/marketplace/facilitator/config');
+
+    expect(() => loadFacilitatorConfig()).toThrow(
+      'Merchant allowlist entry sequencer-health must match facilitator address for eip155:11155111'
+    );
   });
 });

@@ -80,6 +80,26 @@ function parseMerchantAllowlist(raw: string): MerchantAllowlistEntry[] {
   });
 }
 
+function assertAllowlistMatchesFacilitatorProfiles(
+  merchantAllowlist: MerchantAllowlistEntry[],
+  profiles: Record<FacilitatorProfileId, FacilitatorProfile>
+): void {
+  for (const entry of merchantAllowlist) {
+    for (const network of entry.networks) {
+      const profile = Object.values(profiles).find((candidate) => candidate.network === network);
+      if (!profile) {
+        continue;
+      }
+
+      if (getAddress(entry.address) !== getAddress(profile.facilitatorAddress)) {
+        throw new Error(
+          `Merchant allowlist entry ${entry.merchantId} must match facilitator address for ${network}`
+        );
+      }
+    }
+  }
+}
+
 function buildProfile(id: FacilitatorProfileId): FacilitatorProfile {
   const upper = id.toUpperCase();
   const enabled = readBooleanEnv(`TON_FACILITATOR_${upper}_ENABLED`);
@@ -109,6 +129,12 @@ function buildProfile(id: FacilitatorProfileId): FacilitatorProfile {
 
 export function loadFacilitatorConfig(): FacilitatorConfig {
   const merchantAllowlist = parseMerchantAllowlist(readRequiredEnv('TON_FACILITATOR_MERCHANT_ALLOWLIST'));
+  const profiles = {
+    mainnet: buildProfile('mainnet'),
+    sepolia: buildProfile('sepolia'),
+  } satisfies Record<FacilitatorProfileId, FacilitatorProfile>;
+
+  assertAllowlistMatchesFacilitatorProfiles(merchantAllowlist, profiles);
 
   return {
     redisPrefix: readRequiredEnv('TON_FACILITATOR_REDIS_PREFIX'),
@@ -122,9 +148,6 @@ export function loadFacilitatorConfig(): FacilitatorConfig {
       enabled: readBooleanEnv('TON_FACILITATOR_RECONCILER_ENABLED', true),
       cron: process.env.TON_FACILITATOR_RECONCILER_CRON?.trim() || DEFAULT_RECONCILER_CRON,
     },
-    profiles: {
-      mainnet: buildProfile('mainnet'),
-      sepolia: buildProfile('sepolia'),
-    },
+    profiles,
   };
 }

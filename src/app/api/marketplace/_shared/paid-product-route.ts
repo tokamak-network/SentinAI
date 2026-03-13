@@ -24,6 +24,12 @@ export async function handlePaidMarketplaceProduct(
 
   const merchant = config.merchantAllowlist.find((entry) => entry.merchantId === product.merchantId);
   assertMerchantAllowlistMatchesProduct({ product, allowlistEntry: merchant });
+  if (product.merchant !== profile.facilitatorAddress) {
+    return NextResponse.json(
+      { error: `Product merchant must equal facilitator spender for ${product.productId}` },
+      { status: 500 }
+    );
+  }
 
   const paymentRequirements = buildMarketplacePaymentRequirements({
     origin: request.nextUrl.origin,
