@@ -57,6 +57,7 @@ function Navbar() {
       }}>
         {[
           { href: '/docs', label: 'DOCS' },
+          { href: '/marketplace', label: 'MARKETPLACE' },
           { href: '/connect', label: 'DEPLOY' },
         ].map(({ href, label }) => (
           <a key={label} href={href} style={{
