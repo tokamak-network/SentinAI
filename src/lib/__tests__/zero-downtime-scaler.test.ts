@@ -15,7 +15,6 @@ import {
   isSwapInProgress,
   resetSwapState,
   _testHooks,
-  MAX_BLOCK_GAP,
 } from '../zero-downtime-scaler';
 import { ScalingConfig, DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 

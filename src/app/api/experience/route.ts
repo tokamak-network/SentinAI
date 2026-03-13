@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { computeExperienceStats, getLifetimeStats, lifetimeToExperienceStats } from '@/lib/experience-store';
+import { computeExperienceStats, lifetimeToExperienceStats } from '@/lib/experience-store';
 import { extractPatterns } from '@/lib/pattern-extractor';
 import { calculateTier } from '@/lib/agent-resume';
 import { getStore } from '@/lib/redis-store';

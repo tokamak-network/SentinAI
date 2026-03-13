@@ -1,6 +1,6 @@
 # TODO: SentinAI Implementation
 
-> Last Updated: 2026-03-12
+> Last Updated: 2026-03-13
 
 ## Scope Policy (Hot vs Cold)
 
@@ -149,6 +149,10 @@
 - [x] Add a Foundry workspace and contract tests for the ERC-8004 registry draft.
 - [x] Align the app registry ABI module to the canonical `AgentRegistered(agentId, agent, agentURI)` shape.
 - [x] Add a Foundry deployment script for the Phase 1 ERC-8004 registry.
+- [x] Write the ERC-8004 registry testing scenarios and deferred execution guide.
+- [x] Add `/v2/marketplace` drill-down panels for dispute detail and last batch detail.
+- [x] Add `/v2/marketplace` dispute action controls with reviewer metadata and form-based status updates.
+- [x] Add Redis-backed reputation batch history persistence and show recent batch history in `/v2/marketplace`.
 
 ### TON x402 Facilitator Plan Review
 
@@ -168,11 +172,34 @@
 - [x] Sync the English implementation plan to the hardened Korean facilitator plan.
 - [x] Keep the English docs aligned with the same execution baseline and runtime assumptions.
 
+### TON x402 Buyer Guide
+
+- [x] Write an external buyer integration guide for the TON x402 facilitator flow.
+- [x] Document the `402 -> approve -> EIP-712 sign -> X-PAYMENT retry -> receipt verify` sequence with concrete payload examples.
+- [x] Capture the minimum validation and security checks a buyer SDK must perform.
+- [x] Add a concrete TypeScript buyer example that shows `fetchPaymentRequirements`, `ensureAllowance`, `buildPaymentHeader`, and paid-resource retry flow.
+
+### TON x402 Hardening Runbook
+
+- [x] Write an operator hardening runbook for TON facilitator deployment.
+- [x] Document relayer/receipt key separation and rotation procedures.
+- [x] Capture rate-limit, audit-log, reconciliation, and failed-settlement response policies.
+
+### Lint Cleanup
+
+- [x] Remove the current source-level ESLint warnings from dashboard, API, and test files.
+- [x] Stabilize the NLOps chat auto-open path so React hook lint passes without effect-time sync state updates.
+- [x] Ignore nested `.worktrees/**` from root ESLint runs and re-verify `lint` plus production `build`.
+
 ## Review (2026-03-12, TON Facilitator Docs)
 
 - Strengthened the Korean TON facilitator design doc so it now fixes the Phase 1 source of truth, internal auth contract, canonical resource rules, settlement Redis schema, merchant allowlist source, and reconciler execution model.
 - Expanded the Korean implementation plan with missing `settlement-store` and `reconcile-runner` tasks, explicit detached receipt signing rules, and stronger route/runtime prerequisites.
 - Synced the English TON facilitator design and implementation plan to the same Phase 1 baseline so the Korean and English docs now describe the same settlement store, receipt format, internal auth, reconciler model, and execution order.
+- Added a buyer integration guide that documents how an external agent should validate `402` terms, approve the facilitator spender, sign `PaymentAuthorization`, retry with `X-PAYMENT`, and verify the resulting settlement receipt.
+- Extended the buyer guide with a concrete TypeScript example so integrators can copy the minimal `402 -> allowance -> sign -> retry` flow without reverse-engineering the payload contract.
+- Added a TON facilitator hardening runbook that fixes minimum operator policy for key management, rotation, rate limits, audit logs, reconciliation monitoring, and failed settlement handling before live rollout.
+- Cleared the current root ESLint warning set from touched files, fixed the NLOps panel auto-open implementation to satisfy React lint, and excluded nested `.worktrees/**` so root lint only evaluates this repository's source tree.
 
 ## Review (2026-03-12, Agent Marketplace Plan)
 
@@ -284,3 +311,10 @@
 - Added a marketplace product registry so product metadata now drives the buyer-facing route while merchant allowlist remains the enforcement layer for registry drift.
 - Expanded the protected marketplace surface to `incident-summary` and `batch-submission-status` using the same registry-backed x402 route pattern as `sequencer-health`.
 - Added runtime overrides for product `amount` and `merchant` so operators can adjust pricing and payout addresses without changing canonical product identity or route/resource contracts.
+- Added query-driven drill-down UI to `/v2/marketplace` so operators can inspect selected dispute metadata and the latest batch detail without leaving the ops console.
+- Extended `/v2/marketplace` dispute review from read-only detail into a form-driven action panel with `status`, `reviewed by`, and `reviewer note`, backed by a redirecting POST handler for simple server-rendered operations.
+- Added a Redis-backed reputation batch history store, recorded success and failure publish attempts from the daily job, and surfaced the latest five batch records in `/v2/marketplace`.
+- Extended `/v2/marketplace` batch drill-down with `?batch=<publishedAt>` deep links so operators can select failed or historical batches directly from the history list.
+- Added `GET /api/agent-marketplace/ops/batches` so recent batch history can be reused outside the `/v2/marketplace` page with bounded `limit` queries.
+- Extended disputes with append-only review history so status transitions now keep `fromStatus`, `toStatus`, reviewer metadata, and timestamps, and surfaced that trail in `/v2/marketplace`.
+- Added a Korean developer spec for the deployed `SentinAIERC8004Registry`, including Sepolia address, ABI, event semantics, bootstrap integration, and browse-registry implementation guidance.

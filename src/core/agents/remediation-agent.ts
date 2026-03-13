@@ -116,7 +116,7 @@ export class RemediationAgent implements RoleAgent {
 
     for (const alert of alerts) {
       if (alert.type === 'eoa-balance') {
-        const result = await this.executeEOARefill(alert.metric, alert.value);
+        const result = await this.executeEOARefill(alert.metric);
         results.push(result);
       }
     }
@@ -141,7 +141,7 @@ export class RemediationAgent implements RoleAgent {
     }
   }
 
-  private async executeEOARefill(metric: string, balanceEth: number): Promise<RemediationResult> {
+  private async executeEOARefill(metric: string): Promise<RemediationResult> {
     // Extract role from metric name (e.g., "batcher_balance" → "batcher")
     const role = metric.replace('_balance', '') as 'batcher' | 'proposer' | 'challenger';
 

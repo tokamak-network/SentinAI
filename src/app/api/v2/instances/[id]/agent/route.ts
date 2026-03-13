@@ -8,7 +8,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getInstance } from '@/core/instance-registry';
 import { getAgentOrchestrator } from '@/core/agent-orchestrator';
-import type { AgentStatus } from '@/core/agent-orchestrator';
 import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';

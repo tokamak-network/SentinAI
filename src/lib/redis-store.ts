@@ -88,8 +88,6 @@ const EXPERIENCE_TTL = 90 * 24 * 60 * 60; // 90 days
 const LIFETIME_CATEGORY_PREFIX = 'cat:';
 
 // Marketplace Configuration Constants
-const MARKETPLACE_CONFIG_TTL = 0; // Persist indefinitely
-
 // Redis key names (appended to keyPrefix)
 const KEYS = {
   metricsBuffer: 'metrics:buffer',

@@ -1,8 +1,6 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
-import dynamic from 'next/dynamic';
-import { Activity } from 'lucide-react';
 import type { ChatMessage, NLOpsResponse, NLOpsIntent } from '@/types/nlops';
 import type { ExperienceStats } from '@/types/experience';
 import type { ExperienceTier } from '@/types/agent-resume';
@@ -362,9 +360,7 @@ export default function Dashboard() {
   const [agentDecisions, setAgentDecisions] = useState<AgentDecisionEntry[]>([]);
 
   // --- NLOps Chat State ---
-  const [chatOpen, setChatOpen] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
-  const [chatInput, setChatInput] = useState('');
   const [isSending, setIsSending] = useState(false);
   const [pendingConfirmation, setPendingConfirmation] = useState<{
     message: string;
@@ -379,8 +375,6 @@ export default function Dashboard() {
   // --- Agent Loop State ---
   const [agentLoop, setAgentLoop] = useState<AgentLoopStatus | null>(null);
   const [agentFleet, setAgentFleet] = useState<AgentFleetData | null>(null);
-  const [v2Activities, setV2Activities] = useState<ExperienceData['entries']>([]);
-
   // --- Agent Experience State ---
   const [experience, setExperience] = useState<ExperienceData | null>(null);
 
@@ -389,11 +383,6 @@ export default function Dashboard() {
 
   // --- Seed Injection Trigger (forces immediate metrics re-fetch) ---
   const [seedTrigger, setSeedTrigger] = useState(0);
-  const handleSeedInjected = useCallback(() => {
-    setIsSeedActive(true);
-    setSeedTrigger(Date.now());
-  }, []);
-
   // --- NLOps Chat Handlers ---
 
   useEffect(() => {
@@ -419,7 +408,7 @@ export default function Dashboard() {
 
   const generateMessageId = () => `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
-  const sendChatMessage = async (message: string, confirmAction?: boolean) => {
+  const sendChatMessage = useCallback(async (message: string, confirmAction?: boolean) => {
     if (!message.trim() && !confirmAction) return;
 
     const userMessage: ChatMessage = {
@@ -431,7 +420,6 @@ export default function Dashboard() {
 
     if (!confirmAction) {
       setChatMessages(prev => [...prev, userMessage]);
-      setChatInput('');
     }
 
     setIsSending(true);
@@ -481,7 +469,7 @@ export default function Dashboard() {
     } finally {
       setIsSending(false);
     }
-  };
+  }, [pendingConfirmation]);
 
   const handleConfirm = () => {
     if (pendingConfirmation) {
@@ -498,13 +486,6 @@ export default function Dashboard() {
     };
     setChatMessages(prev => [...prev, cancelMessage]);
     setPendingConfirmation(null);
-  };
-
-  const handleChatKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey && !isSending) {
-      e.preventDefault();
-      sendChatMessage(chatInput);
-    }
   };
 
   // Track active abort controller to cancel pending requests
@@ -616,7 +597,6 @@ export default function Dashboard() {
   // --- Agent Loop polling (every 30s) ---
   // V2 mode: /api/agent-loop returns a synthetic snapshot via v2-cycle-adapter
   // (reads from MetricsStore → includes seeded data, computes real scalingScore)
-  const isAgentV2 = agentFleet?.agentV2 === true;
   useEffect(() => {
     const fetchAgentLoop = async () => {
       try {
@@ -634,26 +614,6 @@ export default function Dashboard() {
     const interval = setInterval(fetchAgentLoop, agentInterval);
     return () => clearInterval(interval);
   }, [isSeedActive]);
-
-  // --- V2 Activity polling (every 30s) — only when Agent V2 is active ---
-  useEffect(() => {
-    if (!isAgentV2) return;
-    const fetchV2Activities = async () => {
-      try {
-        const limit = 50;
-        const res = await fetch(`${BASE_PATH}/api/experience?limit=${limit}`, { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json() as ExperienceData;
-          setV2Activities(data.entries ?? []);
-        }
-      } catch {
-        // Silently ignore
-      }
-    };
-    fetchV2Activities();
-    const interval = setInterval(fetchV2Activities, AGENT_LOOP_REFRESH_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [isAgentV2]);
 
   // --- Parallel Agent Fleet polling (every 30s) ---
   useEffect(() => {
@@ -736,23 +696,6 @@ export default function Dashboard() {
 
 
   // --- Derived state for new layout components ---
-
-  // Derive componentStates for 3D graph from anomaly events
-  const componentStates = useMemo<Record<string, 'normal' | 'anomaly' | 'critical' | 'inactive'>>(() => {
-    const states: Record<string, 'normal' | 'anomaly' | 'critical' | 'inactive'> = {};
-    (anomalyEvents ?? []).filter((a) => a.status === 'active').forEach((a) => {
-      const severity = a.deepAnalysis?.severity;
-      const components = a.deepAnalysis?.relatedComponents ?? [];
-      components.forEach((comp) => {
-        if (severity === 'critical') {
-          states[comp] = 'critical';
-        } else if (severity === 'high' && states[comp] !== 'critical') {
-          states[comp] = 'anomaly';
-        }
-      });
-    });
-    return states;
-  }, [anomalyEvents]);
 
   const scalingScore = agentLoop?.lastCycle?.scaling?.score ?? 0;
 
@@ -875,7 +818,6 @@ export default function Dashboard() {
   const chainName = networkName ?? 'Thanos Sepolia';
   const l1Block = current?.metrics?.l1BlockHeight ?? 0;
   const l2Block = current?.metrics?.blockHeight ?? 0;
-  const txPool = current?.metrics?.txPoolCount ?? 0;
   const gasUsed = agentLoop?.lastCycle?.metrics?.gasUsedRatio ?? 0;
   const successRate = agentFleet?.kpi.successRate ?? 100; // 0–100 (percent, already multiplied in agent-fleet.ts)
   const vcpu = scalerState?.currentVcpu ?? agentLoop?.lastCycle?.scaling?.currentVcpu ?? 2;

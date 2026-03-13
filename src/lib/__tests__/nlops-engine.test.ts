@@ -409,7 +409,7 @@ describe('nlops-engine', () => {
       // the next fetches are for the tools themselves
       mockFetch
         // get_metrics tool call
-        .mockImplementationOnce(async (url: string) => {
+        .mockImplementationOnce(async () => {
           const start = Date.now();
           await new Promise((r) => setTimeout(r, TOOL_DELAY_MS));
           const end = Date.now();
@@ -417,7 +417,7 @@ describe('nlops-engine', () => {
           return { ok: true, json: async () => ({ metrics: { cpuUsage: 20 } }) };
         })
         // get_anomalies tool call
-        .mockImplementationOnce(async (url: string) => {
+        .mockImplementationOnce(async () => {
           const start = Date.now();
           await new Promise((r) => setTimeout(r, TOOL_DELAY_MS));
           const end = Date.now();

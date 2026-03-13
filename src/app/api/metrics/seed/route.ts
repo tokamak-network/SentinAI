@@ -10,7 +10,6 @@ import { resetPredictionState } from '@/lib/predictive-scaler';
 import { initVcpuProfile, clearVcpuProfile, getVcpuValuesForScenario } from '@/lib/seed-vcpu-manager';
 import { getStore } from '@/lib/redis-store';
 import { resetGoalManagerRuntimeState, tickGoalManager } from '@/lib/goal-manager';
-import { getAgentOrchestrator } from '@/core/agent-orchestrator';
 import { MetricDataPoint } from '@/types/prediction';
 import logger from '@/lib/logger';
 

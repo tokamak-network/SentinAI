@@ -101,7 +101,8 @@ export async function getV2LastCycle(): Promise<AgentCycleResult | null> {
  * V2 does not maintain a sequential cycle log.
  * Returns an empty array to satisfy callers expecting AgentCycleResult[].
  */
-export async function getV2CycleHistory(_limit?: number): Promise<AgentCycleResult[]> {
+export async function getV2CycleHistory(limit?: number): Promise<AgentCycleResult[]> {
+  void limit;
   return [];
 }
 

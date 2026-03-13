@@ -28,6 +28,7 @@ const eslintConfig = defineConfig([
     'coverage/**',
     'dist/**',
     'node_modules/**',
+    '.worktrees/**',
     '.turbo/**',
     // Non-production assets/scripts
     'demo/**',

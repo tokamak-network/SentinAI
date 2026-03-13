@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { resolveFeatures } from '@/lib/resolved-features';
-import type { ResolvedFeatures } from '@/lib/resolved-features';
 
 // Minimal mocks matching the actual types
 const makeDetected = (overrides = {}) => ({

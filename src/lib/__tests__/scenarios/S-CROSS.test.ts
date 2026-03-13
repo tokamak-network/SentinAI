@@ -62,7 +62,7 @@ import {
   getActiveL1RpcUrl,
 } from '@/lib/l1-rpc-failover';
 import { detectExecutionClient } from '@/lib/client-detector';
-import { urlDispatchFetch, mockRpcFetch } from './helpers/mock-rpc';
+import { urlDispatchFetch } from './helpers/mock-rpc';
 import { normalizeZkstackRpcSnapshot } from '@/chains/zkstack/rpc';
 
 // ============================================================

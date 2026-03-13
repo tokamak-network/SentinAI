@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { getLastCycle } from '@/lib/cycle-store';
-import { getStore } from '@/lib/redis-store';
 import { getSchedulerStatus } from '@/lib/scheduler';
 import logger from '@/lib/logger';
 import { getChainPlugin } from '@/chains';
@@ -15,13 +14,6 @@ function parseStaleThresholdSeconds(raw: string | undefined): number {
     return DEFAULT_AGENT_HEARTBEAT_STALE_SECONDS;
   }
   return parsed;
-}
-
-function computeLagSeconds(nowMs: number, timestamp: string | null): number | null {
-  if (!timestamp) return null;
-  const parsed = new Date(timestamp).getTime();
-  if (!Number.isFinite(parsed)) return null;
-  return Math.max(0, Math.floor((nowMs - parsed) / 1000));
 }
 
 function getChainSnapshot(): {
@@ -58,13 +50,10 @@ export async function GET() {
 
   try {
     const chain = getChainSnapshot();
-    const [heartbeatAt, lastCycle, scheduler] = await Promise.all([
-      getStore().getAgentLoopHeartbeat(),
+    const [lastCycle, scheduler] = await Promise.all([
       getLastCycle(),
       Promise.resolve(getSchedulerStatus()),
     ]);
-
-    const heartbeatLagSec = computeLagSeconds(nowMs, heartbeatAt);
 
     return NextResponse.json({
       status: 'ok',
