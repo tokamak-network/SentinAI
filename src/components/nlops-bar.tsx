@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { ChatMessage, NLOpsIntent } from '@/types/nlops';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
@@ -46,12 +46,9 @@ export function NLOpsBar({
 }: NLOpsBarProps) {
   const [input, setInput] = useState('');
   const [showScenarios, setShowScenarios] = useState(false);
-  const [panelOpen, setPanelOpen] = useState(false);
-
-  // Auto-open panel when a new message arrives
-  useEffect(() => {
-    if (chatMessages.length > 0) setPanelOpen(true);
-  }, [chatMessages.length]);
+  const [panelDismissedAtCount, setPanelDismissedAtCount] = useState(0);
+  const [panelForcedOpen, setPanelForcedOpen] = useState(false);
+  const panelOpen = panelForcedOpen || chatMessages.length > panelDismissedAtCount;
 
   const handleSend = () => {
     if (!input.trim() || isLoading) return;
@@ -62,6 +59,25 @@ export function NLOpsBar({
   const handleScenario = (id: string) => {
     onInjectScenario?.(id);
     setShowScenarios(false);
+  };
+
+  const handleClosePanel = () => {
+    setPanelForcedOpen(false);
+    setPanelDismissedAtCount(chatMessages.length);
+  };
+
+  const handleOpenPanel = () => {
+    if (chatMessages.length === 0) return;
+    setPanelForcedOpen(true);
+  };
+
+  const handleTogglePanel = () => {
+    if (panelOpen) {
+      handleClosePanel();
+      return;
+    }
+
+    handleOpenPanel();
   };
 
   return (
@@ -85,7 +101,7 @@ export function NLOpsBar({
             <span style={{ fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: '0.12em', color: '#0A0A0A' }}>
               NLOPS CONSOLE
             </span>
-            <button onClick={() => setPanelOpen(false)} style={{
+            <button onClick={handleClosePanel} style={{
               background: 'none', border: 'none', cursor: 'pointer',
               fontFamily: FONT, fontSize: 10, color: '#707070', padding: '0 2px',
             }}>✕</button>
@@ -205,7 +221,7 @@ export function NLOpsBar({
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !isLoading && handleSend()}
-          onFocus={() => chatMessages.length > 0 && setPanelOpen(true)}
+          onFocus={handleOpenPanel}
           placeholder="scale to 4 vCPU · run rca on op-batcher · show cost report · switch l1 rpc ..."
           style={{
             flex: 1, background: 'transparent', border: 'none', outline: 'none',
@@ -215,7 +231,7 @@ export function NLOpsBar({
         />
 
         {chatMessages.length > 0 && (
-          <button onClick={() => setPanelOpen(v => !v)} style={{
+          <button onClick={handleTogglePanel} style={{
             fontFamily: FONT, fontSize: 9, fontWeight: 700,
             padding: '1px 6px', borderRadius: 2,
             background: panelOpen ? '#0055AA' : 'transparent',

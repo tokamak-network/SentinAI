@@ -32,3 +32,8 @@
 - When a repo has no contract toolchain yet but contract work must move forward, add a repository-tracked Solidity draft first and treat compile/deploy verification as a separate explicit phase instead of hand-waving the missing workspace.
 - When adding Foundry to an existing app repo, commit the workspace inputs and tests but ignore `cache/` and `out/`; otherwise contract artifacts create avoidable repository noise.
 - When a deployment script is part of the deliverable, expose a pure `deploy()` entry alongside `run()` so the script can be covered by Foundry tests before any broadcast step is attempted.
+- When using ioredis absolute-expiry writes from TypeScript, match the declared overload order exactly (`'EXAT', timestamp, 'NX'`) or Next.js production type checks will fail even if mocked tests pass.
+- For live payment smoke tests, keep the script thin and push env parsing plus payload assembly into pure helpers so the critical request shape can be regression-tested without touching a real chain.
+- When productizing a facilitator-backed payment flow, the operator env is not enough; expose spender, EIP-712 domain/types, and receipt fields through an actual `402 Payment Required` route so external buyers can verify what they are signing.
+- For paid API products, keep product metadata in a registry as the source of truth and treat merchant allowlists as runtime enforcement; otherwise buyer-facing `402` responses and facilitator policy drift apart.
+- When a paid product needs runtime flexibility, override only operator-controlled fields like `amount` and `merchant` while keeping product identity, resource path, and network canonical in the registry.

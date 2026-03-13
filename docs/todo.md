@@ -204,3 +204,83 @@
 - Replaced the legacy `/marketplace` pricing editor with a public wireframe-aligned marketplace surface backed by the live agent catalog, manifest, and contract metadata.
 - Switched the public `/marketplace` surface from a long static page to a query-driven tab model so `registry`, `instance`, and `guide` now render as distinct deep-linkable views.
 - Added a Phase 1 Solidity draft for the ERC-8004 registry so deployment work can proceed from a repository-tracked canonical contract shape even before a dedicated contract workspace is set up.
+
+### TON x402 Facilitator Implementation Batch 1
+
+- [x] Add failing tests for facilitator config loading.
+- [x] Add failing tests for typed-data domain/resource canonicalization.
+- [x] Add failing tests for payment authorization verification.
+- [x] Implement minimal code for Tasks 1-3 and verify the focused test suite.
+
+### TON x402 Facilitator Implementation Batch 2
+
+- [x] Add failing tests for nonce replay protection.
+- [x] Add failing tests for settlement store persistence and pending index updates.
+- [x] Add failing tests for buyer balance and allowance checks.
+- [x] Implement minimal code for Tasks 4-6 and verify the combined focused facilitator suite.
+
+### TON x402 Facilitator Implementation Batch 3
+
+- [x] Add failing tests for transfer submission, on-chain verification, and detached receipt signing.
+- [x] Implement minimal code for Tasks 7-9.
+- [x] Verify the combined focused facilitator suite through Task 9.
+
+### TON x402 Facilitator Implementation Batch 4
+
+- [x] Add failing tests for facilitator routes, reconciliation, and the reconcile runner.
+- [x] Implement minimal code for Tasks 10-12.
+- [x] Verify the combined focused facilitator suite through Task 12.
+
+### TON x402 Facilitator Implementation Batch 5
+
+- [x] Add failing tests for merchant-side facilitator client behavior.
+- [x] Implement merchant-side x402 facilitator integration and environment/spec updates.
+- [x] Re-run focused facilitator tests, `npm run lint`, and `npm run build` after integration fixes.
+
+### TON x402 Facilitator Smoke Script
+
+- [x] Add failing tests for smoke env validation and x402 payment-header assembly.
+- [x] Implement a live Sepolia smoke script for allowance check, authorization signing, facilitator settlement, and settlement polling.
+- [x] Document smoke env knobs in `.env.local.sample` and verify focused tests plus production build.
+
+### TON Buyer-Facing 402 Surface
+
+- [x] Add failing tests for a protected buyer-facing marketplace route that returns x402 payment requirements.
+- [x] Implement `/api/marketplace/sequencer-health` with `402 Payment Required` requirements and paid-response verification via the facilitator.
+- [x] Verify the protected route with focused tests plus fresh `lint` and `build`.
+
+### TON Facilitator Testing Guide
+
+- [x] Write a testing scenarios and operator guide for the TON facilitator flow without executing live Sepolia tests yet.
+- [x] Capture preconditions, happy path, negative scenarios, and result-recording guidance for later execution.
+
+### TON Marketplace Product Registry
+
+- [x] Add failing tests for a canonical paid product registry and route enforcement against allowlist drift.
+- [x] Implement a marketplace product registry and move `sequencer-health` route/payment metadata to registry-backed source-of-truth definitions.
+- [x] Re-run focused registry/facilitator tests plus fresh `lint` and `build`.
+
+### TON Protected Product Expansion
+
+- [x] Extend the product registry with `incident-summary` and `batch-submission-status`.
+- [x] Add buyer-facing protected routes for both products using the shared paid-route handler.
+- [x] Re-run focused marketplace/facilitator tests plus fresh `lint` and `build`.
+
+### TON Product Runtime Overrides
+
+- [x] Add failing tests for runtime product overrides while preserving canonical registry identity.
+- [x] Implement env-driven override resolution for marketplace product `amount` and `merchant` values.
+- [x] Re-run focused marketplace/facilitator tests plus fresh `lint` and `build`.
+
+## Review (2026-03-12, TON Facilitator Implementation)
+
+- Implemented the facilitator payment path end to end: typed authorization verification, nonce replay protection, settlement persistence, relayed `transferFrom`, detached receipt signing, reconciliation, and internal HTTP routes.
+- Added merchant-side facilitator settlement verification and wired the x402 middleware path to consume facilitator receipts.
+- Updated environment samples and agent-economy specs so the documented TON flow now matches the implemented facilitator-based settlement model.
+- Fixed two verification-found regressions before closeout: ioredis `set(..., 'EXAT', ts, 'NX')` overload ordering and the NLOps panel auto-open pattern that violated the current React lint rule.
+- Added `scripts/smoke-ton-facilitator.ts` plus smoke helpers so Sepolia settlement can now be exercised with one command against a live local app instance.
+- Added the first buyer-facing protected product route, `/api/marketplace/sequencer-health`, so external agents can now discover spender/domain metadata through a concrete `402 Payment Required` response.
+- Added a dedicated testing guide documenting how to validate the TON facilitator flow later without conflating documentation readiness with live Sepolia execution.
+- Added a marketplace product registry so product metadata now drives the buyer-facing route while merchant allowlist remains the enforcement layer for registry drift.
+- Expanded the protected marketplace surface to `incident-summary` and `batch-submission-status` using the same registry-backed x402 route pattern as `sequencer-health`.
+- Added runtime overrides for product `amount` and `merchant` so operators can adjust pricing and payout addresses without changing canonical product identity or route/resource contracts.
