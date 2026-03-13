@@ -257,16 +257,17 @@
 
 - [x] Confirm the home page currently lacks a marketplace entry point.
 - [x] Scope this change to the public buyer surface at `/marketplace`, not the operator console.
-- [ ] Add failing regression tests for a home-page marketplace link and for marketplace page rendering.
-- [ ] Add a marketplace entry in the home navigation and hero CTA.
-- [ ] Fix the current `/marketplace` page type error so production build can pass again.
-- [ ] Re-run focused tests and production build.
+- [x] Add failing regression tests for a home-page marketplace link and for marketplace page rendering.
+- [x] Add a marketplace entry in the home navigation and hero CTA.
+- [x] Fix the current `/marketplace` page type error so production build can pass again.
+- [x] Re-run focused tests and production build.
 
 ## Review (2026-03-13, Marketplace Diagram HTML)
 
 - Added a standalone Mermaid HTML explainer for the SentinAI marketplace relationship, seller-side purchase flow, and reverse procurement scenario.
 - Kept the document presentation-friendly so it can be opened directly from the repository without wiring it into the app.
 - Expanded the diagram narrative so ERC-8004 registry registration, discovery metadata, and x402 payment plus settlement are visible as first-class parts of the flow.
+- Added a public marketplace entry point to the home dashboard shell and restored a passing production build so `/marketplace` and `/v2/marketplace` are present in the generated route manifest again.
 - Added event-log parsing for registry/root submission receipts and wired a scheduler-gated daily reputation publish cron into the main runtime scheduler.
 - Added an in-process reputation score store so daily reputation batches can reuse the latest published scores when explicit `previousScores` input is omitted.
 - Replaced the in-process reputation score store with a Redis-backed fail-closed store so daily reputation publishing now stops on missing `REDIS_URL` or Redis read/write failures instead of resetting or falling back silently.

@@ -57,3 +57,4 @@
 - When removing suspected dead code during lint cleanup, re-run the production build immediately; build-time type references can prove an import is still part of the real contract even if a warning list suggested otherwise.
 - When a conceptual system explanation is needed for fast review, a standalone Mermaid HTML document under `docs/` is usually a better fit than wiring a temporary route into the app.
 - When a marketplace diagram is meant to explain real integration flow, make registry registration, discovery metadata, and payment settlement explicit; otherwise the picture looks simpler than the actual contract between systems.
+- If a dashboard-style home page can render a loading shell first, put critical navigation links in the loading shell too; otherwise link regression tests and first-load UX can diverge from the steady state.

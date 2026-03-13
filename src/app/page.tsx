@@ -329,6 +329,29 @@ const SEED_ACTIVE_REFRESH_INTERVAL_MS = 5_000;
 /** Agent Loop status polling interval (ms) */
 const AGENT_LOOP_REFRESH_INTERVAL_MS = 30_000;
 
+function TopNavLinks() {
+  const linkStyle = {
+    padding: '0 14px',
+    height: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    fontSize: 11,
+    fontWeight: 600,
+    letterSpacing: '0.05em',
+    borderRight: '1px solid rgba(255,255,255,0.2)',
+    color: 'rgba(255,255,255,0.9)',
+    textDecoration: 'none',
+  };
+
+  return (
+    <>
+      <a href="/docs" style={linkStyle}>DOCS</a>
+      <a href="/connect" style={linkStyle}>DEPLOY</a>
+      <a href="/marketplace" style={linkStyle}>MARKETPLACE</a>
+    </>
+  );
+}
+
 // --- Main Dashboard Component ---
 export default function Dashboard() {
   // State
@@ -845,10 +868,21 @@ export default function Dashboard() {
   const tickerAll = [...tickerItems, ...tickerItems]; // duplicate for seamless loop
 
   if (isLoading) return (
-    <div style={{ display: 'flex', height: '100vh', width: '100%', alignItems: 'center', justifyContent: 'center', background: '#FFFFFF', color: '#0A0A0A', fontFamily: FONT }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-        <div style={{ width: 28, height: 28, border: '3px solid #D40000', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
-        <span style={{ fontSize: 12, letterSpacing: '0.1em' }}>CONNECTING TO CLUSTER...</span>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100%', background: '#FFFFFF', color: '#0A0A0A', fontFamily: FONT }}>
+      <div style={{
+        background: '#D40000', color: 'white', height: 28, display: 'flex',
+        alignItems: 'center', flexShrink: 0, borderBottom: '2px solid #8B0000',
+      }}>
+        <div style={{ background: '#8B0000', padding: '0 14px', height: '100%', display: 'flex', alignItems: 'center', borderRight: '2px solid #6B0000', flexShrink: 0 }}>
+          <span style={{ fontWeight: 700, fontSize: 13, letterSpacing: '0.05em' }}>SENTINAI</span>
+        </div>
+        <TopNavLinks />
+      </div>
+      <div style={{ display: 'flex', flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <div style={{ width: 28, height: 28, border: '3px solid #D40000', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+          <span style={{ fontSize: 12, letterSpacing: '0.1em' }}>CONNECTING TO CLUSTER...</span>
+        </div>
       </div>
     </div>
   );
@@ -879,6 +913,7 @@ export default function Dashboard() {
         <div style={{ padding: '0 14px', height: '100%', display: 'flex', alignItems: 'center', fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', borderRight: '1px solid rgba(255,255,255,0.2)' }}>
           {chainName.toUpperCase()}
         </div>
+        <TopNavLinks />
         {scalerState?.simulationMode && (
           <div style={{ padding: '0 14px', height: '100%', display: 'flex', alignItems: 'center', fontSize: 11, fontWeight: 600, letterSpacing: '0.05em', borderRight: '1px solid rgba(255,255,255,0.2)' }}>
             SIMULATION MODE
