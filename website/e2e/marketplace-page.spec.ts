@@ -115,7 +115,7 @@ test.describe('Public API Endpoints', () => {
   });
 
   test('GET /api/agent-marketplace/catalog has CORS headers', async ({ request }) => {
-    const response = await request.options('/api/agent-marketplace/catalog');
+    const response = await request.fetch('/api/agent-marketplace/catalog', { method: 'OPTIONS' });
     expect(response.status()).toBe(204);
     expect(response.headers()['access-control-allow-origin']).toBe('*');
     expect(response.headers()['access-control-allow-methods']).toContain('GET');
@@ -129,7 +129,7 @@ test.describe('Public API Endpoints', () => {
   });
 
   test('GET /api/agent-marketplace/agent.json has CORS headers', async ({ request }) => {
-    const response = await request.options('/api/agent-marketplace/agent.json');
+    const response = await request.fetch('/api/agent-marketplace/agent.json', { method: 'OPTIONS' });
     expect(response.status()).toBe(204);
     expect(response.headers()['access-control-allow-origin']).toBe('*');
   });
@@ -181,7 +181,7 @@ test.describe('x402 Payment Simulation (sequencer-health)', () => {
   });
 
   test('OPTIONS /api/agent-marketplace/sequencer-health includes X-PAYMENT in CORS headers', async ({ request }) => {
-    const response = await request.options('/api/agent-marketplace/sequencer-health');
+    const response = await request.fetch('/api/agent-marketplace/sequencer-health', { method: 'OPTIONS' });
     expect(response.status()).toBe(204);
     expect(response.headers()['access-control-allow-origin']).toBe('*');
     expect(response.headers()['access-control-allow-methods']).toContain('GET');
@@ -231,7 +231,7 @@ test.describe('x402 Payment Simulation (incident-summary)', () => {
   });
 
   test('OPTIONS /api/agent-marketplace/incident-summary includes X-PAYMENT in CORS headers', async ({ request }) => {
-    const response = await request.options('/api/agent-marketplace/incident-summary');
+    const response = await request.fetch('/api/agent-marketplace/incident-summary', { method: 'OPTIONS' });
     expect(response.status()).toBe(204);
     expect(response.headers()['access-control-allow-headers']).toContain('X-PAYMENT');
   });
@@ -263,7 +263,7 @@ test.describe('x402 Payment Simulation (batch-submission-status)', () => {
   });
 
   test('OPTIONS /api/agent-marketplace/batch-submission-status includes X-PAYMENT in CORS headers', async ({ request }) => {
-    const response = await request.options('/api/agent-marketplace/batch-submission-status');
+    const response = await request.fetch('/api/agent-marketplace/batch-submission-status', { method: 'OPTIONS' });
     expect(response.status()).toBe(204);
     expect(response.headers()['access-control-allow-headers']).toContain('X-PAYMENT');
   });
