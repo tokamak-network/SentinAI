@@ -4,9 +4,19 @@
 
 **Goal:** EIP-3009나 토큰 컨트랙트 업그레이드 없이, Ethereum mainnet과 Sepolia의 TON ERC-20 결제를 처리하는 same-app custom x402 facilitator를 구현합니다.
 
-**Architecture:** Buyer는 facilitator spender에 대해 1회 ERC-20 allowance를 부여하고, 이후 구매마다 facilitator가 정의한 EIP-712 `PaymentAuthorization`에 서명합니다. Marketplace API는 같은 SentinAI 앱 내부의 facilitator route로 이 authorization을 전달하고, facilitator는 정책을 검증한 뒤 `transferFrom`을 실행하고 Redis에 settlement 상태를 저장한 뒤 signed settlement proof를 반환합니다.
+**Architecture:** Buyer는 facilitator spender에 대해 1회 ERC-20 allowance를 부여하고, 이후 구매마다 facilitator가 정의한 EIP-712 `PaymentAuthorization`에 서명합니다. Marketplace API는 같은 SentinAI 앱 내부의 facilitator route로 이 authorization을 전달하고, facilitator는 정책을 검증한 뒤 `transferFrom`을 실행하고 Redis에 settlement 상태를 저장한 뒤 signed settlement proof를 반환합니다. 2026-03-13 Sepolia live smoke 결과, 현재 TON settlement는 `merchant == relayer == spender`일 때만 성공했으므로 Phase 1 구현과 운영 설정은 이 제약을 유지해야 합니다.
 
 **Tech Stack:** TypeScript, viem, Next.js route handlers, Redis, Vitest
+
+---
+
+## 구현 전제
+
+- 이 플랜은 `docs/plans/2026-03-11-ton-x402-facilitator-design-kor.md`를 source of truth로 따릅니다.
+- 기존 marketplace/x402 문서에 EIP-3009 기반 설명이 남아 있어도, TON settlement는 approval-based pull facilitator를 기준으로 구현합니다.
+- `src/lib/marketplace/x402-middleware.ts`와 기본 marketplace route 골격이 아직 없으면, facilitator 통합 전에 최소 buyer-facing x402 흐름부터 선행 구현해야 합니다.
+- Phase 1의 background reconciliation은 same-app in-process scheduler로 구현합니다. 별도 worker는 이 플랜 범위 밖입니다.
+- 현재 TON 배포에서는 allowlist merchant address와 relayer/spender address를 동일한 운영자 제어 주소로 맞춰야 합니다.
 
 ---
 
@@ -35,9 +45,12 @@ Expected: missing module failure
 - relayer private key env
 - receipt signing key env
 - chain id
+- per-profile RPC URL env
 - TON asset address
-- Redis nonce prefix
+- Redis nonce/settlement 공통 prefix
 - marketplace → facilitator internal call용 auth secret
+- merchant allowlist env
+- reconciler enabled/cron env
 
 **Step 4: 테스트가 통과하는지 실행**
 
@@ -53,7 +66,7 @@ git commit -m "feat(facilitator): add TON facilitator config profiles"
 
 ---
 
-### Task 2: EIP-712 PaymentAuthorization 정의
+### Task 2: EIP-712 PaymentAuthorization과 canonical resource 규칙 정의
 
 **Files:**
 - Create: `src/lib/marketplace/facilitator/typed-data.ts`
@@ -65,6 +78,9 @@ git commit -m "feat(facilitator): add TON facilitator config profiles"
 - domain field가 올바른지
 - typed data에 `buyer`, `merchant`, `asset`, `amount`, `resource`, `nonce`, `validAfter`, `validBefore`가 포함되는지
 - resource canonicalization이 동작하는지
+- `/api/marketplace/*` path만 허용하는지
+- query string, fragment, origin 포함 입력을 거절하는지
+- trailing slash 제거가 일관적인지
 
 **Step 2: 테스트가 실패하는지 실행**
 
@@ -76,6 +92,14 @@ Functions:
 - `getPaymentAuthorizationDomain(profile)`
 - `getPaymentAuthorizationTypes()`
 - `canonicalizeResource(resource)`
+
+Canonicalization 규칙:
+- path-only resource만 허용
+- `/api/marketplace/` prefix 필수
+- query string 금지
+- fragment 금지
+- trailing slash 제거
+- 중복 slash 거절
 
 **Step 4: 테스트가 통과하는지 실행**
 
@@ -106,6 +130,8 @@ git commit -m "feat(facilitator): add payment authorization typed data"
 - wrong amount
 - expired authorization
 - not-yet-valid authorization
+- canonicalized resource mismatch
+- unsupported network/profile
 
 **Step 2: 테스트가 실패하는지 실행**
 
@@ -162,7 +188,52 @@ git commit -m "feat(facilitator): add replay-protected nonce store"
 
 ---
 
-### Task 5: allowance / balance 확인 구현
+### Task 5: settlement store 추가
+
+**Files:**
+- Create: `src/lib/marketplace/facilitator/settlement-store.ts`
+- Create: `src/lib/__tests__/marketplace/facilitator/settlement-store.test.ts`
+
+**Step 1: 실패하는 테스트 작성**
+
+커버 항목:
+- settlement record 생성
+- settlement id로 단건 조회
+- pending settlement index 조회
+- `submitted`에서 `settled` 또는 `failed`로 상태 전이
+- chain namespace 분리
+
+**Step 2: 테스트가 실패하는지 실행**
+
+Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/settlement-store.test.ts`
+
+**Step 3: settlement store 구현**
+
+Redis key schema:
+- `{prefix}:facilitator:settlement:{chainId}:{settlementId}`
+- `{prefix}:facilitator:pending:{chainId}`
+
+구현 항목:
+- `createSettlement()`
+- `getSettlement()`
+- `listPendingSettlements()`
+- `markSettlementStatus()`
+- production 경로에서 in-memory fallback 금지
+
+**Step 4: 테스트가 통과하는지 실행**
+
+Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/settlement-store.test.ts`
+
+**Step 5: Commit**
+
+```bash
+git add src/lib/marketplace/facilitator/settlement-store.ts src/lib/__tests__/marketplace/facilitator/settlement-store.test.ts
+git commit -m "feat(facilitator): add TON settlement store"
+```
+
+---
+
+### Task 6: allowance / balance 확인 구현
 
 **Files:**
 - Create: `src/lib/marketplace/facilitator/check-funds.ts`
@@ -198,7 +269,7 @@ git commit -m "feat(facilitator): validate TON allowance and balance"
 
 ---
 
-### Task 6: transferFrom settlement executor 구현
+### Task 7: transferFrom settlement executor 구현
 
 **Files:**
 - Create: `src/lib/marketplace/facilitator/settle-transfer.ts`
@@ -237,7 +308,7 @@ git commit -m "feat(facilitator): execute TON transferFrom settlements"
 
 ---
 
-### Task 7: 온체인 settlement 검증 구현
+### Task 8: 온체인 settlement 검증 구현
 
 **Files:**
 - Create: `src/lib/marketplace/facilitator/verify-settlement.ts`
@@ -282,7 +353,7 @@ git commit -m "feat(facilitator): verify TON settlements on-chain"
 
 ---
 
-### Task 8: signed settlement receipt 구현
+### Task 9: detached signed settlement receipt 구현
 
 **Files:**
 - Create: `src/lib/marketplace/facilitator/receipt-signing.ts`
@@ -301,11 +372,14 @@ Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/receipt-signing.t
 
 **Step 3: receipt signing 구현**
 
-다음 중 하나를 사용합니다.
-- canonical JSON에 대한 detached ECDSA signature
-- compact JWS style payload
+detached ECDSA만 사용합니다.
 
-최소 surface area를 위해 detached signature를 권장합니다.
+구현 규칙:
+- key를 사전순 정렬한 canonical JSON 문자열 생성
+- whitespace 없는 canonical JSON 직렬화
+- `keccak256(canonicalJsonBytes)` digest 생성
+- receipt signing key로 digest 서명
+- marketplace는 configured signer address로 검증
 
 **Step 4: 테스트가 통과하는지 실행**
 
@@ -320,7 +394,7 @@ git commit -m "feat(facilitator): sign settlement receipts"
 
 ---
 
-### Task 9: facilitator HTTP endpoint 구축
+### Task 10: facilitator HTTP endpoint 구축
 
 **Files:**
 - Create: `src/app/api/facilitator/v1/settle/route.ts`
@@ -335,6 +409,7 @@ git commit -m "feat(facilitator): sign settlement receipts"
 - nonce replay
 - insufficient allowance
 - missing internal auth
+- merchant allowlist mismatch
 - status lookup
 
 **Step 2: 테스트가 실패하는지 실행**
@@ -346,6 +421,7 @@ Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/settle-route.test
 `POST /api/facilitator/v1/settle`는 다음을 수행합니다.
 - request parse
 - internal marketplace auth 검증
+- `x-sentinai-merchant-id` 검증
 - profile load
 - authorization 검증
 - nonce consume
@@ -353,10 +429,13 @@ Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/settle-route.test
 - transfer execute
 - receipt sign
 - settlement record persist
+- pending settlement index 등록
+- singleton reconciler start 보장
 
 `GET /api/facilitator/v1/settlements/:id`는 다음을 수행합니다.
 - stored settlement status 반환
 - on-chain verification state 포함
+- settlement store만 읽고 계산 중복 금지
 
 **Step 4: 테스트가 통과하는지 실행**
 
@@ -371,7 +450,7 @@ git commit -m "feat(facilitator): add settlement API routes"
 
 ---
 
-### Task 10: submitted settlement 백그라운드 reconciliation 추가
+### Task 11: submitted settlement 백그라운드 reconciliation 추가
 
 **Files:**
 - Create: `src/lib/marketplace/facilitator/reconcile-settlements.ts`
@@ -408,7 +487,45 @@ git commit -m "feat(facilitator): reconcile submitted TON settlements"
 
 ---
 
-### Task 11: merchant-side x402 verification 통합
+### Task 12: reconciliation runner 추가
+
+**Files:**
+- Create: `src/lib/marketplace/facilitator/reconcile-runner.ts`
+- Create: `src/lib/__tests__/marketplace/facilitator/reconcile-runner.test.ts`
+
+**Step 1: 실패하는 테스트 작성**
+
+커버 항목:
+- `ensureFacilitatorReconcilerStarted()`가 최초 1회만 scheduler를 등록하는지
+- `TON_FACILITATOR_RECONCILER_ENABLED=false`면 시작하지 않는지
+- cron tick이 pending reconciliation을 호출하는지
+
+**Step 2: 테스트가 실패하는지 실행**
+
+Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/reconcile-runner.test.ts`
+
+**Step 3: runner 구현**
+
+구현 규칙:
+- `node-cron` 사용
+- 기본 cron: `*/15 * * * * *`
+- module-level singleton guard 유지
+- `POST /settle` 또는 merchant verification 경로에서 `ensureFacilitatorReconcilerStarted()` 호출
+
+**Step 4: 테스트가 통과하는지 실행**
+
+Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/reconcile-runner.test.ts`
+
+**Step 5: Commit**
+
+```bash
+git add src/lib/marketplace/facilitator/reconcile-runner.ts src/lib/__tests__/marketplace/facilitator/reconcile-runner.test.ts
+git commit -m "feat(facilitator): add settlement reconciler runner"
+```
+
+---
+
+### Task 13: merchant-side x402 verification 통합
 
 **Files:**
 - Modify: `src/lib/marketplace/x402-middleware.ts`
@@ -431,8 +548,10 @@ Run: `npx vitest run src/lib/__tests__/marketplace/facilitator-client.test.ts`
 Merchant-side flow:
 - `X-PAYMENT` parse
 - internal facilitator `/api/facilitator/v1/settle` 호출
+- `x-sentinai-internal-auth`와 `x-sentinai-merchant-id` 전달
 - facilitator receipt signature 검증
 - `asset`, `amount`, `merchant`, `resource` 비교
+- `ensureFacilitatorReconcilerStarted()` 호출
 
 **Step 4: 테스트가 통과하는지 실행**
 
@@ -447,24 +566,29 @@ git commit -m "feat(marketplace): integrate TON facilitator settlement"
 
 ---
 
-### Task 12: env 문서와 safety default 추가
+### Task 14: env 문서와 safety default 추가
 
 **Files:**
 - Modify: `.env.local.sample`
-- Modify: `docs/superpowers/specs/2026-03-11-agent-economy-design.md`
 - Modify: `docs/superpowers/specs/2026-03-11-agent-economy-design-kor.md`
 
 **Step 1: env 문서 추가**
 
 문서화 항목:
 - `TON_FACILITATOR_MAINNET_ENABLED`
+- `TON_FACILITATOR_MAINNET_RPC_URL`
+- `TON_FACILITATOR_MAINNET_ADDRESS`
 - `TON_FACILITATOR_SEPOLIA_ENABLED`
+- `TON_FACILITATOR_SEPOLIA_RPC_URL`
+- `TON_FACILITATOR_SEPOLIA_ADDRESS`
 - `TON_FACILITATOR_MAINNET_RELAYER_KEY`
 - `TON_FACILITATOR_SEPOLIA_RELAYER_KEY`
 - `TON_FACILITATOR_RECEIPT_SIGNING_KEY`
 - `TON_FACILITATOR_REDIS_PREFIX`
 - `TON_FACILITATOR_MERCHANT_ALLOWLIST`
 - `TON_FACILITATOR_INTERNAL_AUTH_SECRET`
+- `TON_FACILITATOR_RECONCILER_ENABLED`
+- `TON_FACILITATOR_RECONCILER_CRON`
 
 **Step 2: marketplace 문서 업데이트**
 
@@ -473,13 +597,13 @@ TON settlement가 EIP-3009가 아니라 same-app facilitator route 내부의 app
 **Step 3: Commit**
 
 ```bash
-git add .env.local.sample docs/superpowers/specs/2026-03-11-agent-economy-design.md docs/superpowers/specs/2026-03-11-agent-economy-design-kor.md
+git add .env.local.sample docs/superpowers/specs/2026-03-11-agent-economy-design-kor.md
 git commit -m "docs(facilitator): document TON approval-based x402 settlement"
 ```
 
 ---
 
-### Task 13: 전체 검증
+### Task 15: 전체 검증
 
 **Files:**
 - 이전 태스크 전체

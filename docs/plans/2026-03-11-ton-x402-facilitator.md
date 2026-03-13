@@ -4,9 +4,19 @@
 
 **Goal:** Build a same-app custom x402 facilitator that settles TON ERC-20 payments on Ethereum mainnet and Sepolia without requiring EIP-3009 or token contract upgrades.
 
-**Architecture:** The buyer grants ERC-20 allowance to the facilitator spender once, then signs a facilitator-defined EIP-712 `PaymentAuthorization` per purchase. Marketplace APIs forward the signed authorization to internal facilitator routes in the same SentinAI app, which validate policy constraints, execute `transferFrom`, store settlement state in Redis, and return a signed settlement proof.
+**Architecture:** The buyer grants ERC-20 allowance to the facilitator spender once, then signs a facilitator-defined EIP-712 `PaymentAuthorization` per purchase. Marketplace APIs forward the signed authorization to internal facilitator routes in the same SentinAI app, which validate policy constraints, execute `transferFrom`, store settlement state in Redis, and return a signed settlement proof. Live Sepolia validation on 2026-03-13 showed that current TON settlement only works when `merchant == relayer == spender`, so Phase 1 implementation and operator config must preserve that invariant.
 
 **Tech Stack:** TypeScript, viem, Next.js route handlers, Redis, Vitest
+
+---
+
+## Implementation Preconditions
+
+- This plan follows `docs/plans/2026-03-11-ton-x402-facilitator-design.md` as its execution baseline.
+- If older marketplace/x402 docs still mention an EIP-3009-based TON flow, implement the approval-based pull facilitator path instead.
+- If `src/lib/marketplace/x402-middleware.ts` and the buyer-facing marketplace route skeleton do not exist yet, implement the minimum x402 request/402/retry flow before facilitator integration.
+- Phase 1 background reconciliation runs as a same-app in-process scheduler. A separate worker service is out of scope for this plan.
+- For current TON deployment, the allowlist merchant address and the configured relayer/spender address must be the same operator-controlled address.
 
 ---
 
@@ -35,9 +45,12 @@ Include:
 - relayer private key env
 - receipt signing key env
 - chain id
+- per-profile RPC URL env
 - TON asset address
-- Redis nonce prefix
+- Redis nonce/settlement shared prefix
 - internal auth secret for marketplace to facilitator calls
+- merchant allowlist env
+- reconciler enabled/cron env
 
 **Step 4: Run the test to confirm it passes**
 
@@ -53,7 +66,7 @@ git commit -m "feat(facilitator): add TON facilitator config profiles"
 
 ---
 
-### Task 2: Define EIP-712 PaymentAuthorization
+### Task 2: Define EIP-712 PaymentAuthorization and canonical resource rules
 
 **Files:**
 - Create: `src/lib/marketplace/facilitator/typed-data.ts`
@@ -65,6 +78,9 @@ Test:
 - domain fields are correct
 - typed data contains `buyer`, `merchant`, `asset`, `amount`, `resource`, `nonce`, `validAfter`, `validBefore`
 - resource canonicalization works
+- only `/api/marketplace/*` paths are accepted
+- inputs containing query strings, fragments, or origins are rejected
+- trailing slash removal is consistent
 
 **Step 2: Run the test to confirm failure**
 
@@ -76,6 +92,14 @@ Functions:
 - `getPaymentAuthorizationDomain(profile)`
 - `getPaymentAuthorizationTypes()`
 - `canonicalizeResource(resource)`
+
+Canonicalization rules:
+- only path-only resources are allowed
+- `/api/marketplace/` prefix is required
+- query strings are rejected
+- fragments are rejected
+- trailing slash is removed
+- duplicate slashes are rejected
 
 **Step 4: Run the test to confirm it passes**
 
@@ -106,6 +130,8 @@ Cover:
 - wrong amount
 - expired authorization
 - not-yet-valid authorization
+- canonicalized resource mismatch
+- unsupported network/profile
 
 **Step 2: Run the test to confirm failure**
 
@@ -162,7 +188,52 @@ git commit -m "feat(facilitator): add replay-protected nonce store"
 
 ---
 
-### Task 5: Implement allowance and balance checks
+### Task 5: Add settlement store
+
+**Files:**
+- Create: `src/lib/marketplace/facilitator/settlement-store.ts`
+- Create: `src/lib/__tests__/marketplace/facilitator/settlement-store.test.ts`
+
+**Step 1: Write the failing test**
+
+Cover:
+- settlement record creation
+- single settlement lookup by settlement id
+- pending settlement index lookup
+- status transition from `submitted` to `settled` or `failed`
+- chain namespace isolation
+
+**Step 2: Run the test to confirm failure**
+
+Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/settlement-store.test.ts`
+
+**Step 3: Implement settlement store**
+
+Redis key schema:
+- `{prefix}:facilitator:settlement:{chainId}:{settlementId}`
+- `{prefix}:facilitator:pending:{chainId}`
+
+Implementation:
+- `createSettlement()`
+- `getSettlement()`
+- `listPendingSettlements()`
+- `markSettlementStatus()`
+- no in-memory fallback in production paths
+
+**Step 4: Run the test to confirm it passes**
+
+Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/settlement-store.test.ts`
+
+**Step 5: Commit**
+
+```bash
+git add src/lib/marketplace/facilitator/settlement-store.ts src/lib/__tests__/marketplace/facilitator/settlement-store.test.ts
+git commit -m "feat(facilitator): add TON settlement store"
+```
+
+---
+
+### Task 6: Implement allowance and balance checks
 
 **Files:**
 - Create: `src/lib/marketplace/facilitator/check-funds.ts`
@@ -198,7 +269,7 @@ git commit -m "feat(facilitator): validate TON allowance and balance"
 
 ---
 
-### Task 6: Implement transferFrom settlement executor
+### Task 7: Implement transferFrom settlement executor
 
 **Files:**
 - Create: `src/lib/marketplace/facilitator/settle-transfer.ts`
@@ -237,7 +308,7 @@ git commit -m "feat(facilitator): execute TON transferFrom settlements"
 
 ---
 
-### Task 7: Implement on-chain settlement verification
+### Task 8: Implement on-chain settlement verification
 
 **Files:**
 - Create: `src/lib/marketplace/facilitator/verify-settlement.ts`
@@ -282,7 +353,7 @@ git commit -m "feat(facilitator): verify TON settlements on-chain"
 
 ---
 
-### Task 8: Implement signed settlement receipts
+### Task 9: Implement detached signed settlement receipts
 
 **Files:**
 - Create: `src/lib/marketplace/facilitator/receipt-signing.ts`
@@ -301,12 +372,14 @@ Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/receipt-signing.t
 
 **Step 3: Implement receipt signing**
 
-Use either:
-- detached ECDSA signature over canonical JSON
-or
-- compact JWS style payload
+Use detached ECDSA only.
 
-Prefer detached signature for minimal surface area.
+Rules:
+- create canonical JSON with lexicographically sorted keys
+- serialize without whitespace
+- hash `keccak256(canonicalJsonBytes)`
+- sign the digest with the receipt signing key
+- verify against the configured signer address on the marketplace side
 
 **Step 4: Run the test to confirm it passes**
 
@@ -321,7 +394,7 @@ git commit -m "feat(facilitator): sign settlement receipts"
 
 ---
 
-### Task 9: Build facilitator HTTP endpoints
+### Task 10: Build facilitator HTTP endpoints
 
 **Files:**
 - Create: `src/app/api/facilitator/v1/settle/route.ts`
@@ -336,6 +409,7 @@ Cover:
 - nonce replay
 - insufficient allowance
 - missing internal auth
+- merchant allowlist mismatch
 - status lookup
 
 **Step 2: Run the test to confirm failure**
@@ -347,6 +421,7 @@ Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/settle-route.test
 `POST /api/facilitator/v1/settle` should:
 - parse request
 - verify internal marketplace auth
+- verify `x-sentinai-merchant-id`
 - load profile
 - verify authorization
 - consume nonce
@@ -354,9 +429,12 @@ Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/settle-route.test
 - execute transfer
 - sign receipt
 - persist settlement record
+- register the pending settlement index
+- ensure the singleton reconciler is started
 
 `GET /api/facilitator/v1/settlements/:id` should:
 - return stored settlement status, including on-chain verification state
+- read from the settlement store only, with no duplicated recomputation
 
 **Step 4: Run the test to confirm it passes**
 
@@ -371,7 +449,7 @@ git commit -m "feat(facilitator): add settlement API routes"
 
 ---
 
-### Task 10: Add background reconciliation for submitted settlements
+### Task 11: Add background reconciliation for submitted settlements
 
 **Files:**
 - Create: `src/lib/marketplace/facilitator/reconcile-settlements.ts`
@@ -408,7 +486,45 @@ git commit -m "feat(facilitator): reconcile submitted TON settlements"
 
 ---
 
-### Task 11: Integrate merchant-side x402 verification
+### Task 12: Add reconciliation runner
+
+**Files:**
+- Create: `src/lib/marketplace/facilitator/reconcile-runner.ts`
+- Create: `src/lib/__tests__/marketplace/facilitator/reconcile-runner.test.ts`
+
+**Step 1: Write the failing test**
+
+Cover:
+- `ensureFacilitatorReconcilerStarted()` registers the scheduler only once
+- it does not start when `TON_FACILITATOR_RECONCILER_ENABLED=false`
+- each cron tick invokes pending reconciliation
+
+**Step 2: Run the test to confirm failure**
+
+Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/reconcile-runner.test.ts`
+
+**Step 3: Implement runner**
+
+Rules:
+- use `node-cron`
+- default cron: `*/15 * * * * *`
+- keep a module-level singleton guard
+- call `ensureFacilitatorReconcilerStarted()` from `POST /settle` or merchant verification paths
+
+**Step 4: Run the test to confirm it passes**
+
+Run: `npx vitest run src/lib/__tests__/marketplace/facilitator/reconcile-runner.test.ts`
+
+**Step 5: Commit**
+
+```bash
+git add src/lib/marketplace/facilitator/reconcile-runner.ts src/lib/__tests__/marketplace/facilitator/reconcile-runner.test.ts
+git commit -m "feat(facilitator): add settlement reconciler runner"
+```
+
+---
+
+### Task 13: Integrate merchant-side x402 verification
 
 **Files:**
 - Modify: `src/lib/marketplace/x402-middleware.ts`
@@ -431,8 +547,10 @@ Run: `npx vitest run src/lib/__tests__/marketplace/facilitator-client.test.ts`
 Merchant-side flow:
 - parse X-PAYMENT
 - call internal facilitator `/api/facilitator/v1/settle`
+- send `x-sentinai-internal-auth` and `x-sentinai-merchant-id`
 - verify facilitator receipt signature
 - compare `asset`, `amount`, `merchant`, `resource`
+- call `ensureFacilitatorReconcilerStarted()`
 
 **Step 4: Run the test to confirm it passes**
 
@@ -447,7 +565,7 @@ git commit -m "feat(marketplace): integrate TON facilitator settlement"
 
 ---
 
-### Task 12: Add env docs and safety defaults
+### Task 14: Add env docs and safety defaults
 
 **Files:**
 - Modify: `.env.local.sample`
@@ -458,13 +576,19 @@ git commit -m "feat(marketplace): integrate TON facilitator settlement"
 
 Document:
 - `TON_FACILITATOR_MAINNET_ENABLED`
+- `TON_FACILITATOR_MAINNET_RPC_URL`
+- `TON_FACILITATOR_MAINNET_ADDRESS`
 - `TON_FACILITATOR_SEPOLIA_ENABLED`
+- `TON_FACILITATOR_SEPOLIA_RPC_URL`
+- `TON_FACILITATOR_SEPOLIA_ADDRESS`
 - `TON_FACILITATOR_MAINNET_RELAYER_KEY`
 - `TON_FACILITATOR_SEPOLIA_RELAYER_KEY`
 - `TON_FACILITATOR_RECEIPT_SIGNING_KEY`
 - `TON_FACILITATOR_REDIS_PREFIX`
 - `TON_FACILITATOR_MERCHANT_ALLOWLIST`
 - `TON_FACILITATOR_INTERNAL_AUTH_SECRET`
+- `TON_FACILITATOR_RECONCILER_ENABLED`
+- `TON_FACILITATOR_RECONCILER_CRON`
 
 **Step 2: Update marketplace docs**
 
@@ -479,7 +603,7 @@ git commit -m "docs(facilitator): document TON approval-based x402 settlement"
 
 ---
 
-### Task 13: Full verification
+### Task 15: Full verification
 
 **Files:**
 - Existing files from prior tasks

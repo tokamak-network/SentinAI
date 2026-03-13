@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SentinAI Marketplace Diagram</title>
+  <link rel="icon" href="data:,">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #f4f1eb;
+      --surface: #fffdf8;
+      --surface-strong: #fff8ee;
+      --ink: #141414;
+      --muted: #5e5a54;
+      --line: #c9c1b6;
+      --accent: #a11a12;
+      --accent-soft: #f2d3cd;
+      --accent-strong: #6b0f0a;
+      --blue: #1747a6;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'IBM Plex Mono', monospace;
+      background:
+        radial-gradient(circle at top left, rgba(161, 26, 18, 0.08), transparent 28%),
+        radial-gradient(circle at bottom right, rgba(23, 71, 166, 0.08), transparent 24%),
+        var(--bg);
+      color: var(--ink);
+      line-height: 1.6;
+    }
+
+    main {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 40px 24px 64px;
+    }
+
+    .hero {
+      background: linear-gradient(135deg, var(--surface) 0%, var(--surface-strong) 100%);
+      border: 1px solid var(--line);
+      box-shadow: 0 20px 60px rgba(20, 20, 20, 0.08);
+      padding: 28px;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: '';
+      position: absolute;
+      top: -40px;
+      right: -20px;
+      width: 220px;
+      height: 220px;
+      background: radial-gradient(circle, rgba(161, 26, 18, 0.16), transparent 68%);
+      pointer-events: none;
+    }
+
+    .eyebrow {
+      display: inline-block;
+      margin-bottom: 12px;
+      padding: 4px 8px;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    h1,
+    h2 {
+      font-family: 'Space Grotesk', sans-serif;
+      letter-spacing: -0.03em;
+      margin: 0;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 3.5rem);
+      max-width: 820px;
+      line-height: 1;
+      margin-bottom: 12px;
+    }
+
+    .hero p {
+      max-width: 880px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 20px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      box-shadow: 0 10px 30px rgba(20, 20, 20, 0.06);
+      overflow: hidden;
+    }
+
+    .card-header {
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 248, 238, 0.9), rgba(255, 253, 248, 0.9));
+    }
+
+    .card-header h2 {
+      font-size: 28px;
+      margin-bottom: 6px;
+    }
+
+    .card-header p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      max-width: 920px;
+    }
+
+    .diagram {
+      padding: 20px;
+      overflow-x: auto;
+      background:
+        linear-gradient(90deg, rgba(23, 71, 166, 0.04), transparent 20%),
+        linear-gradient(0deg, rgba(161, 26, 18, 0.03), transparent 30%),
+        #fff;
+    }
+
+    .summary {
+      padding: 0 20px 20px;
+      color: var(--muted);
+      font-size: 12px;
+      border-top: 1px solid rgba(201, 193, 182, 0.6);
+      background: rgba(255, 253, 248, 0.8);
+    }
+
+    .summary strong {
+      color: var(--ink);
+    }
+
+    .mini-flow {
+      display: grid;
+      gap: 14px;
+    }
+
+    .mini-flow-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      align-items: center;
+    }
+
+    .mini-box {
+      border: 1px solid var(--line);
+      background: white;
+      padding: 16px 14px;
+      min-height: 92px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .mini-box strong {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+
+    .mini-box span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .mini-arrow {
+      text-align: center;
+      font-size: 12px;
+      color: var(--accent-strong);
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+
+    .mini-cases {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .flow-steps {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .flow-step {
+      border: 1px solid var(--line);
+      background: white;
+      padding: 14px 12px;
+      min-height: 140px;
+    }
+
+    .flow-step-number {
+      display: inline-flex;
+      width: 28px;
+      height: 28px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid var(--accent);
+      color: var(--accent);
+      font-weight: 700;
+      font-size: 12px;
+      margin-bottom: 10px;
+      background: rgba(242, 211, 205, 0.35);
+    }
+
+    .flow-step strong {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 14px;
+      color: var(--ink);
+    }
+
+    .flow-step span {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .mini-case {
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.88);
+      padding: 12px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .mini-case strong {
+      display: block;
+      color: var(--ink);
+      margin-bottom: 4px;
+      font-size: 13px;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .legend-item {
+      padding: 6px 10px;
+      border: 1px solid var(--line);
+      background: white;
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    footer {
+      margin-top: 20px;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: right;
+    }
+
+    @media (max-width: 720px) {
+      main {
+        padding: 24px 12px 40px;
+      }
+
+      .hero,
+      .card-header,
+      .diagram,
+      .summary {
+        padding-left: 14px;
+        padding-right: 14px;
+      }
+
+      .card-header h2 {
+        font-size: 22px;
+      }
+
+      .mini-flow-row,
+      .mini-cases,
+      .flow-steps {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="hero">
+      <div class="eyebrow">SentinAI x Agent Marketplace</div>
+      <h1>SentinAI가 운영 API와 에이전트 서비스를 마켓플레이스에서 어떻게 판매하는가</h1>
+      <p>
+        이 문서는 먼저 <strong>SentinAI가 판매자</strong>인 구조를 설명합니다. SentinAI는 운영 서비스를 마켓플레이스에 등록하고,
+        구매자는 그곳에서 상품을 찾고 결제한 뒤, 실제 실행은 SentinAI의 API와 에이전트에서 일어납니다. 이 과정에서
+        <strong>ERC-8004 registry 등록</strong>, <strong>외부 에이전트 discovery</strong>, <strong>x402 결제 및 정산</strong>이
+        어떻게 연결되는지도 함께 보여줍니다. 마지막에는 참고용으로
+        <strong>SentinAI가 외부 에이전트를 사오는 반대 케이스</strong>도 함께 넣었습니다.
+      </p>
+      <div class="legend">
+        <div class="legend-item">주요 관점: SentinAI가 판매자</div>
+        <div class="legend-item">보조 관점: SentinAI가 외부 전문 에이전트를 구매</div>
+        <div class="legend-item">포함 요소: ERC-8004, discovery, x402</div>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <div class="card-header">
+          <h2>1. 관계도</h2>
+          <p>누가 서비스를 등록하고, 누가 discovery를 담당하며, 누가 결제와 정산을 맡고, 실제 실행이 어디서 일어나는지 한눈에 보여줍니다.</p>
+        </div>
+        <div class="diagram">
+          <div class="mermaid">
+flowchart LR
+  subgraph SellerSide["판매자 영역"]
+    O["운영팀"]
+    S["SentinAI"]
+    A["운영 API / 에이전트 서비스"]
+    D["모니터링 / RCA / 자동 대응 / 리포트"]
+    M["agent.json / catalog"]
+  end
+
+  subgraph Market["에이전트 마켓플레이스"]
+    C["상품 카탈로그"]
+    P["가격 / SLA"]
+    R["평판 / 리뷰"]
+    G["접근 권한 / Entitlement"]
+    Q["외부 discovery"]
+  end
+
+  subgraph Registry["온체인 등록"]
+    E["ERC-8004 Registry"]
+  end
+
+  subgraph BuyerSide["구매자 영역"]
+    B["구매자"]
+    BA["구매자 앱 / 에이전트"]
+    U["사용 결과"]
+  end
+
+  subgraph PaymentLayer["결제 / 신뢰 계층"]
+    X["결제 승인"]
+    Y["정산 / 수익 배분"]
+    Z["증빙 / 로그 / 분쟁 데이터"]
+  end
+
+  O --> S
+  S --> A
+  A --> D
+  S --> M
+
+  M -->|메타데이터 공개| Q
+  S -->|agentURI 등록| E
+  E -->|registry 기반 발견| Q
+
+  S -->|상품 정보 등록| C
+  S -->|가격, 정책, SLA 설정| P
+  S -->|운영 이력 축적| R
+  S -->|접근 규칙 제공| G
+
+  B -->|registry / catalog 탐색| Q
+  B -->|검색 / 비교| C
+  BA -->|서비스 탐색| C
+  B -->|가격 / 신뢰 검토| P
+  B -->|평판 확인| R
+
+  B -->|x402 결제 / 승인| X
+  X --> Y
+  Y -->|판매 수익 지급| S
+
+  G -->|권한 부여| BA
+  BA -->|구매한 API / 에이전트 호출| A
+  A -->|결과 / 조치 전달| U
+
+  A -->|실행 로그 / 증빙| Z
+  Z --> R
+          </div>
+        </div>
+        <div class="summary">
+          <p><strong>핵심:</strong> SentinAI는 먼저 <strong>ERC-8004 registry</strong>와 <strong>agent.json / catalog</strong>로 자신을 발견 가능하게 만들고, 마켓플레이스는 그 위에 가격, 평판, x402 결제, entitlement를 붙입니다. 실제 실행은 계속 <strong>SentinAI의 운영 기능</strong>에서 일어납니다.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>2. 판매 / 구매 플로우</h2>
+          <p>registry 등록부터 discovery, x402 결제, 서비스 실행, 정산까지 실제 판매 흐름을 단계별로 보여줍니다.</p>
+        </div>
+        <div class="diagram">
+          <div class="flow-steps">
+            <div class="flow-step">
+              <div class="flow-step-number">1</div>
+              <strong>서비스 정의</strong>
+              <span>운영팀이 SentinAI 안에서 판매할 운영 API와 에이전트 서비스, 가격, SLA를 정합니다.</span>
+            </div>
+            <div class="flow-step">
+              <div class="flow-step-number">2</div>
+              <strong>Registry 등록</strong>
+              <span>SentinAI가 ERC-8004 registry에 `agentURI`를 등록해 외부가 온체인 기준으로 찾을 수 있게 만듭니다.</span>
+            </div>
+            <div class="flow-step">
+              <div class="flow-step-number">3</div>
+              <strong>Discovery 공개</strong>
+              <span>`agent.json`과 catalog가 열리고, 외부 에이전트와 구매자가 서비스, 가격, 네트워크, 결제 방식을 읽습니다.</span>
+            </div>
+            <div class="flow-step">
+              <div class="flow-step-number">4</div>
+              <strong>x402 결제</strong>
+              <span>구매자는 x402 기준으로 결제 승인을 보내고, 마켓플레이스 또는 facilitator가 이를 검증합니다.</span>
+            </div>
+            <div class="flow-step">
+              <div class="flow-step-number">5</div>
+              <strong>권한 부여와 실행</strong>
+              <span>결제가 확인되면 entitlement가 생기고, 구매자는 SentinAI API를 호출해 실제 분석이나 조치를 받습니다.</span>
+            </div>
+            <div class="flow-step">
+              <div class="flow-step-number">6</div>
+              <strong>증빙과 정산</strong>
+              <span>실행 기록과 결과 증빙이 다시 마켓플레이스로 돌아가고, 이를 기준으로 평판 업데이트와 수익 정산이 이뤄집니다.</span>
+            </div>
+          </div>
+        </div>
+        <div class="summary">
+          <p><strong>핵심:</strong> 이 플로우의 앞단은 <strong>ERC-8004 registry + discovery metadata</strong>, 가운데는 <strong>x402 결제 검증</strong>, 뒷단은 <strong>entitlement, 실행 증빙, 정산</strong>으로 나뉩니다. 즉 판매는 마켓플레이스에서 보이지만, 실행과 운영 책임은 여전히 SentinAI가 집니다.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <h2>3. 반대 케이스</h2>
+          <p>보조 시나리오로, SentinAI가 판매자가 아니라 구매자가 되어 registry와 discovery를 통해 외부 전문 에이전트를 사오는 경우입니다.</p>
+        </div>
+        <div class="diagram">
+          <div class="mini-flow">
+            <div class="mini-flow-row">
+              <div class="mini-box">
+                <strong>SentinAI</strong>
+                <span>필요한 전문 기능과 공급자를 찾음</span>
+              </div>
+              <div class="mini-box">
+                <strong>마켓플레이스</strong>
+                <span>registry, catalog, 가격, 평판 정보를 연결</span>
+              </div>
+              <div class="mini-box">
+                <strong>외부 전문 에이전트</strong>
+                <span>agentURI, discovery metadata, 유료 기능 제공</span>
+              </div>
+            </div>
+            <div class="mini-arrow">SentinAI → registry / catalog 탐색 → 외부 에이전트 발견 → x402 결제 → 기능 호출 → 결과 반환</div>
+            <div class="mini-cases">
+              <div class="mini-case">
+                <strong>보안</strong>
+                위협 인텔리전스, 지갑 위험도
+              </div>
+              <div class="mini-case">
+                <strong>비용</strong>
+                인프라 비용 최적화, 스케줄 제안
+              </div>
+              <div class="mini-case">
+                <strong>규정</strong>
+                정책 점검, 감사 증빙 생성
+              </div>
+              <div class="mini-case">
+                <strong>체인 특화</strong>
+                OP Stack, ZK Stack, Orbit 전문 기능
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="summary">
+          <p><strong>핵심:</strong> 반대 케이스에서도 구조는 비슷합니다. 다만 이번에는 SentinAI가 buyer가 되어 <strong>registry와 discovery surface</strong>로 외부 공급자를 찾고, <strong>x402 결제</strong>로 필요한 전문 기능만 사와 붙입니다.</p>
+        </div>
+      </section>
+    </div>
+
+    <footer>브라우저에서 이 파일을 열면 Mermaid 다이어그램으로 바로 확인할 수 있습니다.</footer>
+  </main>
+
+  <script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'base',
+      securityLevel: 'loose',
+      themeVariables: {
+        primaryColor: '#fff8ee',
+        primaryTextColor: '#141414',
+        primaryBorderColor: '#a11a12',
+        lineColor: '#5e5a54',
+        secondaryColor: '#eef4ff',
+        tertiaryColor: '#f4f1eb',
+        fontFamily: 'IBM Plex Mono, monospace',
+        noteBkgColor: '#f2d3cd',
+        noteTextColor: '#141414'
+      },
+      flowchart: {
+        curve: 'basis',
+        htmlLabels: true
+      },
+      sequence: {
+        useMaxWidth: true,
+        wrap: true
+      }
+    });
+
+    await mermaid.run({
+      querySelector: '.mermaid'
+    });
+  </script>
+</body>
+</html>

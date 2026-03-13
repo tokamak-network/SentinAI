@@ -28,6 +28,12 @@ Phase 1 TON facilitator는 다음 구조를 전제로 한다.
 - facilitator는 서명과 정책을 검증한 뒤 `transferFrom(buyer, merchant, amount)`를 실행한다
 - settlement는 `submitted -> settled | failed` lifecycle로 추적된다
 
+실체인 smoke 결과로 확인된 현재 제약:
+
+- 2026-03-13 Sepolia smoke에서 `merchant != relayer` 구성은 `SeigToken: only sender or recipient can transfer`로 실패했다
+- 같은 날 `merchant == relayer == spender` 구성은 성공했고 settlement는 block `10438414`에서 `settled`로 전이됐다
+- 따라서 현재 TON Phase 1 운영은 `merchant == relayer == spender`를 전제로 해야 한다
+
 운영자가 가장 먼저 받아들여야 하는 사실은 이것이다.
 
 - relayer key는 단순 API key가 아니라 실제 토큰 pull 권한과 직결된 고위험 비밀값이다
@@ -55,6 +61,7 @@ REDIS_URL=redis://...
 
 - `TON_FACILITATOR_SEPOLIA_ADDRESS`는 `TON_FACILITATOR_SEPOLIA_RELAYER_KEY`의 공개주소와 같아야 한다
 - `TON_FACILITATOR_MERCHANT_ALLOWLIST`는 product registry와 정합해야 한다
+- `TON_FACILITATOR_MERCHANT_ALLOWLIST`의 address는 현재 TON Phase 1에서 `TON_FACILITATOR_SEPOLIA_ADDRESS`와 같아야 한다
 - `REDIS_URL`이 없으면 운영 배포 기준으로 fail closed가 맞다
 
 ---
@@ -81,6 +88,11 @@ relayer key는 아래 역할을 가진다.
 - HSM/KMS 연동이 가능하면 더 좋음
 - `.env.local` 또는 배포 시스템 plain-text 변수는 개발 환경에만 제한
 
+현재 TON Phase 1 주의:
+
+- relayer를 merchant와 분리하는 구조는 현재 토큰 동작에서 실패했다
+- relayer rotation은 곧 merchant payout address rotation이기도 하다
+
 ### 3.2 Receipt Signing Key
 
 receipt signing key는 아래 역할을 가진다.
@@ -102,15 +114,18 @@ receipt signing key는 아래 역할을 가진다.
 
 1. 새 relayer EOA 생성
 2. 새 relayer에 소량 ETH 확보
-3. `TON_FACILITATOR_SEPOLIA_ADDRESS`, `TON_FACILITATOR_SEPOLIA_RELAYER_KEY` 교체
-4. buyer-facing `402`에서 새 spender가 노출되는지 확인
-5. 운영자 문서와 buyer guide에 새 spender 공지
-6. 기존 buyer allowance가 이전 spender를 가리키는지 모니터링
-7. 일정 유예 후 구 relayer 폐기
+3. 새 relayer를 merchant payout address로도 사용할지 먼저 결정
+4. `TON_FACILITATOR_SEPOLIA_ADDRESS`, `TON_FACILITATOR_SEPOLIA_RELAYER_KEY` 교체
+5. `TON_FACILITATOR_MERCHANT_ALLOWLIST`와 product override merchant address를 같은 주소로 교체
+6. buyer-facing `402`에서 새 spender와 merchant가 함께 노출되는지 확인
+7. 운영자 문서와 buyer guide에 새 spender 및 payout address 공지
+8. 기존 buyer allowance가 이전 spender를 가리키는지 모니터링
+9. 일정 유예 후 구 relayer 폐기
 
 주의:
 
 - relayer rotation은 buyer allowance와 직접 연결되므로, 사전 공지 없이 교체하면 기존 buyer 결제가 실패한다
+- 현재 TON Phase 1에서는 relayer rotation이 payout address 변경도 동반하므로 merchant 정산 경로까지 같이 검토해야 한다
 - rotation 직후에는 `approve` 재수행 필요 여부를 buyer에게 명확히 안내해야 한다
 
 ### 4.2 Receipt Signing Key Rotation

@@ -10,7 +10,11 @@ Use this document when:
 - running the live facilitator smoke script later
 - reviewing whether the current implementation is production-ready
 
-This guide documents the plan only. It does not imply that live Sepolia validation has already been completed.
+Live Sepolia status update on 2026-03-13:
+- `merchant != relayer` failed with `SeigToken: only sender or recipient can transfer`
+- `merchant == relayer == spender` succeeded and settled in block `10438414`
+
+This means current TON Phase 1 testing must treat `merchant == relayer == spender` as the expected runtime shape.
 
 ## Current Scope
 
@@ -31,7 +35,7 @@ Before running live tests, prepare these items:
 - a relayer EOA with Sepolia ETH for gas
 - a separate receipt signing private key
 - a buyer EOA with Sepolia TON balance
-- a merchant receiver address
+- a merchant receiver address that is the same as the relayer/spender address for current TON Phase 1
 - a buyer allowance from the buyer EOA to the relayer EOA
 
 Required env fields:
@@ -121,6 +125,7 @@ Expected:
 Review points:
 - spender matches relayer EOA
 - merchant matches allowlist
+- merchant equals relayer/spender for current TON Phase 1
 - resource matches `/api/marketplace/sequencer-health`
 - network is `eip155:11155111`
 
@@ -154,6 +159,7 @@ Success evidence:
 - receipt contains `settlementId`
 - receipt contains `txHash`
 - settlement record shows matching buyer, merchant, amount, and resource
+- merchant equals relayer/spender in the recorded settlement
 
 ### Scenario B. Missing Allowance
 
@@ -192,7 +198,26 @@ Expected:
 - script fails before settlement submission
 - error points to merchant allowlist mismatch
 
-### Scenario D. Invalid Buyer Payment Header
+### Scenario D. Merchant And Relayer Mismatch
+
+Goal:
+- prove the current TON token rejects third-party spender settlement
+
+Setup:
+- keep buyer allowance pointed at the relayer/spender
+- set merchant allowlist and smoke merchant address to a different address from the relayer
+
+Run:
+
+```bash
+npm run smoke:ton:facilitator
+```
+
+Expected:
+- on-chain settlement reverts
+- revert reason includes `SeigToken: only sender or recipient can transfer`
+
+### Scenario E. Invalid Buyer Payment Header
 
 Goal:
 - verify that the product route stays protected when the buyer sends an invalid `X-PAYMENT`
@@ -205,7 +230,7 @@ Expected:
 - route returns `402`
 - response still includes payment requirements for retry
 
-### Scenario E. Reconciliation Lag
+### Scenario F. Reconciliation Lag
 
 Goal:
 - verify the system handles `submitted` state correctly before final settlement confirmation
@@ -225,6 +250,7 @@ Use this checklist during live verification:
 
 - `402` route returns correct payment requirements
 - spender equals relayer EOA public address
+- merchant equals relayer EOA public address for current TON Phase 1
 - buyer approves the spender, not the TON token contract
 - buyer signs the exact resource path
 - facilitator verifies signature and replay nonce
@@ -238,7 +264,8 @@ Use this checklist during live verification:
 - only one buyer-facing paid product route is implemented: `/api/marketplace/sequencer-health`
 - there is no external buyer SDK yet
 - the smoke script is prepared but live Sepolia execution may still expose operational issues not covered by unit tests
-- relayer EOA is the spender in Phase 1; this is simpler operationally but should be reviewed again before production rollout
+- relayer EOA is the spender in Phase 1
+- current TON token semantics also require the relayer/spender to be the merchant receiver in Phase 1
 
 ## Recommended Next Test Order
 

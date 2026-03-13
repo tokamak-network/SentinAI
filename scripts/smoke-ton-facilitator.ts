@@ -29,6 +29,14 @@ function info(message: string) {
   console.log(`INFO: ${message}`);
 }
 
+function getApiKeyHeader(): Record<string, string> {
+  const apiKey = process.env.SENTINAI_API_KEY?.trim();
+  if (!apiKey) {
+    return {};
+  }
+  return { 'x-api-key': apiKey };
+}
+
 function fail(message: string): never {
   console.error(`FAILED: ${message}`);
   process.exit(1);
@@ -125,6 +133,7 @@ async function main() {
       'content-type': 'application/json',
       'x-sentinai-internal-auth': smoke.internalAuthSecret,
       'x-sentinai-merchant-id': smoke.merchantId,
+      ...getApiKeyHeader(),
     },
     body: JSON.stringify({
       network: profile.network,
@@ -177,6 +186,7 @@ async function main() {
       {
         headers: {
           'x-sentinai-internal-auth': smoke.internalAuthSecret,
+          ...getApiKeyHeader(),
         },
       }
     );
