@@ -20,6 +20,7 @@
 → Plan: `docs/plans/2026-03-12-agent-marketplace.md`
 → Principle: 기존 subscription pricing/marketplace prototype와 완전 분리된 독립 도메인으로 구현.
 → MVP: `sequencer-health`, `incident-summary`, `batch-submission-status`
+→ Current: `BROWSE REGISTRY` live discovery에 query-driven pagination을 추가 중.
 
 ### 1) Verifiable Accountability Framework (proposal-29)
 → Contract: `docs/contracts/proposal-29-CONTRACT.md`
@@ -185,6 +186,17 @@
 - [x] Document relayer/receipt key separation and rotation procedures.
 - [x] Capture rate-limit, audit-log, reconciliation, and failed-settlement response policies.
 
+### TON x402 Live-Smoke Alignment
+
+- [x] Run live Sepolia smoke against the TON facilitator flow.
+- [x] Record the runtime constraint discovered from the real-chain result.
+- [x] Update design, plan, buyer guide, testing guide, and hardening docs to reflect the live-smoke constraint.
+
+### TON x402 Runtime Guardrails
+
+- [x] Add fail-closed runtime validation that current TON Phase 1 merchant addresses match the facilitator relayer/spender.
+- [x] Cover the config loader, settle route, and buyer-facing paid route with regression tests for merchant/spender drift.
+
 ### Lint Cleanup
 
 - [x] Remove the current source-level ESLint warnings from dashboard, API, and test files.
@@ -200,6 +212,18 @@
 - Extended the buyer guide with a concrete TypeScript example so integrators can copy the minimal `402 -> allowance -> sign -> retry` flow without reverse-engineering the payload contract.
 - Added a TON facilitator hardening runbook that fixes minimum operator policy for key management, rotation, rate limits, audit logs, reconciliation monitoring, and failed settlement handling before live rollout.
 - Cleared the current root ESLint warning set from touched files, fixed the NLOps panel auto-open implementation to satisfy React lint, and excluded nested `.worktrees/**` so root lint only evaluates this repository's source tree.
+
+## Review (2026-03-13, TON Facilitator Live Smoke)
+
+- Live Sepolia smoke proved the TON facilitator flow works end to end only when `merchant == relayer == spender` for the current token behavior.
+- The `merchant != relayer` configuration failed on-chain with `SeigToken: only sender or recipient can transfer`, so Phase 1 docs now treat merchant/relayer separation as unsupported.
+- Updated the English/Korean facilitator design and plan docs, buyer guide, testing guide, and hardening runbook to align with the verified runtime constraint and the successful settlement result in block `10438414`.
+
+## Review (2026-03-13, TON Facilitator Runtime Guardrails)
+
+- Added fail-closed validation so config loading now rejects allowlist entries that do not match the facilitator spender for the configured TON network.
+- Added runtime checks in the buyer-facing paid route and internal settle route so merchant/spender drift cannot silently survive mocked config or product overrides.
+- Locked the behavior with regression tests covering config drift, settle-route drift, and buyer-facing `402` generation drift.
 
 ## Review (2026-03-12, Agent Marketplace Plan)
 
@@ -218,6 +242,31 @@
 - Added route-level tests for all paid marketplace endpoints and verified the production build now includes the full `/api/agent-marketplace/*` surface.
 - Replaced the ERC-8004 registration stub with a real viem `writeContract(register(agentURI))` path and documented deployment/verification steps in an agent marketplace operations runbook.
 - Implemented IPFS batch publishing, `submitMerkleRoot` on-chain submission, and a daily reputation job orchestration boundary tied to SLA summaries.
+
+## Session Checklist (2026-03-13)
+
+### SentinAI Marketplace Relationship Diagram HTML
+
+- [x] Confirm the diagram scope is SentinAI selling operational API and agent services through the marketplace.
+- [x] Define a three-diagram structure: relationship map, sales flow, reverse-case scenario.
+- [x] Add a standalone HTML document under `docs/` that renders the diagrams with Mermaid.
+- [x] Keep the page self-explanatory with short captions and presentation-friendly styling.
+- [x] Verify the generated HTML structure and asset references.
+
+### Home Marketplace Entry + Build Fix
+
+- [x] Confirm the home page currently lacks a marketplace entry point.
+- [x] Scope this change to the public buyer surface at `/marketplace`, not the operator console.
+- [ ] Add failing regression tests for a home-page marketplace link and for marketplace page rendering.
+- [ ] Add a marketplace entry in the home navigation and hero CTA.
+- [ ] Fix the current `/marketplace` page type error so production build can pass again.
+- [ ] Re-run focused tests and production build.
+
+## Review (2026-03-13, Marketplace Diagram HTML)
+
+- Added a standalone Mermaid HTML explainer for the SentinAI marketplace relationship, seller-side purchase flow, and reverse procurement scenario.
+- Kept the document presentation-friendly so it can be opened directly from the repository without wiring it into the app.
+- Expanded the diagram narrative so ERC-8004 registry registration, discovery metadata, and x402 payment plus settlement are visible as first-class parts of the flow.
 - Added event-log parsing for registry/root submission receipts and wired a scheduler-gated daily reputation publish cron into the main runtime scheduler.
 - Added an in-process reputation score store so daily reputation batches can reuse the latest published scores when explicit `previousScores` input is omitted.
 - Replaced the in-process reputation score store with a Redis-backed fail-closed store so daily reputation publishing now stops on missing `REDIS_URL` or Redis read/write failures instead of resetting or falling back silently.
@@ -231,6 +280,9 @@
 - Replaced the legacy `/marketplace` pricing editor with a public wireframe-aligned marketplace surface backed by the live agent catalog, manifest, and contract metadata.
 - Switched the public `/marketplace` surface from a long static page to a query-driven tab model so `registry`, `instance`, and `guide` now render as distinct deep-linkable views.
 - Added a Phase 1 Solidity draft for the ERC-8004 registry so deployment work can proceed from a repository-tracked canonical contract shape even before a dedicated contract workspace is set up.
+- Replaced the public `BROWSE REGISTRY` placeholder with live ERC-8004 event-scan discovery that deduplicates to the latest operator registration and fetches each discovered `agent.json`.
+- Added a 30-second runtime cache to registry browse so repeated public loads do not rescan the registry and refetch manifests on every request.
+- Added query-driven pagination to `BROWSE REGISTRY` with a fixed page size of 5 while keeping cache on the full discovered registry set.
 
 ### TON x402 Facilitator Implementation Batch 1
 
@@ -318,3 +370,5 @@
 - Added `GET /api/agent-marketplace/ops/batches` so recent batch history can be reused outside the `/v2/marketplace` page with bounded `limit` queries.
 - Extended disputes with append-only review history so status transitions now keep `fromStatus`, `toStatus`, reviewer metadata, and timestamps, and surfaced that trail in `/v2/marketplace`.
 - Added a Korean developer spec for the deployed `SentinAIERC8004Registry`, including Sepolia address, ABI, event semantics, bootstrap integration, and browse-registry implementation guidance.
+- [x] Add operator registry registration UI in `/v2/marketplace` and a buyer sandbox tab in `/marketplace`.
+- Added `/api/agent-marketplace/ops/register`, a `REGISTRY REGISTRATION` panel in `/v2/marketplace`, and a `BUYER SANDBOX` tab in `/marketplace` for operator registration and external-agent purchase-flow testing.

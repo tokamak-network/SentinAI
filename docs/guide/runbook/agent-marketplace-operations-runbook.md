@@ -13,6 +13,8 @@
 - `/api/agent-marketplace/incident-summary`
 - `/api/agent-marketplace/batch-submission-status`
 - `/api/agent-marketplace/ops/summary`
+- `/api/agent-marketplace/ops/batches`
+- `/api/agent-marketplace/ops/register`
 - `/api/agent-marketplace/ops/disputes`
 - `/api/agent-marketplace/ops/contracts`
 - `/v2/marketplace`
@@ -108,13 +110,19 @@ forge script script/DeploySentinAIERC8004Registry.s.sol:DeploySentinAIERC8004Reg
 ```bash
 open https://sentinai.example.com/v2/marketplace
 curl -s https://sentinai.example.com/api/agent-marketplace/ops/summary
+curl -s 'https://sentinai.example.com/api/agent-marketplace/ops/batches?limit=5'
 curl -s https://sentinai.example.com/api/agent-marketplace/ops/contracts
 ```
 
 기대 결과:
 
 - `/v2/marketplace`에 `STATUS`, `REQUESTS / 24H`, `BUYERS / 24H`, `LAST BATCH` 카드 존재
+- `/v2/marketplace`에 `REGISTRY REGISTRATION` 패널 존재
+- `/v2/marketplace?dispute=<id>` deep link로 specific dispute detail 확인 가능
+- `/v2/marketplace?batch=<publishedAt>` deep link로 specific batch detail 확인 가능
 - `ops/summary`가 서비스별 request count, recent verified requests, SLA agents를 반환
+- `ops/batches`가 newest-first batch history를 반환하고 `limit` query를 지원
+- `POST /api/agent-marketplace/ops/register`가 registry registration result를 반환
 - `ops/contracts`가 registry / reputation contract 주소와 event name 목록을 반환
 
 `/v2` mock dashboard에서는 좌측 sidebar의 `Marketplace` 항목으로 `/v2/marketplace`에 진입한다.
@@ -129,12 +137,20 @@ curl -s https://sentinai.example.com/api/agent-marketplace/agent.json
 
 기대 결과:
 
-- `/marketplace`에 `THIS INSTANCE`, `BROWSE REGISTRY`, `CONNECT GUIDE` 섹션이 존재
-- `/marketplace?tab=registry`, `/marketplace?tab=instance`, `/marketplace?tab=guide` deep link가 모두 동작
+- `/marketplace`에 `THIS INSTANCE`, `BROWSE REGISTRY`, `CONNECT GUIDE`, `BUYER SANDBOX` 섹션이 존재
+- `/marketplace?tab=registry`, `/marketplace?tab=instance`, `/marketplace?tab=guide`, `/marketplace?tab=sandbox` deep link가 모두 동작
+- `/marketplace?tab=registry&page=N` deep link로 registry browse pagination이 동작한다
+- `BROWSE REGISTRY`는 `ERC8004_REGISTRY_ADDRESS`와 `SENTINAI_L1_RPC_URL`이 모두 설정되면 live registry rows를 보여준다
+- registry row는 `AgentRegistered` event 기준 latest registration per operator만 노출한다
+- remote `agent.json` fetch가 실패한 row는 `manifest unavailable` 상태로 남는다
+- browse 결과는 process-local 30초 TTL cache를 사용하므로 반복 page load가 매번 full event scan을 강제하지 않는다
+- top-level registry browse 실패 결과는 cache되지 않으므로 다음 요청에서 즉시 재시도된다
+- registry browse는 page size `5`로 고정되고, summary `REGISTERED` 카드는 현재 페이지가 아닌 전체 row 수를 기준으로 표시된다
 - `catalog`에 3개 active service 존재
 - `agent.json`에 capability 3개 존재
 - `endpoint`가 `/api/agent-marketplace`
 - 공개 페이지의 서비스/가이드 내용이 `/api/agent-marketplace/*` 기준으로 표기됨
+- sandbox 탭이 buyer agent id, service selector, endpoint preview, sample `x-payment` envelope를 표시
 
 ### 2. 결제 챌린지
 
@@ -207,19 +223,29 @@ request log는 middleware 레벨에서 기록되며 Redis를 source-of-truth로 
 - 전일 00:00:00 ~ 23:59:59.999 UTC 구간을 집계 대상으로 사용
 - request log는 Redis 키 `sentinai:agent-marketplace:request-logs`에 저장된다
 - 이전 reputation score는 Redis 키 `sentinai:agent-marketplace:reputation:scores`에서 읽고 쓴다
+- reputation batch history는 Redis 키 `sentinai:agent-marketplace:reputation:batches`에 저장된다
 - scheduler는 `previousScores`를 강제로 덮어쓰지 않으므로, Redis에 저장된 이전 score가 다음 일일 batch의 기준값이 된다
 - `REDIS_URL`이 없거나 Redis 읽기/쓰기가 실패하면 batch publish는 즉시 실패한다
+- batch publish 성공과 실패 모두 history에 기록되며, `/v2/marketplace`의 `LAST BATCH DETAIL`과 `LAST BATCH HISTORY`는 이 Redis history를 source-of-truth로 사용한다
 
 ### Dispute Review Workflow
 
 - 운영자는 `/v2/marketplace`의 `DISPUTES` 패널에서 현재 분쟁 요청을 본다
+- `/v2/marketplace?dispute=<id>`로 선택된 분쟁의 상세 패널을 직접 열 수 있다
+- 상세 패널의 `UPDATE DISPUTE` form에서 `status`, `reviewed by`, `reviewer note`를 함께 제출할 수 있다
+- 상태 변경이 일어날 때마다 dispute record에 review history entry가 append된다
 - 생성 API: `POST /api/agent-marketplace/ops/disputes`
 - 상태 변경 API: `PATCH /api/agent-marketplace/ops/disputes/[id]`
+- 운영 UI form submit 경로: `POST /api/agent-marketplace/ops/disputes/[id]`
 - 현재 상태 전이:
   - `open -> reviewed | resolved | rejected`
   - `reviewed -> resolved | rejected`
   - `resolved`, `rejected`는 terminal state
 - 현재 분쟁 UI는 operator review 용이며, on-chain dispute execution UI는 아직 없다
+- `LAST BATCH DETAIL` 패널에서 latest batch의 `publishedAt`, `batchHash`, `txHash`, `error`를 함께 확인할 수 있다
+- `LAST BATCH HISTORY` 패널에서 최근 5건의 batch 결과와 window, tx hash 또는 error를 함께 확인할 수 있다
+- `LAST BATCH HISTORY` row를 클릭하면 선택한 batch 기준으로 `LAST BATCH DETAIL`이 갱신된다
+- `REVIEW HISTORY` 패널에서 dispute status transition trail과 reviewer metadata를 함께 확인할 수 있다
 
 ### Canonical ABI Assets
 
@@ -230,7 +256,8 @@ request log는 middleware 레벨에서 기록되며 Redis를 source-of-truth로 
 
 아직 구현되지 않은 것:
 
-- dispute UI / resolution flow
+- on-chain dispute execution UI
+- dispute evidence attachment / audit trail expansion
 
 ## 장애 대응
 

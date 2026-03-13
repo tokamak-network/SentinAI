@@ -2,11 +2,12 @@ import Link from 'next/link';
 import { getAgentMarketplaceCatalog } from '@/lib/agent-marketplace/catalog';
 import { toAgentMarketplaceAgentManifest } from '@/lib/agent-marketplace/catalog-response';
 import { getAgentMarketplaceContractsStatus } from '@/lib/agent-marketplace/contracts-status';
+import { getAgentMarketplaceRegistryBrowseData } from '@/lib/agent-marketplace/registry-browse';
 
-type MarketplaceTab = 'registry' | 'instance' | 'guide';
+type MarketplaceTab = 'registry' | 'instance' | 'guide' | 'sandbox';
 
 function resolveMarketplaceTab(value: string | undefined): MarketplaceTab {
-  if (value === 'instance' || value === 'guide') {
+  if (value === 'instance' || value === 'guide' || value === 'sandbox') {
     return value;
   }
 
@@ -28,13 +29,18 @@ function formatTonAmount(amount: string | null | undefined): string {
 export default async function MarketplacePage({
   searchParams,
 }: {
-  searchParams?: Promise<{ tab?: string }>;
+  searchParams?: Promise<{ tab?: string; page?: string }>;
 }) {
+  const resolvedSearchParams = await searchParams;
   const enabled = process.env.MARKETPLACE_ENABLED === 'true';
   const catalog = getAgentMarketplaceCatalog();
   const manifest = toAgentMarketplaceAgentManifest(catalog);
   const contracts = getAgentMarketplaceContractsStatus();
-  const tab = resolveMarketplaceTab((await searchParams)?.tab);
+  const tab = resolveMarketplaceTab(resolvedSearchParams?.tab);
+  const registryPage = Number.parseInt(resolvedSearchParams?.page ?? '1', 10);
+  const registryBrowse = tab === 'registry'
+    ? await getAgentMarketplaceRegistryBrowseData({ page: registryPage })
+    : null;
   const supportedNetworks = Array.from(
     new Set(
       catalog.services
@@ -42,6 +48,20 @@ export default async function MarketplacePage({
         .filter((network): network is string => Boolean(network))
     )
   );
+  const sandboxService = catalog.services[0];
+  const sandboxEndpoint = sandboxService
+    ? `/api/agent-marketplace/${sandboxService.key.replace(/_/g, '-')}`
+    : '/api/agent-marketplace/sequencer-health';
+  const sampleEnvelope = Buffer.from(
+    JSON.stringify({
+      agentId: 'buyer-agent-001',
+      scheme: sandboxService?.payment?.scheme ?? 'exact',
+      network: sandboxService?.payment?.network ?? manifest.payment.network,
+      token: sandboxService?.payment?.token ?? 'ton',
+      amount: sandboxService?.payment?.amount ?? '0',
+      authorization: 'sandbox-signature',
+    })
+  ).toString('base64');
 
   return (
     <main className="min-h-screen bg-[#F0F0F0] px-6 py-8 text-[#0A0A0A]">
@@ -92,6 +112,12 @@ export default async function MarketplacePage({
             >
               CONNECT GUIDE
             </Link>
+            <Link
+              href="/marketplace?tab=sandbox"
+              className={`px-5 py-3 text-[10px] font-bold tracking-[0.1em] ${tab === 'sandbox' ? 'mb-[-2px] border-b-[3px] border-[#D40000] text-[#D40000]' : 'text-[#777]'}`}
+            >
+              BUYER SANDBOX
+            </Link>
           </div>
         </section>
 
@@ -114,8 +140,8 @@ export default async function MarketplacePage({
           <div className="mb-6 flex gap-2">
             <div className="min-w-[130px] border border-[#D0D0D0] bg-white px-4 py-3">
               <div className="mb-1 text-[9px] font-bold tracking-[0.12em] text-[#888]">REGISTERED</div>
-              <div className="text-[18px] font-bold">1</div>
-              <div className="text-[9px] text-[#888]">instance</div>
+              <div className="text-[18px] font-bold">{registryBrowse?.totalRows ?? 0}</div>
+              <div className="text-[9px] text-[#888]">instances</div>
             </div>
             <div className="min-w-[130px] border border-[#D0D0D0] bg-white px-4 py-3">
               <div className="mb-1 text-[9px] font-bold tracking-[0.12em] text-[#888]">CHAINS</div>
@@ -124,19 +150,63 @@ export default async function MarketplacePage({
             </div>
           </div>
 
-          <div className="space-y-1">
-            <div className="flex items-center gap-3 border border-[#D0D0D0] bg-white px-4 py-3 text-[12px]">
-              <span className="font-bold">SentinAI Marketplace</span>
-              <span className="text-[11px] text-[#0055AA]">{manifest.payment.network}</span>
-              <span className="text-[11px] text-[#777]">· {manifest.version}</span>
-              <span className="ml-auto text-[11px] text-[#555]">{catalog.services.length} services</span>
-              <span className="text-[10px] font-semibold text-[#27ae60]">x402 ✓</span>
+          {registryBrowse?.rows.length ? (
+            <div>
+              <div className="mb-3 flex items-center justify-between border border-[#D0D0D0] bg-[#F5F5F5] px-4 py-2 text-[10px] font-bold tracking-[0.08em] text-[#555]">
+                <span>PAGE {registryBrowse.page} / {registryBrowse.totalPages}</span>
+                <div className="flex items-center gap-3">
+                  {registryBrowse.hasPreviousPage ? (
+                    <Link href={`/marketplace?tab=registry&page=${registryBrowse.page - 1}`} className="text-[#0055AA]">
+                      PREV
+                    </Link>
+                  ) : (
+                    <span className="text-[#AAA]">PREV</span>
+                  )}
+                  {registryBrowse.hasNextPage ? (
+                    <Link href={`/marketplace?tab=registry&page=${registryBrowse.page + 1}`} className="text-[#0055AA]">
+                      NEXT
+                    </Link>
+                  ) : (
+                    <span className="text-[#AAA]">NEXT</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                {registryBrowse.rows.map((row) => (
+                  <div key={row.agentId} className="border border-[#D0D0D0] bg-white px-4 py-3 text-[12px]">
+                    <div className="flex items-center gap-3">
+                      <span className="font-bold">{row.manifest?.name ?? row.agentUri}</span>
+                      <span className="text-[11px] text-[#0055AA]">{row.manifest?.paymentNetwork ?? 'unknown'}</span>
+                      <span className="text-[11px] text-[#777]">· {row.manifest?.version ?? `agent #${row.agentId}`}</span>
+                      <span className="ml-auto text-[11px] text-[#555]">
+                        {row.manifest?.capabilities.length ?? 0} capabilities
+                      </span>
+                      <span className={`text-[10px] font-semibold ${row.manifestStatus === 'ok' ? 'text-[#27ae60]' : 'text-[#D40000]'}`}>
+                        {row.manifestStatus === 'ok' ? 'manifest ok' : 'manifest unavailable'}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-[10px] leading-5 text-[#666]">
+                      <div>agent {row.agent}</div>
+                      <div>agentURI {row.agentUri}</div>
+                      <div>endpoint {row.manifest?.endpoint ?? 'unavailable'}</div>
+                      {row.manifest?.capabilities.length ? (
+                        <div>capabilities {row.manifest.capabilities.join(', ')}</div>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="border border-[#D0D0D0] bg-white px-4 py-4 text-[11px] text-[#666]">
+              <div className="font-semibold text-[#0A0A0A]">No registry entries discovered yet</div>
+              <div className="mt-1">{registryBrowse?.status ?? 'Registry browse is not configured'}</div>
+            </div>
+          )}
 
           <div className="mt-3 text-[10px] text-[#BBB]">
-            Phase 1 exposes the local SentinAI marketplace surface directly. Multi-instance registry browsing can expand on top of the
-            same manifest and ERC-8004 metadata later.
+            {registryBrowse?.status ?? 'Registry browse is not configured'}
           </div>
         </section>
         ) : null}
@@ -248,6 +318,45 @@ accepts[0].asset.symbol = "TON"`}
   "updatedAt": "2026-03-12T00:00:00.000Z"
 }`}
               </pre>
+            </div>
+          </div>
+        </section>
+        ) : null}
+
+        {tab === 'sandbox' ? (
+        <section id="sandbox" className="px-12 py-6">
+          <div className="max-w-4xl">
+            <div className="mb-5 text-[12px] font-bold tracking-[0.1em]">BUYER SANDBOX</div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="border border-[#D0D0D0] bg-white p-4">
+                <div className="mb-3 text-[9px] font-bold tracking-[0.12em] text-[#888]">INPUTS</div>
+                <label className="mb-3 block">
+                  <div className="mb-1 text-[10px] text-[#666]">buyer agent id</div>
+                  <input className="w-full border border-[#D0D0D0] px-3 py-2 text-[11px]" defaultValue="buyer-agent-001" />
+                </label>
+                <label className="block">
+                  <div className="mb-1 text-[10px] text-[#666]">service</div>
+                  <select className="w-full border border-[#D0D0D0] px-3 py-2 text-[11px]" defaultValue={sandboxService?.key}>
+                    {catalog.services.map((service) => (
+                      <option key={service.key} value={service.key}>
+                        {service.displayName}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+
+              <div className="border border-[#D0D0D0] bg-white p-4">
+                <div className="mb-3 text-[9px] font-bold tracking-[0.12em] text-[#888]">REQUEST PREVIEW</div>
+                <div className="mb-2 text-[11px]"><span className="text-[#888]">endpoint:</span> {sandboxEndpoint}</div>
+                <div className="mb-2 text-[11px]"><span className="text-[#888]">network:</span> {sandboxService?.payment?.network ?? manifest.payment.network}</div>
+                <div className="mb-2 text-[11px]"><span className="text-[#888]">token:</span> {sandboxService?.payment?.token ?? 'ton'}</div>
+                <div className="mb-4 text-[11px]"><span className="text-[#888]">price:</span> {formatTonAmount(sandboxService?.payment?.amount)}</div>
+                <div className="mb-2 text-[10px] text-[#666]">sample x-payment envelope</div>
+                <pre className="overflow-x-auto border border-[#D0D0D0] bg-[#F5F5F5] px-3 py-3 text-[10px] leading-6 text-[#333]">
+{sampleEnvelope}
+                </pre>
+              </div>
             </div>
           </div>
         </section>
