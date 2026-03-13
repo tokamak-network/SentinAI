@@ -27,12 +27,16 @@ test.describe('Navbar', () => {
     expect(bg).toBe('rgb(212, 0, 0)');
   });
 
-  test('nav links DOCS, DEPLOY, GITHUB exist with correct hrefs', async ({ page }) => {
+  test('nav links DOCS, MARKETPLACE, DEPLOY, GITHUB exist with correct hrefs', async ({ page }) => {
     const nav = page.locator('header nav');
 
     const docsLink = nav.locator('a', { hasText: 'DOCS' });
     await expect(docsLink).toBeVisible();
     await expect(docsLink).toHaveAttribute('href', '/docs');
+
+    const marketplaceLink = nav.locator('a', { hasText: 'MARKETPLACE' });
+    await expect(marketplaceLink).toBeVisible();
+    await expect(marketplaceLink).toHaveAttribute('href', '/marketplace');
 
     const deployLink = nav.locator('a', { hasText: 'DEPLOY' });
     await expect(deployLink).toBeVisible();
