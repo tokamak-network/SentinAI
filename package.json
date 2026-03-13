@@ -18,6 +18,7 @@
     "verify:client-profile": "bash scripts/verify-client-profile.sh",
     "verify:client-profile:live": "bash scripts/verify-client-profile.sh --phase 4",
     "smoke:runtime:core": "bash scripts/smoke-runtime-core.sh",
+    "smoke:ton:facilitator": "npx tsx scripts/smoke-ton-facilitator.ts",
     "probe:zk:settlement": "node scripts/zk-settlement-probe.mjs",
     "benchmark": "npx tsx scripts/benchmark-models.ts",
     "smoke:metrics:optimism": "bash scripts/smoke-optimism-metrics.sh",

@@ -18,3 +18,8 @@
 - When an ERC-20 payment asset lacks EIP-3009, the least invasive x402-compatible path is usually facilitator-side EIP-712 authorization plus ERC-20 `approve/transferFrom`, not token replacement.
 - When a config-driven feature introduces a shared store abstraction, every runtime write/read surface must use that same store path; route-level regression tests should prove the API is not silently using a separate in-memory fallback.
 - When a plan introduces async settlement states, it must name the settlement store, write/read owner, and reconciliation trigger explicitly; otherwise route implementation stalls on hidden infrastructure decisions.
+- When using ioredis absolute-expiry writes from TypeScript, match the declared overload order exactly (`'EXAT', timestamp, 'NX'`) or Next.js production type checks will fail even if mocked tests pass.
+- For live payment smoke tests, keep the script thin and push env parsing plus payload assembly into pure helpers so the critical request shape can be regression-tested without touching a real chain.
+- When productizing a facilitator-backed payment flow, the operator env is not enough; expose spender, EIP-712 domain/types, and receipt fields through an actual `402 Payment Required` route so external buyers can verify what they are signing.
+- For paid API products, keep product metadata in a registry as the source of truth and treat merchant allowlists as runtime enforcement; otherwise buyer-facing `402` responses and facilitator policy drift apart.
+- When a paid product needs runtime flexibility, override only operator-controlled fields like `amount` and `merchant` while keeping product identity, resource path, and network canonical in the registry.

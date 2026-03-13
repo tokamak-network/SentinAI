@@ -23,7 +23,7 @@ Phase 1 is intentionally conservative: it optimizes for agent utility and moneti
 
 - **ERC-8004**: On-chain agent identity registry
 - **x402**: HTTP 402-based machine payment protocol
-- **EIP-3009**: `transferWithAuthorization` for gasless token transfer authorization
+- **Facilitator-defined EIP-712 authorization**: signed purchase intent verified by the TON facilitator before `approve + transferFrom` settlement
 
 ## Architecture
 
@@ -151,12 +151,12 @@ Field intent:
                      "token": "<TON contract>", "amount": "100000000000000000" }] }
 
 4. Payment + retry
-   Agent signs EIP-3009 transferWithAuthorization for 0.1 TON
+   Agent signs the facilitator-defined EIP-712 `PaymentAuthorization` for 0.1 TON
    Agent → GET /api/marketplace/sequencer-health
               X-PAYMENT: <base64 PaymentPayload>
 
 5. Verify + respond
-   payment-verifier.ts validates signature, requests TON settlement via facilitator
+   payment-verifier.ts validates the facilitator authorization, requests TON settlement via the same-app facilitator, and verifies the signed settlement receipt
    ← 200 OK { status: "healthy", healthScore: 84, action: "proceed", ... }
 ```
 
@@ -180,7 +180,7 @@ src/lib/marketplace/
   agent-registry.ts     — ERC-8004 registration and lookup client
   x402-middleware.ts    — HTTP 402 response builder + payment header parser
   catalog.ts            — Service definitions, pricing, capability list
-  payment-verifier.ts   — TON EIP-3009 signature verification + facilitator call
+  payment-verifier.ts   — TON facilitator authorization validation + facilitator call
 
 src/app/api/marketplace/
   catalog/route.ts                  — GET: service catalog (free)
@@ -216,6 +216,22 @@ MARKETPLACE_TON_ADDRESS=
 # x402 configuration
 X402_FACILITATOR_URL=
 X402_NETWORK=eip155:1
+
+# TON facilitator configuration
+TON_FACILITATOR_INTERNAL_AUTH_SECRET=
+TON_FACILITATOR_MAINNET_ENABLED=false
+TON_FACILITATOR_MAINNET_RPC_URL=
+TON_FACILITATOR_MAINNET_ADDRESS=
+TON_FACILITATOR_MAINNET_RELAYER_KEY=
+TON_FACILITATOR_SEPOLIA_ENABLED=true
+TON_FACILITATOR_SEPOLIA_RPC_URL=
+TON_FACILITATOR_SEPOLIA_ADDRESS=
+TON_FACILITATOR_SEPOLIA_RELAYER_KEY=
+TON_FACILITATOR_RECEIPT_SIGNING_KEY=
+TON_FACILITATOR_REDIS_PREFIX=sentinai
+TON_FACILITATOR_MERCHANT_ALLOWLIST=
+TON_FACILITATOR_RECONCILER_ENABLED=true
+TON_FACILITATOR_RECONCILER_CRON=*/15 * * * * *
 
 # ERC-8004 configuration
 ERC8004_REGISTRY_ADDRESS=
