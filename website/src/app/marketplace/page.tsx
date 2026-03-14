@@ -216,7 +216,6 @@ export default function MarketplacePage() {
             { href: '/docs', label: 'DOCS' },
             { href: '/connect', label: 'DEPLOY' },
             { href: '/marketplace', label: 'MARKETPLACE' },
-            { href: '/admin/login', label: 'ADMIN' },
           ].map(({ href, label }) => (
             <a key={label} href={href} style={{
               fontFamily: FONT,

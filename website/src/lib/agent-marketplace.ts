@@ -119,32 +119,6 @@ export function getAgentCatalog(): Agent[] {
   return AGENT_CATALOG.filter(agent => agent.enabled);
 }
 
-/**
- * Get catalog from admin marketplace store (for server-side use).
- * This connects to the persisted admin store instead of static data.
- */
-export async function getAgentCatalogFromStore(): Promise<Agent[]> {
-  try {
-    const { getMarketplaceStore } = await import('./admin-marketplace-store');
-    const store = getMarketplaceStore();
-    const data = await store.getData();
-    return data.agents
-      .filter(agent => agent.status === 'active')
-      .map(agent => ({
-        id: agent.id,
-        name: agent.name,
-        description: agent.description,
-        tier: agent.tier,
-        priceUSDCents: agent.priceUSDCents,
-        image: agent.imageUrl,
-        enabled: agent.status === 'active',
-      }));
-  } catch (error) {
-    console.error('[AgentMarketplace] Error loading from store, falling back to static catalog:', error);
-    return getAgentCatalog();
-  }
-}
-
 export function getAgentById(id: string): Agent | null {
   return AGENT_CATALOG.find(agent => agent.id === id) || null;
 }
