@@ -372,4 +372,39 @@ describe('/v2/marketplace page', () => {
     expect(html).not.toContain('tx hash:</span> 0xtxbatch');
     expect(html).toContain('/v2/marketplace?dispute=disp_2&amp;batch=2026-03-11T04%3A00%3A00.000Z');
   });
+
+  it('renders logout button in the header', async () => {
+    hoisted.getContractsStatusMock.mockReturnValue({
+      registry: { name: 'ERC8004 Agent Registry', address: null, eventNames: ['AgentRegistered', 'Register'] },
+      reputation: { name: 'Agent Reputation Registry', address: null, eventNames: ['MerkleRootSubmitted', 'RootSubmitted'] },
+    });
+    hoisted.listDisputesMock.mockResolvedValue([]);
+    hoisted.buildSummaryMock.mockResolvedValue({
+      enabled: true,
+      window: {
+        fromIso: '2026-03-11T00:00:00.000Z',
+        toIso: '2026-03-12T00:00:00.000Z',
+      },
+      requestTotals: { total: 0, verified: 0, rejected: 0, rateLimited: 0 },
+      distinctBuyerCount: 0,
+      services: [],
+      topBuyers: [],
+      recentRequests: [],
+      slaAgents: [],
+      lastBatch: {
+        status: 'never',
+        publishedAt: null,
+        batchHash: null,
+        txHash: null,
+        merkleRoot: null,
+        error: null,
+      },
+      batchHistory: [],
+    });
+
+    const html = renderToStaticMarkup(await Page({}));
+
+    expect(html).toContain('LOGOUT');
+    expect(html).toContain('/api/auth/siwe/logout');
+  });
 });
