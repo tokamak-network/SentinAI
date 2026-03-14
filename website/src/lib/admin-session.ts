@@ -125,14 +125,14 @@ export async function verifySIWESignature(
   signature: string
 ): Promise<boolean> {
   try {
-    const recoveredAddress = await verifyMessage({
+    const isValid = await verifyMessage({
       address,
       message,
       signature: signature as `0x${string}`,
     });
 
-    // verifyMessage returns true if signature is valid
-    return recoveredAddress === address;
+    // verifyMessage returns boolean
+    return isValid;
   } catch (error) {
     console.error('[AdminSession] SIWE signature verification failed', error);
     return false;
