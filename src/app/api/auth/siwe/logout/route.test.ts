@@ -30,20 +30,12 @@ describe('POST /api/auth/siwe/logout', () => {
 
   describe('valid requests', () => {
     it('should return 204 No Content on successful logout', async () => {
-      const request = new Request('http://localhost:3000/api/auth/siwe/logout', {
-        method: 'POST',
-      });
-
       const response = await POST();
 
       expect(response.status).toBe(204);
     });
 
     it('should set Set-Cookie header to clear session', async () => {
-      const request = new Request('http://localhost:3000/api/auth/siwe/logout', {
-        method: 'POST',
-      });
-
       const response = await POST();
 
       const cookieHeader = response.headers.get('Set-Cookie');
