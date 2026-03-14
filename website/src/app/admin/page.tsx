@@ -76,6 +76,38 @@ export default function AdminDashboard() {
         </button>
       </header>
 
+      {/* Navigation */}
+      <nav style={{
+        background: '#E8E8E8',
+        borderBottom: '1px solid #D0D0D0',
+        padding: '12px 24px',
+        display: 'flex',
+        gap: '24px',
+      }}>
+        {[
+          { href: '/admin', label: 'Dashboard' },
+          { href: '/admin/catalog', label: 'Catalog' },
+          { href: '/admin/pricing', label: 'Pricing' },
+          { href: '/admin/orders', label: 'Orders' },
+          { href: '/admin/analytics', label: 'Analytics' },
+        ].map((item) => (
+          <a
+            key={item.href}
+            href={item.href}
+            style={{
+              fontSize: '11px',
+              fontWeight: 700,
+              color: item.href === '/admin' ? '#D40000' : '#333',
+              textDecoration: 'none',
+              borderBottom: item.href === '/admin' ? '2px solid #D40000' : 'none',
+              paddingBottom: '2px',
+            }}
+          >
+            {item.label}
+          </a>
+        ))}
+      </nav>
+
       {/* Content */}
       <div style={{
         padding: '40px 24px',
@@ -105,25 +137,48 @@ export default function AdminDashboard() {
             marginBottom: '20px',
           }}>
             <p>Welcome to the SentinAI Marketplace Admin Panel.</p>
-            <p>This is the administrator interface for managing marketplace operations.</p>
+            <p>Manage your marketplace agents, pricing, orders, and analytics from the navigation menu.</p>
           </div>
 
           <div style={{
-            background: '#F5F5F5',
-            border: '1px solid #E0E0E0',
-            padding: '16px',
-            fontSize: '11px',
-            color: '#666',
-            fontFamily: MONO_FONT,
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '16px',
           }}>
-            <div style={{ marginBottom: '12px', fontWeight: 700 }}>Navigation (Coming Soon):</div>
-            <ul style={{ margin: 0, paddingLeft: '20px', listStyle: 'none' }}>
-              <li>/admin/catalog - Manage marketplace agents</li>
-              <li>/admin/pricing - Set pricing and policies</li>
-              <li>/admin/orders - View and manage orders</li>
-              <li>/admin/payments - Handle payments</li>
-              <li>/admin/analytics - View statistics</li>
-            </ul>
+            {[
+              { href: '/admin/catalog', label: 'Catalog', desc: 'Manage marketplace agents' },
+              { href: '/admin/pricing', label: 'Pricing', desc: 'Set pricing and policies' },
+              { href: '/admin/orders', label: 'Orders', desc: 'View and manage orders' },
+              { href: '/admin/analytics', label: 'Analytics', desc: 'View statistics' },
+            ].map((item) => (
+              <a
+                key={item.href}
+                href={item.href}
+                style={{
+                  background: '#F5F5F5',
+                  border: '1px solid #D0D0D0',
+                  padding: '16px',
+                  textDecoration: 'none',
+                  transition: 'all 0.2s',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLElement).style.background = '#E8E8E8';
+                  (e.currentTarget as HTMLElement).style.borderColor = '#D40000';
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLElement).style.background = '#F5F5F5';
+                  (e.currentTarget as HTMLElement).style.borderColor = '#D0D0D0';
+                }}
+              >
+                <div style={{ fontSize: '12px', fontWeight: 700, color: '#D40000', marginBottom: '4px' }}>
+                  {item.label}
+                </div>
+                <div style={{ fontSize: '11px', color: '#666' }}>
+                  {item.desc}
+                </div>
+              </a>
+            ))}
           </div>
         </div>
       </div>
