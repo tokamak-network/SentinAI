@@ -214,6 +214,26 @@ export interface IStateStore {
   setMarketplacePricingConfig(config: MarketplacePricingConfig): Promise<void>;
   getMarketplaceBonusConfig(defaultConfig: OutcomeBonusConfig): Promise<OutcomeBonusConfig>;
   setMarketplaceBonusConfig(config: OutcomeBonusConfig): Promise<void>;
+
+  // === Phase 6: Playbook Evolution (Task 6) ===
+  // Pattern Management
+  savePattern(pattern: any): Promise<void>;
+  getPatterns(anomalyType: string): Promise<any[]>;
+  deletePattern(anomalyType: string, action: string): Promise<void>;
+
+  // A/B Test Management
+  saveABTestSession(sessionId: string, session: any): Promise<void>;
+  getABTestSession(sessionId: string): Promise<any | null>;
+  getRunningABTests(): Promise<any[]>;
+
+  // Playbook Version Management
+  savePlaybookVersion(version: any): Promise<void>;
+  getPlaybookVersionHistory(): Promise<any>;
+  cleanupOldVersions(): Promise<void>;
+
+  // Evolution Timestamp
+  getLastEvolutionTime(): Promise<number>;
+  setLastEvolutionTime(time: number): Promise<void>;
 }
 
 // ============================================================

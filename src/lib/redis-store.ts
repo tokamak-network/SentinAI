@@ -43,6 +43,12 @@ import { GoalLearningEpisode } from '@/types/goal-learning';
 import { RCAHistoryEntry } from '@/types/rca';
 import type { ExperienceEntry, LifetimeStats } from '@/types/experience';
 import type { MarketplacePricingConfig, OutcomeBonusConfig } from '@/types/marketplace';
+import type {
+  IncidentPattern,
+  ABTestSession,
+  PlaybookVersion,
+  PlaybookVersionHistory,
+} from '@/lib/types/playbook-evolution';
 import logger from '@/lib/logger';
 
 // ============================================================
@@ -86,6 +92,11 @@ const RCA_HISTORY_TTL = 7 * 24 * 60 * 60; // 7 days
 const EXPERIENCE_MAX = 5000;
 const EXPERIENCE_TTL = 90 * 24 * 60 * 60; // 90 days
 const LIFETIME_CATEGORY_PREFIX = 'cat:';
+
+// Phase 6: Playbook Evolution Constants
+const PATTERN_TTL_SECONDS = 24 * 60 * 60; // 24 hours
+const AB_TEST_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
+const MAX_PLAYBOOK_VERSIONS = 10;
 
 // Marketplace Configuration Constants
 // Redis key names (appended to keyPrefix)
@@ -142,6 +153,14 @@ const KEYS = {
   // Marketplace Configuration
   marketplacePricingConfig: 'marketplace:pricing:config',
   marketplaceBonusConfig: 'marketplace:bonus:config',
+  // Phase 6: Playbook Evolution
+  incidentPattern: (anomalyType: string, action: string) =>
+    `incident:pattern:${anomalyType}:${action}`,
+  abTestSession: (sessionId: string) => `ab_test:session:${sessionId}`,
+  playbookVersion: (versionId: string) => `playbook:version:${versionId}`,
+  playbookCurrent: 'playbook:current',
+  playbookHistory: 'playbook:history',
+  playbookLastEvolutionTime: 'playbook:last_evolution_time',
 } as const;
 
 // ============================================================
@@ -1437,6 +1456,358 @@ export class RedisStateStore implements IStateStore {
     // TTL = 0 means persist indefinitely, so we don't use EX option
     await this.client.set(key, JSON.stringify(config));
   }
+
+  // === Phase 6: Playbook Evolution (Task 6) ===
+
+  async savePattern(pattern: IncidentPattern): Promise<void> {
+    const key = this.key(KEYS.incidentPattern(pattern.anomalyType, pattern.effectiveAction));
+    await this.client.setex(key, PATTERN_TTL_SECONDS, JSON.stringify(pattern));
+  }
+
+  async getPatterns(anomalyType: string): Promise<IncidentPattern[]> {
+    const pattern = `${this.prefix}incident:pattern:${anomalyType}:*`;
+    try {
+      const keys = await this.scanKeys(pattern);
+      const patterns: IncidentPattern[] = [];
+
+      for (const key of keys) {
+        const data = await this.client.get(key);
+        if (data) {
+          try {
+            const parsed = JSON.parse(data) as IncidentPattern;
+            patterns.push(parsed);
+          } catch {
+            logger.warn(`[Redis Store] Failed to parse pattern from key ${key}`);
+          }
+        }
+      }
+
+      return patterns;
+    } catch (error) {
+      logger.error('[Redis Store] Error in getPatterns:', String(error));
+      return [];
+    }
+  }
+
+  async deletePattern(anomalyType: string, action: string): Promise<void> {
+    const key = this.key(KEYS.incidentPattern(anomalyType, action));
+    await this.client.del(key);
+  }
+
+  async saveABTestSession(sessionId: string, session: ABTestSession): Promise<void> {
+    const key = this.key(KEYS.abTestSession(sessionId));
+    const serialized = JSON.stringify({
+      ...session,
+      createdAt: session.createdAt.toISOString(),
+    });
+    await this.client.setex(key, AB_TEST_TTL_SECONDS, serialized);
+  }
+
+  async getABTestSession(sessionId: string): Promise<ABTestSession | null> {
+    const key = this.key(KEYS.abTestSession(sessionId));
+    const data = await this.client.get(key);
+    if (!data) return null;
+
+    try {
+      const parsed = JSON.parse(data) as {
+        id: string;
+        testPlaybookId: string;
+        controlPlaybookId: string;
+        status: 'running' | 'completed';
+        createdAt: string;
+        stats: {
+          controlExecutions: number;
+          testExecutions: number;
+          controlSuccesses: number;
+          testSuccesses: number;
+          confidenceLevel: number;
+          statSignificant: boolean;
+        };
+      };
+      return {
+        ...parsed,
+        createdAt: new Date(parsed.createdAt),
+      };
+    } catch (error) {
+      logger.error('[Redis Store] Failed to parse A/B test session:', String(error));
+      return null;
+    }
+  }
+
+  async getRunningABTests(): Promise<ABTestSession[]> {
+    const pattern = `${this.prefix}ab_test:session:*`;
+    try {
+      const keys = await this.scanKeys(pattern);
+      const sessions: ABTestSession[] = [];
+
+      for (const key of keys) {
+        const data = await this.client.get(key);
+        if (data) {
+          try {
+            const parsed = JSON.parse(data) as {
+              id: string;
+              testPlaybookId: string;
+              controlPlaybookId: string;
+              status: 'running' | 'completed';
+              createdAt: string;
+              stats: {
+                controlExecutions: number;
+                testExecutions: number;
+                controlSuccesses: number;
+                testSuccesses: number;
+                confidenceLevel: number;
+                statSignificant: boolean;
+              };
+            };
+            if (parsed.status === 'running') {
+              sessions.push({
+                ...parsed,
+                createdAt: new Date(parsed.createdAt),
+              });
+            }
+          } catch {
+            logger.warn(`[Redis Store] Failed to parse A/B test session from key ${key}`);
+          }
+        }
+      }
+
+      return sessions;
+    } catch (error) {
+      logger.error('[Redis Store] Error in getRunningABTests:', String(error));
+      return [];
+    }
+  }
+
+  async savePlaybookVersion(version: PlaybookVersion): Promise<void> {
+    const versionKey = this.key(KEYS.playbookVersion(version.versionId));
+    const serialized = JSON.stringify({
+      ...version,
+      playbook: {
+        ...version.playbook,
+        generatedAt: version.playbook.generatedAt.toISOString(),
+      },
+      promotedAt: version.promotedAt.toISOString(),
+    });
+    // No TTL - persist forever
+    await this.client.set(versionKey, serialized);
+
+    // Update history list
+    const historyKey = this.key(KEYS.playbookHistory);
+    const history = await this.client.lrange(historyKey, 0, -1);
+    let historyList: string[] = [];
+    if (history.length > 0 && history[0]) {
+      try {
+        historyList = JSON.parse(history[0]) as string[];
+      } catch {
+        historyList = [];
+      }
+    }
+
+    // Add new version to history if not already present
+    if (!historyList.includes(version.versionId)) {
+      historyList.push(version.versionId);
+    }
+
+    // Update history
+    await this.client.del(historyKey);
+    await this.client.rpush(historyKey, JSON.stringify(historyList));
+
+    // Update current if active
+    if (version.isActive) {
+      const currentKey = this.key(KEYS.playbookCurrent);
+      await this.client.set(currentKey, serialized);
+    }
+  }
+
+  async getPlaybookVersionHistory(): Promise<PlaybookVersionHistory> {
+    const currentKey = this.key(KEYS.playbookCurrent);
+    const historyKey = this.key(KEYS.playbookHistory);
+
+    // Get current version
+    const currentData = await this.client.get(currentKey);
+    let current: PlaybookVersion | null = null;
+
+    if (currentData) {
+      try {
+        const parsed = JSON.parse(currentData) as {
+          versionId: string;
+          playbook: {
+            id: string;
+            name: string;
+            description: string;
+            actions: unknown[];
+            fallbacks: unknown[];
+            timeout: number;
+            versionId: string;
+            parentVersionId: string;
+            generatedAt: string;
+            generatedBy: string;
+            confidenceSource: string;
+            generationPromptUsage: unknown;
+            patternContext: unknown;
+          };
+          promotedAt: string;
+          isActive: boolean;
+        };
+        current = {
+          ...parsed,
+          playbook: {
+            ...parsed.playbook,
+            generatedAt: new Date(parsed.playbook.generatedAt),
+          },
+          promotedAt: new Date(parsed.promotedAt),
+        } as PlaybookVersion;
+      } catch (error) {
+        logger.error('[Redis Store] Failed to parse current playbook version:', String(error));
+      }
+    }
+
+    // Get history version IDs
+    const historyData = await this.client.lrange(historyKey, 0, -1);
+    const historyIds: string[] = [];
+    if (historyData.length > 0 && historyData[0]) {
+      try {
+        const parsed = JSON.parse(historyData[0]) as string[];
+        historyIds.push(...parsed);
+      } catch {
+        // Empty history
+      }
+    }
+
+    // Load all historical versions
+    const history: PlaybookVersion[] = [];
+    for (const versionId of historyIds) {
+      if (current && versionId === current.versionId) continue; // Skip current
+
+      const versionKey = this.key(KEYS.playbookVersion(versionId));
+      const versionData = await this.client.get(versionKey);
+      if (versionData) {
+        try {
+          const parsed = JSON.parse(versionData) as {
+            versionId: string;
+            playbook: {
+              id: string;
+              name: string;
+              description: string;
+              actions: unknown[];
+              fallbacks: unknown[];
+              timeout: number;
+              versionId: string;
+              parentVersionId: string;
+              generatedAt: string;
+              generatedBy: string;
+              confidenceSource: string;
+              generationPromptUsage: unknown;
+              patternContext: unknown;
+            };
+            promotedAt: string;
+            isActive: boolean;
+          };
+          history.push({
+            ...parsed,
+            playbook: {
+              ...parsed.playbook,
+              generatedAt: new Date(parsed.playbook.generatedAt),
+            },
+            promotedAt: new Date(parsed.promotedAt),
+          } as PlaybookVersion);
+        } catch (error) {
+          logger.warn(`[Redis Store] Failed to parse version ${versionId}:`, String(error));
+        }
+      }
+    }
+
+    // Return structure with safe defaults
+    return {
+      current: current || ({
+        versionId: 'v-0',
+        playbook: {
+          id: 'default',
+          name: 'Default Playbook',
+          description: 'Default playbook',
+          actions: [],
+          fallbacks: [],
+          timeout: 600,
+          versionId: 'v-0',
+          parentVersionId: '',
+          generatedAt: new Date(),
+          generatedBy: 'system',
+          confidenceSource: 'human_authored',
+          generationPromptUsage: { inputTokens: 0, outputTokens: 0, totalCost: 0 },
+          patternContext: { patterns: [], successRateBaseline: 0 },
+        },
+        promotedAt: new Date(),
+        isActive: true,
+      } as PlaybookVersion),
+      history,
+    };
+  }
+
+  async cleanupOldVersions(): Promise<void> {
+    const historyKey = this.key(KEYS.playbookHistory);
+    const historyData = await this.client.lrange(historyKey, 0, -1);
+    let historyIds: string[] = [];
+
+    if (historyData.length > 0 && historyData[0]) {
+      try {
+        historyIds = JSON.parse(historyData[0]) as string[];
+      } catch {
+        return;
+      }
+    }
+
+    // Keep only the latest MAX_PLAYBOOK_VERSIONS versions
+    if (historyIds.length > MAX_PLAYBOOK_VERSIONS) {
+      const toDelete = historyIds.slice(0, historyIds.length - MAX_PLAYBOOK_VERSIONS);
+      for (const versionId of toDelete) {
+        const versionKey = this.key(KEYS.playbookVersion(versionId));
+        await this.client.del(versionKey);
+      }
+
+      // Update history list
+      const remaining = historyIds.slice(historyIds.length - MAX_PLAYBOOK_VERSIONS);
+      await this.client.del(historyKey);
+      await this.client.rpush(historyKey, JSON.stringify(remaining));
+    }
+  }
+
+  async getLastEvolutionTime(): Promise<number> {
+    const key = this.key(KEYS.playbookLastEvolutionTime);
+    const data = await this.client.get(key);
+    if (!data) return 0;
+
+    try {
+      return parseInt(data, 10);
+    } catch {
+      return 0;
+    }
+  }
+
+  async setLastEvolutionTime(time: number): Promise<void> {
+    const key = this.key(KEYS.playbookLastEvolutionTime);
+    // No TTL - persist forever
+    await this.client.set(key, String(time));
+  }
+
+  // Helper method for SCAN pattern matching
+  private async scanKeys(pattern: string): Promise<string[]> {
+    const keys: string[] = [];
+    let cursor = '0';
+
+    do {
+      const [nextCursor, scanKeys] = await this.client.scan(
+        cursor,
+        'MATCH',
+        pattern,
+        'COUNT',
+        100,
+      );
+      cursor = nextCursor;
+      keys.push(...scanKeys);
+    } while (cursor !== '0');
+
+    return keys;
+  }
 }
 
 // ============================================================
@@ -2271,6 +2642,122 @@ export class InMemoryStateStore implements IStateStore {
 
   async setMarketplaceBonusConfig(config: OutcomeBonusConfig): Promise<void> {
     this.marketplaceBonusConfig = config;
+  }
+
+  // === Phase 6: Playbook Evolution (Task 6) ===
+  private patterns: Map<string, IncidentPattern[]> = new Map();
+  private abTestSessions: Map<string, ABTestSession> = new Map();
+  private playbookVersions: Map<string, PlaybookVersion> = new Map();
+  private playbookCurrent: PlaybookVersion | null = null;
+  private playbookHistory: string[] = [];
+  private lastEvolutionTime: number = 0;
+
+  async savePattern(pattern: IncidentPattern): Promise<void> {
+    const key = `${pattern.anomalyType}`;
+    const patterns = this.patterns.get(key) || [];
+    const index = patterns.findIndex(
+      (p) => p.anomalyType === pattern.anomalyType && p.effectiveAction === pattern.effectiveAction,
+    );
+    if (index >= 0) {
+      patterns[index] = pattern;
+    } else {
+      patterns.push(pattern);
+    }
+    this.patterns.set(key, patterns);
+  }
+
+  async getPatterns(anomalyType: string): Promise<IncidentPattern[]> {
+    return this.patterns.get(anomalyType) || [];
+  }
+
+  async deletePattern(anomalyType: string, action: string): Promise<void> {
+    const patterns = this.patterns.get(anomalyType) || [];
+    const filtered = patterns.filter((p) => p.effectiveAction !== action);
+    if (filtered.length === 0) {
+      this.patterns.delete(anomalyType);
+    } else {
+      this.patterns.set(anomalyType, filtered);
+    }
+  }
+
+  async saveABTestSession(sessionId: string, session: ABTestSession): Promise<void> {
+    this.abTestSessions.set(sessionId, session);
+  }
+
+  async getABTestSession(sessionId: string): Promise<ABTestSession | null> {
+    return this.abTestSessions.get(sessionId) || null;
+  }
+
+  async getRunningABTests(): Promise<ABTestSession[]> {
+    return Array.from(this.abTestSessions.values()).filter((s) => s.status === 'running');
+  }
+
+  async savePlaybookVersion(version: PlaybookVersion): Promise<void> {
+    this.playbookVersions.set(version.versionId, version);
+
+    // Add to history if not already present
+    if (!this.playbookHistory.includes(version.versionId)) {
+      this.playbookHistory.push(version.versionId);
+    }
+
+    // Update current if active
+    if (version.isActive) {
+      this.playbookCurrent = version;
+    }
+  }
+
+  async getPlaybookVersionHistory(): Promise<PlaybookVersionHistory> {
+    const history: PlaybookVersion[] = [];
+
+    for (const versionId of this.playbookHistory) {
+      if (this.playbookCurrent && versionId === this.playbookCurrent.versionId) continue;
+      const version = this.playbookVersions.get(versionId);
+      if (version) {
+        history.push(version);
+      }
+    }
+
+    return {
+      current: this.playbookCurrent || ({
+        versionId: 'v-0',
+        playbook: {
+          id: 'default',
+          name: 'Default Playbook',
+          description: 'Default playbook',
+          actions: [],
+          fallbacks: [],
+          timeout: 600,
+          versionId: 'v-0',
+          parentVersionId: '',
+          generatedAt: new Date(),
+          generatedBy: 'system',
+          confidenceSource: 'human_authored',
+          generationPromptUsage: { inputTokens: 0, outputTokens: 0, totalCost: 0 },
+          patternContext: { patterns: [], successRateBaseline: 0 },
+        },
+        promotedAt: new Date(),
+        isActive: true,
+      } as PlaybookVersion),
+      history,
+    };
+  }
+
+  async cleanupOldVersions(): Promise<void> {
+    if (this.playbookHistory.length > MAX_PLAYBOOK_VERSIONS) {
+      const toDelete = this.playbookHistory.slice(0, this.playbookHistory.length - MAX_PLAYBOOK_VERSIONS);
+      for (const versionId of toDelete) {
+        this.playbookVersions.delete(versionId);
+      }
+      this.playbookHistory = this.playbookHistory.slice(this.playbookHistory.length - MAX_PLAYBOOK_VERSIONS);
+    }
+  }
+
+  async getLastEvolutionTime(): Promise<number> {
+    return this.lastEvolutionTime;
+  }
+
+  async setLastEvolutionTime(time: number): Promise<void> {
+    this.lastEvolutionTime = time;
   }
 
   // --- Connection Management ---
