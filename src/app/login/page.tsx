@@ -1,282 +1,327 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
 
-type LoginState = 'idle' | 'connecting' | 'signing' | 'verifying' | 'error' | 'success';
+type AuthState = 'idle' | 'connecting' | 'signing' | 'verifying' | 'error' | 'success';
 
-const MONO_FONT = "'IBM Plex Mono', monospace";
+interface ExtendedWindow extends Window {
+  ethereum?: {
+    request: (args: {
+      method: string;
+      params?: unknown[];
+    }) => Promise<unknown>;
+  };
+}
 
-function LoginPageContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') ?? '/v2/marketplace';
+export default function LoginPage() {
+  const [state, setState] = useState<AuthState>('idle');
+  const [error, setError] = useState<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const [state, setState] = useState<LoginState>('idle');
-  const [error, setError] = useState<string>('');
-  const [address, setAddress] = useState<string>('');
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
+      }
+    };
+  }, []);
 
-  async function handleConnect() {
-    setState('connecting');
-    setError('');
-
-    // Step 1: Check if MetaMask is available
-    const provider = (window as any).ethereum;
-    if (!provider) {
-      setError('MetaMask or compatible wallet not detected. Please install MetaMask.');
-      setState('error');
-      return;
+  const handleConnect = async () => {
+    if (!abortControllerRef.current) {
+      abortControllerRef.current = new AbortController();
     }
 
     try {
-      // Step 2: Request account access
-      const accounts = (await provider.request({
-        method: 'eth_requestAccounts',
-      })) as string[];
+      setError(null);
+      setState('connecting');
+
+      const extWindow = window as ExtendedWindow;
+
+      // Step 1: Check MetaMask installation
+      if (!extWindow.ethereum) {
+        setError('MetaMask not detected. Please install MetaMask.');
+        setState('error');
+        return;
+      }
+
+      // Step 2: Request wallet accounts
+      let accounts: unknown[];
+      try {
+        accounts = (await extWindow.ethereum.request({
+          method: 'eth_requestAccounts',
+        })) as unknown[];
+      } catch (walletError) {
+        const errMsg = walletError instanceof Error ? walletError.message : String(walletError);
+        if (errMsg.includes('user rejected')) {
+          setError('Wallet connection rejected.');
+        } else {
+          setError(`Wallet connection failed: ${errMsg}`);
+        }
+        setState('error');
+        return;
+      }
 
       if (!accounts || accounts.length === 0) {
-        throw new Error('No accounts available');
+        setError('No accounts found in MetaMask.');
+        setState('error');
+        return;
       }
 
-      const userAddress = accounts[0];
-      setAddress(userAddress);
+      const address = String(accounts[0]);
+
+      // Validate address format
+      if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+        setError('Invalid wallet address format.');
+        setState('error');
+        return;
+      }
+
       setState('signing');
 
-      // Step 3: Get nonce from server
-      const nonceRes = await fetch(`/api/auth/siwe/nonce?address=${userAddress}`);
+      // Step 3: Request nonce from server
+      const nonceRes = await fetch(`/api/auth/siwe/nonce?address=${address}`, {
+        method: 'GET',
+      });
+
       if (!nonceRes.ok) {
-        throw new Error('Failed to get nonce from server');
+        const nonceErrBody = await nonceRes.json() as { error?: string };
+        setError(
+          `Failed to get nonce: ${nonceErrBody.error || 'Unknown error'}`
+        );
+        setState('error');
+        return;
       }
 
-      const { nonce } = (await nonceRes.json()) as { nonce: string };
+      const nonceData = (await nonceRes.json()) as { nonce: string };
+      const nonce = nonceData.nonce;
 
-      // Step 4: Build SIWE message
-      const domain = typeof window !== 'undefined' ? window.location.host : 'localhost:3002';
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3002';
+      // Step 4: Construct SIWE message
       const issuedAt = new Date().toISOString();
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 min expiry
-
-      const message = [
-        'SentinAI wants you to sign in with your Ethereum account:',
-        userAddress,
+      const siweMessage = [
+        'wallet.sentinai.io wants you to sign in with your Ethereum account:',
+        address,
         '',
-        'Sign in to SentinAI Marketplace Admin',
-        '',
-        `URI: ${origin}/login`,
         'Version: 1',
         'Chain ID: 1',
         `Nonce: ${nonce}`,
         `Issued At: ${issuedAt}`,
-        `Expiration Time: ${expiresAt}`,
       ].join('\n');
 
-      // Step 5: Request signature
-      const signature = (await provider.request({
-        method: 'personal_sign',
-        params: [message, userAddress],
-      })) as string;
+      // Step 5: Sign message with MetaMask
+      let signature: string;
+      try {
+        signature = (await extWindow.ethereum.request({
+          method: 'personal_sign',
+          params: [siweMessage, address],
+        })) as string;
+      } catch (signError) {
+        const errMsg = signError instanceof Error ? signError.message : String(signError);
+        if (errMsg.includes('user rejected')) {
+          setError('Message signing rejected.');
+        } else {
+          setError(`Message signing failed: ${errMsg}`);
+        }
+        setState('error');
+        return;
+      }
+
+      if (!signature || !/^0x[a-fA-F0-9]{130}$/.test(signature)) {
+        setError('Invalid signature format.');
+        setState('error');
+        return;
+      }
 
       setState('verifying');
 
-      // Step 6: Verify on server
+      // Step 6: Verify signature with server
       const verifyRes = await fetch('/api/auth/siwe/verify', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({
-          address: userAddress,
+          address,
+          message: siweMessage,
           signature,
-          message,
         }),
       });
 
       if (!verifyRes.ok) {
-        const errorData = (await verifyRes.json()) as { error: string };
-        throw new Error(errorData.error || 'Verification failed');
+        const verifyErrBody = await verifyRes.json() as { error?: string };
+        if (verifyRes.status === 403) {
+          setError('Not authorized. Only admin wallet can sign in.');
+        } else {
+          setError(
+            `Verification failed: ${verifyErrBody.error || 'Unknown error'}`
+          );
+        }
+        setState('error');
+        return;
       }
 
       setState('success');
-      // Redirect after brief success display
+
+      // Step 7: Redirect to callback URL or default
+      const searchParams = new URLSearchParams(window.location.search);
+      const callbackUrl = searchParams.get('callbackUrl');
+      const redirectPath =
+        callbackUrl && callbackUrl.startsWith('/') ? callbackUrl : '/v2/marketplace';
+
       setTimeout(() => {
-        router.push(callbackUrl);
+        window.location.href = redirectPath;
       }, 500);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
+      const errMsg = err instanceof Error ? err.message : String(err);
+      setError(`Unexpected error: ${errMsg}`);
       setState('error');
     }
-  }
+  };
 
-  // Auto-redirect if already authenticated (middleware allows access)
-  useEffect(() => {
-    // Try accessing protected page; if middleware allows, redirect
-    fetch(callbackUrl, { method: 'HEAD' })
-      .then(res => {
-        if (res.ok || res.status === 405) {
-          // 405 means page exists but disallows HEAD
-          router.push(callbackUrl);
-        }
-      })
-      .catch(() => {
-        // Expected: most pages will fail or redirect
-      });
-  }, [callbackUrl, router]);
+  const getStatusMessage = (): string => {
+    switch (state) {
+      case 'idle':
+        return 'Connect your Ethereum wallet to sign in.';
+      case 'connecting':
+        return 'Connecting to wallet...';
+      case 'signing':
+        return 'Sign the message to authenticate...';
+      case 'verifying':
+        return 'Verifying signature...';
+      case 'success':
+        return 'Authentication successful. Redirecting...';
+      case 'error':
+        return error || 'An error occurred.';
+      default:
+        return '';
+    }
+  };
 
   const isLoading = state === 'connecting' || state === 'signing' || state === 'verifying';
-  const isError = state === 'error';
-  const isSuccess = state === 'success';
+  const showRetry = state === 'error';
 
   return (
-    <main style={{
-      minHeight: '100vh',
-      background: '#F0F0F0',
-      padding: '40px 20px',
-      fontFamily: MONO_FONT,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-    }}>
-      <div style={{
-        maxWidth: '500px',
-        width: '100%',
-        border: '1px solid #C0C0C0',
-        background: '#FFFFFF',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.12)',
-      }}>
+    <main className="min-h-screen bg-black px-6 py-8 text-white" style={{ fontFamily: "'Monaco', 'Courier New', monospace" }}>
+      <div
+        className="mx-auto max-w-md border border-white bg-black p-8"
+        style={{
+          borderWidth: '1px',
+          boxShadow: '0 0 0 1px #333',
+        }}
+      >
         {/* Header */}
-        <div style={{
-          borderBottom: '2px solid #8B0000',
-          background: '#D40000',
-          color: 'white',
-          padding: '12px 16px',
-          fontSize: '11px',
-          fontWeight: 700,
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-        }}>
-          SentinAI Marketplace Admin
+        <div className="mb-8 border-b border-white pb-6">
+          <h1
+            className="mb-2 text-sm font-bold tracking-widest text-white"
+            style={{ letterSpacing: '0.1em' }}
+          >
+            SIWE AUTHENTICATION
+          </h1>
+          <p
+            className="text-xs text-gray-400"
+            style={{ letterSpacing: '0.05em' }}
+          >
+            Sign in with your Ethereum wallet
+          </p>
         </div>
 
-        {/* Content */}
-        <div style={{
-          padding: '40px',
-          minHeight: '280px',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          gap: '20px',
-        }}>
-          {/* Status Messages */}
-          {isError && (
-            <div style={{
-              background: '#FFF8F8',
-              border: '1px solid #D0D0D0',
-              padding: '12px',
-              fontSize: '12px',
-              color: '#D40000',
-              borderRadius: '2px',
-            }}>
-              <div style={{ fontWeight: 700, marginBottom: '6px' }}>Error</div>
-              <div>{error}</div>
+        {/* Status Display */}
+        <div className="mb-8 min-h-[100px]">
+          {state === 'error' ? (
+            <div
+              className="border border-red-600 bg-red-900 bg-opacity-20 p-4 text-sm"
+              style={{
+                borderColor: '#D40000',
+                backgroundColor: 'rgba(212, 0, 0, 0.1)',
+              }}
+            >
+              <p style={{ color: '#D40000', fontWeight: 'bold', marginBottom: '4px' }}>
+                ERROR
+              </p>
+              <p className="text-red-200" style={{ color: '#ff6b6b', fontSize: '12px' }}>
+                {error}
+              </p>
             </div>
-          )}
-
-          {isSuccess && (
-            <div style={{
-              background: '#F0FFF0',
-              border: '1px solid #D0D0D0',
-              padding: '12px',
-              fontSize: '12px',
-              color: '#27ae60',
-              borderRadius: '2px',
-              textAlign: 'center',
-            }}>
-              ✓ Signed in successfully. Redirecting...
+          ) : state === 'success' ? (
+            <div
+              className="border border-green-600 bg-green-900 bg-opacity-20 p-4 text-sm"
+              style={{
+                borderColor: '#00AA00',
+                backgroundColor: 'rgba(0, 170, 0, 0.1)',
+              }}
+            >
+              <p style={{ color: '#00AA00', fontWeight: 'bold' }}>
+                SUCCESS
+              </p>
+              <p style={{ color: '#00AA00', fontSize: '12px', marginTop: '4px' }}>
+                {getStatusMessage()}
+              </p>
             </div>
-          )}
-
-          {!isSuccess && (
-            <>
-              {/* Description */}
-              <div style={{ fontSize: '12px', color: '#555', lineHeight: '1.6' }}>
-                {state === 'idle' && (
-                  <>
-                    <p>Connect your Ethereum wallet to access the marketplace admin panel.</p>
-                    <p style={{ fontSize: '11px', color: '#888', marginTop: '8px' }}>
-                      Only the marketplace operator account can access this page.
-                    </p>
-                  </>
-                )}
-                {state === 'connecting' && 'Connecting wallet...'}
-                {state === 'signing' && 'Sign the message in your wallet...'}
-                {state === 'verifying' && 'Verifying signature...'}
-              </div>
-
-              {/* Address Display */}
-              {address && (
-                <div style={{
-                  background: '#FAFAFA',
-                  border: '1px solid #D0D0D0',
-                  padding: '8px 12px',
-                  fontSize: '11px',
-                  wordBreak: 'break-all',
-                  color: '#0055AA',
-                }}>
-                  <div style={{ color: '#888', marginBottom: '4px' }}>Address:</div>
-                  {address}
+          ) : (
+            <div className="border border-gray-600 bg-gray-900 bg-opacity-20 p-4 text-sm">
+              <p style={{ color: '#999', fontSize: '12px', lineHeight: '1.6' }}>
+                {getStatusMessage()}
+              </p>
+              {isLoading && (
+                <div className="mt-2 flex items-center gap-2">
+                  <div
+                    className="h-2 w-2 rounded-full bg-gray-400 animate-pulse"
+                    style={{ animation: 'pulse 1.5s infinite' }}
+                  />
+                  <span style={{ color: '#999', fontSize: '11px' }}>Processing...</span>
                 </div>
               )}
-
-              {/* Connect Button */}
-              <button
-                onClick={handleConnect}
-                disabled={isLoading}
-                style={{
-                  background: isLoading ? '#A9A9A9' : '#D40000',
-                  color: 'white',
-                  border: isLoading ? 'none' : '2px solid #8B0000',
-                  padding: '12px 20px',
-                  fontSize: '11px',
-                  fontWeight: 700,
-                  letterSpacing: '0.08em',
-                  textTransform: 'uppercase',
-                  cursor: isLoading ? 'not-allowed' : 'pointer',
-                  opacity: isLoading ? 0.7 : 1,
-                  fontFamily: MONO_FONT,
-                  transition: 'background 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  if (!isLoading) (e.currentTarget as HTMLButtonElement).style.background = '#8B0000';
-                }}
-                onMouseLeave={(e) => {
-                  if (!isLoading) (e.currentTarget as HTMLButtonElement).style.background = '#D40000';
-                }}
-              >
-                {isLoading ? '⏳ LOADING...' : '🔗 CONNECT WALLET'}
-              </button>
-            </>
+            </div>
           )}
         </div>
 
+        {/* Button */}
+        {state === 'idle' || showRetry ? (
+          <button
+            onClick={handleConnect}
+            disabled={isLoading}
+            className="w-full border border-white bg-black px-4 py-3 text-sm font-bold tracking-widest text-white transition-colors hover:bg-white hover:text-black disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{
+              letterSpacing: '0.1em',
+              cursor: isLoading ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {showRetry ? 'RETRY' : 'CONNECT WALLET'}
+          </button>
+        ) : (
+          <button
+            disabled
+            className="w-full border border-gray-600 bg-black px-4 py-3 text-sm font-bold tracking-widest text-gray-600"
+            style={{
+              letterSpacing: '0.1em',
+              cursor: 'not-allowed',
+              opacity: 0.5,
+            }}
+          >
+            {state === 'connecting'
+              ? 'CONNECTING...'
+              : state === 'signing'
+                ? 'SIGNING...'
+                : state === 'verifying'
+                  ? 'VERIFYING...'
+                  : 'REDIRECTING...'}
+          </button>
+        )}
+
         {/* Footer */}
-        <div style={{
-          borderTop: '1px solid #E8E8E8',
-          background: '#FAFAFA',
-          padding: '12px 16px',
-          fontSize: '10px',
-          color: '#888',
-          textAlign: 'center',
-        }}>
-          Powered by SentinAI | MetaMask Required
+        <div className="mt-8 border-t border-gray-600 pt-6 text-center">
+          <p style={{ fontSize: '11px', color: '#999', letterSpacing: '0.05em' }}>
+            Powered by Sign-In with Ethereum (SIWE)
+          </p>
         </div>
       </div>
-    </main>
-  );
-}
 
-export default function LoginPage() {
-  return (
-    <Suspense fallback={<div style={{ minHeight: '100vh', background: '#F0F0F0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Loading...</div>}>
-      <LoginPageContent />
-    </Suspense>
+      {/* CSS for animation */}
+      <style>{`
+        @keyframes pulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
+        }
+      `}</style>
+    </main>
   );
 }
