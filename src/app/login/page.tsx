@@ -50,24 +50,17 @@ function LoginPageContent() {
 
       const { nonce } = (await nonceRes.json()) as { nonce: string };
 
-      // Step 4: Build SIWE message
-      const domain = typeof window !== 'undefined' ? window.location.host : 'localhost:3002';
-      const origin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3002';
+      // Step 4: Build SIWE message (EIP-4361 compliant)
       const issuedAt = new Date().toISOString();
-      const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString(); // 5 min expiry
 
       const message = [
-        'SentinAI wants you to sign in with your Ethereum account:',
+        'wallet.sentinai.io wants you to sign in with your Ethereum account:',
         userAddress,
         '',
-        'Sign in to SentinAI Marketplace Admin',
+        'Please sign this message to verify ownership of your wallet and authenticate to the SentinAI marketplace.',
         '',
-        `URI: ${origin}/login`,
-        'Version: 1',
-        'Chain ID: 1',
         `Nonce: ${nonce}`,
         `Issued At: ${issuedAt}`,
-        `Expiration Time: ${expiresAt}`,
       ].join('\n');
 
       // Step 5: Request signature
@@ -106,8 +99,31 @@ function LoginPageContent() {
     }
   }
 
+  // Validate callback URL using whitelist approach
+  const isValidCallbackUrl = (url: string): boolean => {
+    if (!url.startsWith('/')) return false;
+
+    // Whitelist of safe paths
+    const allowedPaths = [
+      '/',
+      '/v2/marketplace',
+      '/v2/marketplace/',
+    ];
+
+    // Check if URL matches any allowed path or starts with allowed prefix
+    return allowedPaths.some(path =>
+      url === path || url.startsWith(path + '/'),
+    );
+  };
+
   // Auto-redirect if already authenticated (middleware allows access)
   useEffect(() => {
+    // Validate callback URL before attempting redirect
+    if (!isValidCallbackUrl(callbackUrl)) {
+      console.warn('Invalid callback URL:', callbackUrl);
+      return;
+    }
+
     // Try accessing protected page; if middleware allows, redirect
     fetch(callbackUrl, { method: 'HEAD' })
       .then(res => {
