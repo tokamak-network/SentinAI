@@ -32,21 +32,21 @@ const globalForAgentMarketplaceDisputes = globalThis as unknown as {
   __sentinai_agent_marketplace_dispute_redis?: Redis;
 };
 
-function getRedisUrl(): string {
-  const redisUrl = process.env.REDIS_URL?.trim();
-  if (!redisUrl) {
-    throw new Error('REDIS_URL is required for agent marketplace disputes');
-  }
-
-  return redisUrl;
+function getRedisUrl(): string | null {
+  return process.env.REDIS_URL?.trim() ?? null;
 }
 
-function getRedisClient(): Redis {
+function getRedisClient(): Redis | null {
+  const redisUrl = getRedisUrl();
+  if (!redisUrl) {
+    return null;
+  }
+
   if (globalForAgentMarketplaceDisputes.__sentinai_agent_marketplace_dispute_redis) {
     return globalForAgentMarketplaceDisputes.__sentinai_agent_marketplace_dispute_redis;
   }
 
-  const client = new Redis(getRedisUrl(), {
+  const client = new Redis(redisUrl, {
     lazyConnect: true,
     connectTimeout: 5000,
     maxRetriesPerRequest: 3,
@@ -57,12 +57,23 @@ function getRedisClient(): Redis {
 }
 
 async function readDisputes(): Promise<AgentMarketplaceDisputeRecord[]> {
-  const raw = await getRedisClient().get(DISPUTES_KEY);
+  const client = getRedisClient();
+  if (!client) {
+    return [];
+  }
+
+  const raw = await client.get(DISPUTES_KEY);
   return raw ? (JSON.parse(raw) as AgentMarketplaceDisputeRecord[]) : [];
 }
 
 async function writeDisputes(disputes: AgentMarketplaceDisputeRecord[]): Promise<void> {
-  await getRedisClient().set(DISPUTES_KEY, JSON.stringify(disputes));
+  const client = getRedisClient();
+  if (!client) {
+    // No Redis available, skip persistence
+    return;
+  }
+
+  await client.set(DISPUTES_KEY, JSON.stringify(disputes));
 }
 
 function assertValidTransition(

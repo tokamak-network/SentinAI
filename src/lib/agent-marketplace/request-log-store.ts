@@ -21,21 +21,21 @@ const globalForAgentMarketplaceRequestLog = globalThis as unknown as {
   __sentinai_agent_marketplace_request_log_redis?: Redis;
 };
 
-function getRedisUrl(): string {
-  const redisUrl = process.env.REDIS_URL?.trim();
-  if (!redisUrl) {
-    throw new Error('REDIS_URL is required for agent marketplace request logs');
-  }
-
-  return redisUrl;
+function getRedisUrl(): string | null {
+  return process.env.REDIS_URL?.trim() ?? null;
 }
 
-function getRedisClient(): Redis {
+function getRedisClient(): Redis | null {
+  const redisUrl = getRedisUrl();
+  if (!redisUrl) {
+    return null;
+  }
+
   if (globalForAgentMarketplaceRequestLog.__sentinai_agent_marketplace_request_log_redis) {
     return globalForAgentMarketplaceRequestLog.__sentinai_agent_marketplace_request_log_redis;
   }
 
-  const client = new Redis(getRedisUrl(), {
+  const client = new Redis(redisUrl, {
     lazyConnect: true,
     connectTimeout: 5000,
     maxRetriesPerRequest: 3,
@@ -46,14 +46,24 @@ function getRedisClient(): Redis {
 }
 
 async function listRequestLogs(): Promise<AgentMarketplaceRequestLogRecord[]> {
-  const records = await getRedisClient().lrange(REQUEST_LOGS_KEY, 0, -1);
+  const client = getRedisClient();
+  if (!client) {
+    return [];
+  }
+
+  const records = await client.lrange(REQUEST_LOGS_KEY, 0, -1);
   return records.map((record) => JSON.parse(record) as AgentMarketplaceRequestLogRecord);
 }
 
 export async function recordAgentMarketplaceRequest(
   record: AgentMarketplaceRequestLogRecord
 ): Promise<void> {
-  await getRedisClient().rpush(REQUEST_LOGS_KEY, JSON.stringify(record));
+  const client = getRedisClient();
+  if (!client) {
+    return;
+  }
+
+  await client.rpush(REQUEST_LOGS_KEY, JSON.stringify(record));
 }
 
 export async function getAgentMarketplaceRequestLogs(): Promise<AgentMarketplaceRequestLogRecord[]> {
@@ -76,7 +86,11 @@ export async function getAgentMarketplaceRequestLogsByWindow(input: {
 
 export async function clearAgentMarketplaceRequestLogs(): Promise<void> {
   try {
-    await getRedisClient().del(REQUEST_LOGS_KEY);
+    const client = getRedisClient();
+    if (!client) {
+      return;
+    }
+    await client.del(REQUEST_LOGS_KEY);
   } catch {
     // Ignore cleanup failures in test-only callers.
   }

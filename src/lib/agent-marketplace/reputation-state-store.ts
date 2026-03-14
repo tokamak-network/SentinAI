@@ -6,21 +6,21 @@ const globalForAgentMarketplaceReputation = globalThis as unknown as {
   __sentinai_agent_marketplace_reputation_redis?: Redis;
 };
 
-function getRedisUrl(): string {
-  const redisUrl = process.env.REDIS_URL?.trim();
-  if (!redisUrl) {
-    throw new Error('REDIS_URL is required for agent marketplace reputation state');
-  }
-
-  return redisUrl;
+function getRedisUrl(): string | null {
+  return process.env.REDIS_URL?.trim() ?? null;
 }
 
-function getRedisClient(): Redis {
+function getRedisClient(): Redis | null {
+  const redisUrl = getRedisUrl();
+  if (!redisUrl) {
+    return null;
+  }
+
   if (globalForAgentMarketplaceReputation.__sentinai_agent_marketplace_reputation_redis) {
     return globalForAgentMarketplaceReputation.__sentinai_agent_marketplace_reputation_redis;
   }
 
-  const client = new Redis(getRedisUrl(), {
+  const client = new Redis(redisUrl, {
     lazyConnect: true,
     connectTimeout: 5000,
     maxRetriesPerRequest: 3,
@@ -31,7 +31,12 @@ function getRedisClient(): Redis {
 }
 
 export async function getAgentMarketplaceReputationScores(): Promise<Record<string, number>> {
-  const raw = await getRedisClient().get(REPUTATION_SCORES_KEY);
+  const client = getRedisClient();
+  if (!client) {
+    return {};
+  }
+
+  const raw = await client.get(REPUTATION_SCORES_KEY);
   if (!raw) {
     return {};
   }
@@ -46,12 +51,22 @@ export async function getAgentMarketplaceReputationScores(): Promise<Record<stri
 export async function setAgentMarketplaceReputationScores(
   scores: Record<string, number>
 ): Promise<void> {
-  await getRedisClient().set(REPUTATION_SCORES_KEY, JSON.stringify(scores));
+  const client = getRedisClient();
+  if (!client) {
+    return;
+  }
+
+  await client.set(REPUTATION_SCORES_KEY, JSON.stringify(scores));
 }
 
 export async function clearAgentMarketplaceReputationState(): Promise<void> {
+  const client = getRedisClient();
+  if (!client) {
+    return;
+  }
+
   try {
-    await getRedisClient().del(REPUTATION_SCORES_KEY);
+    await client.del(REPUTATION_SCORES_KEY);
   } catch {
     // Ignore cleanup failures in test-only callers.
   }
