@@ -68,3 +68,13 @@ export interface CatalogAgent {
   createdAt: number;
   updatedAt: number;
 }
+
+/** Marketplace Order (transaction record) */
+export interface MarketplaceOrder {
+  id: string;
+  agentId: string;
+  buyerAddress: string;
+  tier: 'trainee' | 'junior' | 'senior' | 'expert';
+  priceInCents: number;
+  createdAt: number;
+}

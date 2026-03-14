@@ -16,6 +16,7 @@ import type {
   PricingUpdateRequest,
   OutcomeBonusConfig,
   CatalogAgent,
+  MarketplaceOrder,
 } from '@/types/marketplace';
 import { getStore } from '@/lib/redis-store';
 import logger from '@/lib/logger';
@@ -316,6 +317,90 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
         error instanceof Error ? error.message : String(error)
       );
       throw error;
+    }
+  }
+
+  /**
+   * Retrieve paginated list of orders.
+   *
+   * @param page - Page number (1-indexed)
+   * @param limit - Items per page
+   * @returns Promise resolving to array of MarketplaceOrder
+   */
+  async getOrders(page: number, limit: number): Promise<MarketplaceOrder[]> {
+    try {
+      const state = getStore();
+      const allOrders = await state.getMarketplaceOrders([]);
+
+      const start = (page - 1) * limit;
+      const end = start + limit;
+      return allOrders.slice(start, end);
+    } catch (error) {
+      logger.error(
+        '[Marketplace Store] Failed to get orders:',
+        error instanceof Error ? error.message : String(error)
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Create a new order.
+   *
+   * @param order - MarketplaceOrder without id
+   * @returns Promise resolving to created MarketplaceOrder with id
+   */
+  async createOrder(
+    order: Omit<MarketplaceOrder, 'id'>
+  ): Promise<MarketplaceOrder> {
+    try {
+      const state = getStore();
+      const id = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+      const newOrder: MarketplaceOrder = {
+        id,
+        ...order,
+      };
+
+      const allOrders = await state.getMarketplaceOrders([]);
+      allOrders.push(newOrder);
+      await state.setMarketplaceOrders(allOrders);
+
+      logger.info('[Marketplace Store] Order created:', {
+        id: newOrder.id,
+        agentId: newOrder.agentId,
+      });
+
+      return newOrder;
+    } catch (error) {
+      logger.error(
+        '[Marketplace Store] Failed to create order:',
+        error instanceof Error ? error.message : String(error)
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Get orders summary.
+   *
+   * @returns Promise resolving to { totalCount, totalRevenueInCents }
+   */
+  async getOrdersSummary(): Promise<{ totalCount: number; totalRevenueInCents: number }> {
+    try {
+      const state = getStore();
+      const allOrders = await state.getMarketplaceOrders([]);
+
+      const totalCount = allOrders.length;
+      const totalRevenueInCents = allOrders.reduce((sum, order) => sum + order.priceInCents, 0);
+
+      return { totalCount, totalRevenueInCents };
+    } catch (error) {
+      logger.error(
+        '[Marketplace Store] Failed to get orders summary:',
+        error instanceof Error ? error.message : String(error)
+      );
+      return { totalCount: 0, totalRevenueInCents: 0 };
     }
   }
 }

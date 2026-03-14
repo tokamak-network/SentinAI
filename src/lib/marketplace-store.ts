@@ -11,6 +11,7 @@ import type {
   PricingUpdateRequest,
   OutcomeBonusConfig,
   CatalogAgent,
+  MarketplaceOrder,
 } from '@/types/marketplace';
 import { RedisMarketplaceStore } from '@/lib/redis-marketplace-store';
 
@@ -122,6 +123,32 @@ export interface IMarketplaceStore {
    * @returns Promise resolving to deleted CatalogAgent
    */
   deleteCatalogAgent(id: string): Promise<CatalogAgent>;
+
+  /**
+   * Retrieve paginated list of marketplace orders.
+   *
+   * @param page - Page number (1-indexed)
+   * @param limit - Items per page
+   * @returns Promise resolving to array of MarketplaceOrder
+   */
+  getOrders(page: number, limit: number): Promise<MarketplaceOrder[]>;
+
+  /**
+   * Create a new marketplace order.
+   *
+   * @param order - MarketplaceOrder without id (auto-generated)
+   * @returns Promise resolving to created MarketplaceOrder with id
+   */
+  createOrder(
+    order: Omit<MarketplaceOrder, 'id'>
+  ): Promise<MarketplaceOrder>;
+
+  /**
+   * Get orders summary (total count, revenue).
+   *
+   * @returns Promise resolving to { totalCount, totalRevenueInCents }
+   */
+  getOrdersSummary(): Promise<{ totalCount: number; totalRevenueInCents: number }>;
 }
 
 // ---------------------------------------------------------------------------

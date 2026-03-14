@@ -42,7 +42,7 @@ import {
 import { GoalLearningEpisode } from '@/types/goal-learning';
 import { RCAHistoryEntry } from '@/types/rca';
 import type { ExperienceEntry, LifetimeStats } from '@/types/experience';
-import type { MarketplacePricingConfig, OutcomeBonusConfig, CatalogAgent } from '@/types/marketplace';
+import type { MarketplacePricingConfig, OutcomeBonusConfig, CatalogAgent, MarketplaceOrder } from '@/types/marketplace';
 import logger from '@/lib/logger';
 
 // ============================================================
@@ -143,6 +143,7 @@ const KEYS = {
   marketplacePricingConfig: 'marketplace:pricing:config',
   marketplaceBonusConfig: 'marketplace:bonus:config',
   marketplaceCatalogAgents: 'marketplace:catalog:agents',
+  marketplaceOrders: 'marketplace:orders',
 } as const;
 
 // ============================================================
@@ -1458,6 +1459,26 @@ export class RedisStateStore implements IStateStore {
     const key = this.key(KEYS.marketplaceCatalogAgents);
     await this.client.set(key, JSON.stringify(agents));
   }
+
+  async getMarketplaceOrders(
+    defaultOrders: MarketplaceOrder[]
+  ): Promise<MarketplaceOrder[]> {
+    const data = await this.client.get(this.key(KEYS.marketplaceOrders));
+    if (!data) {
+      return defaultOrders;
+    }
+    try {
+      return JSON.parse(data) as MarketplaceOrder[];
+    } catch (error) {
+      logger.error('Failed to parse marketplace orders:', error);
+      return defaultOrders;
+    }
+  }
+
+  async setMarketplaceOrders(orders: MarketplaceOrder[]): Promise<void> {
+    const key = this.key(KEYS.marketplaceOrders);
+    await this.client.set(key, JSON.stringify(orders));
+  }
 }
 
 // ============================================================
@@ -1535,6 +1556,7 @@ export class InMemoryStateStore implements IStateStore {
   private marketplacePricingConfig: MarketplacePricingConfig | null = null;
   private marketplaceBonusConfig: OutcomeBonusConfig | null = null;
   private marketplaceCatalogAgents: CatalogAgent[] = [];
+  private marketplaceOrders: MarketplaceOrder[] = [];
 
   // --- Metrics Buffer ---
 
@@ -2303,6 +2325,16 @@ export class InMemoryStateStore implements IStateStore {
 
   async setMarketplaceCatalogAgents(agents: CatalogAgent[]): Promise<void> {
     this.marketplaceCatalogAgents = agents;
+  }
+
+  async getMarketplaceOrders(
+    defaultOrders: MarketplaceOrder[]
+  ): Promise<MarketplaceOrder[]> {
+    return this.marketplaceOrders.length > 0 ? this.marketplaceOrders : defaultOrders;
+  }
+
+  async setMarketplaceOrders(orders: MarketplaceOrder[]): Promise<void> {
+    this.marketplaceOrders = orders;
   }
 
   // --- Connection Management ---

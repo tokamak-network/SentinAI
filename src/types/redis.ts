@@ -25,7 +25,7 @@ import {
 import { GoalLearningEpisode } from './goal-learning';
 import { RCAHistoryEntry } from './rca';
 import { ExperienceEntry, LifetimeStats } from './experience';
-import type { MarketplacePricingConfig, OutcomeBonusConfig, CatalogAgent } from './marketplace';
+import type { MarketplacePricingConfig, OutcomeBonusConfig, CatalogAgent, MarketplaceOrder } from './marketplace';
 
 // ============================================================
 // Store Interface
@@ -219,6 +219,11 @@ export interface IStateStore {
   // Catalog agents list (admin management)
   getMarketplaceCatalogAgents(defaultAgents: CatalogAgent[]): Promise<CatalogAgent[]>;
   setMarketplaceCatalogAgents(agents: CatalogAgent[]): Promise<void>;
+
+  // === Marketplace Orders ===
+  // Orders list (transaction history)
+  getMarketplaceOrders(defaultOrders: MarketplaceOrder[]): Promise<MarketplaceOrder[]>;
+  setMarketplaceOrders(orders: MarketplaceOrder[]): Promise<void>;
 }
 
 // ============================================================
