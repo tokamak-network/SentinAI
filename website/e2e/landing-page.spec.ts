@@ -27,20 +27,22 @@ test.describe('Navbar', () => {
     expect(bg).toBe('rgb(212, 0, 0)');
   });
 
-  test('nav links DOCS, MARKETPLACE, DEPLOY, GITHUB exist with correct hrefs', async ({ page }) => {
+  test('nav links DOCS, DEPLOY, ADMIN, GITHUB exist with correct hrefs', async ({ page }) => {
     const nav = page.locator('header nav');
 
     const docsLink = nav.locator('a', { hasText: 'DOCS' });
     await expect(docsLink).toBeVisible();
     await expect(docsLink).toHaveAttribute('href', '/docs');
 
-    const marketplaceLink = nav.locator('a', { hasText: 'MARKETPLACE' });
-    await expect(marketplaceLink).toBeVisible();
-    await expect(marketplaceLink).toHaveAttribute('href', '/marketplace');
-
     const deployLink = nav.locator('a', { hasText: 'DEPLOY' });
     await expect(deployLink).toBeVisible();
-    await expect(deployLink).toHaveAttribute('href', '/setup');
+    await expect(deployLink).toHaveAttribute('href', '/connect');
+
+    const adminLink = nav.locator('a', { hasText: 'ADMIN' });
+    await expect(adminLink).toBeVisible();
+    // ADMIN link defaults to localhost:3002/login but can be overridden by NEXT_PUBLIC_ADMIN_URL
+    const adminHref = await adminLink.getAttribute('href');
+    expect(adminHref).toBeTruthy();
 
     const githubLink = nav.locator('a', { hasText: 'GITHUB' });
     await expect(githubLink).toBeVisible();
@@ -377,7 +379,7 @@ test.describe('Footer', () => {
 
     const deployLink = footerNav.locator('a', { hasText: 'DEPLOY' });
     await expect(deployLink).toBeVisible();
-    await expect(deployLink).toHaveAttribute('href', '/setup');
+    await expect(deployLink).toHaveAttribute('href', '/connect');
 
     const githubLink = footerNav.locator('a', { hasText: 'GITHUB' });
     await expect(githubLink).toBeVisible();

@@ -79,12 +79,39 @@ function getApiKey(): string | undefined {
 }
 
 /**
+ * Minimal session token validation at Edge Runtime.
+ * Parses token format: satv2_{address}_{issuedAt}_{expiresAt}_{hmac}
+ * Checks expiration timestamp only (HMAC verification happens at API Route).
+ */
+function isValidSessionTokenEdge(token: string): boolean {
+  try {
+    const parts = token.split('_');
+    if (parts.length !== 5 || parts[0] !== 'satv2') return false;
+
+    const expiresAtStr = parts[3];
+    const expiresAt = parseInt(expiresAtStr, 10);
+
+    // Check if token is expired
+    if (isNaN(expiresAt) || Date.now() > expiresAt) {
+      return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const SESSION_COOKIE_NAME = 'sentinai_admin_session';
+
+/**
  * Middleware configuration.
  * - /api/*: API key guard + read-only mode
  * - /.well-known/*: OAuth discovery (intercepted before basePath routing, served at domain root)
+ * - /v2/marketplace: Session cookie gate for admin access
  */
 export const config = {
-  matcher: ['/api/:path*', '/.well-known/:path*'],
+  matcher: ['/api/:path*', '/.well-known/:path*', '/v2/marketplace', '/v2/marketplace/:path*'],
 };
 
 /**
@@ -111,6 +138,22 @@ export function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const method = request.method;
+
+  // --- Layer 0: Session Cookie Gate for Admin Pages ---
+  const isProtectedAdminPath =
+    pathname === '/v2/marketplace' ||
+    pathname.startsWith('/v2/marketplace/');
+
+  if (isProtectedAdminPath) {
+    const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
+
+    if (!sessionToken || !isValidSessionTokenEdge(sessionToken)) {
+      // Redirect to login with callback URL
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('callbackUrl', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+  }
 
   // Always allow exempt routes (health checks, internal automation)
   if (AUTH_EXEMPT_ROUTES.has(pathname)) {

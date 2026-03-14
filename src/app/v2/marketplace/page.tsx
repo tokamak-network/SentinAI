@@ -82,8 +82,28 @@ export default async function MarketplaceOpsPage({
   return (
     <main className="min-h-screen bg-[#F0F0F0] px-6 py-8 text-[#0A0A0A]">
       <div className="mx-auto max-w-6xl border border-[#C0C0C0] bg-white font-mono shadow-[0_4px_24px_rgba(0,0,0,0.12)]">
-        <header className="border-b-2 border-[#8B0000] bg-[#D40000] px-4 py-2 text-[11px] font-bold tracking-[0.08em] text-white">
-          SENTINAI MARKETPLACE OPS
+        <header className="flex items-center justify-between border-b-2 border-[#8B0000] bg-[#D40000] px-4 py-2 text-[11px] font-bold tracking-[0.08em] text-white">
+          <span>SENTINAI MARKETPLACE OPS</span>
+          <form action="/api/auth/siwe/logout" method="post" style={{ display: 'inline' }}>
+            <button
+              type="submit"
+              style={{
+                background: '#8B0000',
+                border: '1px solid #FFFFFF',
+                color: 'white',
+                padding: '4px 12px',
+                fontSize: '10px',
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                cursor: 'pointer',
+                fontFamily: "'IBM Plex Mono', monospace",
+              }}
+              onMouseEnter={(e) => { (e.currentTarget.style.background = '#FFFFFF'); (e.currentTarget.style.color = '#D40000'); }}
+              onMouseLeave={(e) => { (e.currentTarget.style.background = '#8B0000'); (e.currentTarget.style.color = 'white'); }}
+            >
+              LOGOUT
+            </button>
+          </form>
         </header>
 
         <section className="grid gap-2 border-b border-[#E8E8E8] bg-[#FAFAFA] p-6 md:grid-cols-4">
