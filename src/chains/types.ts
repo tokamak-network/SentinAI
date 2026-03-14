@@ -12,6 +12,7 @@ import type {
   AutonomousPlanStep,
   AutonomousVerificationResult,
 } from '@/types/autonomous-ops';
+import type { ComponentRole } from '@/playbooks/types';
 
 // ============================================================
 // Primitive Aliases
@@ -167,6 +168,27 @@ export interface ChainPlugin {
   readonly l1Chain: Chain;
   /** L2 chain configuration for viem. Undefined for L1-only monitors (nodeLayer === 'l1'). */
   readonly l2Chain?: Chain;
+
+  // ---- Abstract Playbook Support (Phase 1+) ----
+
+  /**
+   * Role → component name mapping for AbstractPlaybooks.
+   * Enables chain-agnostic playbooks to resolve semantic roles to actual component names.
+   *
+   * Example (OP Stack):
+   * ```
+   * roleMap: {
+   *   'block-producer': 'op-geth',
+   *   'tx-submitter': 'op-batcher',
+   *   'state-root-poster': 'op-proposer',
+   * }
+   * ```
+   *
+   * Used by:
+   * - playbook-matcher: filter AbstractPlaybooks by requiredRoles
+   * - action-executor: resolve AbstractRemediationAction.targetRole
+   */
+  readonly roleMap?: Partial<Record<ComponentRole, ChainComponent>>
 
   // ---- AI Prompts ----
 
