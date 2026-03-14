@@ -111,7 +111,14 @@ const SESSION_COOKIE_NAME = 'sentinai_admin_session';
  * - /v2/marketplace: Session cookie gate for admin access
  */
 export const config = {
-  matcher: ['/api/:path*', '/.well-known/:path*', '/v2/marketplace', '/v2/marketplace/:path*'],
+  matcher: [
+    '/api/:path*',
+    '/.well-known/:path*',
+    '/admin',
+    '/admin/:path*',
+    '/v2/marketplace',
+    '/v2/marketplace/:path*',
+  ],
 };
 
 /**
@@ -141,15 +148,22 @@ export function middleware(request: NextRequest) {
 
   // --- Layer 0: Session Cookie Gate for Admin Pages ---
   const isProtectedAdminPath =
+    pathname === '/admin' ||
+    pathname.startsWith('/admin/') ||
     pathname === '/v2/marketplace' ||
     pathname.startsWith('/v2/marketplace/');
 
   if (isProtectedAdminPath) {
+    // Allow /admin/login without session
+    if (pathname === '/admin/login') {
+      return NextResponse.next();
+    }
+
     const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
     if (!sessionToken || !isValidSessionTokenEdge(sessionToken)) {
       // Redirect to login with callback URL
-      const loginUrl = new URL('/login', request.url);
+      const loginUrl = new URL('/admin/login', request.url);
       loginUrl.searchParams.set('callbackUrl', pathname);
       return NextResponse.redirect(loginUrl);
     }
