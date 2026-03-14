@@ -1,11 +1,18 @@
 /**
  * Playbook Matcher
  * Match anomaly events to predefined recovery playbooks
+ *
+ * Three-layer resolution:
+ * 1. Abstract playbooks (Redis dynamic from proposal-32)
+ * 2. Chain-specific playbooks (existing Playbook type)
+ * 3. Core hardcoded abstract playbooks
  */
 
 import type { AnomalyEvent, DeepAnalysisResult } from '@/types/anomaly';
-import type { Playbook, RCAComponent } from '@/types/remediation';
+import type { Playbook, RCAComponent, RemediationAction } from '@/types/remediation';
+import type { AbstractPlaybook } from '@/playbooks/types';
 import { getChainPlugin } from '@/chains';
+import { matchAbstractPlaybooks, resolvePlaybookActions } from './abstract-playbook-matcher';
 
 // ============================================================
 // Playbook Definitions (loaded from chain plugin)
@@ -160,4 +167,59 @@ export function matchPlaybook(
  */
 export function getPlaybookByName(name: string): Playbook | null {
   return getPlaybooks().find(p => p.name === name) || null;
+}
+
+// ============================================================
+// Three-Layer Unified Matcher
+// ============================================================
+
+/**
+ * Match event to best playbook with three-layer resolution:
+ * Layer 1: Redis dynamic abstract playbooks (proposal-32 generated)
+ * Layer 2: Chain-specific playbooks (existing)
+ * Layer 3: Core hardcoded abstract playbooks
+ *
+ * Returns matched playbook with resolved actions
+ */
+export async function matchPlaybookWithLayers(
+  event: AnomalyEvent,
+  analysis?: DeepAnalysisResult
+): Promise<{
+  playbook: AbstractPlaybook | Playbook;
+  actions: RemediationAction[];
+  source: 'abstract' | 'chain-specific';
+} | null> {
+  // Determine node layer from anomalies
+  const nodeLayer = event.anomalies[0]?.metric.includes('l2') !== false ? 'l2' : 'l1';
+
+  // Layer 1 & 3: Try abstract playbooks first
+  const abstractMatches = await matchAbstractPlaybooks(event, nodeLayer);
+
+  if (abstractMatches.length > 0) {
+    const playbook = abstractMatches[0];
+    const actions = resolvePlaybookActions(playbook, 'primary');
+
+    return {
+      playbook,
+      actions,
+      source: 'abstract',
+    };
+  }
+
+  // Layer 2: Fall back to chain-specific playbooks (existing system)
+  const chainPlaybook = matchPlaybook(event, analysis);
+
+  if (chainPlaybook) {
+    // Playbook.actions are already RemediationAction[]
+    const actions = chainPlaybook.actions || [];
+
+    return {
+      playbook: chainPlaybook,
+      actions,
+      source: 'chain-specific',
+    };
+  }
+
+  // No match found in any layer
+  return null;
 }
