@@ -15,6 +15,7 @@ import type {
   MarketplacePricingConfig,
   PricingUpdateRequest,
   OutcomeBonusConfig,
+  CatalogAgent,
 } from '@/types/marketplace';
 import { getStore } from '@/lib/redis-store';
 import logger from '@/lib/logger';
@@ -173,6 +174,145 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
     } catch (error) {
       logger.error(
         '[Marketplace Store] Failed to update bonus config:',
+        error instanceof Error ? error.message : String(error)
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Retrieve all catalog agents from Redis.
+   * Falls back to empty array if retrieval fails.
+   *
+   * @returns Promise resolving to array of CatalogAgent
+   */
+  async getCatalogAgents(): Promise<CatalogAgent[]> {
+    try {
+      const state = getStore();
+      const agents = await state.getMarketplaceCatalogAgents([]);
+      return agents;
+    } catch (error) {
+      logger.error(
+        '[Marketplace Store] Failed to get catalog agents:',
+        error instanceof Error ? error.message : String(error)
+      );
+      return [];
+    }
+  }
+
+  /**
+   * Create a new catalog agent in Redis.
+   *
+   * @param agent - CatalogAgent without id
+   * @returns Promise resolving to created CatalogAgent with id
+   */
+  async createCatalogAgent(
+    agent: Omit<CatalogAgent, 'id' | 'createdAt' | 'updatedAt'>
+  ): Promise<CatalogAgent> {
+    try {
+      const state = getStore();
+      const id = `agent_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const now = Date.now();
+
+      const newAgent: CatalogAgent = {
+        id,
+        ...agent,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const agents = await state.getMarketplaceCatalogAgents([]);
+      agents.push(newAgent);
+      await state.setMarketplaceCatalogAgents(agents);
+
+      logger.info('[Marketplace Store] Catalog agent created:', {
+        id: newAgent.id,
+        name: newAgent.name,
+      });
+
+      return newAgent;
+    } catch (error) {
+      logger.error(
+        '[Marketplace Store] Failed to create catalog agent:',
+        error instanceof Error ? error.message : String(error)
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Update an existing catalog agent in Redis.
+   *
+   * @param id - Agent ID
+   * @param updates - Partial agent updates
+   * @returns Promise resolving to updated CatalogAgent
+   */
+  async updateCatalogAgent(
+    id: string,
+    updates: Partial<Omit<CatalogAgent, 'id' | 'createdAt'>>
+  ): Promise<CatalogAgent> {
+    try {
+      const state = getStore();
+      const agents = await state.getMarketplaceCatalogAgents([]);
+
+      const agentIndex = agents.findIndex(a => a.id === id);
+      if (agentIndex === -1) {
+        throw new Error(`Agent not found: ${id}`);
+      }
+
+      const updated: CatalogAgent = {
+        ...agents[agentIndex],
+        ...updates,
+        updatedAt: Date.now(),
+      };
+
+      agents[agentIndex] = updated;
+      await state.setMarketplaceCatalogAgents(agents);
+
+      logger.info('[Marketplace Store] Catalog agent updated:', {
+        id: updated.id,
+        name: updated.name,
+      });
+
+      return updated;
+    } catch (error) {
+      logger.error(
+        '[Marketplace Store] Failed to update catalog agent:',
+        error instanceof Error ? error.message : String(error)
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a catalog agent from Redis.
+   *
+   * @param id - Agent ID
+   * @returns Promise resolving to deleted CatalogAgent
+   */
+  async deleteCatalogAgent(id: string): Promise<CatalogAgent> {
+    try {
+      const state = getStore();
+      const agents = await state.getMarketplaceCatalogAgents([]);
+
+      const agentIndex = agents.findIndex(a => a.id === id);
+      if (agentIndex === -1) {
+        throw new Error(`Agent not found: ${id}`);
+      }
+
+      const deleted = agents[agentIndex];
+      agents.splice(agentIndex, 1);
+      await state.setMarketplaceCatalogAgents(agents);
+
+      logger.info('[Marketplace Store] Catalog agent deleted:', {
+        id: deleted.id,
+        name: deleted.name,
+      });
+
+      return deleted;
+    } catch (error) {
+      logger.error(
+        '[Marketplace Store] Failed to delete catalog agent:',
         error instanceof Error ? error.message : String(error)
       );
       throw error;
