@@ -133,26 +133,20 @@ export type ABTestState = z.infer<typeof ABTestStateSchema>;
 
 /**
  * ABTestSession Interface
- * Session state for managing A/B tests
+ * Session state for managing A/B tests (Task 4: ABTestController)
  */
 export interface ABTestSession {
-  sessionId: string;
-  state: ABTestState;
-  playbookA: {
-    id: string;
-    versionId: string;
-    successCount: number;
-    totalExecutions: number;
+  id: string;
+  testPlaybookId: string;
+  controlPlaybookId: string;
+  status: 'running' | 'completed';
+  createdAt: Date;
+  stats: {
+    controlExecutions: number;
+    testExecutions: number;
+    controlSuccesses: number;
+    testSuccesses: number;
+    confidenceLevel: number;
+    statSignificant: boolean;
   };
-  playbookB: {
-    id: string;
-    versionId: string;
-    successCount: number;
-    totalExecutions: number;
-  };
-  minExecutions: number;
-  minSuccessRateDelta: number;
-  startedAt: Date;
-  completedAt?: Date;
-  winner?: 'A' | 'B';
 }
