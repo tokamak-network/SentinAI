@@ -5,6 +5,7 @@ import { HeroMiniature } from '@/components/hero-miniature';
 
 const GITHUB_URL = 'https://github.com/tokamak-network/SentinAI';
 const EXAMPLE_DASHBOARD_URL = 'https://sentinai.tokamak.network/thanos-sepolia';
+const ADMIN_LOGIN_URL = process.env.NEXT_PUBLIC_ADMIN_URL || '/admin/login';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
@@ -59,7 +60,7 @@ function Navbar() {
           { href: '/docs', label: 'DOCS' },
           { href: '/connect', label: 'DEPLOY' },
           { href: '/marketplace', label: 'MARKETPLACE' },
-          { href: '/admin/login', label: 'ADMIN' },
+          { href: ADMIN_LOGIN_URL, label: 'ADMIN' },
         ].map(({ href, label }) => (
           <a key={label} href={href} style={{
             fontFamily: FONT, fontSize: 10, fontWeight: 600, letterSpacing: '0.1em',
