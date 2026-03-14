@@ -30,6 +30,8 @@ import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 import { getChainPlugin } from '@/chains';
 import { switchL1RpcUrl } from '@/lib/l1-rpc-operator';
 import { setRoutingPolicy } from '@/lib/ai-routing';
+import { resolveAction } from '@/playbooks/resolver';
+import type { AbstractRemediationAction } from '@/playbooks/types';
 
 // ============================================================
 // Configuration
@@ -490,18 +492,50 @@ async function executeVerifyBalanceRestored(action: RemediationAction): Promise<
 }
 
 // ============================================================
+// Abstract Playbook Action Resolution
+// ============================================================
+
+/**
+ * Resolve abstract playbook actions (with targetRole) to executable RemediationAction format
+ * Converts ComponentRole references to actual component names via roleMap
+ */
+function resolveAbstractAction(action: RemediationAction | AbstractRemediationAction): RemediationAction {
+  // If action doesn't have targetRole, it's already a RemediationAction
+  if (!('targetRole' in action) || !action.targetRole) {
+    return action as RemediationAction;
+  }
+
+  // Resolve abstract action with targetRole
+  const abstractAction = action as AbstractRemediationAction;
+  const plugin = getChainPlugin();
+  const resolved = resolveAction(abstractAction, plugin);
+
+  // Convert resolved abstract action to RemediationAction
+  return {
+    type: resolved.type,
+    safetyLevel: resolved.safetyLevel,
+    target: resolved.target,
+    params: resolved.params,
+    waitAfterMs: resolved.waitAfterMs,
+  } as RemediationAction;
+}
+
+// ============================================================
 // Main Executor
 // ============================================================
 
 /**
- * Execute a single remediation action
+ * Execute a single remediation action (RemediationAction or AbstractRemediationAction)
  */
 export async function executeAction(
-  action: RemediationAction,
+  action: RemediationAction | AbstractRemediationAction,
   config: ScalingConfig = DEFAULT_SCALING_CONFIG
 ): Promise<ActionResult> {
+  // Resolve abstract actions to executable RemediationAction format
+  const resolvedAction = resolveAbstractAction(action);
+
   const result: ActionResult = {
-    action,
+    action: resolvedAction,
     status: 'running',
     startedAt: new Date().toISOString(),
   };
@@ -509,9 +543,9 @@ export async function executeAction(
   // In L1-only mode with external deployment, skip guarded pod-control actions
   const plugin = getChainPlugin();
   const deploymentType = process.env.L1_DEPLOYMENT_TYPE as 'k8s' | 'docker' | 'external' | undefined;
-  if (plugin.nodeLayer === 'l1' && deploymentType === 'external' && action.safetyLevel === 'guarded') {
+  if (plugin.nodeLayer === 'l1' && deploymentType === 'external' && resolvedAction.safetyLevel === 'guarded') {
     result.status = 'skipped';
-    result.output = `Action '${action.type}' skipped: external deployment has no pod control`;
+    result.output = `Action '${resolvedAction.type}' skipped: external deployment has no pod control`;
     result.completedAt = new Date().toISOString();
     return result;
   }
@@ -519,13 +553,13 @@ export async function executeAction(
   try {
     let output: string;
 
-    switch (action.type) {
+    switch (resolvedAction.type) {
       case 'collect_logs':
-        output = await executeCollectLogs(action, config);
+        output = await executeCollectLogs(resolvedAction, config);
         break;
 
       case 'health_check':
-        output = await executeHealthCheck(action, config);
+        output = await executeHealthCheck(resolvedAction, config);
         break;
 
       case 'check_l1_connection':
@@ -533,23 +567,23 @@ export async function executeAction(
         break;
 
       case 'describe_pod':
-        output = await executeDescribePod(action, config);
+        output = await executeDescribePod(resolvedAction, config);
         break;
 
       case 'restart_pod':
-        output = await executeRestartPod(action, config);
+        output = await executeRestartPod(resolvedAction, config);
         break;
 
       case 'scale_up':
-        output = await executeScaleUp(action, config);
+        output = await executeScaleUp(resolvedAction, config);
         break;
 
       case 'scale_down':
-        output = await executeScaleDown(action, config);
+        output = await executeScaleDown(resolvedAction, config);
         break;
 
       case 'zero_downtime_swap':
-        output = await executeZeroDowntimeSwap(action, config);
+        output = await executeZeroDowntimeSwap(resolvedAction, config);
         break;
 
       case 'check_treasury_balance':
@@ -561,17 +595,17 @@ export async function executeAction(
         break;
 
       case 'refill_eoa':
-        output = await executeRefillEOA(action);
+        output = await executeRefillEOA(resolvedAction);
         break;
 
       case 'verify_balance_restored':
-        output = await executeVerifyBalanceRestored(action);
+        output = await executeVerifyBalanceRestored(resolvedAction);
         break;
 
       case 'switch_l1_rpc': {
         const switchResult = await switchL1RpcUrl({
-          targetUrl: typeof action.params?.targetUrl === 'string' ? action.params.targetUrl : undefined,
-          reason: typeof action.params?.reason === 'string' ? action.params.reason : 'auto-remediation: L1 RPC failover',
+          targetUrl: typeof resolvedAction.params?.targetUrl === 'string' ? resolvedAction.params.targetUrl : undefined,
+          reason: typeof resolvedAction.params?.reason === 'string' ? resolvedAction.params.reason : 'auto-remediation: L1 RPC failover',
         });
         if (!switchResult.success) throw new Error(switchResult.message);
         output = `L1 RPC switched: ${switchResult.fromUrl} → ${switchResult.toUrl}`;
@@ -579,7 +613,7 @@ export async function executeAction(
       }
 
       case 'escalate_operator':
-        output = `Escalation required: ${action.params?.message || 'EOA balance critically low'}`;
+        output = `Escalation required: ${resolvedAction.params?.message || 'EOA balance critically low'}`;
         break;
 
       case 'config_change':
@@ -591,7 +625,7 @@ export async function executeAction(
         break;
 
       default:
-        throw new Error(`Unknown action type: ${action.type}`);
+        throw new Error(`Unknown action type: ${resolvedAction.type}`);
     }
 
     result.output = output;
