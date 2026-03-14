@@ -34,6 +34,7 @@ import type {
   AutonomousPlanStep,
   AutonomousVerificationResult,
 } from '@/types/autonomous-ops';
+import type { ComponentRole } from '@/playbooks/types';
 
 export class ArbitrumPlugin implements ChainPlugin {
   readonly chainType = 'arbitrum';
@@ -66,6 +67,17 @@ export class ArbitrumPlugin implements ChainPlugin {
 
   readonly l1Chain: Chain = getArbitrumL1Chain();
   readonly l2Chain: Chain = arbitrumOrbitChain;
+
+  // Abstract Playbook Role Mapping
+  readonly roleMap: Partial<Record<ComponentRole, string>> = {
+    'block-producer': 'nitro-node',
+    'sync-node': 'nitro-node',
+    'tx-submitter': 'batch-poster',
+    'state-root-poster': 'validator',
+    'proof-generator': 'validator',
+    'l1-execution-client': 'l1',
+    'rpc-gateway': 'system',
+  };
 
   readonly aiPrompts: ChainAIPrompts = ARBITRUM_AI_PROMPTS;
 

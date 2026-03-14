@@ -40,6 +40,7 @@ import type {
   AutonomousPlanStep,
   AutonomousVerificationResult,
 } from '@/types/autonomous-ops';
+import type { ComponentRole } from '@/playbooks/types';
 
 export class ThanosPlugin implements ChainPlugin {
   readonly chainType = 'thanos';
@@ -77,6 +78,17 @@ export class ThanosPlugin implements ChainPlugin {
   // viem Chain
   readonly l1Chain: Chain = sepolia;
   readonly l2Chain: Chain = mainnet;
+
+  // Abstract Playbook Role Mapping
+  readonly roleMap: Partial<Record<ComponentRole, string>> = {
+    'block-producer': 'op-geth',
+    'tx-submitter': 'op-batcher',
+    'state-root-poster': 'op-proposer',
+    'proof-generator': 'op-challenger',
+    'sync-node': 'op-node',
+    'l1-execution-client': 'l1',
+    'rpc-gateway': 'system',
+  };
 
   // AI Prompts
   readonly aiPrompts: ChainAIPrompts = THANOS_AI_PROMPTS;

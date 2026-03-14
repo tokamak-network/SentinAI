@@ -40,6 +40,7 @@ import type {
   AutonomousPlanStep,
   AutonomousVerificationResult,
 } from '@/types/autonomous-ops';
+import type { ComponentRole } from '@/playbooks/types';
 
 export class L1EVMPlugin implements ChainPlugin {
   readonly chainType = 'l1-evm';
@@ -72,6 +73,12 @@ export class L1EVMPlugin implements ChainPlugin {
 
   readonly l1Chain: Chain = mainnet;
   readonly l2Chain: Chain | undefined = undefined;
+
+  // Abstract Playbook Role Mapping
+  readonly roleMap: Partial<Record<ComponentRole, string>> = {
+    'l1-execution-client': 'l1-execution',
+    'rpc-gateway': 'system',
+  };
 
   readonly aiPrompts: ChainAIPrompts = L1_EVM_AI_PROMPTS;
 

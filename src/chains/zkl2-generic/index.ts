@@ -34,6 +34,7 @@ import type {
   AutonomousPlanStep,
   AutonomousVerificationResult,
 } from '@/types/autonomous-ops';
+import type { ComponentRole } from '@/playbooks/types';
 
 function resolveNetworkLabel(): string {
   const chainType = process.env.CHAIN_TYPE?.trim().toLowerCase();
@@ -82,6 +83,16 @@ export class ZkL2GenericPlugin implements ChainPlugin {
 
   readonly l1Chain: Chain = getZkL2GenericL1Chain();
   readonly l2Chain: Chain = zkL2GenericChain;
+
+  // Abstract Playbook Role Mapping
+  readonly roleMap: Partial<Record<ComponentRole, string>> = {
+    'block-producer': 'zk-sequencer',
+    'sync-node': 'zk-sequencer',
+    'tx-submitter': 'zk-batcher',
+    'proof-generator': 'zk-prover',
+    'l1-execution-client': 'l1',
+    'rpc-gateway': 'system',
+  };
 
   readonly aiPrompts: ChainAIPrompts = ZKL2_GENERIC_AI_PROMPTS;
 

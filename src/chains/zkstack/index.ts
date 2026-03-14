@@ -34,6 +34,7 @@ import type {
   AutonomousPlanStep,
   AutonomousVerificationResult,
 } from '@/types/autonomous-ops';
+import type { ComponentRole } from '@/playbooks/types';
 
 function getMode(): 'legacy-era' | 'os-preview' {
   const mode = process.env.ZKSTACK_MODE?.trim().toLowerCase();
@@ -99,6 +100,16 @@ export class ZkstackPlugin implements ChainPlugin {
 
   readonly l1Chain: Chain = getZkstackL1Chain();
   readonly l2Chain: Chain = zkstackLocalChain;
+
+  // Abstract Playbook Role Mapping
+  readonly roleMap: Partial<Record<ComponentRole, string>> = {
+    'block-producer': 'zksync-server',
+    'sync-node': 'zksync-server',
+    'tx-submitter': 'zk-batcher',
+    'proof-generator': 'zk-prover',
+    'l1-execution-client': 'l1',
+    'rpc-gateway': 'system',
+  };
 
   readonly aiPrompts: ChainAIPrompts = ZKSTACK_AI_PROMPTS;
 
