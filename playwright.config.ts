@@ -15,12 +15,15 @@ export default defineConfig({
     trace: 'off',
   },
   webServer: {
-    command: `npm run build && npm run start -- -p ${PORT}`,
+    command: `npx next build && npx next start -- -p ${PORT}`,
     env: {
       ...process.env,
+      NODE_ENV: 'production',
       SENTINAI_API_KEY: E2E_API_KEY,
       NEXT_PUBLIC_SENTINAI_API_KEY: E2E_API_KEY,
       NEXT_PUBLIC_SENTINAI_READ_ONLY_MODE: 'false',
+      NEXT_PUBLIC_MARKETPLACE_ADMIN_KEY: '0x742d35Cc6634C0532925a3b844Bc9e7595f42bE3',
+      MARKETPLACE_SESSION_KEY: 'e2e-test-secret-key-for-session-hmac',
     },
     port: PORT,
     timeout: 300_000,

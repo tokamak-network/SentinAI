@@ -348,6 +348,7 @@ function TopNavLinks() {
       <a href="/docs" style={linkStyle}>DOCS</a>
       <a href="/connect" style={linkStyle}>DEPLOY</a>
       <a href="/marketplace" style={linkStyle}>MARKETPLACE</a>
+      <a href="/admin" style={linkStyle}>ADMIN</a>
     </>
   );
 }

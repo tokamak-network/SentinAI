@@ -57,3 +57,24 @@ export interface MarketplaceCatalog {
   pricingTiers: Record<ExperienceTier, number>;  // tier → monthly price in cents
   updatedAt: string;
 }
+
+/** Catalog Agent in marketplace admin */
+export interface CatalogAgent {
+  id: string;
+  name: string;
+  description: string;
+  tier: 'trainee' | 'junior' | 'senior' | 'expert';
+  capabilities: string[];
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Marketplace Order (transaction record) */
+export interface MarketplaceOrder {
+  id: string;
+  agentId: string;
+  buyerAddress: string;
+  tier: 'trainee' | 'junior' | 'senior' | 'expert';
+  priceInCents: number;
+  createdAt: number;
+}

@@ -20,21 +20,21 @@ const globalForAgentMarketplaceBatchHistory = globalThis as unknown as {
   __sentinai_agent_marketplace_batch_history_redis?: Redis;
 };
 
-function getRedisUrl(): string {
-  const redisUrl = process.env.REDIS_URL?.trim();
-  if (!redisUrl) {
-    throw new Error('REDIS_URL is required for agent marketplace batch history');
-  }
-
-  return redisUrl;
+function getRedisUrl(): string | null {
+  return process.env.REDIS_URL?.trim() ?? null;
 }
 
-function getRedisClient(): Redis {
+function getRedisClient(): Redis | null {
+  const redisUrl = getRedisUrl();
+  if (!redisUrl) {
+    return null;
+  }
+
   if (globalForAgentMarketplaceBatchHistory.__sentinai_agent_marketplace_batch_history_redis) {
     return globalForAgentMarketplaceBatchHistory.__sentinai_agent_marketplace_batch_history_redis;
   }
 
-  const client = new Redis(getRedisUrl(), {
+  const client = new Redis(redisUrl, {
     lazyConnect: true,
     connectTimeout: 5000,
     maxRetriesPerRequest: 3,
@@ -48,12 +48,21 @@ export async function appendAgentMarketplaceBatchHistory(
   record: AgentMarketplaceBatchHistoryRecord
 ): Promise<void> {
   const client = getRedisClient();
+  if (!client) {
+    return;
+  }
+
   await client.rpush(BATCH_HISTORY_KEY, JSON.stringify(record));
   await client.ltrim(BATCH_HISTORY_KEY, -BATCH_HISTORY_LIMIT, -1);
 }
 
 export async function getAgentMarketplaceBatchHistory(): Promise<AgentMarketplaceBatchHistoryRecord[]> {
-  const records = await getRedisClient().lrange(BATCH_HISTORY_KEY, 0, -1);
+  const client = getRedisClient();
+  if (!client) {
+    return [];
+  }
+
+  const records = await client.lrange(BATCH_HISTORY_KEY, 0, -1);
   return records
     .map((record) => JSON.parse(record) as AgentMarketplaceBatchHistoryRecord)
     .reverse();
@@ -61,7 +70,11 @@ export async function getAgentMarketplaceBatchHistory(): Promise<AgentMarketplac
 
 export async function clearAgentMarketplaceBatchHistory(): Promise<void> {
   try {
-    await getRedisClient().del(BATCH_HISTORY_KEY);
+    const client = getRedisClient();
+    if (!client) {
+      return;
+    }
+    await client.del(BATCH_HISTORY_KEY);
   } catch {
     // Ignore cleanup failures in test-only callers.
   }

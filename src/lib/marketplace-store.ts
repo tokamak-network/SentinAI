@@ -10,6 +10,8 @@ import type {
   MarketplacePricingConfig,
   PricingUpdateRequest,
   OutcomeBonusConfig,
+  CatalogAgent,
+  MarketplaceOrder,
 } from '@/types/marketplace';
 import { RedisMarketplaceStore } from '@/lib/redis-marketplace-store';
 
@@ -84,6 +86,69 @@ export interface IMarketplaceStore {
   updateBonusConfig(
     update: Partial<OutcomeBonusConfig>
   ): Promise<OutcomeBonusConfig>;
+
+  /**
+   * Retrieve all catalog agents from marketplace.
+   *
+   * @returns Promise resolving to array of CatalogAgent
+   */
+  getCatalogAgents(): Promise<CatalogAgent[]>;
+
+  /**
+   * Create a new catalog agent.
+   *
+   * @param agent - CatalogAgent without id (auto-generated)
+   * @returns Promise resolving to created CatalogAgent with id
+   */
+  createCatalogAgent(
+    agent: Omit<CatalogAgent, 'id' | 'createdAt' | 'updatedAt'>
+  ): Promise<CatalogAgent>;
+
+  /**
+   * Update an existing catalog agent.
+   *
+   * @param id - Agent ID
+   * @param updates - Partial agent updates
+   * @returns Promise resolving to updated CatalogAgent
+   */
+  updateCatalogAgent(
+    id: string,
+    updates: Partial<Omit<CatalogAgent, 'id' | 'createdAt'>>
+  ): Promise<CatalogAgent>;
+
+  /**
+   * Delete a catalog agent.
+   *
+   * @param id - Agent ID
+   * @returns Promise resolving to deleted CatalogAgent
+   */
+  deleteCatalogAgent(id: string): Promise<CatalogAgent>;
+
+  /**
+   * Retrieve paginated list of marketplace orders.
+   *
+   * @param page - Page number (1-indexed)
+   * @param limit - Items per page
+   * @returns Promise resolving to array of MarketplaceOrder
+   */
+  getOrders(page: number, limit: number): Promise<MarketplaceOrder[]>;
+
+  /**
+   * Create a new marketplace order.
+   *
+   * @param order - MarketplaceOrder without id (auto-generated)
+   * @returns Promise resolving to created MarketplaceOrder with id
+   */
+  createOrder(
+    order: Omit<MarketplaceOrder, 'id'>
+  ): Promise<MarketplaceOrder>;
+
+  /**
+   * Get orders summary (total count, revenue).
+   *
+   * @returns Promise resolving to { totalCount, totalRevenueInCents }
+   */
+  getOrdersSummary(): Promise<{ totalCount: number; totalRevenueInCents: number }>;
 }
 
 // ---------------------------------------------------------------------------

@@ -19,9 +19,12 @@ import { executeRemediation } from './remediation-engine';
 
 const createTestConfig = (overrides?: Partial<RemediationConfig>): RemediationConfig => ({
   enabled: true,
+  allowGuardedActions: true,
   cooldownMinutes: 1,
   maxExecutionsPerHour: 10,
   maxExecutionsPerDay: 50,
+  maxAutoScaleVcpu: 8,
+  circuitBreakerThreshold: 5,
   ...overrides,
 });
 
@@ -224,9 +227,11 @@ describe('Remediation Engine E2E - Three-Layer Playbook Resolution', () => {
       const analysis = {
         severity: 'critical' as const,
         anomalyType: 'performance' as const,
+        correlations: ['op-geth CPU spike'],
+        predictedImpact: 'Transaction processing delay',
+        suggestedActions: ['Scale op-geth replicas', 'Increase memory limit'],
         relatedComponents: ['op-geth'],
-        rootCauses: ['High CPU usage on execution client'],
-        confidence: 0.95,
+        timestamp: new Date().toISOString(),
       };
       const config = createTestConfig();
 
