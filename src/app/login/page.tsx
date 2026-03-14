@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 type LoginState = 'idle' | 'connecting' | 'signing' | 'verifying' | 'error' | 'success';
@@ -115,27 +115,6 @@ function LoginPageContent() {
       url === path || url.startsWith(path + '/'),
     );
   };
-
-  // Auto-redirect if already authenticated (middleware allows access)
-  useEffect(() => {
-    // Validate callback URL before attempting redirect
-    if (!isValidCallbackUrl(callbackUrl)) {
-      console.warn('Invalid callback URL:', callbackUrl);
-      return;
-    }
-
-    // Try accessing protected page; if middleware allows, redirect
-    fetch(callbackUrl, { method: 'HEAD' })
-      .then(res => {
-        if (res.ok || res.status === 405) {
-          // 405 means page exists but disallows HEAD
-          router.push(callbackUrl);
-        }
-      })
-      .catch(() => {
-        // Expected: most pages will fail or redirect
-      });
-  }, [callbackUrl, router]);
 
   const isLoading = state === 'connecting' || state === 'signing' || state === 'verifying';
   const isError = state === 'error';
