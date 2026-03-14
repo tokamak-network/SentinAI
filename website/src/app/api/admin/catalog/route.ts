@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { name, description, imageUrl, status } = body;
+    const { name, description, tier, priceUSDCents, imageUrl, status } = body;
 
     // Validate required fields
     if (!name || typeof name !== 'string') {
@@ -80,6 +80,20 @@ export async function POST(request: NextRequest) {
     if (!description || typeof description !== 'string') {
       return NextResponse.json(
         { error: 'Invalid request: description is required' },
+        { status: 400 }
+      );
+    }
+
+    if (!tier || !['trainee', 'junior', 'senior', 'expert'].includes(tier)) {
+      return NextResponse.json(
+        { error: 'Invalid request: tier must be trainee, junior, senior, or expert' },
+        { status: 400 }
+      );
+    }
+
+    if (typeof priceUSDCents !== 'number' || priceUSDCents < 0) {
+      return NextResponse.json(
+        { error: 'Invalid request: priceUSDCents must be a non-negative number' },
         { status: 400 }
       );
     }
@@ -98,9 +112,11 @@ export async function POST(request: NextRequest) {
       id: agentId,
       name,
       description,
+      tier,
+      priceUSDCents,
       imageUrl: imageUrl || undefined,
       status,
-    });
+    } as any, { preserveId: true });
 
     return NextResponse.json(newAgent, { status: 201 });
   } catch (error) {
