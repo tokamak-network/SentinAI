@@ -58,7 +58,7 @@ function Navbar() {
         {[
           { href: '/docs', label: 'DOCS' },
           { href: '/connect', label: 'DEPLOY' },
-          { href: process.env.NEXT_PUBLIC_ADMIN_URL ?? 'http://localhost:3002/login', label: 'ADMIN' },
+          { href: '/admin/login', label: 'ADMIN' },
         ].map(({ href, label }) => (
           <a key={label} href={href} style={{
             fontFamily: FONT, fontSize: 10, fontWeight: 600, letterSpacing: '0.1em',
