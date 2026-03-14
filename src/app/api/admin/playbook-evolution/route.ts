@@ -10,8 +10,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { RollbackManager } from '@/lib/playbook-evolution/rollback-manager';
 import { PatternMiner } from '@/lib/playbook-evolution/pattern-miner';
-import { getRedisInstance } from '@/lib/redis-store';
-import { getStateStore } from '@/lib/state-store';
+import { getCoreRedis } from '@/core/redis';
+import { getStore } from '@/lib/redis-store';
 import logger from '@/lib/logger';
 
 export const dynamic = 'force-dynamic';
@@ -47,8 +47,15 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   if (authError) return authError;
 
   try {
-    const redis = getRedisInstance();
-    const store = getStateStore();
+    const redis = getCoreRedis();
+    if (!redis) {
+      return NextResponse.json(
+        { error: 'Redis not available' },
+        { status: 503 }
+      );
+    }
+
+    const store = getStore();
     const manager = new RollbackManager(store, redis);
 
     const versionHistory = await manager.getVersionHistory();
@@ -91,8 +98,15 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       );
     }
 
-    const redis = getRedisInstance();
-    const store = getStateStore();
+    const redis = getCoreRedis();
+    if (!redis) {
+      return NextResponse.json(
+        { error: 'Redis not available' },
+        { status: 503 }
+      );
+    }
+
+    const store = getStore();
 
     if (action === 'trigger_evolution') {
       return await handleTriggerEvolution(store, redis);

@@ -16,15 +16,15 @@ const SENTINAI_API_KEY = 'test-api-key-12345';
 let mockRedis: any;
 let mockStore: any;
 
-vi.mock('@/lib/state-store', () => {
+vi.mock('@/core/redis', () => {
   return {
-    getStateStore: () => mockStore,
+    getCoreRedis: () => mockRedis,
   };
 });
 
 vi.mock('@/lib/redis-store', () => {
   return {
-    getRedisInstance: () => mockRedis,
+    getStore: () => mockStore,
   };
 });
 
