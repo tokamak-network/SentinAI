@@ -90,6 +90,12 @@ function LoginPageContent() {
       setState('success');
       // Redirect after brief success display
       setTimeout(() => {
+        // Validate callback URL before redirect
+        if (!isValidCallbackUrl(callbackUrl)) {
+          setError('Invalid callback URL');
+          setState('error');
+          return;
+        }
         router.push(callbackUrl);
       }, 500);
     } catch (err) {
