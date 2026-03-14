@@ -150,3 +150,23 @@ export interface ABTestSession {
     statSignificant: boolean;
   };
 }
+
+/**
+ * PlaybookVersion Interface
+ * Represents a versioned snapshot of an evolved playbook
+ */
+export interface PlaybookVersion {
+  versionId: string;         // v-0, v-1, v-2, ...
+  playbook: EvolvedPlaybook;
+  promotedAt: Date;          // When this version was promoted to active
+  isActive: boolean;         // Is this the currently active version
+}
+
+/**
+ * PlaybookVersionHistory Interface
+ * Tracks current and historical playbook versions
+ */
+export interface PlaybookVersionHistory {
+  current: PlaybookVersion;
+  history: PlaybookVersion[]; // max 10 versions (excluding current)
+}
