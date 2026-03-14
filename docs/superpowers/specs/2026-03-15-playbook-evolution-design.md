@@ -192,14 +192,22 @@ export interface EvolvedPlaybook extends Playbook {
   };
 }
 
+// RemediationAction schema (from Phase 5)
+const RemediationActionSchema = z.object({
+  type: z.enum(['scale', 'evict', 'restart', 'drain']),
+  target: z.string().min(1),
+  params: z.record(z.any()).optional(),
+  timeout: z.number().min(1000).max(30000),
+});
+
 // Zod schema for runtime validation
 export const EvolvedPlaybookSchema = z.object({
   // Existing Playbook fields (inferred from base)
   id: z.string().min(1),
   name: z.string().min(1),
   description: z.string().optional(),
-  actions: z.array(z.object({ /* RemediationAction fields */ })).min(1).max(3),
-  fallbacks: z.array(z.object({ /* RemediationAction fields */ })).optional(),
+  actions: z.array(RemediationActionSchema).min(1).max(3),
+  fallbacks: z.array(RemediationActionSchema).min(1).max(2),
   timeout: z.number().min(1000).max(60000),
 
   // Phase 6 fields
@@ -555,7 +563,7 @@ async function evolvePlaybook(
     const json = JSON.parse(response.content[0].text);
 
     // Validate against Zod schema
-    const validation = EvolvedPlaybook.safeParse(json);
+    const validation = EvolvedPlaybookSchema.safeParse(json);
     if (!validation.success) {
       return Err(new ValidationError("Invalid playbook structure"));
     }
@@ -785,7 +793,7 @@ test('should collect metrics and update confidence during A/B testing', async ({
   await page.evaluate(() => window.__simulateABExecutions(60, { existing: 0.9, evolved: 0.95 }));
 
   // Wait for confidence calculation (with explicit timeout)
-  await expect(page.locator('[data-testid=confidence-score]')).toContainText(/8[5-9]%|9\d%/, {
+  await expect(page.locator('[data-testid=confidence-score]')).toContainText(/8[5-9]%|9\d%|100%/, {
     timeout: 30000,  // Wait up to 30s for metrics update
   });
 
@@ -997,26 +1005,41 @@ export interface EvolutionMetrics {
 
 ## 8. Rollback Mechanism
 
-### Version Storage (Redis)
+### Version Storage & ID Scheme (Redis)
+
+**Version ID Format**: `v-N` where N is sequential integer (starting from 0 for Phase 5 baseline)
 
 ```
-marketplace:playbooks:current
-  ├─ id: "v-5"
+Phase 5 Initial State (baseline):
+  marketplace:playbooks:current → { id: "v0", name: "baseline-playbook" }
+
+Phase 6 Evolution Timeline:
+  1st Evolution: v0 → v1 (parentVersionId: "v0")
+  2nd Evolution: v1 → v2 (parentVersionId: "v1")
+  3rd Evolution: v2 → v3 (parentVersionId: "v2")
+  [Only 10 most recent kept in history]
+
+Storage Keys:
+marketplace:playbooks:current             # Active playbook (TTL: ∞)
+  ├─ id: "v3"
   ├─ status: "active"
   ├─ promotedAt: timestamp
   └─ ...
 
-marketplace:playbooks:versions:v-5
+marketplace:playbooks:versions:v3         # Version details (TTL: ∞)
   ├─ playbookData: {...}
   ├─ createdAt: timestamp
   ├─ promotedAt: timestamp
-  ├─ evolvedFrom: "v-4"
+  ├─ parentVersionId: "v2"
   ├─ confidenceScore: 87.3
   ├─ successMetrics: { existing: 90%, evolved: 95% }
   └─ rollbackReason: null
 
-marketplace:playbooks:history
-  [v-5, v-4, v-3, v-2, v-1, v0, ...]
+marketplace:playbooks:history             # [v3, v2, v1, v0] (max 10)
+  [v3, v2, v1, v0]
+
+marketplace:patterns:*                    # TTL: 24h
+marketplace:ab-tests:*                    # TTL: 7d
 ```
 
 ### Rollback Scenarios
@@ -1220,11 +1243,22 @@ describe('PlaybookEvolver', () => {
 
 // ab-test-controller.test.ts
 describe('ABTestController', () => {
-  it('should split execution 50/50', async () => {
-    for (let i = 0; i < 100; i++) {
+  it('should split execution 50/50 with statistical validity', async () => {
+    const choices = [];
+    for (let i = 0; i < 200; i++) {
       const choice = ABTestController.selectPlaybook(existing, evolved);
-      // Verify ±10% distribution
+      choices.push(choice === 'existing' ? 0 : 1);
     }
+
+    // Verify ±15% distribution (200 samples)
+    const existingCount = choices.filter(c => c === 0).length;
+    const evolvedCount = choices.filter(c => c === 1).length;
+    const existingRatio = existingCount / 200;
+    const evolvedRatio = evolvedCount / 200;
+
+    expect(Math.abs(existingRatio - 0.5)).toBeLessThan(0.15); // Within ±15%
+    expect(Math.abs(evolvedRatio - 0.5)).toBeLessThan(0.15);
+    expect(existingCount + evolvedCount).toBe(200);
   });
 });
 
@@ -1320,6 +1354,10 @@ describe('Full Evolution Cycle', () => {
       });
     }
 
+    // Record current playbook before evolution attempt
+    const beforeEvolution = await store.getCurrentPlaybook();
+    const originalVersionId = beforeEvolution.id;
+
     // Simulate Claude API timeout
     vi.spyOn(PlaybookEvolver, 'generate').mockRejectedValueOnce(
       new Error('Claude API timeout')
@@ -1329,9 +1367,11 @@ describe('Full Evolution Cycle', () => {
     const result = await PatternMiner.analyzeAndEvolve();
     expect(result.isErr()).toBe(true);
 
-    // Existing playbook should remain active
+    // Existing playbook should remain unchanged
     const current = await store.getCurrentPlaybook();
-    expect(current.versionId).not.toMatch(/^v-\d+$/); // Not an evolved version
+    expect(current.id).toBe(originalVersionId);
+    // Verify it's not a newly evolved version
+    expect(current.generatedBy).not.toBe('claude-sonnet-4-5-20250929');
   });
 
   it('should auto-rollback when A/B test confidence drops below 70%', async () => {
