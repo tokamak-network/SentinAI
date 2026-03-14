@@ -6,6 +6,16 @@
  */
 
 import type { ExperienceTier } from './agent-resume';
+import type {
+  IncidentPattern,
+  RemediationAction,
+  PromptUsageMetrics,
+  PatternContext,
+  EvolvedPlaybook,
+  ABTestResult,
+  ABTestState,
+  ABTestSession,
+} from '../lib/types/playbook-evolution';
 
 /** Pricing for a single experience tier (in USD cents, for decimal precision) */
 export interface TierPrice {
@@ -57,3 +67,15 @@ export interface MarketplaceCatalog {
   pricingTiers: Record<ExperienceTier, number>;  // tier → monthly price in cents
   updatedAt: string;
 }
+
+// Re-export playbook evolution types for convenience
+export type {
+  IncidentPattern,
+  RemediationAction,
+  PromptUsageMetrics,
+  PatternContext,
+  EvolvedPlaybook,
+  ABTestResult,
+  ABTestState,
+  ABTestSession,
+};
