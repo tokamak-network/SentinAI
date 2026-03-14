@@ -12,7 +12,7 @@ import type {
   ExecutionStatus,
   Playbook,
 } from '@/types/remediation';
-import { matchPlaybook, getPlaybookByName } from '@/lib/playbook-matcher';
+import { matchPlaybook, getPlaybookByName, matchPlaybookWithLayers } from '@/lib/playbook-matcher';
 import { executeAction } from '@/lib/action-executor';
 import * as store from '@/lib/remediation-store';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
@@ -47,7 +47,7 @@ function toLedgerOutcome(status: ExecutionStatus): LedgerOutcome | null {
 async function writeToOperationLedger(
   execution: RemediationExecution,
   event: AnomalyEvent,
-  playbook: Playbook
+  playbook: Playbook | any // AbstractPlaybook | Playbook
 ): Promise<void> {
   const outcome = toLedgerOutcome(execution.status);
   if (!outcome) return;
@@ -55,10 +55,14 @@ async function writeToOperationLedger(
   const primaryAnomaly = event.anomalies[0];
   if (!primaryAnomaly) return;
 
+  // Handle both Playbook and AbstractPlaybook action structures
+  const playbookActions = playbook.actions || [];
   const primaryAction =
-    playbook.actions.find(a => a.safetyLevel !== 'safe')?.type ??
-    playbook.actions[0]?.type ??
+    playbookActions.find((a: any) => a.safetyLevel !== 'safe')?.type ??
+    playbookActions[0]?.type ??
     'unknown';
+
+  const playbookId = (playbook as any).name || (playbook as any).id || 'unknown';
 
   const startMs = new Date(execution.startedAt).getTime();
   const endMs = execution.completedAt ? new Date(execution.completedAt).getTime() : Date.now();
@@ -73,7 +77,7 @@ async function writeToOperationLedger(
       zScore: primaryAnomaly.zScore,
       metricValue: primaryAnomaly.value,
     },
-    playbookId: playbook.name,
+    playbookId,
     action: primaryAction,
     outcome,
     resolutionMs: Math.max(0, endMs - startMs),
@@ -251,12 +255,12 @@ export async function executeRemediation(
 
   logger.info(`[Remediation] Triggered for event ${event.id}`);
 
-  // 1. Match playbook
-  const playbook = matchPlaybook(event, analysis);
+  // 1. Match playbook (three-layer resolution: abstract → chain-specific)
+  const match = await matchPlaybookWithLayers(event, analysis);
 
-  if (!playbook) {
-    logger.info('[Remediation] No matching playbook found');
-    
+  if (!match) {
+    logger.info('[Remediation] No matching playbook found in any layer');
+
     // Create a no-op execution record
     const execution: RemediationExecution = {
       id: generateUUID(),
@@ -269,22 +273,27 @@ export async function executeRemediation(
       startedAt: startTime,
       completedAt: new Date().toISOString(),
     };
-    
+
     store.addExecution(execution);
     return execution;
   }
 
-  logger.info(`[Remediation] Matched playbook: ${playbook.name}`);
+  const { playbook, actions, source } = match;
+  // Extract playbook name from either AbstractPlaybook (id) or Playbook (name)
+  const playbookName = source === 'abstract'
+    ? (playbook as any).id || (playbook as any).name
+    : (playbook as any).name;
+  logger.info(`[Remediation] Matched ${source} playbook: ${playbookName}`);
 
   // 2. Safety gate checks
-  const safetyCheck = await checkSafetyGates(playbook.name, config);
+  const safetyCheck = await checkSafetyGates(playbookName, config);
 
   if (!safetyCheck.allowed) {
     logger.info(`[Remediation] Blocked: ${safetyCheck.reason}`);
-    
+
     const execution: RemediationExecution = {
       id: generateUUID(),
-      playbookName: playbook.name,
+      playbookName,
       triggeredBy: 'auto',
       anomalyEventId: event.id,
       status: 'skipped',
@@ -293,7 +302,7 @@ export async function executeRemediation(
       startedAt: startTime,
       completedAt: new Date().toISOString(),
     };
-    
+
     store.addExecution(execution);
     return execution;
   }
@@ -301,11 +310,11 @@ export async function executeRemediation(
   // 3. Create execution record
   const execution: RemediationExecution = {
     id: generateUUID(),
-    playbookName: playbook.name,
+    playbookName,
     triggeredBy: 'auto',
     anomalyEventId: event.id,
     status: 'running',
-    actions: playbook.actions.map(action => ({
+    actions: actions.map(action => ({
       action,
       status: 'pending' as ExecutionStatus,
       startedAt: new Date().toISOString(),
@@ -315,7 +324,7 @@ export async function executeRemediation(
   };
 
   store.addExecution(execution);
-  store.setLastExecutionTime(playbook.name, Date.now());
+  store.setLastExecutionTime(playbookName, Date.now());
 
   // 4. Execute actions
   await executeActions(execution.actions, execution, config);
@@ -325,17 +334,18 @@ export async function executeRemediation(
   execution.completedAt = new Date().toISOString();
 
   if (execution.status === 'success') {
-    store.recordSuccess(playbook.name);
-    logger.info(`[Remediation] ✅ Success: ${playbook.name}`);
+    store.recordSuccess(playbookName);
+    logger.info(`[Remediation] ✅ Success: ${playbookName}`);
   } else if (execution.status === 'failed') {
-    store.recordFailure(playbook.name);
-    logger.info(`[Remediation] ❌ Failed: ${playbook.name}`);
+    store.recordFailure(playbookName);
+    logger.info(`[Remediation] ❌ Failed: ${playbookName}`);
 
-    // Try fallback actions if available
-    if (playbook.fallback && playbook.fallback.length > 0) {
+    // Try fallback actions if available (from abstract playbooks only)
+    const fallbackActions = 'fallback' in playbook ? playbook.fallback : undefined;
+    if (fallbackActions && fallbackActions.length > 0) {
       logger.info('[Remediation] Attempting fallback actions...');
-      
-      const fallbackResults: ActionResult[] = playbook.fallback.map(action => ({
+
+      const fallbackResults: ActionResult[] = fallbackActions.map(action => ({
         action,
         status: 'pending' as ExecutionStatus,
         startedAt: new Date().toISOString(),
