@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Agent, getAgentCatalog, getPriceDisplay } from '@/lib/agent-marketplace';
+import { Agent, getPriceDisplay } from '@/lib/agent-marketplace';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
@@ -147,10 +147,24 @@ export default function MarketplacePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load agents from our local catalog
-    const catalog = getAgentCatalog();
-    setAgents(catalog);
-    setLoading(false);
+    // Load agents from dynamic marketplace store via API
+    const loadAgents = async () => {
+      try {
+        const response = await fetch('/api/agents');
+        if (!response.ok) {
+          throw new Error(`Failed to fetch agents: ${response.status}`);
+        }
+        const data = await response.json();
+        setAgents(data.agents || []);
+      } catch (error) {
+        console.error('Failed to load agents:', error);
+        setAgents([]); // Empty on error, don't break the UI
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAgents();
   }, []);
 
   return (
