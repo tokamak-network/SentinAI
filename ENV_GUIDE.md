@@ -104,6 +104,36 @@ When `AGENT_V2=true`, the serial agent-loop (60s cron) is replaced by a parallel
 | `SENTINAI_DEFAULT_INSTANCE_ID` | `default` | Instance ID used when `SENTINAI_INSTANCES` is not set |
 | `SENTINAI_DEFAULT_PROTOCOL_ID` | `opstack-l2` | Protocol ID used when `SENTINAI_INSTANCES` is not set |
 
+### Agent v2 Goal Manager (Autonomous Goal Generation & Execution)
+
+**Note**: These variables are for the dashboard (root Next.js app) only, **not** for the website (Vercel landing page).
+
+Goal Manager enables automatic goal generation from anomalies/events and autonomous execution with multi-stage approval workflow.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GOAL_MANAGER_ENABLED` | `false` | Enable automatic goal generation from remediation events |
+| `GOAL_MANAGER_DISPATCH_ENABLED` | `false` | Enable autonomous goal dispatch and execution |
+| `GOAL_MANAGER_DISPATCH_DRY_RUN` | `true` | Execute goals in dry-run mode (no actual changes) |
+| `GOAL_MANAGER_DISPATCH_ALLOW_WRITES` | `false` | Allow actual write operations (requires autonomy approval) |
+| `GOAL_CANDIDATE_LLM_ENABLED` | `false` | Enable LLM-enhanced goal candidate generation |
+| `GOAL_MANAGER_MIN_CONFIDENCE` | `0.5` | Minimum confidence score for goal acceptance (0.0-1.0) |
+| `GOAL_MANAGER_DEDUP_WINDOW_MINUTES` | `30` | Time window for goal deduplication (1-1440 min) |
+| `GOAL_MANAGER_STALE_SIGNAL_MINUTES` | `90` | Time before goal signal considered stale (1-1440 min) |
+| `GOAL_MANAGER_DEFAULT_TTL_MINUTES` | `60` | Default goal time-to-live (5-1440 min) |
+
+### Agent v2 Autonomy Policy (Confidence & Execution Levels)
+
+**Note**: These variables are for the dashboard (root Next.js app) only, **not** for the website (Vercel landing page).
+
+Autonomy policy controls when autonomous operations (goal execution, scaling, remediation) are allowed based on confidence scores.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GOAL_AUTONOMY_LEVEL` | `A2` | Autonomy level: `A0` (manual only) → `A1` (monitor) → `A2` (suggest) → `A3` (auto-dry-run) → `A4` (auto-write-low) → `A5` (fully autonomous) |
+| `GOAL_AUTONOMY_MIN_CONFIDENCE_DRY_RUN` | `0.35` | Minimum confidence for dry-run execution (0.0-1.0) |
+| `GOAL_AUTONOMY_MIN_CONFIDENCE_WRITE` | `0.65` | Minimum confidence for actual write operations (0.0-1.0) |
+
 ### Agent Memory / Decision Trace
 
 | Variable | Default | Description |
