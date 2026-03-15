@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Shield, AlertTriangle, CheckCircle2, Clock } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Shield, AlertTriangle, Clock, Zap, Target } from 'lucide-react';
 
 type Phase = 'incident' | 'timeline' | 'rca' | 'impact';
 
-const PHASE_DURATION = 3000;
+const PHASE_DURATION = 4000;
 const PHASES: Phase[] = ['incident', 'timeline', 'rca', 'impact'];
 
 interface TimelineStep {
@@ -14,6 +14,79 @@ interface TimelineStep {
   time: string;
   completed: boolean;
 }
+
+const PhaseCard = ({
+  phase,
+  isActive,
+  children,
+}: {
+  phase: Phase;
+  isActive: boolean;
+  children: React.ReactNode;
+}) => {
+  const phaseConfig = {
+    incident: { icon: AlertTriangle, label: '① INCIDENT', color: '#DC2626', bgColor: '#FEE2E2', borderColor: '#FECACA' },
+    timeline: { icon: Clock, label: '② TIMELINE', color: '#2563EB', bgColor: '#DBEAFE', borderColor: '#BFDBFE' },
+    rca: { icon: Zap, label: '③ RCA', color: '#7C3AED', bgColor: '#EDE9FE', borderColor: '#DDD6FE' },
+    impact: { icon: Target, label: '④ IMPACT', color: '#16A34A', bgColor: '#DCFCE7', borderColor: '#BBFBDC' },
+  };
+
+  const config = phaseConfig[phase];
+  const Icon = config.icon;
+
+  return (
+    <motion.div
+      animate={{
+        scale: isActive ? 1.02 : 0.98,
+        opacity: isActive ? 1 : 0.6,
+        borderWidth: isActive ? 2 : 1,
+      }}
+      transition={{ duration: 0.3 }}
+      style={{
+        padding: '16px',
+        background: config.bgColor,
+        border: `${isActive ? 2 : 1}px solid ${isActive ? config.color : config.borderColor}`,
+        borderRadius: 8,
+        flex: 1,
+        minHeight: 120,
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <Icon size={16} style={{ color: config.color, flexShrink: 0 }} />
+        <span
+          style={{
+            fontFamily: 'monospace',
+            fontSize: 11,
+            fontWeight: 700,
+            color: config.color,
+            letterSpacing: '0.05em',
+          }}
+        >
+          {config.label}
+        </span>
+        {isActive && (
+          <motion.span
+            animate={{ opacity: [1, 0.3, 1] }}
+            transition={{ duration: 1.2, repeat: Infinity }}
+            style={{
+              display: 'inline-block',
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: config.color,
+              marginLeft: 'auto',
+            }}
+          />
+        )}
+      </div>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+        {children}
+      </div>
+    </motion.div>
+  );
+};
 
 export function HeroMiniature() {
   const [phaseIdx, setPhaseIdx] = useState(0);
@@ -35,12 +108,17 @@ export function HeroMiniature() {
   ];
 
   return (
-    <div className="rounded-xl border border-border bg-card/90 shadow-2xl backdrop-blur-sm w-full" style={{ padding: '20px 24px' }}>
+    <div
+      className="rounded-xl border border-border bg-card/90 shadow-2xl backdrop-blur-sm w-full"
+      style={{ padding: '24px' }}
+    >
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }} className="text-primary">
-          <Shield size={16} />
-          <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, letterSpacing: '0.08em' }}>SentinAI</span>
+          <Shield size={18} />
+          <span style={{ fontFamily: 'monospace', fontSize: 14, fontWeight: 700, letterSpacing: '0.08em' }}>
+            SentinAI
+          </span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <motion.span
@@ -48,203 +126,217 @@ export function HeroMiniature() {
             transition={{ duration: 1.2, repeat: Infinity }}
             style={{
               display: 'inline-block',
-              width: 8, height: 8, borderRadius: '50%',
-              background: '#FF6B6B',
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: '#DC2626',
             }}
           />
-          <span style={{ fontFamily: 'monospace', fontSize: 11, letterSpacing: '0.06em' }} className="text-muted-foreground">
-            INCIDENT RESPONSE
+          <span
+            style={{ fontFamily: 'monospace', fontSize: 11, letterSpacing: '0.06em', fontWeight: 600 }}
+            className="text-muted-foreground"
+          >
+            LIVE INCIDENT RESPONSE
           </span>
         </div>
       </div>
 
-      {/* Incident Card */}
-      <AnimatePresence mode="wait">
-        {(activePhase === 'incident' || activePhase === 'timeline') && (
-          <motion.div
-            key="incident-card"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            style={{
-              padding: '12px 16px',
-              background: '#FF6B6B15',
-              border: '1px solid #FF6B6B30',
-              borderRadius: 6,
-              marginBottom: 12,
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <AlertTriangle size={14} style={{ color: '#FF6B6B' }} />
-              <span style={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700, color: '#FF6B6B' }}>
-                Issue: Sequencer Latency Spike
-              </span>
+      {/* 4-Phase Pipeline Grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+        {/* PHASE 1: INCIDENT */}
+        <PhaseCard phase="incident" isActive={activePhase === 'incident'}>
+          <div>
+            <div
+              style={{
+                fontFamily: 'monospace',
+                fontSize: 12,
+                fontWeight: 700,
+                color: '#1F2937',
+                marginBottom: 8,
+              }}
+            >
+              Sequencer Latency Spike
             </div>
-            <div style={{ fontFamily: 'monospace', fontSize: 10, color: '#666' }}>
-              Block time: 2s → 8s | Z-score: 5.2σ
+            <div
+              style={{
+                fontFamily: 'monospace',
+                fontSize: 10,
+                color: '#4B5563',
+                lineHeight: 1.5,
+              }}
+            >
+              Block time: 2s → 8s
+              <br />
+              Z-score: 5.2σ
             </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          </div>
+        </PhaseCard>
 
-      {/* Timeline Phase */}
-      <AnimatePresence mode="wait">
-        {activePhase === 'timeline' && (
-          <motion.div
-            key="timeline"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            style={{ marginBottom: 12 }}
-          >
-            <div style={{ fontSize: 10, fontWeight: 700, color: '#0a0a0a', marginBottom: 8, fontFamily: 'monospace' }}>
-              Response Timeline
-            </div>
-            {timelineSteps.map((step, idx) => (
+        {/* PHASE 2: TIMELINE */}
+        <PhaseCard phase="timeline" isActive={activePhase === 'timeline'}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            {timelineSteps.slice(0, 2).map((step, idx) => (
               <div
                 key={idx}
                 style={{
-                  display: 'flex',
-                  gap: 8,
-                  marginBottom: idx < timelineSteps.length - 1 ? 6 : 0,
-                  padding: '6px 0',
                   fontFamily: 'monospace',
-                  fontSize: 9,
+                  fontSize: 10,
+                  color: step.completed ? '#1F2937' : '#9CA3AF',
+                  fontWeight: step.completed ? 600 : 400,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
                 }}
               >
-                <div style={{
-                  minWidth: 60,
-                  padding: '4px 8px',
-                  background: step.completed ? '#00FF8815' : '#f0f0f0',
-                  border: `1px solid ${step.completed ? '#00FF8830' : '#ddd'}`,
-                  borderRadius: 3,
-                  textAlign: 'center',
-                  color: step.completed ? '#00FF88' : '#666',
-                  fontWeight: step.completed ? 700 : 400,
-                }}>
-                  {step.completed ? '✓' : '○'} {step.label}
-                </div>
-                <div style={{ color: '#666', flex: 1 }}>{step.time}</div>
+                <span>{step.completed ? '✓' : '○'} {step.label}</span>
+                <span style={{ fontSize: 9 }}>{step.time}</span>
               </div>
             ))}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* RCA Phase */}
-      <AnimatePresence mode="wait">
-        {(activePhase === 'rca' || activePhase === 'impact') && (
-          <motion.div
-            key="rca"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            style={{ marginBottom: 12 }}
-          >
-            <div style={{
-              padding: '10px 12px',
-              background: '#0055AA15',
-              border: '1px solid #0055AA30',
-              borderRadius: 4,
-              marginBottom: 8,
-            }}>
-              <div style={{ fontFamily: 'monospace', fontSize: 10, fontWeight: 700, color: '#0055AA', marginBottom: 4 }}>
-                RCA Result:
-              </div>
-              <div style={{ fontFamily: 'monospace', fontSize: 9, color: '#666' }}>
-                L1 RPC timeout. Proposer CPU at 95%.
-              </div>
-            </div>
-            <div style={{
-              padding: '10px 12px',
-              background: '#0055AA15',
-              border: '1px solid #0055AA30',
-              borderRadius: 4,
-            }}>
-              <div style={{ fontFamily: 'monospace', fontSize: 10, fontWeight: 700, color: '#0055AA', marginBottom: 4 }}>
-                Remediation:
-              </div>
-              <div style={{ fontFamily: 'monospace', fontSize: 9, color: '#666' }}>
-                Switch L1 RPC + scale proposer
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Impact Phase - Before/After */}
-      <AnimatePresence mode="wait">
-        {activePhase === 'impact' && (
-          <motion.div
-            key="impact"
-            initial={{ opacity: 0, y: 4 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -4 }}
-            style={{ marginBottom: 12 }}
-          >
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 10,
-            }}>
-              <div style={{
-                padding: '10px',
-                background: '#FF6B6B15',
-                border: '1px solid #FF6B6B30',
-                borderRadius: 4,
-              }}>
-                <div style={{ fontFamily: 'monospace', fontSize: 9, fontWeight: 700, color: '#FF6B6B', marginBottom: 4 }}>
-                  Without AI:
-                </div>
-                <div style={{ fontFamily: 'monospace', fontSize: 8, color: '#666', lineHeight: 1.4 }}>
-                  On-call page<br/>
-                  15 min investigation<br/>
-                  <strong style={{ color: '#FF6B6B' }}>30 min downtime</strong>
-                </div>
-              </div>
-              <div style={{
-                padding: '10px',
-                background: '#00FF8815',
-                border: '1px solid #00FF8830',
-                borderRadius: 4,
-              }}>
-                <div style={{ fontFamily: 'monospace', fontSize: 9, fontWeight: 700, color: '#00FF88', marginBottom: 4 }}>
-                  With SentinAI:
-                </div>
-                <div style={{ fontFamily: 'monospace', fontSize: 8, color: '#666', lineHeight: 1.4 }}>
-                  Automatic detection<br/>
-                  RCA + planning<br/>
-                  <strong style={{ color: '#00FF88' }}>&lt;1 sec response</strong>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Bottom indicator */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 6,
-        paddingTop: 12,
-        borderTop: '1px solid #e0e0e0',
-      }}>
-        <Clock size={12} className="text-muted-foreground" />
-        <span style={{ fontFamily: 'monospace', fontSize: 9, color: '#999' }}>
-          {['Incident', 'Timeline', 'RCA', 'Impact'][phaseIdx]}
-        </span>
-        <div style={{ display: 'flex', gap: 4, marginLeft: 'auto' }}>
-          {PHASES.map((_, idx) => (
             <div
-              key={idx}
               style={{
-                width: 6,
+                fontSize: 9,
+                color: '#6B7280',
+                fontStyle: 'italic',
+                marginTop: 4,
+              }}
+            >
+              +150ms total
+            </div>
+          </div>
+        </PhaseCard>
+
+        {/* PHASE 3: RCA */}
+        <PhaseCard phase="rca" isActive={activePhase === 'rca'}>
+          <div>
+            <div
+              style={{
+                fontFamily: 'monospace',
+                fontSize: 11,
+                fontWeight: 700,
+                color: '#1F2937',
+                marginBottom: 6,
+              }}
+            >
+              Root Cause
+            </div>
+            <div
+              style={{
+                fontFamily: 'monospace',
+                fontSize: 10,
+                color: '#4B5563',
+                lineHeight: 1.5,
+                marginBottom: 8,
+              }}
+            >
+              L1 RPC timeout
+              <br />
+              Proposer CPU: 95%
+            </div>
+            <div
+              style={{
+                fontFamily: 'monospace',
+                fontSize: 9,
+                fontWeight: 600,
+                color: '#7C3AED',
+              }}
+            >
+              Action: Switch RPC + Scale
+            </div>
+          </div>
+        </PhaseCard>
+
+        {/* PHASE 4: IMPACT */}
+        <PhaseCard phase="impact" isActive={activePhase === 'impact'}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div>
+              <div
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: '#DC2626',
+                  marginBottom: 3,
+                }}
+              >
+                Without AI
+              </div>
+              <div
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: 9,
+                  color: '#4B5563',
+                }}
+              >
+                30 min downtime
+              </div>
+            </div>
+            <div>
+              <div
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: '#16A34A',
+                  marginBottom: 3,
+                }}
+              >
+                With SentinAI
+              </div>
+              <div
+                style={{
+                  fontFamily: 'monospace',
+                  fontSize: 9,
+                  color: '#4B5563',
+                }}
+              >
+                &lt;1 sec response
+              </div>
+            </div>
+          </div>
+        </PhaseCard>
+      </div>
+
+      {/* Progress Indicator */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          paddingTop: 16,
+          borderTop: '1px solid #E5E7EB',
+        }}
+      >
+        <span
+          style={{
+            fontFamily: 'monospace',
+            fontSize: 10,
+            fontWeight: 600,
+            color: '#6B7280',
+            letterSpacing: '0.05em',
+          }}
+        >
+          INCIDENT RESPONSE FLOW
+        </span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {PHASES.map((phase, idx) => (
+            <motion.div
+              key={idx}
+              animate={{
+                width: idx <= phaseIdx ? 24 : 12,
+                opacity: idx <= phaseIdx ? 1 : 0.3,
+              }}
+              transition={{ duration: 0.3 }}
+              style={{
                 height: 6,
-                borderRadius: '50%',
-                background: idx <= phaseIdx ? '#0055AA' : '#ddd',
-                transition: 'all 0.3s ease',
+                borderRadius: 3,
+                background:
+                  phase === 'incident'
+                    ? '#DC2626'
+                    : phase === 'timeline'
+                      ? '#2563EB'
+                      : phase === 'rca'
+                        ? '#7C3AED'
+                        : '#16A34A',
               }}
             />
           ))}
