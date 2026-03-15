@@ -3,6 +3,21 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+function isValidSessionTokenClient(token: string): boolean {
+  try {
+    const parts = token.split('_');
+    if (parts.length !== 5 || parts[0] !== 'satv2') return false;
+    const expiresAtStr = parts[3];
+    const expiresAt = parseInt(expiresAtStr, 10);
+    if (isNaN(expiresAt) || Date.now() > expiresAt) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 declare global {
   interface Window {
     ethereum?: {
@@ -15,6 +30,19 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Check if already logged in
+  useEffect(() => {
+    const sessionToken = document.cookie
+      .split('; ')
+      .find((row) => row.startsWith('sentinai_admin_session='))
+      ?.split('=')[1];
+
+    if (sessionToken && isValidSessionTokenClient(sessionToken)) {
+      // Already logged in, redirect to admin dashboard
+      router.push('/admin');
+    }
+  }, [router]);
 
   async function handleConnect() {
     setIsConnecting(true);

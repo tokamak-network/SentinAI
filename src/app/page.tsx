@@ -345,7 +345,7 @@ function TopNavLinks() {
 
   return (
     <>
-      <a href="/admin" style={linkStyle}>ADMIN</a>
+      <a href="/admin/login" style={linkStyle}>ADMIN</a>
     </>
   );
 }
