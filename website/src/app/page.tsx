@@ -85,8 +85,8 @@ function Hero() {
               fontFamily: FONT, fontSize: 12, color: '#707070', lineHeight: 1.7,
               marginBottom: 32, maxWidth: 480,
             }}>
-              Geth, Reth, OP Stack, Arbitrum — AI-powered 24/7 autonomous ops for every EVM node.
-              Anomaly detection, policy-based planning, and approval-gated remediation.
+              AI-powered autonomous infrastructure for L1 & L2 nodes. Real-time anomaly detection, RCA, predictive scaling,
+              cost optimization, agent marketplace, and NLOps chat. Multi-chain support: Optimism, Arbitrum, ZK Stack, Thanos.
             </p>
 
             {/* CTAs */}
@@ -177,9 +177,9 @@ function Hero() {
 
 const clientGroups = [
   {
-    label: 'L2',
+    label: 'L2 CHAINS',
     color: '#D40000',
-    clients: ['OP Stack', 'Arbitrum Nitro', 'ZK Stack'],
+    clients: ['Optimism', 'Arbitrum Orbit', 'ZK Stack', 'Thanos'],
   },
   {
     label: 'L1 EXECUTION',
@@ -235,32 +235,47 @@ const capabilities = [
   {
     dot: '#D40000',
     title: 'Real-time Detection',
-    description: 'Monitors L2 operational anomalies — sync failures, sequencer stalls, infra instability. Z-Score + AI analysis pipeline.',
+    description: 'Z-Score statistical anomaly detection + AI semantic analysis. Monitors L2 sync, sequencer stalls, infra anomalies 24/7.',
   },
   {
     dot: '#0055AA',
-    title: 'Policy-based Planning',
-    description: 'Generates recovery plans based on risk tiers. Dangerous actions are blocked by default at the policy layer.',
-  },
-  {
-    dot: '#007A00',
-    title: 'Auto-execution',
-    description: 'Low-risk remediation actions (restart, scale) execute automatically within policy bounds. No human needed for routine ops.',
+    title: 'Root Cause Analysis',
+    description: 'RCA Engine traces fault propagation across infrastructure. Identifies root cause before impact spreads to L2.',
   },
   {
     dot: '#CC6600',
-    title: 'Approval Gating',
-    description: 'High-risk operations (drain, replace, rollback) require human approval via ChatOps. Fully auditable.',
+    title: 'Predictive Scaling',
+    description: 'ML-based load forecasting. Scales pods ahead of demand spikes. Prevents cascading failures before they happen.',
+  },
+  {
+    dot: '#007A00',
+    title: 'Auto-remediation',
+    description: 'Low-risk actions (restart, scale) auto-execute. High-risk ops require ChatOps approval. Always within policy bounds.',
+  },
+  {
+    dot: '#FFD700',
+    title: 'Cost Optimization',
+    description: 'Real-time cost tracking across chains. Recommends optimizations. 30-50% cost reduction via smart resource allocation.',
+  },
+  {
+    dot: '#FF6B6B',
+    title: 'Agent Marketplace',
+    description: 'Buy/sell AI agents for ops tasks. Dynamic pricing. Custom recovery playbooks. Growing ecosystem of pre-built solutions.',
   },
   {
     dot: '#0055AA',
-    title: 'Audit Trails',
-    description: 'Every decision, action, and outcome is logged with timestamps. Full traceability for ops teams and governance.',
+    title: 'NLOps Chat',
+    description: 'Operate via natural language. Ask "scale my sequencer by 20%" in Slack. AI understands context and executes safely.',
   },
   {
-    dot: '#D40000',
-    title: 'L1 Validator Monitoring',
-    description: 'Real-time detection of finality delays, peer isolation, and sync issues before they impact L2 operations.',
+    dot: '#007A00',
+    title: 'Admin Dashboard',
+    description: 'SIWE authentication. Real-time metrics, anomaly logs, cost breakdown. Manage marketplace catalog & pricing tiers.',
+  },
+  {
+    dot: '#CC6600',
+    title: 'Audit & Compliance',
+    description: 'Full transaction history. Every action logged with timestamps. Replay incidents for post-mortems and governance.',
   },
 ];
 
@@ -274,7 +289,7 @@ function WhatItDoes() {
             <div key={cap.title} style={{
               padding: '18px 20px',
               borderRight: (i + 1) % 3 !== 0 ? '1px solid #F0F0F0' : 'none',
-              borderBottom: i < 3 ? '1px solid #F0F0F0' : 'none',
+              borderBottom: i < capabilities.length - 3 ? '1px solid #F0F0F0' : 'none',
             }}>
               <div style={{
                 fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
