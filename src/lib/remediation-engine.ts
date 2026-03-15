@@ -19,6 +19,9 @@ import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 import logger from '@/lib/logger';
 import { appendOperationRecord } from '@/core/playbook-system/store';
 import type { LedgerOutcome } from '@/core/playbook-system/types';
+import { PatternMiner } from '@/lib/playbook-evolution/pattern-miner';
+import { getCoreRedis } from '@/core/redis';
+import type { IStateStore } from '@/types/redis';
 
 // ============================================================
 // UUID Generator
@@ -370,7 +373,57 @@ export async function executeRemediation(
   }
 
   void writeToOperationLedger(execution, event, playbook);
+
+  // Non-blocking: Trigger pattern mining asynchronously
+  // Don't await - let it run in background
+  triggerPatternMiningAsync(event.anomalies[0]?.metric ?? 'unknown').catch((err) => {
+    logger.warn('[RemediationEngine] Pattern mining trigger failed (non-blocking)', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
+
   return execution;
+}
+
+/**
+ * Async pattern mining trigger (fire-and-forget)
+ * 1. Check if evolution should trigger (threshold met)
+ * 2. If yes, call analyzeAndEvolve
+ * 3. Log errors but don't throw
+ */
+async function triggerPatternMiningAsync(anomalyType: string): Promise<void> {
+  try {
+    const redis = getCoreRedis();
+    if (!redis) {
+      logger.debug('[PatternMiner] Skipping: Redis not available (in-memory mode)');
+      return;
+    }
+
+    // We need to get the state store - try to get it from global context
+    // Since we don't have direct access to IStateStore here, we'll create a minimal mock
+    // for the PatternMiner to work with
+    const storeForMiner: Partial<IStateStore> = {
+      getOperationRecordCount: async () => 0,
+      getLastEvolutionTime: async () => 0,
+      getOperationRecords: async () => [],
+      setLastEvolutionTime: async () => {},
+    };
+
+    const miner = new PatternMiner(storeForMiner as IStateStore, redis);
+
+    const shouldTrigger = await miner.shouldTriggerEvolution();
+
+    if (shouldTrigger) {
+      logger.debug('[PatternMiner] Evolution threshold met, starting analyzeAndEvolve');
+      await miner.analyzeAndEvolve();
+    }
+  } catch (err) {
+    // Non-blocking: silently fail (log only)
+    logger.warn('[PatternMiner] Trigger failed (non-blocking)', {
+      anomalyType,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 /**

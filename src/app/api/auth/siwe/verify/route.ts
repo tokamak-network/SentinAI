@@ -2,94 +2,105 @@
  * POST /api/auth/siwe/verify
  * Verifies SIWE message and issues session cookie.
  * Body: { address, signature, message }
- * Response: { ok: true } with Set-Cookie header
+ * Response: { ok: true, message: "Session created successfully" } with Set-Cookie header
  */
 
-import { verifyMessage } from 'viem';
-import { getAddress } from 'viem';
-import { getNonceStore } from '@/lib/nonce-store';
+import { verifyMessage, getAddress } from 'viem';
+import { consumeNonce } from '@/lib/nonce-store';
 import { getAdminAddress, issueSessionToken, buildSessionCookie } from '@/lib/siwe-session';
+import logger from '@/lib/logger';
 
 export async function POST(request: Request): Promise<Response> {
+  let body: unknown;
   try {
-    const body = await request.json();
-    const { address, signature, message } = body;
+    body = await request.json();
+  } catch (parseError) {
+    logger.error('[SIWE Verify] Failed to parse JSON', parseError);
+    return Response.json({ error: 'Invalid request' }, { status: 400 });
+  }
+
+  try {
+    const { address, signature, message } = body as Record<string, unknown>;
 
     // Validate input format
-    if (!address || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
-      return Response.json({ error: 'Invalid address format' }, { status: 400 });
+    if (!address || typeof address !== 'string' || !/^0x[a-fA-F0-9]{40}$/.test(address)) {
+      return Response.json({ error: 'Invalid request' }, { status: 400 });
     }
 
-    if (!signature || !/^0x[a-fA-F0-9]{130}$/.test(signature)) {
-      return Response.json({ error: 'Invalid signature format' }, { status: 400 });
+    if (!signature || typeof signature !== 'string' || !/^0x[a-fA-F0-9]{130}$/.test(signature)) {
+      return Response.json({ error: 'Invalid request' }, { status: 400 });
     }
 
     if (!message || typeof message !== 'string') {
-      return Response.json({ error: 'Invalid message' }, { status: 400 });
+      return Response.json({ error: 'Invalid request' }, { status: 400 });
     }
 
+    const addressLower = address.toLowerCase() as `0x${string}`;
+
     // Step 1: Extract and validate nonce from message
-    const nonceMatch = message.match(/Nonce: ([a-f0-9]{32})/i);
+    const nonceMatch = message.match(/Nonce:\s+([a-f0-9]{64})/i);
     if (!nonceMatch) {
-      return Response.json({ error: 'Nonce not found in message' }, { status: 400 });
+      logger.warn('[SIWE Verify] Nonce not found in message');
+      return Response.json({ error: 'Invalid request' }, { status: 400 });
     }
     const nonce = nonceMatch[1];
 
-    // Step 2: Consume nonce (1-use pattern)
-    const nonceValid = await getNonceStore().consume(address as `0x${string}`, nonce);
+    // Step 2: Consume nonce (1-use pattern, atomic)
+    const nonceValid = await consumeNonce(addressLower, nonce);
     if (!nonceValid) {
-      return Response.json(
-        { error: 'Invalid or expired nonce' },
-        { status: 401 }
-      );
+      logger.warn('[SIWE Verify] Invalid or expired nonce for address', { address: addressLower });
+      return Response.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
     // Step 3: Verify signature using viem
     let isValid: boolean;
     try {
       isValid = await verifyMessage({
-        address: address as `0x${string}`,
+        address: addressLower,
         message,
         signature: signature as `0x${string}`,
       });
     } catch (error) {
-      console.error('[SIWE Verify] Signature verification failed:', error);
-      return Response.json({ error: 'Signature verification failed' }, { status: 401 });
+      logger.error('[SIWE Verify] Signature verification failed:', error);
+      return Response.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
     if (!isValid) {
+      logger.warn('[SIWE Verify] Signature verification returned false', { address: addressLower });
       return Response.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
     // Step 4: Check if signer is admin
     const adminAddress = getAdminAddress();
     if (!adminAddress) {
-      console.error('[SIWE Verify] Admin address not configured');
-      return Response.json(
-        { error: 'Server configuration error' },
-        { status: 500 }
-      );
+      logger.error('[SIWE Verify] Admin address not configured');
+      return Response.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
-    // Normalize addresses for comparison
-    const signerAddress = getAddress(address as `0x${string}`);
+    // Normalize addresses for comparison (case-insensitive)
+    const signerAddress = getAddress(addressLower);
     const normalizedAdmin = getAddress(adminAddress);
 
     if (signerAddress.toLowerCase() !== normalizedAdmin.toLowerCase()) {
-      return Response.json(
-        { error: 'Not authorized to access marketplace admin' },
-        { status: 403 }
-      );
+      logger.warn('[SIWE Verify] Address not authorized for marketplace admin', {
+        signer: signerAddress,
+        admin: normalizedAdmin,
+      });
+      return Response.json({ error: 'Address not authorized' }, { status: 403 });
     }
 
     // Step 5: Issue session token and set cookie
     const sessionToken = issueSessionToken(signerAddress);
-    const response = Response.json({ ok: true }, { status: 200 });
+    const response = Response.json(
+      { ok: true, message: 'Session created successfully' },
+      { status: 200 }
+    );
     response.headers.set('Set-Cookie', buildSessionCookie(sessionToken));
 
+    logger.info('[SIWE Verify] Session created for address', { address: signerAddress });
     return response;
   } catch (error) {
-    console.error('[SIWE Verify] Request processing error:', error);
-    return Response.json({ error: 'Request processing failed' }, { status: 500 });
+    logger.error('[SIWE Verify] Request processing error:', error);
+    return Response.json({ error: 'Invalid request' }, { status: 400 });
   }
 }

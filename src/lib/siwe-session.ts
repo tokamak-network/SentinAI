@@ -5,7 +5,7 @@
  * No external storage needed (HMAC-verified).
  */
 
-import { createHmac } from 'crypto';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { getAddress } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import logger from '@/lib/logger';
@@ -58,20 +58,32 @@ function computeHmac(
   expiresAt: number
 ): string {
   const secret = getHmacSecret();
-  const data = `${address.toLowerCase()}:${issuedAt}:${expiresAt}`;
+  const data = `satv2_${address}_${issuedAt}_${expiresAt}`;
   return createHmac('sha256', secret).update(data).digest('hex');
 }
 
 export function issueSessionToken(address: `0x${string}`): string {
+  const apiKey = process.env.SENTINAI_API_KEY;
+  if (!apiKey) {
+    throw new Error('SENTINAI_API_KEY is not configured');
+  }
+
   const checksumAddress = getAddress(address);
   const issuedAt = Date.now();
   const expiresAt = issuedAt + SESSION_TTL_MS;
 
   const hmac = computeHmac(checksumAddress, issuedAt, expiresAt);
-  return `satv2_${checksumAddress.toLowerCase()}_${issuedAt}_${expiresAt}_${hmac}`;
+  // Store address without 0x prefix in token to avoid parsing issues
+  return `satv2_${checksumAddress.slice(2)}_${issuedAt}_${expiresAt}_${hmac}`;
 }
 
 export function verifySessionToken(token: string): AdminSession | null {
+  const apiKey = process.env.SENTINAI_API_KEY;
+  if (!apiKey) {
+    logger.warn('[SIWE] SENTINAI_API_KEY is not configured; cannot verify session tokens');
+    return null;
+  }
+
   try {
     const parts = token.split('_');
     if (parts.length !== 5 || parts[0] !== 'satv2') return null;
@@ -84,22 +96,38 @@ export function verifySessionToken(token: string): AdminSession | null {
     // Validate timestamp format
     if (isNaN(issuedAt) || isNaN(expiresAt)) return null;
 
+    // Validate address format (40 hex characters without 0x prefix)
+    if (!addressStr.match(/^[0-9a-fA-F]{40}$/)) {
+      return null;
+    }
+
     // Check expiration
     if (Date.now() > expiresAt) {
       logger.debug('[SIWE] Session token expired', { address, expiresAt });
       return null;
     }
 
-    // Verify HMAC
+    // Verify HMAC using timing-safe comparison
     const expectedHmac = computeHmac(address, issuedAt, expiresAt);
-    if (providedHmac !== expectedHmac) {
-      logger.warn('[SIWE] Session token HMAC mismatch', { address });
+    try {
+      const expectedBuffer = Buffer.from(expectedHmac);
+      const providedBuffer = Buffer.from(providedHmac);
+
+      if (expectedBuffer.length !== providedBuffer.length) {
+        return null;
+      }
+
+      if (!timingSafeEqual(expectedBuffer, providedBuffer)) {
+        logger.warn('[SIWE] Session token HMAC mismatch', { address });
+        return null;
+      }
+    } catch {
       return null;
     }
 
     return { address, issuedAt, expiresAt };
   } catch (error) {
-    logger.error('[SIWE] Failed to verify session token', error);
+    logger.debug('[SIWE] Failed to verify session token', error);
     return null;
   }
 }
