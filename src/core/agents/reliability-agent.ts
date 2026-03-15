@@ -29,6 +29,10 @@ const logger = createLogger('ReliabilityAgent');
 export class ReliabilityAgent extends DomainAgent {
   readonly domain: DomainAgentType = 'reliability';
 
+  /** Track consecutive health-check failures to avoid false positives from transient blips */
+  private l1HealthCheckFailures = 0;
+  private static readonly L1_FAILURE_THRESHOLD = 2;
+
   constructor(config: { instanceId: string; protocolId: string; intervalMs?: number }) {
     super({ ...config, intervalMs: config.intervalMs ?? 30_000 });
   }
@@ -37,16 +41,25 @@ export class ReliabilityAgent extends DomainAgent {
     const startMs = Date.now();
     const issues: Array<{ type: string; detail: string }> = [];
 
-    // 1. L1 RPC health check
+    // 1. L1 RPC health check — require consecutive failures before emitting
     try {
       const activeUrl = getActiveL1RpcUrl();
       if (activeUrl) {
         const healthy = await healthCheckEndpoint(activeUrl);
         if (!healthy) {
-          issues.push({
-            type: 'l1-rpc-unhealthy',
-            detail: `Active L1 RPC endpoint failed health check`,
-          });
+          this.l1HealthCheckFailures += 1;
+          if (this.l1HealthCheckFailures >= ReliabilityAgent.L1_FAILURE_THRESHOLD) {
+            issues.push({
+              type: 'l1-rpc-unhealthy',
+              detail: `Active L1 RPC endpoint failed health check ${this.l1HealthCheckFailures} consecutive times`,
+            });
+          } else {
+            logger.warn(
+              `[ReliabilityAgent:${this.instanceId}] L1 health check failed (${this.l1HealthCheckFailures}/${ReliabilityAgent.L1_FAILURE_THRESHOLD}), waiting for confirmation`
+            );
+          }
+        } else {
+          this.l1HealthCheckFailures = 0;
         }
       }
     } catch {
@@ -82,6 +95,9 @@ export class ReliabilityAgent extends DomainAgent {
 
     // 4. Emit reliability issues
     if (issues.length > 0) {
+      // Reset counter after emitting so the threshold re-applies for the next incident
+      this.l1HealthCheckFailures = 0;
+
       const bus = getAgentEventBus();
       bus.emit({
         type: 'reliability-issue',

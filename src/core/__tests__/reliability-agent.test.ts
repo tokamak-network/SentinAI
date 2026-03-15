@@ -91,13 +91,27 @@ describe('ReliabilityAgent', () => {
     expect(mockBusEmit).not.toHaveBeenCalled();
   });
 
-  it('should emit reliability-issue when L1 health check fails', async () => {
+  it('should not emit on a single L1 health check failure (transient)', async () => {
     const failover = await import('@/lib/l1-rpc-failover');
     (failover.healthCheckEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue(false);
 
     agent.start();
     await vi.advanceTimersByTimeAsync(55);
 
+    expect(mockBusEmit).not.toHaveBeenCalled();
+  });
+
+  it('should emit reliability-issue after consecutive L1 health check failures', async () => {
+    const failover = await import('@/lib/l1-rpc-failover');
+    (failover.healthCheckEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+
+    agent.start();
+    // First tick — below threshold, no emit
+    await vi.advanceTimersByTimeAsync(55);
+    expect(mockBusEmit).not.toHaveBeenCalled();
+
+    // Second tick — reaches threshold, should emit
+    await vi.advanceTimersByTimeAsync(50);
     expect(mockBusEmit).toHaveBeenCalledWith(
       expect.objectContaining({
         type: 'reliability-issue',
@@ -108,6 +122,26 @@ describe('ReliabilityAgent', () => {
         }),
       })
     );
+  });
+
+  it('should reset failure counter when health check recovers', async () => {
+    const failover = await import('@/lib/l1-rpc-failover');
+    (failover.healthCheckEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+
+    agent.start();
+    // First tick — failure #1
+    await vi.advanceTimersByTimeAsync(55);
+    expect(mockBusEmit).not.toHaveBeenCalled();
+
+    // Recovery — health check succeeds, resets counter
+    (failover.healthCheckEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(mockBusEmit).not.toHaveBeenCalled();
+
+    // Fail again — should need 2 consecutive failures from scratch
+    (failover.healthCheckEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(mockBusEmit).not.toHaveBeenCalled();
   });
 
   it('should detect consecutive failures from failover state', async () => {
@@ -175,7 +209,9 @@ describe('ReliabilityAgent', () => {
     const { recordExperience } = await import('@/lib/experience-store');
 
     agent.start();
+    // Need 2 consecutive failures to trigger
     await vi.advanceTimersByTimeAsync(55);
+    await vi.advanceTimersByTimeAsync(50);
 
     expect(recordExperience).toHaveBeenCalledWith(
       expect.objectContaining({

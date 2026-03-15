@@ -522,6 +522,18 @@ export async function executeFailover(
   reason: string
 ): Promise<FailoverEvent | null> {
   const state = getState();
+
+  // Cooldown: skip if a failover was executed recently
+  if (
+    state.lastFailoverTime &&
+    Date.now() - state.lastFailoverTime < FAILOVER_COOLDOWN_MS
+  ) {
+    logger.warn(
+      `Failover cooldown active (${Math.ceil((FAILOVER_COOLDOWN_MS - (Date.now() - state.lastFailoverTime)) / 1000)}s remaining), skipping: ${reason}`
+    );
+    return null;
+  }
+
   const fromUrl = state.activeUrl;
   const startIndex = state.activeIndex;
 
