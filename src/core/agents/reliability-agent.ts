@@ -16,6 +16,7 @@ import {
   healthCheckEndpoint,
   checkProxydBackends,
   getL1FailoverState,
+  hasHealthyBackup,
 } from '@/lib/l1-rpc-failover';
 import { DomainAgent } from '@/core/agents/domain-agent';
 import type { DomainAgentType } from '@/core/agents/domain-agent';
@@ -42,6 +43,7 @@ export class ReliabilityAgent extends DomainAgent {
     const issues: Array<{ type: string; detail: string }> = [];
 
     // 1. L1 RPC health check — require consecutive failures before emitting
+    let l1HealthPassed = false;
     try {
       const activeUrl = getActiveL1RpcUrl();
       if (activeUrl) {
@@ -60,6 +62,7 @@ export class ReliabilityAgent extends DomainAgent {
           }
         } else {
           this.l1HealthCheckFailures = 0;
+          l1HealthPassed = true;
         }
       }
     } catch {
@@ -80,21 +83,46 @@ export class ReliabilityAgent extends DomainAgent {
     }
 
     // 3. Failover state check — inspect active endpoint's consecutive failures
-    try {
-      const state = getL1FailoverState();
-      const activeEndpoint = state.endpoints[state.activeIndex];
-      if (activeEndpoint && activeEndpoint.consecutiveFailures >= 3) {
-        issues.push({
-          type: 'l1-consecutive-failures',
-          detail: `L1 RPC has ${activeEndpoint.consecutiveFailures} consecutive failures`,
-        });
+    //    Skip when our direct health check passed: the consecutiveFailures counter
+    //    is updated by a separate path (reportL1Failure) and may be stale.
+    if (!l1HealthPassed) {
+      try {
+        const state = getL1FailoverState();
+        const activeEndpoint = state.endpoints[state.activeIndex];
+        if (activeEndpoint && activeEndpoint.consecutiveFailures >= 3) {
+          issues.push({
+            type: 'l1-consecutive-failures',
+            detail: `L1 RPC has ${activeEndpoint.consecutiveFailures} consecutive failures`,
+          });
+        }
+      } catch {
+        // Non-fatal
       }
-    } catch {
-      // Non-fatal
     }
 
-    // 4. Emit reliability issues
-    if (issues.length > 0) {
+    // 4. Pre-check: for failover-related issues, verify a backup endpoint exists
+    //    before emitting. Avoids unnecessary remediation failure + Slack alarm.
+    const failoverIssues = issues.filter(
+      i => i.type === 'l1-rpc-unhealthy' || i.type === 'l1-consecutive-failures'
+    );
+    const nonFailoverIssues = issues.filter(
+      i => i.type !== 'l1-rpc-unhealthy' && i.type !== 'l1-consecutive-failures'
+    );
+
+    let emittableIssues = [...nonFailoverIssues];
+    if (failoverIssues.length > 0) {
+      const backupAvailable = await hasHealthyBackup();
+      if (backupAvailable) {
+        emittableIssues.push(...failoverIssues);
+      } else {
+        logger.warn(
+          `[ReliabilityAgent:${this.instanceId}] L1 issue detected but no healthy backup endpoint available, suppressing failover event`
+        );
+      }
+    }
+
+    // 5. Emit reliability issues
+    if (emittableIssues.length > 0) {
       // Reset counter after emitting so the threshold re-applies for the next incident
       this.l1HealthCheckFailures = 0;
 
@@ -102,20 +130,20 @@ export class ReliabilityAgent extends DomainAgent {
       bus.emit({
         type: 'reliability-issue',
         instanceId: this.instanceId,
-        payload: { issues, issueCount: issues.length },
+        payload: { issues: emittableIssues, issueCount: emittableIssues.length },
         timestamp: new Date().toISOString(),
         correlationId: randomUUID(),
       });
 
       await this.recordDomainExperience({
-        trigger: { type: issues[0].type, metric: 'l1_health', value: issues.length },
-        action: `reliability issue: ${issues.map(i => i.type).join(', ')}`,
+        trigger: { type: emittableIssues[0].type, metric: 'l1_health', value: emittableIssues.length },
+        action: `reliability issue: ${emittableIssues.map(i => i.type).join(', ')}`,
         outcome: 'success',
         resolutionMs: Date.now() - startMs,
       });
 
       logger.info(
-        `[ReliabilityAgent:${this.instanceId}] ${issues.length} reliability issue(s) detected`
+        `[ReliabilityAgent:${this.instanceId}] ${emittableIssues.length} reliability issue(s) detected`
       );
     }
   }

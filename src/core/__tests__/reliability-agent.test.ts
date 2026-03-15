@@ -9,6 +9,7 @@ vi.mock('@/lib/l1-rpc-failover', () => ({
   getActiveL1RpcUrl: vi.fn().mockReturnValue('https://eth.example.com'),
   healthCheckEndpoint: vi.fn().mockResolvedValue(true),
   checkProxydBackends: vi.fn().mockResolvedValue(null),
+  hasHealthyBackup: vi.fn().mockResolvedValue(true),
   getL1FailoverState: vi.fn().mockReturnValue({
     activeUrl: 'https://eth.example.com',
     activeIndex: 0,
@@ -66,6 +67,7 @@ describe('ReliabilityAgent', () => {
       endpoints: [{ url: 'https://eth.example.com', healthy: true, lastSuccess: null, lastFailure: null, consecutiveFailures: 0 }],
       lastFailoverTime: null, events: [], proxydHealth: [], backendReplacements: [], spareUrls: [],
     });
+    (failover.hasHealthyBackup as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 
     agent = new ReliabilityAgent({ instanceId: 'inst-1', protocolId: 'opstack', intervalMs: 50 });
   });
@@ -144,8 +146,10 @@ describe('ReliabilityAgent', () => {
     expect(mockBusEmit).not.toHaveBeenCalled();
   });
 
-  it('should detect consecutive failures from failover state', async () => {
+  it('should detect consecutive failures from failover state when health check also fails', async () => {
     const failover = await import('@/lib/l1-rpc-failover');
+    // Health check must also fail, otherwise check #3 is skipped
+    (failover.healthCheckEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue(false);
     (failover.getL1FailoverState as ReturnType<typeof vi.fn>).mockReturnValue({
       activeUrl: 'https://eth.example.com',
       activeIndex: 0,
@@ -154,6 +158,7 @@ describe('ReliabilityAgent', () => {
     });
 
     agent.start();
+    // First tick — health check fails but below threshold (1/2), however consecutiveFailures check triggers
     await vi.advanceTimersByTimeAsync(55);
 
     expect(mockBusEmit).toHaveBeenCalledWith(
@@ -162,6 +167,61 @@ describe('ReliabilityAgent', () => {
         payload: expect.objectContaining({
           issues: expect.arrayContaining([
             expect.objectContaining({ type: 'l1-consecutive-failures' }),
+          ]),
+        }),
+      })
+    );
+  });
+
+  it('should skip failover state check when direct health check passes (stale counter)', async () => {
+    const failover = await import('@/lib/l1-rpc-failover');
+    // Direct health check passes
+    (failover.healthCheckEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+    // But failover state has stale consecutiveFailures
+    (failover.getL1FailoverState as ReturnType<typeof vi.fn>).mockReturnValue({
+      activeUrl: 'https://eth.example.com',
+      activeIndex: 0,
+      endpoints: [{ url: 'https://eth.example.com', healthy: false, lastSuccess: null, lastFailure: null, consecutiveFailures: 10 }],
+      lastFailoverTime: null, events: [], proxydHealth: [], backendReplacements: [], spareUrls: [],
+    });
+
+    agent.start();
+    await vi.advanceTimersByTimeAsync(55);
+
+    // Should NOT emit — health check passed, stale counter should be ignored
+    expect(mockBusEmit).not.toHaveBeenCalled();
+  });
+
+  it('should suppress failover event when no healthy backup is available', async () => {
+    const failover = await import('@/lib/l1-rpc-failover');
+    (failover.healthCheckEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+    (failover.hasHealthyBackup as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+
+    agent.start();
+    // 2 consecutive failures to reach threshold
+    await vi.advanceTimersByTimeAsync(55);
+    await vi.advanceTimersByTimeAsync(50);
+
+    // Should NOT emit — no backup available
+    expect(mockBusEmit).not.toHaveBeenCalled();
+  });
+
+  it('should emit failover event when healthy backup is available', async () => {
+    const failover = await import('@/lib/l1-rpc-failover');
+    (failover.healthCheckEndpoint as ReturnType<typeof vi.fn>).mockResolvedValue(false);
+    (failover.hasHealthyBackup as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+
+    agent.start();
+    // 2 consecutive failures to reach threshold
+    await vi.advanceTimersByTimeAsync(55);
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(mockBusEmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'reliability-issue',
+        payload: expect.objectContaining({
+          issues: expect.arrayContaining([
+            expect.objectContaining({ type: 'l1-rpc-unhealthy' }),
           ]),
         }),
       })

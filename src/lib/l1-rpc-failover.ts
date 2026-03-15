@@ -1236,6 +1236,22 @@ export function getL1FailoverState(): L1FailoverState {
 }
 
 /**
+ * Check if any backup (non-active) endpoint is healthy.
+ * Used by ReliabilityAgent to avoid emitting reliability-issue when no failover target exists.
+ */
+export async function hasHealthyBackup(): Promise<boolean> {
+  const state = getState();
+  if (state.endpoints.length <= 1) return false;
+
+  for (let i = 0; i < state.endpoints.length; i++) {
+    if (i === state.activeIndex) continue;
+    const healthy = await healthCheckEndpoint(state.endpoints[i].url);
+    if (healthy) return true;
+  }
+  return false;
+}
+
+/**
  * Get recent failover events.
  */
 export function getFailoverEvents(): FailoverEvent[] {
