@@ -399,17 +399,12 @@ async function triggerPatternMiningAsync(anomalyType: string): Promise<void> {
       return;
     }
 
-    // We need to get the state store - try to get it from global context
-    // Since we don't have direct access to IStateStore here, we'll create a minimal mock
-    // for the PatternMiner to work with
-    const storeForMiner: Partial<IStateStore> = {
-      getOperationRecordCount: async () => 0,
-      getLastEvolutionTime: async () => 0,
-      getOperationRecords: async () => [],
-      setLastEvolutionTime: async () => {},
-    };
+    // PatternMiner uses (store as any).getOperationRecordCount and getLastEvolutionTime
+    // which may not exist (handled gracefully in PatternMiner with optional chaining)
+    // Create minimal store with known IStateStore methods
+    const storeForMiner: Partial<IStateStore> = {};
 
-    const miner = new PatternMiner(storeForMiner as IStateStore, redis);
+    const miner = new PatternMiner(storeForMiner as any, redis);
 
     const shouldTrigger = await miner.shouldTriggerEvolution();
 

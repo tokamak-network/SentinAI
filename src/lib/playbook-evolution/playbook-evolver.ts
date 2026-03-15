@@ -1,5 +1,6 @@
 import { EvolvedPlaybook, EvolvedPlaybookSchema, IncidentPattern } from '@/lib/types/playbook-evolution';
-import type Anthropic from '@anthropic-ai/sdk';
+// TODO: Install @anthropic-ai/sdk when implementing full LLM integration
+// import type Anthropic from '@anthropic-ai/sdk';
 
 const MODEL = 'claude-sonnet-4-5-20250929';
 const TIMEOUT_MS = 60 * 1000;
@@ -33,17 +34,17 @@ export class Result<T, E> {
     return this.error;
   }
 
-  static ok<T, E>(value: T): Result<T, E> {
-    return new Result(value, null);
+  static ok<T, E = any>(value: T): Result<T, E> {
+    return new Result(value, null) as Result<T, E>;
   }
 
-  static err<T, E>(error: E): Result<T, E> {
-    return new Result(null, error);
+  static err<T = any, E = any>(error: E): Result<T, E> {
+    return new Result(null, error) as Result<T, E>;
   }
 }
 
 export class PlaybookEvolver {
-  constructor(private aiClient: Anthropic) {}
+  constructor(private aiClient: any) {} // TODO: type with Anthropic when SDK installed
 
   async generate(
     patterns: IncidentPattern[],
@@ -67,7 +68,7 @@ export class PlaybookEvolver {
         ],
       });
 
-      const textContent = response.content.find(c => c.type === 'text');
+      const textContent = response.content.find((c: any) => c.type === 'text');
       if (!textContent || textContent.type !== 'text') {
         return Result.err(new Error('No text content in API response'));
       }

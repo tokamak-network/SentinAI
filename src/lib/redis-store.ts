@@ -42,7 +42,7 @@ import {
 import { GoalLearningEpisode } from '@/types/goal-learning';
 import { RCAHistoryEntry } from '@/types/rca';
 import type { ExperienceEntry, LifetimeStats } from '@/types/experience';
-import type { MarketplacePricingConfig, OutcomeBonusConfig } from '@/types/marketplace';
+import type { MarketplacePricingConfig, OutcomeBonusConfig, CatalogAgent, MarketplaceOrder } from '@/types/marketplace';
 import type {
   IncidentPattern,
   ABTestSession,
@@ -1457,6 +1457,42 @@ export class RedisStateStore implements IStateStore {
     await this.client.set(key, JSON.stringify(config));
   }
 
+  // === Marketplace Catalog ===
+
+  async getMarketplaceCatalogAgents(defaultAgents: CatalogAgent[]): Promise<CatalogAgent[]> {
+    const key = this.key('marketplace:catalog:agents');
+    try {
+      const data = await this.client.get(key);
+      if (!data) return defaultAgents;
+      return JSON.parse(data) as CatalogAgent[];
+    } catch {
+      return defaultAgents;
+    }
+  }
+
+  async setMarketplaceCatalogAgents(agents: CatalogAgent[]): Promise<void> {
+    const key = this.key('marketplace:catalog:agents');
+    await this.client.set(key, JSON.stringify(agents));
+  }
+
+  // === Marketplace Orders ===
+
+  async getMarketplaceOrders(defaultOrders: MarketplaceOrder[]): Promise<MarketplaceOrder[]> {
+    const key = this.key('marketplace:orders');
+    try {
+      const data = await this.client.get(key);
+      if (!data) return defaultOrders;
+      return JSON.parse(data) as MarketplaceOrder[];
+    } catch {
+      return defaultOrders;
+    }
+  }
+
+  async setMarketplaceOrders(orders: MarketplaceOrder[]): Promise<void> {
+    const key = this.key('marketplace:orders');
+    await this.client.set(key, JSON.stringify(orders));
+  }
+
   // === Phase 6: Playbook Evolution (Task 6) ===
 
   async savePattern(pattern: IncidentPattern): Promise<void> {
@@ -2642,6 +2678,28 @@ export class InMemoryStateStore implements IStateStore {
 
   async setMarketplaceBonusConfig(config: OutcomeBonusConfig): Promise<void> {
     this.marketplaceBonusConfig = config;
+  }
+
+  // === Marketplace Catalog ===
+  private catalogAgents: CatalogAgent[] = [];
+
+  async getMarketplaceCatalogAgents(defaultAgents: CatalogAgent[]): Promise<CatalogAgent[]> {
+    return this.catalogAgents.length > 0 ? this.catalogAgents : defaultAgents;
+  }
+
+  async setMarketplaceCatalogAgents(agents: CatalogAgent[]): Promise<void> {
+    this.catalogAgents = agents;
+  }
+
+  // === Marketplace Orders ===
+  private orders: MarketplaceOrder[] = [];
+
+  async getMarketplaceOrders(defaultOrders: MarketplaceOrder[]): Promise<MarketplaceOrder[]> {
+    return this.orders.length > 0 ? this.orders : defaultOrders;
+  }
+
+  async setMarketplaceOrders(orders: MarketplaceOrder[]): Promise<void> {
+    this.orders = orders;
   }
 
   // === Phase 6: Playbook Evolution (Task 6) ===

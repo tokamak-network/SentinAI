@@ -18,7 +18,9 @@ const createTestConfig = (overrides?: Partial<RemediationConfig>): RemediationCo
   cooldownMinutes: 1,
   maxExecutionsPerHour: 10,
   maxExecutionsPerDay: 50,
+  maxAutoScaleVcpu: 8,
   allowGuardedActions: true,
+  circuitBreakerThreshold: 3,
   ...overrides,
 });
 

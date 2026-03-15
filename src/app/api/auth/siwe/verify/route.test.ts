@@ -66,7 +66,7 @@ describe('POST /api/auth/siwe/verify', () => {
     vi.mocked(siweSessionModule.buildSessionCookie).mockReturnValue(
       'sentinai_admin_session=satv2_token_123; HttpOnly; Path=/; Max-Age=28800'
     );
-    vi.mocked(viemModule.getAddress).mockImplementation((addr) => addr);
+    vi.mocked(viemModule.getAddress).mockImplementation((addr) => addr as `0x${string}`);
   });
 
   describe('address validation', () => {

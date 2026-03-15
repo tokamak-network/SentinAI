@@ -21,16 +21,16 @@ vi.mock('@/lib/logger', () => ({
 vi.mock('ioredis', () => {
   const mockRedis = {
     connect: vi.fn(),
-    on: vi.fn(function () {
+    on: vi.fn(function (this: any) {
       return this;
     }),
     setex: vi.fn(),
-    multi: vi.fn(function () {
+    multi: vi.fn(function (this: any) {
       return {
-        get: vi.fn(function () {
+        get: vi.fn(function (this: any) {
           return this;
         }),
-        del: vi.fn(function () {
+        del: vi.fn(function (this: any) {
           return this;
         }),
         exec: vi.fn(),
