@@ -55,10 +55,10 @@ function Hero() {
         ))}
       </div>
 
-      <div style={{ maxWidth: 1100, margin: '0 auto', padding: '48px 24px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 60 }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto', padding: '48px 24px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 48 }}>
           {/* Left: text */}
-          <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ flex: '0 0 520px', minWidth: 0 }}>
             {/* Badge */}
             <div style={{
               display: 'inline-flex', alignItems: 'center', gap: 8,
@@ -164,7 +164,7 @@ function Hero() {
           </div>
 
           {/* Right: dashboard miniature */}
-          <div style={{ flex: 1, minWidth: 0, maxWidth: 520 }} className="hidden lg:block">
+          <div style={{ flex: 1, minWidth: 0 }} className="hidden lg:block">
             <HeroMiniature />
           </div>
         </div>
