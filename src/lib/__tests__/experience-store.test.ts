@@ -26,30 +26,35 @@ vi.mock('@/lib/redis-store', () => ({
     },
     getExperienceCount: async () => experienceLog.length,
     incrementLifetimeStats: async (instanceId: string, entry: ExperienceEntry) => {
-      const existing = lifetimeStatsMap.get(instanceId);
-      if (existing) {
-        existing.totalOps += 1;
-        if (entry.outcome === 'success') existing.successCount += 1;
-        else if (entry.outcome === 'failure') existing.failureCount += 1;
-        else existing.partialCount += 1;
-        existing.totalResolutionMs += entry.resolutionMs;
-        existing.lastSeenAt = entry.timestamp;
-        existing.categories[entry.category] = (existing.categories[entry.category] || 0) + 1;
-      } else {
-        lifetimeStatsMap.set(instanceId, {
-          totalOps: 1,
-          successCount: entry.outcome === 'success' ? 1 : 0,
-          failureCount: entry.outcome === 'failure' ? 1 : 0,
-          partialCount: entry.outcome === 'partial' ? 1 : 0,
-          totalResolutionMs: entry.resolutionMs,
-          firstSeenAt: entry.timestamp,
-          lastSeenAt: entry.timestamp,
-          categories: { [entry.category]: 1 },
-        });
+      for (const id of [instanceId, '_global']) {
+        const existing = lifetimeStatsMap.get(id);
+        if (existing) {
+          existing.totalOps += 1;
+          if (entry.outcome === 'success') existing.successCount += 1;
+          else if (entry.outcome === 'failure') existing.failureCount += 1;
+          else existing.partialCount += 1;
+          existing.totalResolutionMs += entry.resolutionMs;
+          existing.lastSeenAt = entry.timestamp;
+          existing.categories[entry.category] = (existing.categories[entry.category] || 0) + 1;
+        } else {
+          lifetimeStatsMap.set(id, {
+            totalOps: 1,
+            successCount: entry.outcome === 'success' ? 1 : 0,
+            failureCount: entry.outcome === 'failure' ? 1 : 0,
+            partialCount: entry.outcome === 'partial' ? 1 : 0,
+            totalResolutionMs: entry.resolutionMs,
+            firstSeenAt: entry.timestamp,
+            lastSeenAt: entry.timestamp,
+            categories: { [entry.category]: 1 },
+          });
+        }
       }
     },
     getLifetimeStats: async (instanceId: string) => {
       return lifetimeStatsMap.get(instanceId) ?? null;
+    },
+    getGlobalLifetimeStats: async () => {
+      return lifetimeStatsMap.get('_global') ?? null;
     },
   }),
 }));

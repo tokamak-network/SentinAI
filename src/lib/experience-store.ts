@@ -112,6 +112,10 @@ export function computeExperienceStats(entries: ExperienceEntry[]): ExperienceSt
 
 export async function getExperienceStats(): Promise<ExperienceStats> {
   const store = getStore();
+  const globalLifetime = await store.getGlobalLifetimeStats();
+  if (globalLifetime) {
+    return lifetimeToExperienceStats(globalLifetime);
+  }
   const entries = await store.getExperience(5000);
   return computeExperienceStats(entries);
 }

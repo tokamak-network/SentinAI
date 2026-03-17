@@ -92,6 +92,7 @@ const RCA_HISTORY_TTL = 7 * 24 * 60 * 60; // 7 days
 const EXPERIENCE_MAX = 5000;
 const EXPERIENCE_TTL = 90 * 24 * 60 * 60; // 90 days
 const LIFETIME_CATEGORY_PREFIX = 'cat:';
+const LIFETIME_GLOBAL_ID = '_global';
 
 // Phase 6: Playbook Evolution Constants
 const PATTERN_TTL_SECONDS = 24 * 60 * 60; // 24 hours
@@ -1360,9 +1361,11 @@ export class RedisStateStore implements IStateStore {
   }
 
   async incrementLifetimeStats(instanceId: string, entry: ExperienceEntry): Promise<void> {
-    const key = this.key(KEYS.experienceLifetime(instanceId));
     const outcomeField = `${entry.outcome}Count`;
     const categoryField = `${LIFETIME_CATEGORY_PREFIX}${entry.category}`;
+
+    // Increment per-instance stats
+    const key = this.key(KEYS.experienceLifetime(instanceId));
     const multi = this.client.multi();
     multi.hincrby(key, 'totalOps', 1);
     multi.hincrby(key, outcomeField, 1);
@@ -1370,7 +1373,21 @@ export class RedisStateStore implements IStateStore {
     multi.hincrby(key, categoryField, 1);
     multi.hsetnx(key, 'firstSeenAt', entry.timestamp);
     multi.hset(key, 'lastSeenAt', entry.timestamp);
+
+    // Increment global aggregate stats
+    const globalKey = this.key(KEYS.experienceLifetime(LIFETIME_GLOBAL_ID));
+    multi.hincrby(globalKey, 'totalOps', 1);
+    multi.hincrby(globalKey, outcomeField, 1);
+    multi.hincrby(globalKey, 'totalResolutionMs', Math.round(entry.resolutionMs));
+    multi.hincrby(globalKey, categoryField, 1);
+    multi.hsetnx(globalKey, 'firstSeenAt', entry.timestamp);
+    multi.hset(globalKey, 'lastSeenAt', entry.timestamp);
+
     await multi.exec();
+  }
+
+  async getGlobalLifetimeStats(): Promise<LifetimeStats | null> {
+    return this.getLifetimeStats(LIFETIME_GLOBAL_ID);
   }
 
   async getLifetimeStats(instanceId: string): Promise<LifetimeStats | null> {
@@ -2631,27 +2648,34 @@ export class InMemoryStateStore implements IStateStore {
   }
 
   async incrementLifetimeStats(instanceId: string, entry: ExperienceEntry): Promise<void> {
-    const existing = this.lifetimeStatsMap.get(instanceId);
-    if (existing) {
-      existing.totalOps += 1;
-      if (entry.outcome === 'success') existing.successCount += 1;
-      else if (entry.outcome === 'failure') existing.failureCount += 1;
-      else existing.partialCount += 1;
-      existing.totalResolutionMs += entry.resolutionMs;
-      existing.lastSeenAt = entry.timestamp;
-      existing.categories[entry.category] = (existing.categories[entry.category] || 0) + 1;
-    } else {
-      this.lifetimeStatsMap.set(instanceId, {
-        totalOps: 1,
-        successCount: entry.outcome === 'success' ? 1 : 0,
-        failureCount: entry.outcome === 'failure' ? 1 : 0,
-        partialCount: entry.outcome === 'partial' ? 1 : 0,
-        totalResolutionMs: entry.resolutionMs,
-        firstSeenAt: entry.timestamp,
-        lastSeenAt: entry.timestamp,
-        categories: { [entry.category]: 1 },
-      });
+    // Increment both per-instance and global stats
+    for (const id of [instanceId, LIFETIME_GLOBAL_ID]) {
+      const existing = this.lifetimeStatsMap.get(id);
+      if (existing) {
+        existing.totalOps += 1;
+        if (entry.outcome === 'success') existing.successCount += 1;
+        else if (entry.outcome === 'failure') existing.failureCount += 1;
+        else existing.partialCount += 1;
+        existing.totalResolutionMs += entry.resolutionMs;
+        existing.lastSeenAt = entry.timestamp;
+        existing.categories[entry.category] = (existing.categories[entry.category] || 0) + 1;
+      } else {
+        this.lifetimeStatsMap.set(id, {
+          totalOps: 1,
+          successCount: entry.outcome === 'success' ? 1 : 0,
+          failureCount: entry.outcome === 'failure' ? 1 : 0,
+          partialCount: entry.outcome === 'partial' ? 1 : 0,
+          totalResolutionMs: entry.resolutionMs,
+          firstSeenAt: entry.timestamp,
+          lastSeenAt: entry.timestamp,
+          categories: { [entry.category]: 1 },
+        });
+      }
     }
+  }
+
+  async getGlobalLifetimeStats(): Promise<LifetimeStats | null> {
+    return this.getLifetimeStats(LIFETIME_GLOBAL_ID);
   }
 
   async getLifetimeStats(instanceId: string): Promise<LifetimeStats | null> {

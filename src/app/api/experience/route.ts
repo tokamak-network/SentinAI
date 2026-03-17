@@ -19,7 +19,9 @@ export async function GET(request: Request) {
 
     // Lifetime stats preferred (survives log rotation), fallback to raw computation
     const store = getStore();
-    const lifetime = instanceId ? await store.getLifetimeStats(instanceId) : null;
+    const lifetime = instanceId
+      ? await store.getLifetimeStats(instanceId)
+      : await store.getGlobalLifetimeStats();
 
     // When lifetime stats exist, only fetch 500 entries (for patterns + display).
     // Without lifetime stats, fetch full 5000 for raw stats computation.
@@ -58,7 +60,7 @@ export async function GET(request: Request) {
         confidence: p.confidence,
       })),
       tier: calculateTier(stats.operatingDays),
-      total: allEntries.length,
+      total: stats.totalOperations,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unknown error';

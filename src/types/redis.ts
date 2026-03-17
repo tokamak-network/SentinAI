@@ -205,6 +205,7 @@ export interface IStateStore {
   // Permanent per-instance cumulative stats (no TTL, no max)
   incrementLifetimeStats(instanceId: string, entry: ExperienceEntry): Promise<void>;
   getLifetimeStats(instanceId: string): Promise<LifetimeStats | null>;
+  getGlobalLifetimeStats(): Promise<LifetimeStats | null>;
 
   // === Marketplace Configuration ===
   // Dynamic pricing and bonus configuration stored in Redis
