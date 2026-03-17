@@ -881,6 +881,11 @@ export async function GET(request: Request) {
               memoryUsage: Math.round(containerUsage.memoryMiB),
               memoryPercent: Math.min(100, (containerUsage.memoryMiB / (currentVcpu * 2 * 1024)) * 100),
             } : {}),
+            // txCountPerBlock: leading indicator for traffic surge detection
+            // block.transactions is already fetched — zero additional RPC cost
+            ...(block ? {
+              txCountPerBlock: block.transactions.length,
+            } : {}),
           };
           await pushMetric(dataPoint);
         }
