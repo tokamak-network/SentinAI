@@ -10,6 +10,8 @@ export const agentMarketplaceRegistryEventNames = [
 
 export const agentMarketplaceRegistryAbi = parseAbi([
   'function register(string agentURI)',
+  'function latestAgentIdOf(address agent) view returns (uint256)',
+  'function agentUriOf(uint256 agentId) view returns (string)',
   agentMarketplaceRegistryCanonicalEvent,
   'event Register(address indexed agent, string agentURI)',
 ]);
