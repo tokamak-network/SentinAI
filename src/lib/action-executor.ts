@@ -612,6 +612,12 @@ export async function executeAction(
         break;
       }
 
+      case 'claim_bond': {
+        const gameIndex = resolvedAction.params?.gameIndex;
+        output = `Bond claim escalated to operator (game: ${gameIndex ?? 'all resolved'})`;
+        break;
+      }
+
       case 'escalate_operator':
         output = `Escalation required: ${resolvedAction.params?.message || 'EOA balance critically low'}`;
         break;

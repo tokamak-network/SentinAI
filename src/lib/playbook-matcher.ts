@@ -54,74 +54,175 @@ function identifyComponent(
   return 'system';
 }
 
+/** Metric alias map: alternate names → canonical names */
+const METRIC_ALIASES: Record<string, string> = {
+  batchPosterBalance: 'batcherBalance',
+};
+
 /**
- * Check if metric condition matches anomaly data
+ * Normalize metric name: resolve aliases and camelCase-ify space-separated names.
+ * e.g. "pod restart count" → "podRestartCount", "batchPosterBalance" → "batcherBalance"
  */
-function matchesMetricCondition(
+function normalizeMetric(raw: string): string {
+  const alias = METRIC_ALIASES[raw];
+  if (alias) return alias;
+  // "pod restart count" → "podRestartCount"
+  return raw.replace(/\s+(\w)/g, (_, c: string) => c.toUpperCase());
+}
+
+/** Parse time string (e.g. "300s", "2h", "24h") to seconds */
+function parseTimeSeconds(timeStr: string): number {
+  const m = timeStr.match(/^(\d+(?:\.\d+)?)(s|m|h|d)$/i);
+  if (!m) return NaN;
+  const n = parseFloat(m[1]);
+  switch (m[2].toLowerCase()) {
+    case 's': return n;
+    case 'm': return n * 60;
+    case 'h': return n * 3600;
+    case 'd': return n * 86400;
+    default: return NaN;
+  }
+}
+
+/**
+ * Normalize space-separated metric names to camelCase in a condition string.
+ * e.g. "pod restart count > 3" → "podRestartCount > 3"
+ */
+function normalizeConditionSpaces(condition: string): string {
+  // Match: words-with-spaces before an operator
+  return condition.replace(
+    /^([\w][\w\s]*?)\s+(stagnant|monotonic increase|increasing|high|>=?|<=?|==)/i,
+    (_, metric, op) => `${normalizeMetric(metric.trim())} ${op}`
+  );
+}
+
+/**
+ * Evaluate a single (non-compound) metric condition string against event anomalies.
+ */
+function evalSingleMetricCondition(
   condition: string,
   event: AnomalyEvent
 ): boolean {
-  // Simple pattern matching — expand as needed
-  const anomalyMetrics = event.anomalies.map(a => a.metric);
+  const trimmed = normalizeConditionSpaces(condition.trim());
 
-  if (condition.includes('cpuUsage') && anomalyMetrics.includes('cpuUsage')) {
-    const anomaly = event.anomalies.find(a => a.metric === 'cpuUsage');
-    if (condition.includes('> 90') && anomaly && anomaly.value > 90) return true;
-    if (condition.includes('> 80') && anomaly && anomaly.value > 80) return true;
+  // Special case: hybridScore — use heuristic (multiple anomalies = high score)
+  if (trimmed.includes('hybridScore')) {
+    return event.anomalies.length >= 2;
   }
 
-  if (condition.includes('txPoolPending') && anomalyMetrics.includes('txPoolPending')) {
-    if (condition.includes('monotonic increase')) {
-      const anomaly = event.anomalies.find(a => a.metric === 'txPoolPending');
-      return anomaly?.direction === 'spike';
-    }
-  }
-
-  if (condition.includes('l2BlockHeight stagnant')) {
-    const anomaly = event.anomalies.find(a => a.metric === 'l2BlockHeight');
+  // Pattern: "metric stagnant"
+  const stagnantMatch = trimmed.match(/^(\S+)\s+stagnant$/i);
+  if (stagnantMatch) {
+    const metric = normalizeMetric(stagnantMatch[1]);
+    const anomaly = event.anomalies.find(a => a.metric === metric);
     return anomaly?.direction === 'plateau';
   }
 
-  if (condition.includes('l1BlockNumber stagnant')) {
-    // Would need L1 metrics — placeholder for now
-    return false;
+  // Pattern: "metric monotonic increase" or "metric increasing"
+  const increasingMatch = trimmed.match(/^(\S+)\s+(monotonic increase|increasing)$/i);
+  if (increasingMatch) {
+    const metric = normalizeMetric(increasingMatch[1]);
+    const anomaly = event.anomalies.find(a => a.metric === metric);
+    if (!anomaly) return false;
+    return anomaly.rule === 'monotonic-increase' || anomaly.direction === 'spike';
   }
 
-  if (condition.includes('hybridScore')) {
-    // TODO: Calculate hybrid score from multiple anomalies
-    return event.anomalies.length >= 2; // Heuristic: multiple anomalies = high score
+  // Pattern: "metric high"
+  const highMatch = trimmed.match(/^(\S+)\s+high$/i);
+  if (highMatch) {
+    const metric = normalizeMetric(highMatch[1]);
+    const anomaly = event.anomalies.find(a => a.metric === metric);
+    if (!anomaly) return false;
+    return anomaly.isAnomaly && (anomaly.direction === 'spike' || anomaly.rule === 'threshold-breach');
   }
 
-  // EOA balance conditions
-  if (condition.includes('batcherBalance')) {
-    const anomaly = event.anomalies.find(a => a.metric === 'batcherBalance');
+  // Pattern: "metric < level" (level = critical | warning | low | ...)
+  const levelMatch = trimmed.match(/^(\S+)\s+<\s+(critical|warning|low|high)$/i);
+  if (levelMatch) {
+    const metric = normalizeMetric(levelMatch[1]);
+    const anomaly = event.anomalies.find(a => a.metric === metric);
     return anomaly?.rule === 'threshold-breach';
   }
-  if (condition.includes('proposerBalance')) {
-    const anomaly = event.anomalies.find(a => a.metric === 'proposerBalance');
-    return anomaly?.rule === 'threshold-breach';
+
+  // Pattern: "metric > Ns" or "metric > Nh" (time unit)
+  const timeMatch = trimmed.match(/^(\S+)\s*(>=?|<=?|==)\s*(\d+(?:\.\d+)?[smhd])$/i);
+  if (timeMatch) {
+    const metric = normalizeMetric(timeMatch[1]);
+    const op = timeMatch[2];
+    const thresholdSec = parseTimeSeconds(timeMatch[3]);
+    const anomaly = event.anomalies.find(a => a.metric === metric);
+    if (!anomaly) return false;
+    // value is assumed to be in seconds for time-based metrics
+    return compare(anomaly.value, op, thresholdSec);
   }
-  if (condition.includes('challengerBalance')) {
-    const anomaly = event.anomalies.find(a => a.metric === 'challengerBalance');
-    return anomaly?.rule === 'threshold-breach';
+
+  // Pattern: "metric >/>=/<=/==/< N" (numeric)
+  const numericMatch = trimmed.match(/^(\S+)\s*(>=?|<=?|==)\s*(-?\d+(?:\.\d+)?)$/);
+  if (numericMatch) {
+    const metric = normalizeMetric(numericMatch[1]);
+    const op = numericMatch[2];
+    const threshold = parseFloat(numericMatch[3]);
+    const anomaly = event.anomalies.find(a => a.metric === metric);
+    if (!anomaly) return false;
+    return compare(anomaly.value, op, threshold);
+  }
+
+  // Pattern: "metric > identifier" (named threshold, e.g. guardGwei, threshold)
+  const namedThresholdMatch = trimmed.match(/^(\S+)\s*(>=?|<=?|==)\s*([a-zA-Z]\w*)$/);
+  if (namedThresholdMatch) {
+    const metric = normalizeMetric(namedThresholdMatch[1]);
+    const anomaly = event.anomalies.find(a => a.metric === metric);
+    if (!anomaly) return false;
+    return anomaly.rule === 'threshold-breach' || anomaly.direction === 'spike';
   }
 
   return false;
 }
 
+function compare(value: number, op: string, threshold: number): boolean {
+  switch (op) {
+    case '>':  return value > threshold;
+    case '>=': return value >= threshold;
+    case '<':  return value < threshold;
+    case '<=': return value <= threshold;
+    case '==': return value === threshold;
+    default:   return false;
+  }
+}
+
 /**
- * Check if log pattern matches (placeholder — requires log ingestion)
+ * Check if metric condition matches anomaly data.
+ * Supports compound conditions joined by &&.
+ */
+function matchesMetricCondition(
+  condition: string,
+  event: AnomalyEvent
+): boolean {
+  if (condition.includes('&&')) {
+    const parts = condition.split('&&');
+    // At least one part must match (partial match on compound conditions)
+    return parts.some(part => evalSingleMetricCondition(part, event));
+  }
+  return evalSingleMetricCondition(condition, event);
+}
+
+/**
+ * Check if log pattern matches recent log lines in the event.
+ * Falls back to substring matching when the pattern is not valid regex.
  */
 function matchesLogPattern(
-  _pattern: string,
-  _event: AnomalyEvent
+  pattern: string,
+  event: AnomalyEvent
 ): boolean {
-  void _pattern;
-  void _event;
-
-  // TODO: Integrate with log ingestion module when available
-  // For now, return false as logs are not yet ingested into events
-  return false;
+  if (!event.recentLogs?.length) return false;
+  try {
+    const regex = new RegExp(pattern, 'i');
+    return event.recentLogs.some(line => regex.test(line));
+  } catch {
+    return event.recentLogs.some(line =>
+      pattern.split('|').some(p => line.toLowerCase().includes(p.trim().toLowerCase()))
+    );
+  }
 }
 
 /**
@@ -143,17 +244,12 @@ export function matchPlaybook(
     const metricIndicators = playbook.trigger.indicators.filter(i => i.type === 'metric');
     const logIndicators = playbook.trigger.indicators.filter(i => i.type === 'log_pattern');
 
-    // Check if any metric indicator matches
-    const metricMatch = metricIndicators.some(i =>
-      matchesMetricCondition(i.condition, event)
-    );
+    // Match if any indicator (metric or log) fires
+    const anyMatch =
+      metricIndicators.some(i => matchesMetricCondition(i.condition, event)) ||
+      logIndicators.some(i => matchesLogPattern(i.condition, event));
 
-    // Check if any log indicator matches
-    const logMatch = logIndicators.length === 0 || logIndicators.some(i =>
-      matchesLogPattern(i.condition, event)
-    );
-
-    if (metricMatch || logMatch) {
+    if (anyMatch) {
       return playbook;
     }
   }

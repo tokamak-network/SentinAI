@@ -156,6 +156,8 @@ export interface AnomalyEvent {
   resolvedAt?: number;
   /** Dispatched alert records */
   alerts: AlertRecord[];
+  /** Recent log lines from affected component (if collected) */
+  recentLogs?: string[];
 }
 
 // ============================================================================
