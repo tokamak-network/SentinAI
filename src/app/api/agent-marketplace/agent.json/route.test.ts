@@ -20,5 +20,8 @@ describe('/api/agent-marketplace/agent.json', () => {
       protocol: 'x402',
       network: 'eip155:1',
     });
+    expect(body.opsSnapshot).toMatchObject({
+      endpoint: '/api/agent-marketplace/ops-snapshot.json',
+    });
   });
 });

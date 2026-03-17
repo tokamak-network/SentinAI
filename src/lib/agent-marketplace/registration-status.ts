@@ -10,8 +10,6 @@ const CACHE_TTL_MS = CACHE_TTL_S * 1000;
 
 export type EnvCheck = {
   registryAddress: boolean;
-  agentUriBase: boolean;
-  walletKey: boolean;
   l1RpcUrl: boolean;
 };
 
@@ -57,70 +55,82 @@ const globalForCache = globalThis as typeof globalThis & {
   __sentinaiRegistrationStatusCache?: CacheState;
 };
 
+// ---- wallet address resolution ----
+
+/**
+ * Resolve the wallet address for cache keys.
+ * Prefers an explicit address parameter, falls back to MARKETPLACE_WALLET_KEY
+ * derivation for backward compatibility (server-side bootstrap).
+ */
+function resolveWalletAddress(walletAddress?: string): string | null {
+  if (walletAddress) return walletAddress.toLowerCase();
+  const walletKey = process.env.MARKETPLACE_WALLET_KEY?.trim();
+  if (!walletKey) return null;
+  try {
+    return privateKeyToAddress(walletKey as `0x${string}`).toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
 // ---- public API ----
 
 /** Clears Redis key (if available) + globalThis fallback */
-export async function clearRegistrationCache(): Promise<void> {
+export async function clearRegistrationCache(walletAddress?: string): Promise<void> {
   globalForCache.__sentinaiRegistrationStatusCache = undefined;
-  const walletKey = process.env.MARKETPLACE_WALLET_KEY?.trim();
-  if (!walletKey) return;
-  try {
-    const walletAddress = privateKeyToAddress(walletKey as `0x${string}`);
-    await redisDel(`${REDIS_KEY_PREFIX}${walletAddress}`);
-  } catch { /* ignore */ }
+  const address = resolveWalletAddress(walletAddress);
+  if (!address) return;
+  await redisDel(`${REDIS_KEY_PREFIX}${address}`);
 }
 
 /** Saves to Redis (TTL 300s, if available) + globalThis fallback */
-export async function saveRegistrationCache(status: RegistrationStatus): Promise<void> {
+export async function saveRegistrationCache(
+  status: RegistrationStatus,
+  walletAddress?: string,
+): Promise<void> {
   globalForCache.__sentinaiRegistrationStatusCache = { value: status, cachedAt: Date.now() };
-  const walletKey = process.env.MARKETPLACE_WALLET_KEY?.trim();
-  if (!walletKey) return;
-  try {
-    const walletAddress = privateKeyToAddress(walletKey as `0x${string}`);
-    await redisSetex(`${REDIS_KEY_PREFIX}${walletAddress}`, CACHE_TTL_S, JSON.stringify(status));
-  } catch { /* ignore */ }
+  const address = resolveWalletAddress(walletAddress);
+  if (!address) return;
+  await redisSetex(`${REDIS_KEY_PREFIX}${address}`, CACHE_TTL_S, JSON.stringify(status));
 }
 
 function buildEnvCheck(): EnvCheck {
   return {
     registryAddress: !!process.env.ERC8004_REGISTRY_ADDRESS?.trim(),
-    agentUriBase: !!process.env.MARKETPLACE_AGENT_URI_BASE?.trim(),
-    walletKey: !!process.env.MARKETPLACE_WALLET_KEY?.trim(),
     l1RpcUrl: !!(process.env.SENTINAI_L1_RPC_URL?.trim() || process.env.L1_RPC_URL?.trim()),
   };
-}
-
-function isEnvReady(check: EnvCheck): boolean {
-  return check.registryAddress && check.agentUriBase && check.walletKey && check.l1RpcUrl;
 }
 
 function resolveChain() {
   return process.env.X402_NETWORK?.trim() === 'eip155:1' ? mainnet : sepolia;
 }
 
-export async function getRegistrationStatus(): Promise<RegistrationStatus> {
+/**
+ * Get registration status.
+ * If walletAddress is provided, uses it for cache lookup and on-chain query.
+ * Otherwise falls back to MARKETPLACE_WALLET_KEY derivation.
+ */
+export async function getRegistrationStatus(walletAddress?: string): Promise<RegistrationStatus> {
   const envCheck = buildEnvCheck();
+  const registryAddress = process.env.ERC8004_REGISTRY_ADDRESS?.trim();
+  const l1RpcUrl = (process.env.SENTINAI_L1_RPC_URL?.trim() || process.env.L1_RPC_URL?.trim());
 
-  if (!isEnvReady(envCheck)) {
+  if (!registryAddress || !l1RpcUrl) {
     return {
       registered: false,
       envCheck,
-      agentUri: process.env.MARKETPLACE_AGENT_URI_BASE
-        ? `${process.env.MARKETPLACE_AGENT_URI_BASE.replace(/\/+$/, '')}/api/agent-marketplace/agent.json`
-        : null,
+      agentUri: null,
     };
   }
 
-  const walletKey = process.env.MARKETPLACE_WALLET_KEY!.trim();
-  const registryAddress = process.env.ERC8004_REGISTRY_ADDRESS!.trim() as `0x${string}`;
-  const l1RpcUrl = (process.env.SENTINAI_L1_RPC_URL || process.env.L1_RPC_URL)!.trim();
-  const agentUriBase = process.env.MARKETPLACE_AGENT_URI_BASE!.trim();
-  const agentUri = `${agentUriBase.replace(/\/+$/, '')}/api/agent-marketplace/agent.json`;
-  const walletAddress = privateKeyToAddress(walletKey as `0x${string}`);
+  const address = resolveWalletAddress(walletAddress);
+  if (!address) {
+    return { registered: false, envCheck, agentUri: null };
+  }
 
   // 1. Redis cache (primary)
   try {
-    const redisData = await redisGet(`${REDIS_KEY_PREFIX}${walletAddress}`);
+    const redisData = await redisGet(`${REDIS_KEY_PREFIX}${address}`);
     if (redisData) return JSON.parse(redisData) as RegistrationStatus;
   } catch { /* fall through */ }
 
@@ -136,20 +146,20 @@ export async function getRegistrationStatus(): Promise<RegistrationStatus> {
     });
 
     const agentIdBigInt = await publicClient.readContract({
-      address: registryAddress,
+      address: registryAddress as `0x${string}`,
       abi: agentMarketplaceRegistryAbi,
       functionName: 'latestAgentIdOf',
-      args: [walletAddress],
+      args: [address as `0x${string}`],
     }) as bigint;
 
     if (agentIdBigInt === BigInt(0)) {
-      const result: RegistrationStatus = { registered: false, envCheck, agentUri };
-      await saveRegistrationCache(result);
+      const result: RegistrationStatus = { registered: false, envCheck, agentUri: null };
+      await saveRegistrationCache(result, address);
       return result;
     }
 
     const onChainUri = await publicClient.readContract({
-      address: registryAddress,
+      address: registryAddress as `0x${string}`,
       abi: agentMarketplaceRegistryAbi,
       functionName: 'agentUriOf',
       args: [agentIdBigInt],
@@ -158,14 +168,14 @@ export async function getRegistrationStatus(): Promise<RegistrationStatus> {
     const result: RegistrationStatus = {
       registered: true,
       agentId: String(agentIdBigInt),
-      agentUri: onChainUri || agentUri,
+      agentUri: onChainUri,
       txHash: null,
       registeredAt: null,
       contractAddress: registryAddress,
     };
-    await saveRegistrationCache(result);
+    await saveRegistrationCache(result, address);
     return result;
   } catch {
-    return { registered: false, envCheck, agentUri };
+    return { registered: false, envCheck, agentUri: null };
   }
 }

@@ -114,6 +114,8 @@ function LoginPageContent() {
       '/',
       '/v2/marketplace',
       '/v2/marketplace/',
+      '/admin',
+      '/admin/',
     ];
 
     // Check if URL matches any allowed path or starts with allowed prefix

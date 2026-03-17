@@ -41,7 +41,6 @@ describe('registration-status', () => {
     delete process.env.MARKETPLACE_WALLET_KEY;
     delete process.env.ERC8004_REGISTRY_ADDRESS;
     delete process.env.SENTINAI_L1_RPC_URL;
-    delete process.env.MARKETPLACE_AGENT_URI_BASE;
     delete process.env.REDIS_URL;
     (globalThis as Record<string, unknown>).__sentinaiRegistrationStatusCache = undefined;
 
@@ -52,34 +51,42 @@ describe('registration-status', () => {
     });
   });
 
-  it('returns registered:false with all envCheck false when env vars are missing', async () => {
+  it('returns registered:false with envCheck false when env vars are missing', async () => {
     const status = await getRegistrationStatus();
     expect(status.registered).toBe(false);
     if (status.registered) throw new Error('expected unregistered');
-    expect(status.envCheck.walletKey).toBe(false);
     expect(status.envCheck.registryAddress).toBe(false);
+    expect(status.envCheck.l1RpcUrl).toBe(false);
   });
 
-  it('returns registered:false when latestAgentIdOf returns 0', async () => {
+  it('returns registered:false when latestAgentIdOf returns 0 (wallet from env)', async () => {
     process.env.MARKETPLACE_WALLET_KEY = '0x' + '1'.repeat(64);
     process.env.ERC8004_REGISTRY_ADDRESS = '0xREG';
     process.env.SENTINAI_L1_RPC_URL = 'https://rpc.example.com';
-    process.env.MARKETPLACE_AGENT_URI_BASE = 'https://my.sentinai.io';
 
     hoisted.readContractMock.mockResolvedValue(0n);
 
     const status = await getRegistrationStatus();
     expect(status.registered).toBe(false);
     if (status.registered) throw new Error('expected unregistered');
-    expect(status.envCheck.walletKey).toBe(true);
     expect(status.envCheck.registryAddress).toBe(true);
+    expect(status.envCheck.l1RpcUrl).toBe(true);
+  });
+
+  it('returns registered:false when latestAgentIdOf returns 0 (explicit wallet address)', async () => {
+    process.env.ERC8004_REGISTRY_ADDRESS = '0xREG';
+    process.env.SENTINAI_L1_RPC_URL = 'https://rpc.example.com';
+
+    hoisted.readContractMock.mockResolvedValue(0n);
+
+    const status = await getRegistrationStatus('0xExplicitWallet');
+    expect(status.registered).toBe(false);
   });
 
   it('returns registered:true with agentId and agentUri when on-chain data exists', async () => {
     process.env.MARKETPLACE_WALLET_KEY = '0x' + '1'.repeat(64);
     process.env.ERC8004_REGISTRY_ADDRESS = '0xREG';
     process.env.SENTINAI_L1_RPC_URL = 'https://rpc.example.com';
-    process.env.MARKETPLACE_AGENT_URI_BASE = 'https://my.sentinai.io';
 
     hoisted.readContractMock
       .mockResolvedValueOnce(42n)
@@ -94,10 +101,8 @@ describe('registration-status', () => {
   });
 
   it('returns globalThis cache hit without RPC call when cache is valid', async () => {
-    process.env.MARKETPLACE_WALLET_KEY = '0x' + '1'.repeat(64);
     process.env.ERC8004_REGISTRY_ADDRESS = '0xREG';
     process.env.SENTINAI_L1_RPC_URL = 'https://rpc.example.com';
-    process.env.MARKETPLACE_AGENT_URI_BASE = 'https://my.sentinai.io';
 
     (globalThis as Record<string, unknown>).__sentinaiRegistrationStatusCache = {
       value: {
@@ -111,7 +116,7 @@ describe('registration-status', () => {
       cachedAt: Date.now(),
     };
 
-    const status = await getRegistrationStatus();
+    const status = await getRegistrationStatus('0xSomeWallet');
     expect(status.registered).toBe(true);
     if (!status.registered) throw new Error('expected registered');
     expect(status.agentId).toBe('99');
@@ -135,7 +140,7 @@ describe('registration-status', () => {
 
   it('clearRegistrationCache clears globalThis cache', async () => {
     (globalThis as Record<string, unknown>).__sentinaiRegistrationStatusCache = {
-      value: { registered: false, envCheck: { registryAddress: true, agentUriBase: true, walletKey: true, l1RpcUrl: true }, agentUri: null },
+      value: { registered: false, envCheck: { registryAddress: true, l1RpcUrl: true }, agentUri: null },
       cachedAt: Date.now(),
     };
 

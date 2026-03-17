@@ -2,7 +2,10 @@
  * POST /api/auth/siwe/verify
  * Verifies SIWE message and issues session cookie.
  * Body: { address, signature, message }
- * Response: { ok: true, message: "Session created successfully" } with Set-Cookie header
+ *
+ * Only the address matching SENTINAI_ADMIN_ADDRESS can authenticate.
+ * The authenticated wallet signs on-chain transactions (e.g. ERC8004
+ * registration) directly from the browser.
  */
 
 import { verifyMessage, getAddress } from 'viem';
@@ -70,21 +73,17 @@ export async function POST(request: Request): Promise<Response> {
       return Response.json({ error: 'Invalid signature' }, { status: 401 });
     }
 
-    // Step 4: Check if signer is admin
+    // Step 4: Check if signer is the designated admin
+    const signerAddress = getAddress(addressLower);
     const adminAddress = getAdminAddress();
     if (!adminAddress) {
-      logger.error('[SIWE Verify] Admin address not configured');
-      return Response.json({ error: 'Invalid signature' }, { status: 401 });
+      logger.warn('[SIWE Verify] SENTINAI_ADMIN_ADDRESS not set — admin login disabled');
+      return Response.json({ error: 'Admin login not configured' }, { status: 403 });
     }
-
-    // Normalize addresses for comparison (case-insensitive)
-    const signerAddress = getAddress(addressLower);
-    const normalizedAdmin = getAddress(adminAddress);
-
-    if (signerAddress.toLowerCase() !== normalizedAdmin.toLowerCase()) {
-      logger.warn('[SIWE Verify] Address not authorized for marketplace admin', {
+    if (signerAddress.toLowerCase() !== adminAddress.toLowerCase()) {
+      logger.warn('[SIWE Verify] Address not authorized', {
         signer: signerAddress,
-        admin: normalizedAdmin,
+        admin: adminAddress,
       });
       return Response.json({ error: 'Address not authorized' }, { status: 403 });
     }

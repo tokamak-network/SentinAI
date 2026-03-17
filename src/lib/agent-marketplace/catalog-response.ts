@@ -27,6 +27,10 @@ export interface AgentMarketplaceAgentManifest {
     protocol: 'x402';
     network: string;
   };
+  opsSnapshot: {
+    endpoint: string;
+    description: string;
+  };
 }
 
 export function toAgentMarketplaceAgentManifest(
@@ -42,6 +46,10 @@ export function toAgentMarketplaceAgentManifest(
     payment: {
       protocol: 'x402',
       network: catalog.services[0]?.payment?.network ?? 'eip155:1',
+    },
+    opsSnapshot: {
+      endpoint: '/api/agent-marketplace/ops-snapshot.json',
+      description: 'Live operational data: metrics, scaling state, and anomaly summary',
     },
   };
 }

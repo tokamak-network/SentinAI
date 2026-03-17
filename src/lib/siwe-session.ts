@@ -1,13 +1,17 @@
 /**
  * SIWE (Sign-In with Ethereum) Session Management
- * Issues self-verifiable HMAC-based session tokens for admin access.
+ * Issues self-verifiable HMAC-based session tokens for dashboard access.
  * Token format: satv2_{address_lower}_{issuedAt}_{expiresAt}_{hmac}
  * No external storage needed (HMAC-verified).
+ *
+ * Admin access is gated by SENTINAI_ADMIN_ADDRESS (public address, not a
+ * private key). Only the matching wallet can authenticate via SIWE.
+ * The authenticated wallet then signs on-chain transactions (e.g. ERC8004
+ * registration) directly from the browser — no server-side key needed.
  */
 
 import { createHmac, timingSafeEqual } from 'crypto';
 import { getAddress } from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
 import logger from '@/lib/logger';
 
 export const SESSION_COOKIE_NAME = 'sentinai_admin_session';
@@ -21,21 +25,28 @@ export interface AdminSession {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Get admin address from MARKETPLACE_WALLET_KEY
+// Admin address from env (public address only — no private key)
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Returns the admin address from SENTINAI_ADMIN_ADDRESS.
+ * This is a plain Ethereum address (0x..., 42 chars), NOT a private key.
+ */
 export function getAdminAddress(): `0x${string}` | null {
-  const walletKey = process.env.MARKETPLACE_WALLET_KEY?.trim();
-  if (!walletKey) {
-    logger.warn('[SIWE] MARKETPLACE_WALLET_KEY not set');
+  const raw = process.env.SENTINAI_ADMIN_ADDRESS?.trim();
+  if (!raw) {
+    logger.warn('[SIWE] SENTINAI_ADMIN_ADDRESS not set — admin login disabled');
     return null;
   }
 
   try {
-    const account = privateKeyToAccount(walletKey as `0x${string}`);
-    return getAddress(account.address); // Checksum address
+    if (!/^0x[0-9a-fA-F]{40}$/.test(raw)) {
+      logger.error('[SIWE] SENTINAI_ADMIN_ADDRESS is not a valid Ethereum address');
+      return null;
+    }
+    return getAddress(raw as `0x${string}`);
   } catch (error) {
-    logger.error('[SIWE] Failed to derive admin address from MARKETPLACE_WALLET_KEY', error);
+    logger.error('[SIWE] Failed to parse SENTINAI_ADMIN_ADDRESS', error);
     return null;
   }
 }

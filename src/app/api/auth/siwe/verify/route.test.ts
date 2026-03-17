@@ -34,9 +34,9 @@ vi.mock('@/lib/logger', () => ({
   },
 }));
 
-const VALID_ADDRESS = '0xebc243c42b3e3814629ddc03189ab60ddfffe6498';
-const ADMIN_ADDRESS = '0xebc243c42b3e3814629ddc03189ab60ddfffe6498';
-const NONCE = 'a1b2c3d4e5f6789012345678901234567890123456789012345678901234567';
+const VALID_ADDRESS = '0xebc243c42b3e3814629ddc03189ab60ddfffe649';
+const ADMIN_ADDRESS = '0xebc243c42b3e3814629ddc03189ab60ddfffe649';
+const NONCE = 'a1b2c3d4e5f67890123456789012345678901234567890123456789012345678';
 const VALID_SIGNATURE = '0x' + 'a'.repeat(130);
 
 const VALID_MESSAGE = `wallet.sentinai.io wants you to sign in with your Ethereum account:
@@ -142,6 +142,40 @@ describe('POST /api/auth/siwe/verify', () => {
       const response = await POST(request);
 
       expect(response.status).toBe(400);
+    });
+  });
+
+  describe('admin authorization', () => {
+    it('should return 403 when signer does not match admin address', async () => {
+      vi.mocked(siweSessionModule.getAdminAddress).mockReturnValue(
+        '0x0000000000000000000000000000000000000001' as `0x${string}`,
+      );
+
+      const request = createRequest({
+        address: VALID_ADDRESS,
+        signature: VALID_SIGNATURE,
+        message: VALID_MESSAGE,
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(403);
+      const data = await response.json();
+      expect(data.error).toBe('Address not authorized');
+    });
+
+    it('should return 403 when SENTINAI_ADMIN_ADDRESS is not set', async () => {
+      vi.mocked(siweSessionModule.getAdminAddress).mockReturnValue(null);
+
+      const request = createRequest({
+        address: VALID_ADDRESS,
+        signature: VALID_SIGNATURE,
+        message: VALID_MESSAGE,
+      });
+
+      const response = await POST(request);
+      expect(response.status).toBe(403);
+      const data = await response.json();
+      expect(data.error).toBe('Admin login not configured');
     });
   });
 

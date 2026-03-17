@@ -17,7 +17,7 @@ const { GET } = await import(
 
 describe('GET /api/agent-marketplace/ops/registration-status', () => {
   it('returns 200 with registration status', async () => {
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/agent-marketplace/ops/registration-status'));
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.registered).toBe(true);
