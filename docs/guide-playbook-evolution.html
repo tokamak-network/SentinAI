@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SentinAI - LLM-Enhanced Playbook Evolution Guide</title>
+<style>
+  :root {
+    --bg: #FAFAFA; --fg: #0A0A0A; --muted: #707070; --border: #D0D0D0;
+    --blue: #0055AA; --green: #007A00; --red: #D40000; --orange: #CC6600;
+    --amber: #AA6600; --code-bg: #F0F0F0;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'IBM Plex Mono', 'SF Mono', 'Consolas', monospace;
+    background: var(--bg); color: var(--fg); line-height: 1.6;
+    max-width: 960px; margin: 0 auto; padding: 40px 24px;
+  }
+  h1 { font-size: 20px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+       border-bottom: 2px solid var(--fg); padding-bottom: 8px; margin-bottom: 32px; }
+  h2 { font-size: 14px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+       color: var(--blue); margin: 32px 0 12px; }
+  h3 { font-size: 12px; font-weight: 700; color: var(--fg); margin: 20px 0 8px; }
+  p, li { font-size: 12px; color: #3A3A3A; }
+  ul { padding-left: 20px; margin: 8px 0; }
+  li { margin: 4px 0; }
+
+  .section { background: white; border: 1px solid var(--border); padding: 20px; margin: 16px 0; }
+  .label { font-size: 9px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase;
+           background: var(--fg); color: white; padding: 2px 10px; margin: -20px -20px 16px; }
+
+  .badge { display: inline-block; font-size: 9px; font-weight: 700; padding: 1px 6px;
+           border-radius: 2px; vertical-align: middle; }
+  .badge-green  { background: #E6F4E6; color: var(--green); border: 1px solid var(--green); }
+  .badge-blue   { background: #EEF3FF; color: var(--blue);  border: 1px solid var(--blue); }
+  .badge-amber  { background: #FFF3E0; color: var(--amber); border: 1px solid var(--amber); }
+  .badge-red    { background: #FFE6E6; color: var(--red);   border: 1px solid var(--red); }
+
+  code {
+    background: var(--code-bg); padding: 2px 6px; border-radius: 2px;
+    font-size: 11px; font-family: inherit;
+  }
+  pre {
+    background: var(--fg); color: #E0E0E0; padding: 16px; border-radius: 2px;
+    overflow-x: auto; font-size: 11px; margin: 8px 0; line-height: 1.5;
+  }
+  pre .comment { color: #707070; }
+  pre .string  { color: #98C379; }
+  pre .key     { color: #61AFEF; }
+  pre .value   { color: #E5C07B; }
+
+  .flow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+  .flow-step {
+    background: white; border: 1px solid var(--border); padding: 8px 12px;
+    font-size: 10px; font-weight: 600; min-width: 100px; text-align: center;
+  }
+  .flow-step.active { border-color: var(--blue); background: #EEF3FF; color: var(--blue); }
+  .flow-step.llm    { border-color: var(--red);  background: #FFF0F0; color: var(--red); }
+  .flow-arrow { font-size: 14px; color: var(--muted); flex-shrink: 0; }
+
+  .screenshot {
+    border: 1px solid var(--border); background: white; padding: 16px;
+    margin: 12px 0; position: relative;
+  }
+  .screenshot-label {
+    position: absolute; top: 0; right: 0; font-size: 8px; font-weight: 700;
+    letter-spacing: 0.1em; background: var(--fg); color: white; padding: 2px 8px;
+  }
+
+  table { width: 100%; border-collapse: collapse; margin: 8px 0; font-size: 11px; }
+  th { background: var(--fg); color: white; text-align: left; padding: 4px 10px;
+       font-size: 9px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+  td { padding: 6px 10px; border-bottom: 1px solid #F0F0F0; }
+  tr:nth-child(even) { background: #F7F7F7; }
+
+  .tip { background: #EEF3FF; border-left: 3px solid var(--blue); padding: 10px 14px;
+         font-size: 11px; margin: 12px 0; }
+  .warn { background: #FFF3E0; border-left: 3px solid var(--orange); padding: 10px 14px;
+          font-size: 11px; margin: 12px 0; }
+
+  .metric-box {
+    display: inline-flex; flex-direction: column; align-items: center;
+    border: 1px solid var(--border); padding: 8px 16px; min-width: 80px;
+  }
+  .metric-label { font-size: 8px; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+  .metric-value { font-size: 18px; font-weight: 700; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<h1>LLM-Enhanced Playbook Evolution Guide</h1>
+<p style="color: var(--muted); margin-bottom: 24px;">
+  SentinAI의 AI 기반 플레이북 자동 생성 및 진화 기능을 대시보드에서 확인하고 활용하는 방법
+</p>
+
+<!-- ─── OVERVIEW ─── -->
+<div class="section">
+  <div class="label">Overview</div>
+  <p>SentinAI는 운영 이력에서 패턴을 학습하고, LLM을 활용해 최적화된 remediation 플레이북을 자동 생성합니다.</p>
+
+  <div class="flow" style="margin-top: 16px;">
+    <div class="flow-step">Incident<br>Detection</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">Pattern<br>Mining</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-step llm">LLM<br>Generation</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-step active">Review<br>& Approve</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">Auto<br>Execution</div>
+  </div>
+
+  <div class="grid-2" style="margin-top: 16px;">
+    <div>
+      <h3>Heuristic (기존)</h3>
+      <ul>
+        <li>규칙 기반 confidence 계산</li>
+        <li>성공률/빈도 기반 플레이북 생성</li>
+        <li>매일 00:05 UTC 자동 실행</li>
+      </ul>
+    </div>
+    <div>
+      <h3>LLM Enhanced (신규)</h3>
+      <ul>
+        <li>AI가 패턴 분석 후 최적 구성 생성</li>
+        <li>액션 순서, 타임아웃, fallback 최적화</li>
+        <li>Provider fallback (Qwen &rarr; Anthropic &rarr; OpenAI &rarr; Gemini)</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ─── STEP 1: TICKER ─── -->
+<h2>1. Ticker Bar에서 상태 확인</h2>
+<div class="section">
+  <div class="label">Dashboard &mdash; Top Ticker</div>
+  <p>대시보드 상단 티커에서 <code>AUTO-LEARNED</code> 항목을 확인합니다.</p>
+
+  <div class="screenshot" style="margin-top: 12px;">
+    <div class="screenshot-label">TICKER</div>
+    <div style="display: flex; gap: 16px; flex-wrap: wrap; padding: 8px 0;">
+      <div class="metric-box">
+        <span class="metric-label">L2 BLOCK</span>
+        <span class="metric-value" style="color: var(--blue);">1,234,567</span>
+      </div>
+      <div class="metric-box">
+        <span class="metric-label">vCPU</span>
+        <span class="metric-value" style="color: var(--blue);">2 ACTIVE</span>
+      </div>
+      <div class="metric-box" style="border-color: var(--orange); background: #FFF8F0;">
+        <span class="metric-label">AUTO-LEARNED</span>
+        <span class="metric-value" style="color: var(--orange);">3 REVIEW</span>
+      </div>
+      <div class="metric-box">
+        <span class="metric-label">SCORE</span>
+        <span class="metric-value">42</span>
+      </div>
+    </div>
+  </div>
+
+  <table>
+    <tr><th>표시</th><th>의미</th><th>조치</th></tr>
+    <tr>
+      <td><span class="badge badge-amber">3 REVIEW</span></td>
+      <td>AI가 생성한 플레이북 3개가 검토 대기 중</td>
+      <td>Operations 패널 &rarr; PLAYBOOKS 탭에서 확인</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-green">LEARNING</span></td>
+      <td>검토 대기 플레이북 없음, 학습 진행 중</td>
+      <td>정상 상태, 조치 불필요</td>
+    </tr>
+  </table>
+</div>
+
+<!-- ─── STEP 2: PLAYBOOKS TAB ─── -->
+<h2>2. Playbooks 탭에서 상세 확인</h2>
+<div class="section">
+  <div class="label">Operations Panel &mdash; Playbooks Tab</div>
+  <p>우측 Operations 패널에서 <strong>PLAYBOOKS</strong> 탭을 클릭합니다.</p>
+
+  <h3>Status Bar</h3>
+  <div class="screenshot">
+    <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border);">
+      <div style="display: flex; gap: 16px;">
+        <span style="font-size: 10px;"><strong style="color: var(--blue);">RECORDS</strong> 847</span>
+        <span style="font-size: 10px;"><strong style="color: var(--muted);">LAST LEARNED</strong> 2m ago</span>
+      </div>
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <span style="font-size: 9px; color: var(--muted);">NEXT: 00:05 UTC</span>
+        <button style="font-family: inherit; font-size: 9px; font-weight: 700; background: var(--fg); color: white; border: none; padding: 3px 10px; cursor: pointer;">RUN NOW</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="tip">
+    <strong>RUN NOW</strong> 버튼을 누르면 즉시 패턴 마이닝 + LLM 플레이북 생성이 실행됩니다.<br>
+    자동 실행은 매일 00:05 UTC에 스케줄러가 수행합니다.
+  </div>
+
+  <h3>Playbook Card</h3>
+  <p>각 플레이북은 아래 형태의 카드로 표시됩니다:</p>
+
+  <div class="screenshot" style="padding: 12px;">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+      <div>
+        <span style="font-size: 11px; font-weight: 700;">Scale up resources</span>
+        <span style="font-size: 9px; color: var(--muted); margin-left: 8px;">v3</span>
+      </div>
+      <span class="badge badge-amber">DRAFT</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+      <div style="background: #F7F7F7; border: 1px solid var(--border); padding: 6px 10px; font-size: 10px;">
+        <span style="color: var(--muted);">WHEN</span><br>
+        <strong>CPU usage</strong> &gt; 85%
+      </div>
+      <span style="font-size: 14px; color: var(--muted);">&rarr;</span>
+      <div style="background: #F0F4FF; border: 1px solid var(--blue); padding: 6px 10px; font-size: 10px;">
+        <span style="color: var(--muted);">DO</span><br>
+        <strong>scale op-geth</strong> 2&rarr;4 vCPU
+      </div>
+    </div>
+    <div style="display: flex; gap: 16px; font-size: 10px; color: var(--muted); padding: 6px 0; border-top: 1px solid #F0F0F0;">
+      <span>Incidents: <strong style="color: var(--fg);">23</strong></span>
+      <span>Success: <strong style="color: var(--green);">91%</strong></span>
+      <span>Confidence: <strong style="color: var(--green);">0.82</strong></span>
+      <span>Source: <strong style="color: var(--red);">AI-assisted</strong></span>
+    </div>
+    <div style="display: flex; gap: 8px; margin-top: 8px;">
+      <button style="font-family: inherit; font-size: 9px; font-weight: 700; background: var(--red); color: white; border: none; padding: 4px 12px; cursor: pointer;">APPROVE</button>
+      <button style="font-family: inherit; font-size: 9px; font-weight: 600; background: #F0F0F0; color: var(--muted); border: none; padding: 4px 12px; cursor: pointer;">SKIP</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── STEP 3: LIFECYCLE ─── -->
+<h2>3. Playbook Lifecycle</h2>
+<div class="section">
+  <div class="label">Review Workflow</div>
+
+  <div class="flow">
+    <div class="flow-step" style="border-color: var(--amber);">
+      <span class="badge badge-amber">DRAFT</span><br>
+      <span style="font-size: 9px; color: var(--muted);">AI 생성 직후</span>
+    </div>
+    <div class="flow-arrow">&rarr;<br><span style="font-size: 8px;">APPROVE</span></div>
+    <div class="flow-step" style="border-color: var(--blue);">
+      <span class="badge badge-blue">APPROVED</span><br>
+      <span style="font-size: 9px; color: var(--muted);">검증 완료</span>
+    </div>
+    <div class="flow-arrow">&rarr;<br><span style="font-size: 8px;">PROMOTE</span></div>
+    <div class="flow-step" style="border-color: var(--green);">
+      <span class="badge badge-green">TRUSTED</span><br>
+      <span style="font-size: 9px; color: var(--muted);">자동 실행 가능</span>
+    </div>
+  </div>
+
+  <table style="margin-top: 12px;">
+    <tr><th>Status</th><th>설명</th><th>자동 실행</th><th>버튼</th></tr>
+    <tr>
+      <td><span class="badge badge-amber">DRAFT</span></td>
+      <td>LLM 또는 패턴 마이닝으로 생성됨, 검토 필요</td>
+      <td style="color: var(--red);">No</td>
+      <td>APPROVE / SKIP</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-blue">APPROVED</span></td>
+      <td>운영자가 승인함, 프로덕션 사용 준비</td>
+      <td style="color: var(--orange);">Manual only</td>
+      <td>MARK TRUSTED / SUSPEND</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-green">TRUSTED</span></td>
+      <td>완전 신뢰, 조건 충족 시 자동 실행</td>
+      <td style="color: var(--green);">Yes</td>
+      <td>SUSPEND</td>
+    </tr>
+    <tr>
+      <td><span class="badge badge-red">SUSPENDED</span></td>
+      <td>일시 정지됨</td>
+      <td style="color: var(--red);">No</td>
+      <td>&mdash;</td>
+    </tr>
+  </table>
+
+  <div class="warn">
+    <strong>TRUSTED</strong> 상태의 플레이북만 이상 징후 발생 시 자동으로 실행됩니다.
+    AI가 생성한 플레이북은 항상 <strong>DRAFT</strong>로 시작하므로, 운영자 검토 없이 실행되지 않습니다.
+  </div>
+</div>
+
+<!-- ─── STEP 4: API ─── -->
+<h2>4. API로 직접 확인</h2>
+<div class="section">
+  <div class="label">API Endpoints</div>
+
+  <h3>Evolution 상태 조회</h3>
+<pre>
+<span class="comment"># 플레이북 현황 (대시보드와 동일 데이터)</span>
+curl <span class="string">https://sentinai.tokamak.network/thanos-sepolia/api/playbook-evolution?action=status</span>
+
+<span class="comment"># 응답 예시:</span>
+{
+  <span class="key">"ledger"</span>: { <span class="key">"total"</span>: <span class="value">847</span>, <span class="key">"lastTimestamp"</span>: <span class="string">"2026-03-17T06:25:45Z"</span> },
+  <span class="key">"playbooks"</span>: { <span class="key">"total"</span>: <span class="value">5</span>, <span class="key">"needsReview"</span>: <span class="value">2</span> },
+  <span class="key">"scheduler"</span>: { <span class="key">"nextCron"</span>: <span class="string">"00:05 UTC (daily)"</span> }
+}
+</pre>
+
+  <h3>수동 패턴 마이닝 + LLM 생성 트리거</h3>
+<pre>
+<span class="comment"># 패턴 마이닝 + LLM 플레이북 생성</span>
+curl -X POST <span class="string">https://sentinai.tokamak.network/thanos-sepolia/api/playbook-evolution?action=mine</span> \
+  -H <span class="string">"x-api-key: $API_KEY"</span>
+
+<span class="comment"># 응답 예시:</span>
+{
+  <span class="key">"patterns"</span>: <span class="value">3</span>,
+  <span class="key">"saved"</span>: [<span class="string">"pb-cpu-spike"</span>, <span class="string">"pb-gas-ratio"</span>],
+  <span class="key">"skipped"</span>: [],
+  <span class="key">"llmEvolved"</span>: {
+    <span class="key">"generatedBy"</span>: <span class="string">"anthropic/claude-sonnet-4-5-20250929"</span>,
+    <span class="key">"name"</span>: <span class="string">"Optimized CPU Spike Response"</span>,
+    <span class="key">"actions"</span>: <span class="value">2</span>,
+    <span class="key">"fallbacks"</span>: <span class="value">1</span>
+  }
+}
+</pre>
+
+  <h3>Admin: LLM Evolution 트리거 + 버전 승격</h3>
+<pre>
+<span class="comment"># LLM 진화 트리거 (패턴 분석 → LLM 생성 → 자동 버전 승격)</span>
+curl -X POST <span class="string">https://sentinai.tokamak.network/thanos-sepolia/api/admin/playbook-evolution</span> \
+  -H <span class="string">"Authorization: Bearer $API_KEY"</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{"action": "trigger_evolution"}'</span>
+
+<span class="comment"># 응답 예시:</span>
+{
+  <span class="key">"action"</span>: <span class="string">"evolution_triggered"</span>,
+  <span class="key">"patterns"</span>: [
+    { <span class="key">"anomalyType"</span>: <span class="string">"high_cpu"</span>, <span class="key">"successRate"</span>: <span class="value">92</span>, <span class="key">"executionCount"</span>: <span class="value">50</span> }
+  ],
+  <span class="key">"evolved"</span>: {
+    <span class="key">"promoted"</span>: <span class="value">true</span>,
+    <span class="key">"versionId"</span>: <span class="string">"v-3"</span>,
+    <span class="key">"generatedBy"</span>: <span class="string">"anthropic/claude-sonnet-4-5-20250929"</span>
+  }
+}
+</pre>
+
+  <h3>버전 롤백</h3>
+<pre>
+<span class="comment"># 특정 버전으로 롤백</span>
+curl -X POST <span class="string">https://sentinai.tokamak.network/thanos-sepolia/api/admin/playbook-evolution</span> \
+  -H <span class="string">"Authorization: Bearer $API_KEY"</span> \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{"action": "rollback", "versionId": "v-1"}'</span>
+</pre>
+</div>
+
+<!-- ─── STEP 5: EXECUTION LOG ─── -->
+<h2>5. 실행 이력 확인</h2>
+<div class="section">
+  <div class="label">Recent Executions</div>
+  <p>Playbooks 탭 하단의 <strong>Recent Executions</strong> 테이블에서 실제 실행 결과를 확인합니다.</p>
+
+  <div class="screenshot">
+    <table>
+      <tr><th>Time</th><th>Trigger</th><th>Action</th><th>Result</th></tr>
+      <tr>
+        <td style="color: var(--muted); font-size: 9px;">06:25:45</td>
+        <td>CPU usage &gt; 85%</td>
+        <td>scale-up</td>
+        <td><span class="badge badge-green">success</span> 4.2s</td>
+      </tr>
+      <tr>
+        <td style="color: var(--muted); font-size: 9px;">06:18:02</td>
+        <td>Gas ratio &gt; 0.9</td>
+        <td>cache-clear</td>
+        <td><span class="badge badge-green">success</span> 1.8s</td>
+      </tr>
+      <tr>
+        <td style="color: var(--muted); font-size: 9px;">05:55:11</td>
+        <td>L1 sync lag &gt; 120</td>
+        <td>switch-l1-rpc</td>
+        <td><span class="badge badge-red">failure</span> 30.0s</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="tip">
+    실행 결과가 시스템에 피드백되어 플레이북 confidence가 자동으로 조정됩니다.<br>
+    성공률이 높은 패턴은 다음 LLM 진화에서 우선적으로 반영됩니다.
+  </div>
+</div>
+
+<!-- ─── ARCHITECTURE ─── -->
+<h2>6. Architecture Summary</h2>
+<div class="section">
+  <div class="label">LLM Evolution Pipeline</div>
+
+  <div style="font-size: 10px; line-height: 2; margin: 8px 0;">
+    <div style="display: flex; gap: 4px; align-items: center; flex-wrap: wrap;">
+      <code style="background: var(--fg); color: white;">PatternMiner</code>
+      <span>&rarr;</span>
+      <code>analyzeRecords()</code>
+      <span>&rarr;</span>
+      <code style="background: #FFF0F0; border: 1px solid var(--red); color: var(--red);">PlaybookEvolver</code>
+      <span>&rarr;</span>
+      <code>chatCompletion()</code>
+      <span>&rarr;</span>
+      <code style="background: #E6F4E6; border: 1px solid var(--green); color: var(--green);">RollbackManager</code>
+      <span>&rarr;</span>
+      <code>promoteVersion()</code>
+    </div>
+  </div>
+
+  <table style="margin-top: 12px;">
+    <tr><th>Component</th><th>Role</th><th>AI?</th></tr>
+    <tr>
+      <td><code>PatternMiner</code></td>
+      <td>운영 이력에서 반복 패턴 추출 (anomalyType + action 그룹핑)</td>
+      <td>No</td>
+    </tr>
+    <tr>
+      <td><code>PlaybookEvolver</code></td>
+      <td>패턴을 기반으로 LLM이 최적화된 플레이북 JSON 생성</td>
+      <td style="color: var(--red); font-weight: 700;">Yes</td>
+    </tr>
+    <tr>
+      <td><code>RollbackManager</code></td>
+      <td>버전 관리, 승격, 롤백 (최대 10 버전 보관)</td>
+      <td>No</td>
+    </tr>
+    <tr>
+      <td><code>ABTestController</code></td>
+      <td>새 버전 vs 기존 버전 A/B 테스트 (Fisher's exact test)</td>
+      <td>No</td>
+    </tr>
+  </table>
+
+  <h3 style="margin-top: 16px;">AI Provider Fallback Chain</h3>
+  <div class="flow">
+    <div class="flow-step">Gateway</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">Qwen</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-step active">Anthropic</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">OpenAI</div>
+    <div class="flow-arrow">&rarr;</div>
+    <div class="flow-step">Gemini</div>
+  </div>
+  <p style="font-size: 10px; color: var(--muted); margin-top: 4px;">
+    모든 provider 실패 시 LLM 생성은 skip되고, 기존 heuristic 플레이북이 정상 동작합니다.
+  </p>
+</div>
+
+<div style="text-align: center; margin-top: 40px; padding: 16px; border-top: 1px solid var(--border); font-size: 10px; color: var(--muted);">
+  SentinAI &mdash; LLM-Enhanced Playbook Evolution &mdash; 2026-03-17
+</div>
+
+</body>
+</html>
