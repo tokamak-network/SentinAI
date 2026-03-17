@@ -27,6 +27,7 @@ export type AnomalyMetric = string;
 export const CORE_ANOMALY_METRICS = [
   'cpuUsage',
   'memoryPercent',
+  'txCountPerBlock',
   'txPoolPending',
   'gasUsedRatio',
   'l2BlockHeight',

@@ -40,6 +40,9 @@ export interface MetricDataPoint {
   /** Memory usage percentage (0-100), memoryUsage / memoryLimit * 100 */
   memoryPercent?: number;
 
+  /** Number of transactions in the latest L2 block (leading indicator for traffic surge) */
+  txCountPerBlock?: number;
+
   /**
    * Custom metrics collected via SENTINAI_CUSTOM_METRIC_N_* env vars.
    * Key: metric name (e.g. 'proofGenTime'), Value: numeric reading.
