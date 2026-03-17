@@ -1,6 +1,8 @@
 import { buildAgentMarketplaceOpsSummary } from '@/lib/agent-marketplace/ops-summary';
 import { getAgentMarketplaceContractsStatus } from '@/lib/agent-marketplace/contracts-status';
 import { listAgentMarketplaceDisputes } from '@/lib/agent-marketplace/dispute-store';
+import { getRegistrationStatus } from '@/lib/agent-marketplace/registration-status';
+import { RegistrationWizard } from '@/components/marketplace/RegistrationWizard';
 
 function formatTonAmount(amount: string | null): string {
   if (!amount) {
@@ -36,10 +38,11 @@ export default async function MarketplaceOpsPage({
 }) {
   const toIso = new Date().toISOString();
   const fromIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-  const [summary, disputes, contracts] = await Promise.all([
+  const [summary, disputes, contracts, registrationStatus] = await Promise.all([
     buildAgentMarketplaceOpsSummary({ fromIso, toIso }),
     listAgentMarketplaceDisputes(),
     Promise.resolve(getAgentMarketplaceContractsStatus()),
+    getRegistrationStatus(),
   ]);
   const resolvedSearchParams = await searchParams;
   const selectedDisputeId = resolvedSearchParams?.dispute;
@@ -120,8 +123,10 @@ export default async function MarketplaceOpsPage({
             <div className="text-[18px] font-bold">{summary.distinctBuyerCount}</div>
           </div>
           <div className="border border-[#D0D0D0] bg-white p-4">
-            <div className="mb-1 text-[9px] font-bold tracking-[0.12em] text-[#888]">LAST BATCH</div>
-            <div className="text-[18px] font-bold uppercase">{summary.lastBatch.status}</div>
+            <div className="mb-1 text-[9px] font-bold tracking-[0.12em] text-[#888]">REGISTRY</div>
+            <div className={`text-[12px] font-bold ${registrationStatus.registered ? 'text-[#27ae60]' : 'text-[#D40000]'}`}>
+              {registrationStatus.registered ? 'REGISTERED ●' : 'NOT REGISTERED'}
+            </div>
           </div>
         </section>
 
@@ -165,25 +170,7 @@ export default async function MarketplaceOpsPage({
           </div>
         </section>
 
-        <section className="px-6 pb-6">
-          <div className="border border-[#D0D0D0] bg-white">
-            <div className="border-b border-[#D0D0D0] bg-[#F5F5F5] px-4 py-2 text-[9px] font-bold tracking-[0.12em]">
-              REGISTRY REGISTRATION
-            </div>
-            <div className="space-y-3 px-4 py-3 text-[11px]">
-              <div><span className="text-[#888]">registry:</span> {contracts.registry.address ?? 'missing'}</div>
-              <div><span className="text-[#888]">agent.json:</span> {manifestUri}</div>
-              <form action="/api/agent-marketplace/ops/register" method="post">
-                <button
-                  type="submit"
-                  className="border border-[#8B0000] bg-[#D40000] px-3 py-2 text-[10px] font-bold tracking-[0.08em] text-white"
-                >
-                  Register to Registry
-                </button>
-              </form>
-            </div>
-          </div>
-        </section>
+        <RegistrationWizard initialStatus={registrationStatus} />
 
         <section className="px-6 pb-6">
           <div className="mb-3 border-b border-[#E8E8E8] pb-2 text-[9px] font-bold tracking-[0.12em] text-[#888]">
