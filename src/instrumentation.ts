@@ -4,6 +4,25 @@ const g = globalThis as typeof globalThis & {
   __sentinai_first_run_bootstrap_started__?: boolean;
 };
 
+/**
+ * Fallback: start a default agent instance when bootstrap is disabled or fails.
+ * Only used when SENTINAI_INSTANCES is not set (single-instance mode).
+ */
+async function startDefaultInstanceFallback() {
+  const { getAgentOrchestrator } = await import('./core/agent-orchestrator');
+  const orchestrator = getAgentOrchestrator();
+
+  if (orchestrator.getInstanceIds().length > 0) {
+    return; // agents already started by another path
+  }
+
+  const instanceId = process.env.SENTINAI_DEFAULT_INSTANCE_ID ?? 'default';
+  const protocolId = process.env.SENTINAI_DEFAULT_PROTOCOL_ID ?? 'opstack-l2';
+  const rpcUrl = process.env.L2_RPC_URL;
+  orchestrator.startInstance(instanceId, protocolId, rpcUrl);
+  logger.info(`[instrumentation] fallback: started default instance (instanceId=${instanceId})`);
+}
+
 export async function register() {
   if (process.env.NEXT_RUNTIME !== 'nodejs') {
     return;
@@ -20,9 +39,15 @@ export async function register() {
   }
   g.__sentinai_first_run_bootstrap_started__ = true;
 
+  // Skip agent startup if SENTINAI_INSTANCES is explicitly set (handled by scheduler)
+  if (process.env.SENTINAI_INSTANCES) {
+    return;
+  }
+
   const autoBootstrapEnabled = process.env.SENTINAI_AUTO_BOOTSTRAP !== 'false';
   if (!autoBootstrapEnabled) {
     logger.info('[first-run-bootstrap] skipped (SENTINAI_AUTO_BOOTSTRAP=false)');
+    await startDefaultInstanceFallback();
     return;
   }
 
@@ -83,8 +108,10 @@ export async function register() {
       }
     } else {
       logger.info('[first-run-bootstrap] skipped/failed: %s', result.error ?? 'unknown');
+      await startDefaultInstanceFallback();
     }
   } catch (error) {
     logger.warn('[first-run-bootstrap] failed with unexpected error: %s', String(error));
+    await startDefaultInstanceFallback();
   }
 }

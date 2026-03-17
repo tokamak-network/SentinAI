@@ -192,10 +192,12 @@ export async function initializeScheduler(): Promise<void> {
     }, { timezone: 'UTC' });
   }
 
-  // AgentOrchestrator v2 — always active
-  const orchestrator = getAgentOrchestrator();
+  // AgentOrchestrator v2 — explicit multi-instance mode only.
+  // Default single-instance startup is handled by instrumentation.ts (first-run-bootstrap)
+  // to avoid duplicate agents when bootstrap creates a Registry instance with a different ID.
   const instancesEnv = process.env.SENTINAI_INSTANCES;
   if (instancesEnv) {
+    const orchestrator = getAgentOrchestrator();
     try {
       const instances = JSON.parse(instancesEnv) as Array<{ instanceId: string; protocolId: string; rpcUrl?: string }>;
       for (const inst of instances) {
@@ -205,13 +207,6 @@ export async function initializeScheduler(): Promise<void> {
     } catch {
       logger.warn('Failed to parse SENTINAI_INSTANCES env var');
     }
-  } else {
-    // Default: start a single instance using L2_RPC_URL
-    const defaultInstanceId = process.env.SENTINAI_DEFAULT_INSTANCE_ID ?? 'default';
-    const defaultProtocolId = process.env.SENTINAI_DEFAULT_PROTOCOL_ID ?? 'opstack-l2';
-    const defaultRpcUrl = process.env.L2_RPC_URL;
-    orchestrator.startInstance(defaultInstanceId, defaultProtocolId, defaultRpcUrl);
-    logger.info(`AgentOrchestrator started default instance (instanceId=${defaultInstanceId})`);
   }
 
   initialized = true;
