@@ -42,6 +42,35 @@ export async function listPendingSettlements(redisPrefix: string, chainId: numbe
   return records.filter((record): record is SettlementRecord => record !== null);
 }
 
+export async function listAllSettlements(
+  redisPrefix: string,
+  chainId: number,
+  options?: { limit?: number; status?: import('./types').SettlementStatus }
+): Promise<SettlementRecord[]> {
+  const redis = getRedisClient();
+  const pattern = `${redisPrefix}:facilitator:settlement:${chainId}:*`;
+  const limit = options?.limit ?? 100;
+
+  const keys: string[] = [];
+  let cursor = '0';
+  do {
+    const [nextCursor, batch] = await redis.scan(cursor, 'MATCH', pattern, 'COUNT', 100);
+    cursor = nextCursor;
+    keys.push(...batch);
+  } while (cursor !== '0');
+
+  if (keys.length === 0) return [];
+
+  const raws = await redis.mget(...keys);
+  const records: SettlementRecord[] = raws
+    .filter((raw): raw is string => raw !== null)
+    .map((raw) => JSON.parse(raw) as SettlementRecord);
+
+  const filtered = options?.status ? records.filter((r) => r.status === options.status) : records;
+  filtered.sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+  return filtered.slice(0, limit);
+}
+
 export async function markSettlementStatus(
   redisPrefix: string,
   chainId: number,

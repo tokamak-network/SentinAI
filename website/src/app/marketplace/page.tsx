@@ -2,10 +2,25 @@
 
 import { useEffect, useState } from 'react';
 import { Agent, getPriceDisplay } from '@/lib/agent-marketplace';
+import PurchaseModal from '@/components/PurchaseModal';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
+// Map agent IDs to their purchasable operator API endpoints
+const AGENT_ENDPOINT_MAP: Record<string, string> = {
+  'anomaly-detector': '/api/marketplace/sequencer-health',
+  'rca-engine': '/api/marketplace/incident-summary',
+  'cost-optimizer': '/api/marketplace/batch-submission-status',
+  'predictive-scaler': '/api/marketplace/sequencer-health',
+  'nlops-chat': '/api/marketplace/incident-summary',
+};
+
 type TabType = 'registry' | 'instance' | 'guide' | 'sandbox';
+
+interface PurchaseTarget {
+  agent: Agent;
+  endpoint: string;
+}
 
 function SectionBar({ children }: { children: string }) {
   return (
@@ -28,7 +43,9 @@ function StatusDot({ color }: { color: string }) {
   );
 }
 
-function AgentCard({ agent }: { agent: Agent }) {
+function AgentCard({ agent, onBuy }: { agent: Agent; onBuy?: () => void }) {
+  const isPaid = agent.priceUSDCents > 0;
+
   return (
     <div style={{
       border: '1px solid #D0D0D0',
@@ -136,6 +153,26 @@ function AgentCard({ agent }: { agent: Agent }) {
         >
           DOCS
         </button>
+        {isPaid && onBuy && (
+          <button
+            onClick={onBuy}
+            style={{
+              fontFamily: FONT,
+              fontSize: '9px',
+              fontWeight: 700,
+              letterSpacing: '0.08em',
+              padding: '4px 12px',
+              background: '#007A00',
+              color: 'white',
+              border: 'none',
+              cursor: 'pointer',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = '#005500')}
+            onMouseLeave={(e) => (e.currentTarget.style.background = '#007A00')}
+          >
+            BUY WITH TON
+          </button>
+        )}
       </div>
     </div>
   );
@@ -145,9 +182,9 @@ export default function MarketplacePage() {
   const [activeTab, setActiveTab] = useState<TabType>('registry');
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [purchaseTarget, setPurchaseTarget] = useState<PurchaseTarget | null>(null);
 
   useEffect(() => {
-    // Load agents from dynamic marketplace store via API
     const loadAgents = async () => {
       try {
         const response = await fetch('/api/agents');
@@ -158,7 +195,7 @@ export default function MarketplacePage() {
         setAgents(data.agents || []);
       } catch (error) {
         console.error('Failed to load agents:', error);
-        setAgents([]); // Empty on error, don't break the UI
+        setAgents([]);
       } finally {
         setLoading(false);
       }
@@ -166,6 +203,12 @@ export default function MarketplacePage() {
 
     loadAgents();
   }, []);
+
+  function handleBuy(agent: Agent) {
+    const endpoint = AGENT_ENDPOINT_MAP[agent.id];
+    if (!endpoint) return;
+    setPurchaseTarget({ agent, endpoint });
+  }
 
   return (
     <div style={{
@@ -354,7 +397,11 @@ export default function MarketplacePage() {
             ) : (
               <div>
                 {agents.map((agent) => (
-                  <AgentCard key={agent.id} agent={agent} />
+                  <AgentCard
+                    key={agent.id}
+                    agent={agent}
+                    onBuy={AGENT_ENDPOINT_MAP[agent.id] ? () => handleBuy(agent) : undefined}
+                  />
                 ))}
               </div>
             )}
@@ -409,6 +456,16 @@ export default function MarketplacePage() {
           </div>
         )}
       </main>
+
+      {/* Purchase Modal */}
+      {purchaseTarget && (
+        <PurchaseModal
+          agentId={purchaseTarget.agent.id}
+          agentName={purchaseTarget.agent.name}
+          endpoint={purchaseTarget.endpoint}
+          onClose={() => setPurchaseTarget(null)}
+        />
+      )}
     </div>
   );
 }

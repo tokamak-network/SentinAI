@@ -41,6 +41,13 @@ export default function AdminDashboard() {
       link: '/admin/registry',
       icon: '📋',
     },
+    {
+      title: 'Settlements',
+      description: 'x402 payment settlements',
+      count: 'TON payment records',
+      link: '/admin/settlements',
+      icon: '💳',
+    },
   ];
 
   return (
