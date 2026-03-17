@@ -130,6 +130,10 @@ const AUTH_EXEMPT_ROUTES = new Set([
   '/api/oauth/token',    // OAuth token endpoint is the auth entry point
   '/api/oauth/register', // DCR endpoint is unauthenticated by definition (RFC 7591)
   '/api/mcp',           // MCP server has its own auth layer (policy engine + Bearer token)
+  '/api/auth/siwe/nonce',  // SIWE login flow — public by design
+  '/api/auth/siwe/verify', // SIWE login flow — public by design
+  '/api/auth/siwe/logout', // SIWE logout — session-gated, not API-key-gated
+  '/api/admin/auth/logout', // Admin logout — session-gated, not API-key-gated
 ]);
 
 /**
