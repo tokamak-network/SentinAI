@@ -162,8 +162,9 @@ export function middleware(request: NextRequest) {
     const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
     if (!sessionToken || !isValidSessionTokenEdge(sessionToken)) {
-      // Redirect to login with callback URL
-      const loginUrl = new URL('/admin/login', request.url);
+      // Redirect to login with callback URL (preserve basePath via nextUrl.clone)
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = '/admin/login';
       loginUrl.searchParams.set('callbackUrl', pathname);
       return NextResponse.redirect(loginUrl);
     }

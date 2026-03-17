@@ -415,7 +415,7 @@ export default function Dashboard() {
   // --- Playbook Evolution Polling ---
   useEffect(() => {
     const fetchPlaybookStatus = () => {
-      fetch('/api/playbook-evolution?action=status')
+      fetch(`${BASE_PATH}/api/playbook-evolution?action=status`)
         .then(r => r.json())
         .then((d: { playbooks?: { needsReview?: number } }) => {
           setNeedsReviewCount(d.playbooks?.needsReview ?? 0);
