@@ -177,7 +177,7 @@ function verifyPlugin(entry: PluginEntry): PluginReport {
     // ── Action type validation ────────────────────────────────────────────────
     const allActions = [
       ...(pb.actions ?? []),
-      ...(pb.fallbackActions ?? []),
+      ...(pb.fallback ?? []),
     ];
     let playbookActionsValid = true;
     for (const action of allActions) {

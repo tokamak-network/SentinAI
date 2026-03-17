@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
@@ -83,7 +84,7 @@ export default function AdminLayout({
         {navItems.map((item) => {
           const isActive = pathname === item.href;
           return (
-            <a
+            <Link
               key={item.href}
               href={item.href}
               style={{
@@ -96,7 +97,7 @@ export default function AdminLayout({
               }}
             >
               {item.label}
-            </a>
+            </Link>
           );
         })}
       </nav>

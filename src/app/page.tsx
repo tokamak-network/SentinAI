@@ -7,6 +7,7 @@ import type { ExperienceTier } from '@/types/agent-resume';
 import { NLOpsBar } from '@/components/nlops-bar';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
+import Link from 'next/link';
 import { AgentInteractionGraph } from '@/components/agent-interaction-graph';
 import { AgentRosterPanel } from '@/components/agent-roster-panel';
 import { OperationsPanel } from '@/components/operations-panel';
@@ -346,7 +347,7 @@ function TopNavLinks() {
 
   return (
     <>
-      <a href="/admin/login" style={linkStyle}>ADMIN</a>
+      <Link href="/admin/login" style={linkStyle}>ADMIN</Link>
     </>
   );
 }
