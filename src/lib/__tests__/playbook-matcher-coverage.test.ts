@@ -311,3 +311,23 @@ describe('claim_bond action executor', () => {
     expect(result.output).toContain('all resolved');
   });
 });
+
+// ── memoryPercent playbook matching ──────────────────────────────────────────
+describe('memoryPercent > 85 playbook matching', () => {
+  it('memoryPercent > 85 matches when value is 88', () => {
+    // In the mock, memoryPercent maps to 'system' (default)
+    expect(match('system', 'memoryPercent > 85', { metric: 'memoryPercent', value: 88 })).toBe(true);
+  });
+
+  it('memoryPercent > 85 does not match when value is 80', () => {
+    expect(match('system', 'memoryPercent > 85', { metric: 'memoryPercent', value: 80 })).toBe(false);
+  });
+
+  it('memoryPercent > 90 matches when value is 95', () => {
+    expect(match('system', 'memoryPercent > 90', { metric: 'memoryPercent', value: 95 })).toBe(true);
+  });
+
+  it('memoryPercent > 90 does not match when value is 89', () => {
+    expect(match('system', 'memoryPercent > 90', { metric: 'memoryPercent', value: 89 })).toBe(false);
+  });
+});

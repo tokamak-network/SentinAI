@@ -36,6 +36,7 @@ interface MetricData {
     gethMemGiB: number;
     syncLag: number;
     syncLagReliable?: boolean;
+    peerCount?: number | null;
   };
   components?: ComponentData[];
   cost: {
@@ -843,6 +844,7 @@ export default function Dashboard() {
   const successRate = agentFleet?.kpi.successRate ?? 100; // 0–100 (percent, already multiplied in agent-fleet.ts)
   const vcpu = scalerState?.currentVcpu ?? agentLoop?.lastCycle?.scaling?.currentVcpu ?? 2;
   const p95 = agentFleet?.kpi.p95CycleMs ?? 0;
+  const peerCount = current?.metrics?.peerCount ?? null;
 
   // Derive scaling event for interaction graph banner
   const lastScaling = agentLoop?.lastCycle?.scaling;
@@ -855,6 +857,7 @@ export default function Dashboard() {
   const tickerItems = [
     { label: 'L2 BLOCK', value: l2Block.toLocaleString() },
     { label: 'L1 BLOCK', value: l1Block.toLocaleString() },
+    { label: 'PEERS', value: peerCount != null ? String(peerCount) : 'N/A', warn: peerCount === 0 },
     { label: 'GAS RATIO', value: `${(gasUsed * 100).toFixed(0)}%` },
     { label: 'SUCCESS', value: `${successRate.toFixed(1)}%` },
     { label: 'P95', value: p95Str },

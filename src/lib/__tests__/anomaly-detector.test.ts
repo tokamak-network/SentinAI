@@ -685,4 +685,76 @@ describe('anomaly-detector', () => {
       expect(config.minHistoryPoints).toBe(5);
     });
   });
+
+  // ========================================================================
+  // Test Suite N: memoryPercent Z-Score Detection
+  // ========================================================================
+
+  describe('memoryPercent Z-Score detection', () => {
+    it('should NOT generate anomaly when memory is stable (30-50%)', () => {
+      const history = generateHistory(10, {}).map((m, i) => ({
+        ...m,
+        memoryPercent: 35 + i * 0.5, // 35% to 39.5%, gentle rise
+      }));
+      const current = createMetric({ memoryPercent: 40 });
+
+      const anomalies = detectAnomalies(current, history);
+      const memAnomaly = anomalies.find(a => a.metric === 'memoryPercent');
+
+      expect(memAnomaly).toBeUndefined();
+    });
+
+    it('should detect memoryPercent spike when memory jumps to 88% from stable baseline (sustained)', () => {
+      // Stable history: 30% with small variance
+      const history = generateHistory(10, {}).map(m => ({
+        ...m,
+        memoryPercent: 30 + (Math.random() - 0.5) * 2, // 29-31%
+      }));
+      const current = createMetric({ memoryPercent: 88 });
+
+      // Sustained: requires DEFAULT_SUSTAINED_COUNT (3) cycles
+      const anomalies = detectWithSustained(current, history, 3);
+      const memAnomaly = anomalies.find(a => a.metric === 'memoryPercent');
+
+      expect(memAnomaly).toBeDefined();
+      expect(memAnomaly?.direction).toBe('spike');
+      expect(memAnomaly?.isAnomaly).toBe(true);
+      expect(memAnomaly?.value).toBe(88);
+    });
+
+    it('should NOT detect anomaly on single transient memory spike (below sustained count)', () => {
+      const history = generateHistory(10, {}).map(m => ({
+        ...m,
+        memoryPercent: 30 + (Math.random() - 0.5) * 2,
+      }));
+      const current = createMetric({ memoryPercent: 88 });
+
+      // Only 1 cycle — below sustained threshold
+      const anomalies = detectAnomalies(current, history);
+      const memAnomaly = anomalies.find(a => a.metric === 'memoryPercent' && a.rule === 'z-score');
+
+      expect(memAnomaly).toBeUndefined();
+    });
+
+    it('should skip memoryPercent detection when memoryPercent is undefined', () => {
+      const history = generateHistory(10, {}); // no memoryPercent field
+      const current = createMetric(); // no memoryPercent field
+
+      const anomalies = detectAnomalies(current, history);
+      const memAnomaly = anomalies.find(a => a.metric === 'memoryPercent');
+
+      expect(memAnomaly).toBeUndefined();
+    });
+
+    it('should skip memoryPercent detection when history has no memoryPercent values', () => {
+      // history without memoryPercent, but current has it
+      const history = generateHistory(10, {});
+      const current = createMetric({ memoryPercent: 90 });
+
+      const anomalies = detectAnomalies(current, history);
+      const memAnomaly = anomalies.find(a => a.metric === 'memoryPercent');
+
+      expect(memAnomaly).toBeUndefined();
+    });
+  });
 });

@@ -128,6 +128,9 @@ export async function getMetricsStats(): Promise<MetricsStoreStats> {
   const txPoolValues = metricsBuffer.map(m => m.txPoolPending);
   const gasValues = metricsBuffer.map(m => m.gasUsedRatio);
   const blockIntervalValues = metricsBuffer.map(m => m.blockInterval);
+  const memValues = metricsBuffer
+    .map(m => m.memoryPercent)
+    .filter((v): v is number => v !== undefined && v > 0);
 
   return {
     count: metricsBuffer.length,
@@ -138,6 +141,7 @@ export async function getMetricsStats(): Promise<MetricsStoreStats> {
       txPool: calculateStats(txPoolValues),
       gasUsedRatio: calculateStats(gasValues),
       blockInterval: calculateStats(blockIntervalValues),
+      memory: memValues.length > 0 ? calculateStats(memValues) : undefined,
     },
   };
 }

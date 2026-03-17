@@ -34,6 +34,12 @@ export interface MetricDataPoint {
   /** Optional: seed data TTL expiry timestamp (ISO 8601) */
   seedTtlExpiry?: string;
 
+  /** Memory usage in MiB (from kubectl top / docker stats) */
+  memoryUsage?: number;
+
+  /** Memory usage percentage (0-100), memoryUsage / memoryLimit * 100 */
+  memoryPercent?: number;
+
   /**
    * Custom metrics collected via SENTINAI_CUSTOM_METRIC_N_* env vars.
    * Key: metric name (e.g. 'proofGenTime'), Value: numeric reading.
@@ -123,6 +129,7 @@ export interface MetricsStoreStats {
     txPool: MetricStatSummary;
     gasUsedRatio: MetricStatSummary;
     blockInterval: MetricStatSummary;
+    memory?: MetricStatSummary;
   };
 }
 

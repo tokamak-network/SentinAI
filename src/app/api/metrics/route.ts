@@ -661,9 +661,11 @@ export async function GET(request: Request) {
         const clientProfile = resolveClientProfile();
         // Use probe-detected namespace if available, otherwise fall back to env-based profile
         let detectedL2ClientNamespace: 'txpool' | 'parity' | null = null;
+        let peerCount: number | null = null;
         try {
             const detectedL2Client = await getOrDetectL2Client(rpcUrl);
             detectedL2ClientNamespace = detectedL2Client.txpoolNamespace;
+            peerCount = detectedL2Client.peerCount ?? null;
         } catch {
             // Non-blocking: probe failure falls through to profile-based method selection
         }
@@ -873,6 +875,12 @@ export async function GET(request: Request) {
             ...(usingSeedMetrics && seedMetricData?.seedTtlExpiry
               ? { seedTtlExpiry: seedMetricData.seedTtlExpiry }
               : {}),
+            // Memory: use already-collected containerUsage.memoryMiB
+            // totalMemoryMiB = currentVcpu * 2 * 1024 (Fargate formula, same as line ~952)
+            ...(containerUsage ? {
+              memoryUsage: Math.round(containerUsage.memoryMiB),
+              memoryPercent: Math.min(100, (containerUsage.memoryMiB / (currentVcpu * 2 * 1024)) * 100),
+            } : {}),
           };
           await pushMetric(dataPoint);
         }
@@ -952,6 +960,7 @@ export async function GET(request: Request) {
                 gethMemGiB: currentVcpu * 2,
                 syncLag,
                 syncLagReliable,
+                peerCount,
                 cpuSource,
                 source: responseSource,
                 ...zkstackMetrics,

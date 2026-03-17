@@ -43,6 +43,7 @@ const SUSTAINED_COUNT: Record<string, number> = {
   gasUsedRatio: parseInt(process.env.ANOMALY_SUSTAINED_COUNT_GAS || '2', 10),
   txPoolPending: parseInt(process.env.ANOMALY_SUSTAINED_COUNT_TXPOOL || String(DEFAULT_SUSTAINED_COUNT), 10),
   l2BlockInterval: parseInt(process.env.ANOMALY_SUSTAINED_COUNT_BLOCK_INTERVAL || String(DEFAULT_SUSTAINED_COUNT), 10),
+  memoryPercent: parseInt(process.env.ANOMALY_SUSTAINED_COUNT_MEMORY || String(DEFAULT_SUSTAINED_COUNT), 10),
 };
 
 /**
@@ -56,6 +57,7 @@ const MIN_STD_DEV: Partial<Record<string, number>> = {
   gasUsedRatio: parseFloat(process.env.ANOMALY_MIN_STD_DEV_GAS || '0.01'),
   txPoolPending: parseFloat(process.env.ANOMALY_MIN_STD_DEV_TXPOOL || '5'),
   l2BlockInterval: parseFloat(process.env.ANOMALY_MIN_STD_DEV_BLOCK_INTERVAL || '0.3'),
+  memoryPercent: parseFloat(process.env.ANOMALY_MIN_STD_DEV_MEMORY || '0.5'),
 };
 
 // ============================================================================
@@ -398,6 +400,21 @@ export function detectAnomalies(
     history.map(p => p.blockInterval)
   );
   if (intervalAnomaly) anomalies.push(intervalAnomaly);
+
+  // Memory Percent Z-Score (only if memoryPercent data is available)
+  if (current.memoryPercent !== undefined && current.memoryPercent > 0) {
+    const memHistory = history
+      .map(p => p.memoryPercent)
+      .filter((v): v is number => v !== undefined && v > 0);
+    if (memHistory.length >= MIN_HISTORY_POINTS) {
+      const memAnomaly = detectZScoreAnomaly(
+        'memoryPercent',
+        current.memoryPercent,
+        memHistory
+      );
+      if (memAnomaly) anomalies.push(memAnomaly);
+    }
+  }
 
   // 5. Custom metrics Z-Score detection (from ClientProfile / chain plugins)
   if (current.customMetrics) {

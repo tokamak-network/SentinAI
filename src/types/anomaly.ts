@@ -26,6 +26,7 @@ export type AnomalyMetric = string;
 /** Core metrics shared across all EVM L2 chains */
 export const CORE_ANOMALY_METRICS = [
   'cpuUsage',
+  'memoryPercent',
   'txPoolPending',
   'gasUsedRatio',
   'l2BlockHeight',
