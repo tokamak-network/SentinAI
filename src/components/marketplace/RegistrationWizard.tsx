@@ -129,10 +129,14 @@ export function RegistrationWizard({
       const res = await fetch('/api/agent-marketplace/ops/register', { method: 'POST' });
       const body = await res.json() as { result: { ok: boolean; agentId?: string; txHash?: string; error?: string } };
       if (body.result.ok) {
-        setTxResult({ ok: true, agentId: body.result.agentId!, txHash: body.result.txHash! });
-        const statusRes = await fetch('/api/agent-marketplace/ops/registration-status');
-        const newStatus = await statusRes.json() as RegistrationStatus;
-        setStatus(newStatus);
+        if (!body.result.agentId || !body.result.txHash) {
+          setTxResult({ ok: false, error: 'Invalid response from server' });
+        } else {
+          setTxResult({ ok: true, agentId: body.result.agentId, txHash: body.result.txHash });
+          const statusRes = await fetch('/api/agent-marketplace/ops/registration-status');
+          const newStatus = await statusRes.json() as RegistrationStatus;
+          setStatus(newStatus);
+        }
       } else {
         setTxResult({ ok: false, error: body.result.error ?? 'Unknown error' });
       }
@@ -293,7 +297,11 @@ export function RegistrationWizard({
         {/* Step 4: RESULT */}
         {step === 4 && (
           <div className="p-5">
-            {txResult?.ok ? (
+            {txResult === null ? (
+              <div className="py-6 text-center text-[11px] text-[#888]">
+                Click ③ TX tab and press REGISTER NOW to send the transaction.
+              </div>
+            ) : txResult.ok ? (
               <>
                 <div className="mb-4 text-[10px] font-bold text-[#27ae60]">✓ REGISTRATION SUCCESSFUL</div>
                 <div className="mb-4 space-y-2">
@@ -326,7 +334,7 @@ export function RegistrationWizard({
               <>
                 <div className="mb-4 text-[10px] font-bold text-[#D40000]">✗ REGISTRATION FAILED</div>
                 <div className="mb-4 border border-[#FFCDD2] bg-[#FFEBEE] px-4 py-3 text-[11px] text-[#C62828]">
-                  {txResult?.error ?? 'Unknown error'}
+                  {txResult.error ?? 'Unknown error'}
                 </div>
                 <div className="flex justify-end">
                   <button
