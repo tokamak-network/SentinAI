@@ -123,14 +123,21 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       return NextResponse.json({ patterns: patterns.length, saved, skipped, llmEvolved });
     }
 
-    if ((action === 'approve' || action === 'promote' || action === 'suspend') && playbookId) {
+    if ((action === 'approve' || action === 'promote' || action === 'suspend' || action === 'reactivate') && playbookId) {
       const playbook = await getPlaybook(INSTANCE_ID, playbookId);
       if (!playbook) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
       const nextStatus =
         action === 'approve' ? 'approved' as const :
         action === 'promote' ? 'trusted' as const :
+        action === 'reactivate' ? 'pending' as const :
         'suspended' as const;
+
+      const reasonText =
+        action === 'approve' ? 'Approved' :
+        action === 'promote' ? 'Promoted to trusted' :
+        action === 'reactivate' ? 'Reactivated' :
+        'Suspended';
 
       const updated = {
         ...playbook,
@@ -142,7 +149,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
             {
               version: playbook.evolution.version + 1,
               timestamp: new Date().toISOString(),
-              reason: `${action === 'approve' ? 'Approved' : action === 'promote' ? 'Promoted to trusted' : 'Suspended'} by operator`,
+              reason: `${reasonText} by operator`,
               confidenceDelta: 0,
               changedBy: 'operator' as const,
             },

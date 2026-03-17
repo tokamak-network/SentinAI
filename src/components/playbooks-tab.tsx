@@ -13,6 +13,7 @@ function authHeaders(): HeadersInit {
 // ─── Label Maps ─────────────────────────────────────────────────────────────
 
 const METRIC_LABEL: Record<string, string> = {
+  // snake_case (legacy)
   tx_pool_pending: 'TxPool pending',
   tx_pool_count: 'TxPool count',
   l1_sync_lag: 'L1 sync lag',
@@ -21,6 +22,16 @@ const METRIC_LABEL: Record<string, string> = {
   block_height: 'Block height',
   memory_usage: 'Memory usage',
   peer_count: 'Peer count',
+  // camelCase (anomaly detector metric names)
+  txPoolPending: 'TxPool pending',
+  cpuUsage: 'CPU usage',
+  memoryPercent: 'Memory %',
+  txCountPerBlock: 'Tx count/block',
+  gasUsedRatio: 'Gas used ratio',
+  l2BlockHeight: 'L2 block height',
+  l2BlockInterval: 'L2 block interval',
+  peerCount: 'Peer count',
+  blockInterval: 'Block interval',
 };
 
 const ANOMALY_OP: Record<string, string> = {
@@ -32,12 +43,26 @@ const ANOMALY_OP: Record<string, string> = {
 };
 
 const ACTION_LABEL: Record<string, string> = {
+  // kebab-case (legacy)
   'restart-batcher': 'Restart batcher',
   'restart-proposer': 'Restart proposer',
   'restart-component': 'Restart component',
   'switch-l1-rpc': 'Switch L1 RPC',
-  'scale-up': 'Scale up resources',
-  'refill-eoa': 'Refill EOA wallet',
+  'scale-up': 'Scale up',
+  'refill-eoa': 'Refill EOA',
+  // underscore (action-executor types)
+  restart_pod: 'Restart pod',
+  scale_up: 'Scale up',
+  scale_down: 'Scale down',
+  health_check: 'Health check',
+  check_l1_connection: 'Check L1 connection',
+  collect_logs: 'Collect logs',
+  escalate_operator: 'Escalate to operator',
+  refill_eoa: 'Refill EOA',
+  verify_balance_restored: 'Verify balance',
+  switch_l1_rpc: 'Switch L1 RPC',
+  claim_bond: 'Claim bond',
+  zero_downtime_swap: 'Zero-downtime swap',
   unknown: '—',
 };
 
@@ -55,14 +80,22 @@ function parseSignature(sig: string): { when: string; anomalyType: string } {
   const value = valuePart ? valuePart.slice(2) : null;
 
   const op = ANOMALY_OP[anomalyType] ?? '>';
-  const label = METRIC_LABEL[metricName] ?? metricName.replace(/_/g, ' ');
+  const label = METRIC_LABEL[metricName]
+    ?? metricName.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/_/g, ' ');
 
   const when = value ? `${label} ${op} ${value}` : `${label} ${op}`;
   return { when, anomalyType };
 }
 
 function humanAction(action: string): string {
-  return ACTION_LABEL[action] ?? action.replace(/-/g, ' ');
+  return ACTION_LABEL[action] ?? action.replace(/[-_]/g, ' ');
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 1000) return `${ms}ms`;
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.round(seconds / 60)}m`;
 }
 
 function relativeTime(iso: string | null): string {
@@ -159,19 +192,22 @@ function StatusBar({ totalRecords, lastTimestamp, onRunNow, running }: StatusBar
 
 interface PlaybookCardProps {
   playbook: EvolvedPlaybook;
-  onAction: (id: string, action: 'approve' | 'promote' | 'suspend') => void;
+  onAction: (id: string, action: 'approve' | 'promote' | 'suspend' | 'reactivate') => void;
 }
 
 function PlaybookCard({ playbook, onAction }: PlaybookCardProps) {
   const font = "'IBM Plex Mono', monospace";
   const { when, anomalyType } = parseSignature(playbook.triggerSignature);
   const action = humanAction(playbook.action);
+  const [showHistory, setShowHistory] = useState(false);
 
   const borderColor =
     playbook.reviewStatus === 'trusted'
       ? '#007A00'
       : playbook.reviewStatus === 'approved'
       ? '#0055AA'
+      : playbook.reviewStatus === 'suspended'
+      ? '#888'
       : '#D40000';
 
   const badgeStyle: React.CSSProperties = {
@@ -185,6 +221,8 @@ function PlaybookCard({ playbook, onAction }: PlaybookCardProps) {
       ? { background: '#E8FFF5', color: '#007A00' }
       : playbook.reviewStatus === 'approved'
       ? { background: '#E8F0FF', color: '#0055AA' }
+      : playbook.reviewStatus === 'suspended'
+      ? { background: '#F0F0F0', color: '#888' }
       : { background: '#FFF8E0', color: '#AA6600' }),
   };
 
@@ -220,14 +258,10 @@ function PlaybookCard({ playbook, onAction }: PlaybookCardProps) {
             {action} when {when}
           </span>
           <span
-            style={{
-              marginLeft: 8,
-              fontSize: 9,
-              color: '#888',
-              textTransform: 'uppercase',
-            }}
+            onClick={() => setShowHistory(prev => !prev)}
+            style={{ marginLeft: 8, fontSize: 9, color: '#0055AA', cursor: 'pointer' }}
           >
-            v{playbook.evolution.version}
+            v{playbook.evolution.version} {showHistory ? '▲' : '▼'}
           </span>
         </div>
         <span style={badgeStyle}>{playbook.reviewStatus.toUpperCase()}</span>
@@ -358,7 +392,31 @@ function PlaybookCard({ playbook, onAction }: PlaybookCardProps) {
           LAST{' '}
           <strong>{relativeTime(playbook.performance.lastApplied)}</strong>
         </span>
+        <span>|</span>
+        <span>
+          AVG{' '}
+          <strong style={{ color: '#0A0A0A' }}>
+            {formatDuration(playbook.performance.avgResolutionMs)}
+          </strong>
+        </span>
       </div>
+
+      {/* Evolution History */}
+      {showHistory && playbook.evolution.changelog.length > 0 && (
+        <div style={{ background: '#FAFAFA', border: '1px solid #E8E8E8', padding: '8px 10px', marginBottom: 8, fontSize: 9 }}>
+          <div style={{ fontWeight: 700, fontSize: 8, letterSpacing: 1, color: '#888', marginBottom: 6 }}>EVOLUTION HISTORY</div>
+          {playbook.evolution.changelog.slice().reverse().map((entry, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, padding: '3px 0', borderBottom: '1px solid #F0F0F0' }}>
+              <span style={{ color: '#888', minWidth: 24 }}>v{entry.version}</span>
+              <span style={{ color: '#555', minWidth: 50 }}>{relativeTime(entry.timestamp)}</span>
+              <span style={{ color: '#0A0A0A', flex: 1 }}>{entry.reason}</span>
+              <span style={{ color: entry.confidenceDelta > 0 ? '#007A00' : entry.confidenceDelta < 0 ? '#D40000' : '#888' }}>
+                {entry.confidenceDelta > 0 ? '+' : ''}{Math.round(entry.confidenceDelta * 100)}%
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Action buttons */}
       <div style={{ display: 'flex', gap: 6 }}>
@@ -450,6 +508,24 @@ function PlaybookCard({ playbook, onAction }: PlaybookCardProps) {
             }}
           >
             SUSPEND
+          </button>
+        )}
+        {playbook.reviewStatus === 'suspended' && (
+          <button
+            onClick={() => onAction(playbook.playbookId, 'reactivate')}
+            style={{
+              background: '#CC6600',
+              color: '#FFF',
+              border: 'none',
+              padding: '4px 10px',
+              fontSize: 10,
+              fontFamily: font,
+              fontWeight: 700,
+              cursor: 'pointer',
+              letterSpacing: 0.5,
+            }}
+          >
+            REACTIVATE
           </button>
         )}
       </div>
@@ -638,7 +714,7 @@ export function PlaybooksTab() {
   }, [fetchAll]);
 
   const handleAction = useCallback(
-    async (id: string, action: 'approve' | 'promote' | 'suspend') => {
+    async (id: string, action: 'approve' | 'promote' | 'suspend' | 'reactivate') => {
       try {
         const res = await fetch(
           `${BASE_PATH}/api/playbook-evolution?action=${action}&id=${encodeURIComponent(id)}`,
@@ -693,6 +769,7 @@ export function PlaybooksTab() {
   const activePlaybooks = playbooks.filter(
     p => p.reviewStatus === 'approved' || p.reviewStatus === 'trusted'
   );
+  const suspended = playbooks.filter(p => p.reviewStatus === 'suspended');
 
   // ── Render ──
 
@@ -831,6 +908,18 @@ export function PlaybooksTab() {
           <SectionHeader label="Active Playbooks" count={activePlaybooks.length} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
             {activePlaybooks.map(p => (
+              <PlaybookCard key={p.playbookId} playbook={p} onAction={handleAction} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* SUSPENDED section */}
+      {suspended.length > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <SectionHeader label="Suspended" count={suspended.length} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+            {suspended.map(p => (
               <PlaybookCard key={p.playbookId} playbook={p} onAction={handleAction} />
             ))}
           </div>
