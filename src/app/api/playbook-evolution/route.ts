@@ -90,7 +90,37 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         saved.push(next.playbookId);
       }
 
-      return NextResponse.json({ patterns: patterns.length, saved, skipped });
+      // LLM-enhanced evolution: generate an optimized playbook from mined patterns
+      let llmEvolved = null;
+      if (patterns.length > 0) {
+        try {
+          const { PlaybookEvolver } = await import('@/lib/playbook-evolution/playbook-evolver');
+          const evolver = new PlaybookEvolver();
+          const chainName = process.env.SENTINAI_CHAIN_NAME ?? process.env.SENTINAI_DEFAULT_PROTOCOL_ID ?? 'L2';
+
+          // Convert core IncidentPattern to evolution IncidentPattern format
+          const evolutionPatterns = patterns.map(p => ({
+            anomalyType: p.triggerSignature,
+            effectiveAction: p.action,
+            successRate: p.successRate * 100,
+            executionCount: p.occurrences,
+            avgDuration: p.avgResolutionMs,
+            correlationStrength: Math.min(1, p.successRate),
+          }));
+
+          const result = await evolver.generate(evolutionPatterns, 'v-0', chainName);
+          if (result.isOk()) {
+            llmEvolved = {
+              generatedBy: result.unwrap().generatedBy,
+              name: result.unwrap().name,
+              actions: result.unwrap().actions.length,
+              fallbacks: result.unwrap().fallbacks.length,
+            };
+          }
+        } catch { /* LLM enhancement is non-blocking */ }
+      }
+
+      return NextResponse.json({ patterns: patterns.length, saved, skipped, llmEvolved });
     }
 
     if ((action === 'approve' || action === 'promote' || action === 'suspend') && playbookId) {

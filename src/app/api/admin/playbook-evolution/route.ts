@@ -136,7 +136,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
 /**
  * Handle trigger_evolution action
- * Analyzes patterns and generates new playbook if evolution is triggered
+ * Analyzes patterns → LLM generates optimized playbook → promotes to active version
  */
 async function handleTriggerEvolution(
   store: any,
@@ -146,10 +146,70 @@ async function handleTriggerEvolution(
     const miner = new PatternMiner(store, redis);
     const patterns = await miner.analyzeAndEvolve();
 
+    if (!patterns || patterns.length === 0) {
+      return NextResponse.json({
+        action: 'evolution_triggered',
+        patterns: [],
+        evolved: null,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // LLM-enhanced playbook generation
+    const { PlaybookEvolver } = await import('@/lib/playbook-evolution/playbook-evolver');
+    const { RollbackManager } = await import('@/lib/playbook-evolution/rollback-manager');
+    const evolver = new PlaybookEvolver();
+    const manager = new RollbackManager(store, redis);
+
+    // Determine parent version
+    const current = await manager.getCurrentVersion();
+    const parentVersionId = current?.versionId ?? 'v-0';
+    const chainName = process.env.SENTINAI_CHAIN_NAME ?? process.env.SENTINAI_DEFAULT_PROTOCOL_ID ?? 'L2';
+
+    const result = await evolver.generate(patterns, parentVersionId, chainName);
+
+    if (result.isErr()) {
+      logger.warn('[API] LLM evolution failed, patterns saved: %s', result.getError()?.message);
+      return NextResponse.json({
+        action: 'evolution_triggered',
+        patterns,
+        evolved: null,
+        llmError: result.getError()?.message,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    const evolved = result.unwrap();
+
+    // Promote the new version
+    const promoteResult = await manager.promoteVersion(evolved);
+    if (promoteResult.isErr()) {
+      logger.warn('[API] Version promotion failed: %s', promoteResult.getError()?.message);
+      return NextResponse.json({
+        action: 'evolution_triggered',
+        patterns,
+        evolved: { playbook: evolved, promoted: false, error: promoteResult.getError()?.message },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    logger.info(
+      '[API] Playbook evolved: %s → %s (%d patterns, by %s)',
+      parentVersionId,
+      evolved.versionId,
+      patterns.length,
+      evolved.generatedBy,
+    );
+
     return NextResponse.json({
       action: 'evolution_triggered',
-      patterns: patterns ?? [],
-      evolved: patterns ? { note: 'New playbook generated' } : null,
+      patterns,
+      evolved: {
+        playbook: evolved,
+        promoted: true,
+        versionId: evolved.versionId,
+        generatedBy: evolved.generatedBy,
+      },
       timestamp: new Date().toISOString(),
     });
   } catch (error) {

@@ -36,6 +36,19 @@ vi.mock('@/lib/playbook-evolution/rollback-manager', () => {
         return mockStore.__versionHistory || { current: {}, history: [] };
       }
 
+      async getCurrentVersion() {
+        return mockStore.__currentVersion || null;
+      }
+
+      async promoteVersion(playbook: any) {
+        return {
+          isOk: () => true,
+          isErr: () => false,
+          unwrap: () => ({ versionId: playbook.versionId, playbook, promotedAt: new Date(), isActive: true }),
+          getError: () => null,
+        };
+      }
+
       async rollbackToVersion(versionId: string) {
         return mockStore.__rollbackResult || { isOk: () => false, isErr: () => true };
       }
@@ -49,6 +62,37 @@ vi.mock('@/lib/playbook-evolution/pattern-miner', () => {
     PatternMiner: class {
       async analyzeAndEvolve() {
         return mockStore.__patterns || null;
+      }
+    },
+  };
+});
+
+// Mock PlaybookEvolver (LLM-enhanced generation)
+vi.mock('@/lib/playbook-evolution/playbook-evolver', () => {
+  return {
+    PlaybookEvolver: class {
+      async generate(patterns: any[], parentVersionId: string) {
+        const vNum = parseInt(parentVersionId.replace('v-', ''), 10) || 0;
+        return {
+          isOk: () => true,
+          isErr: () => false,
+          unwrap: () => ({
+            id: 'pb-llm-1',
+            name: 'LLM Generated Playbook',
+            description: 'Generated from patterns',
+            actions: [{ type: 'scale', target: 'op-geth', params: {}, timeout: 30000 }],
+            fallbacks: [],
+            timeout: 60000,
+            versionId: `v-${vNum + 1}`,
+            parentVersionId,
+            generatedAt: new Date(),
+            generatedBy: 'anthropic/claude-sonnet-4-5-20250929',
+            confidenceSource: 'llm_generation',
+            generationPromptUsage: { inputTokens: 500, outputTokens: 200, totalCost: 0.004 },
+            patternContext: { patterns, successRateBaseline: 85 },
+          }),
+          getError: () => null,
+        };
       }
     },
   };
