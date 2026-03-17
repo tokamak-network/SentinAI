@@ -1,9 +1,10 @@
 import {
   createPublicClient,
   http,
+  parseAbiItem,
 } from 'viem';
 import { mainnet, sepolia } from 'viem/chains';
-import { agentMarketplaceRegistryAbi } from '@/lib/agent-marketplace/abi/agent-registry';
+import { agentMarketplaceRegistryAbi, agentMarketplaceRegistryCanonicalEvent } from '@/lib/agent-marketplace/abi/agent-registry';
 
 const REGISTRY_BROWSE_CACHE_TTL_MS = 30_000;
 
@@ -185,7 +186,7 @@ export async function getAgentMarketplaceRegistryBrowseData(
 
     const logs = await client.getLogs({
       address: registryAddress as `0x${string}`,
-      event: agentMarketplaceRegistryAbi[1],
+      event: parseAbiItem(agentMarketplaceRegistryCanonicalEvent),
       fromBlock: BigInt(0),
       toBlock: 'latest',
     });

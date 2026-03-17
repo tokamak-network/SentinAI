@@ -142,7 +142,7 @@ export async function getRegistrationStatus(): Promise<RegistrationStatus> {
       args: [walletAddress],
     }) as bigint;
 
-    if (agentIdBigInt === 0n) {
+    if (agentIdBigInt === BigInt(0)) {
       const result: RegistrationStatus = { registered: false, envCheck, agentUri };
       await saveRegistrationCache(result);
       return result;
