@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef } from 'react';
 import type { CatalogAgent } from '@/types/marketplace';
 
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
 interface CreateFormData {
   name: string;
   description: string;
@@ -36,7 +38,7 @@ export default function CatalogPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/admin/catalog');
+      const res = await fetch(`${BASE_PATH}/api/admin/catalog`);
       if (!res.ok) throw new Error('Failed to fetch agents');
       const data = (await res.json()) as { success: boolean; agents: CatalogAgent[] };
       setAgents(data.agents || []);
@@ -63,7 +65,7 @@ export default function CatalogPage() {
         .map((c) => c.trim())
         .filter((c) => c);
 
-      const res = await fetch('/api/admin/catalog', {
+      const res = await fetch(`${BASE_PATH}/api/admin/catalog`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -94,7 +96,7 @@ export default function CatalogPage() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/admin/catalog/${id}`, { method: 'DELETE' });
+      const res = await fetch(`${BASE_PATH}/api/admin/catalog/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('Failed to delete agent');
 
       await fetchAgents();

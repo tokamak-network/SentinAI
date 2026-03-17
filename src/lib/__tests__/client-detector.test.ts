@@ -3,7 +3,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 vi.mock('fs');
 import * as fs from 'fs';
 
-import { detectExecutionClient, detectConsensusClient } from '@/lib/client-detector';
+import { detectExecutionClient } from '@/lib/client-detector';
 
 function mockRpcFetch(handlers: Record<string, unknown>) {
   return vi.fn(async (_url: string, init?: RequestInit) => {
@@ -183,31 +183,4 @@ describe('client-detector', () => {
     expect(detected.family).toBe('unknown');
   });
 
-  it('detectConsensusClient: parses version + peer_count, L2 fields are false/null', async () => {
-    const fetchMock = vi.fn(async (url: string) => {
-      if (url.endsWith('/eth/v1/node/version')) {
-        return new Response(JSON.stringify({ data: { version: 'Lighthouse/v5.2.0' } }), { status: 200 });
-      }
-      if (url.endsWith('/eth/v1/node/syncing')) {
-        return new Response(JSON.stringify({ data: { is_syncing: false } }), { status: 200 });
-      }
-      if (url.endsWith('/eth/v1/node/peer_count')) {
-        return new Response(JSON.stringify({ data: { connected: '12' } }), { status: 200 });
-      }
-      return new Response('not found', { status: 404 });
-    });
-
-    vi.stubGlobal('fetch', fetchMock);
-
-    const detected = await detectConsensusClient({ rpcUrl: 'http://beacon' });
-
-    expect(detected.layer).toBe('consensus');
-    expect(detected.family).toBe('lighthouse');
-    expect(detected.syncing).toBe(false);
-    expect(detected.peerCount).toBe(12);
-    expect(detected.supportsL2SyncStatus).toBe(false);
-    expect(detected.l2SyncMethod).toBeNull();
-    expect(detected.probes['/eth/v1/node/version']).toBe(true);
-    expect(detected.probes['/eth/v1/node/peer_count']).toBe(true);
-  });
 });

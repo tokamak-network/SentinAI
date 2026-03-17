@@ -201,11 +201,11 @@ const OPTIONAL_FEATURES: FeatureDef[] = [
 // Output generators
 // ============================================================================
 
-const ENV_MAP: Record<NodeType, { primary: string; optional?: string }> = {
-  "ethereum-el": { primary: "SENTINAI_L1_RPC_URL" },
-  "opstack-l2": { primary: "L2_RPC_URL", optional: "SENTINAI_L1_RPC_URL" },
-  "arbitrum-nitro": { primary: "L2_RPC_URL", optional: "SENTINAI_L1_RPC_URL" },
-  "zkstack": { primary: "L2_RPC_URL", optional: "SENTINAI_L1_RPC_URL" },
+const ENV_MAP: Record<NodeType, { primary: string; optional?: string; chainType: string }> = {
+  "ethereum-el": { primary: "SENTINAI_L1_RPC_URL", chainType: "l1-evm" },
+  "opstack-l2": { primary: "L2_RPC_URL", optional: "SENTINAI_L1_RPC_URL", chainType: "optimism" },
+  "arbitrum-nitro": { primary: "L2_RPC_URL", optional: "SENTINAI_L1_RPC_URL", chainType: "arbitrum" },
+  "zkstack": { primary: "L2_RPC_URL", optional: "SENTINAI_L1_RPC_URL", chainType: "zkstack" },
 };
 
 interface BuildConfig {
@@ -224,7 +224,7 @@ interface BuildConfig {
 }
 
 function buildEnvLocal(cfg: BuildConfig, featureSnippets: string[] = [], deployTarget?: DeployTarget | null): string {
-  const { primary, optional } = ENV_MAP[cfg.nodeType];
+  const { primary, optional, chainType } = ENV_MAP[cfg.nodeType];
   const rawUrl = cfg.url.trim() || "<your-url>";
   const u = deployTarget === "local"
     ? rawUrl.replace(/localhost/g, "host.docker.internal").replace(/127\.0\.0\.1/g, "host.docker.internal")
@@ -232,6 +232,7 @@ function buildEnvLocal(cfg: BuildConfig, featureSnippets: string[] = [], deployT
   const lines: string[] = [];
 
   if (cfg.networkName.trim()) lines.push(`NEXT_PUBLIC_NETWORK_NAME=${cfg.networkName.trim()}`);
+  lines.push(`CHAIN_TYPE=${chainType}`);
   lines.push(`${primary}=${u}`);
   if (optional) lines.push(`${optional}=<optional-l1-rpc-url>`);
   if (cfg.authToken.trim()) lines.push(`SENTINAI_RPC_AUTH_TOKEN=${cfg.authToken.trim()}`);

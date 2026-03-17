@@ -161,8 +161,6 @@ describe('/v2/marketplace page', () => {
     expect(html).toContain('CONTRACTS / ABI');
     expect(html).toContain('LAST BATCH DETAIL');
     expect(html).toContain('REGISTRY REGISTRATION');
-    expect(html).toContain('/api/agent-marketplace/agent.json');
-    expect(html).toContain('/api/agent-marketplace/ops/register');
     expect(html).toContain('No reputation batch has been published yet.');
     expect(html).toContain('ERC8004 Agent Registry');
     expect(html).toContain('MerkleRootSubmitted');

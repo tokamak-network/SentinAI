@@ -7,5 +7,19 @@
 
 | ID | Time | T | Title | Read |
 |----|------|---|-------|------|
-| #5598 | 1:16 AM | 🟣 | L1 EVM remediation playbooks implemented | ~465 |
+| #6083 | 7:06 PM | 🟣 | Marketplace pricing configuration types added | ~379 |
+| #6082 | " | 🟣 | Marketplace pricing type definitions implemented | ~442 |
+
+### Mar 15, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #6798 | 3:13 AM | 🟣 | Redis Storage Infrastructure Added for Playbook Evolution | ~437 |
+| #6424 | 12:25 AM | 🔵 | Root Application Marketplace Infrastructure Inventory | ~382 |
+
+### Mar 17, 2026
+
+| ID | Time | T | Title | Read |
+|----|------|---|-------|------|
+| #8206 | 7:35 PM | 🔵 | Remediation type system defines 18 action types across 3 safety levels | ~452 |
 </claude-mem-context>

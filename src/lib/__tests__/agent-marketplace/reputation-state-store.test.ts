@@ -45,17 +45,17 @@ describe('agent-marketplace reputation-state-store', () => {
     }).__sentinai_agent_marketplace_reputation_redis = undefined;
   });
 
-  it('fails reads when REDIS_URL is missing', async () => {
-    await expect(getAgentMarketplaceReputationScores()).rejects.toThrow('REDIS_URL is required');
+  it('returns empty object when REDIS_URL is missing', async () => {
+    await expect(getAgentMarketplaceReputationScores()).resolves.toEqual({});
     expect(hoisted.redisCtorMock).not.toHaveBeenCalled();
   });
 
-  it('fails writes when REDIS_URL is missing', async () => {
+  it('silently no-ops writes when REDIS_URL is missing', async () => {
     await expect(
       setAgentMarketplaceReputationScores({
         '0x00000000000000000000000000000000000000a1': 92,
       })
-    ).rejects.toThrow('REDIS_URL is required');
+    ).resolves.toBeUndefined();
     expect(hoisted.redisCtorMock).not.toHaveBeenCalled();
   });
 

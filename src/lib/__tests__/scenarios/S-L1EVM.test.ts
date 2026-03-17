@@ -125,6 +125,12 @@ describe('S-L1EVM-09: Plugin loads and is configured correctly', () => {
 describe('S-L1EVM-01: Block production stall detection', () => {
   beforeEach(() => {
     resetAllStreaks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T12:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('blockHeight unchanged for 2+ minutes should be detected as plateau anomaly', () => {

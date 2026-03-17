@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
 export default function AdminLayout({
   children,
 }: {
@@ -18,7 +20,7 @@ export default function AdminLayout({
   }, []);
 
   async function handleLogout() {
-    await fetch('/api/admin/auth/logout', { method: 'POST' });
+    await fetch(`${BASE_PATH}/api/admin/auth/logout`, { method: 'POST' });
     router.push('/admin/login');
   }
 

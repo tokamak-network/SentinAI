@@ -523,9 +523,9 @@ describe('ArbitrumPlugin', () => {
   });
 
   describe('getPlaybooks', () => {
-    it('should return 8 playbooks', () => {
+    it('should return 11 playbooks', () => {
       const playbooks = plugin.getPlaybooks();
-      expect(playbooks).toHaveLength(8);
+      expect(playbooks).toHaveLength(11);
     });
 
     it('should have valid playbook structure', () => {

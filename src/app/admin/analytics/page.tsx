@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import type { MarketplaceOrder } from '@/types/marketplace';
 
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
 interface AnalyticsData {
   totalOrders: number;
   totalRevenue: number;
@@ -31,7 +33,7 @@ export default function AnalyticsPage() {
     setError(null);
     try {
       // Fetch all orders to compute analytics
-      const res = await fetch('/api/admin/orders?page=1&limit=1000');
+      const res = await fetch(`${BASE_PATH}/api/admin/orders?page=1&limit=1000`);
       if (!res.ok) throw new Error('Failed to fetch orders');
 
       interface OrdersResponse {

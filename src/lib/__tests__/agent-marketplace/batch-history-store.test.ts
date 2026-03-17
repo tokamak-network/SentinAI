@@ -60,8 +60,8 @@ describe('agent-marketplace batch-history-store', () => {
     await clearAgentMarketplaceBatchHistory();
   });
 
-  it('fails closed when REDIS_URL is missing', async () => {
-    await expect(getAgentMarketplaceBatchHistory()).rejects.toThrow('REDIS_URL is required');
+  it('returns empty array and silently no-ops when REDIS_URL is missing', async () => {
+    await expect(getAgentMarketplaceBatchHistory()).resolves.toEqual([]);
     await expect(
       appendAgentMarketplaceBatchHistory({
         status: 'success',
@@ -75,7 +75,7 @@ describe('agent-marketplace batch-history-store', () => {
         merkleRoot: '0x' + 'a'.repeat(64),
         error: null,
       })
-    ).rejects.toThrow('REDIS_URL is required');
+    ).resolves.toBeUndefined();
   });
 
   it('returns newest-first history after appending records', async () => {

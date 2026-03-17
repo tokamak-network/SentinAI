@@ -1,18 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const hoisted = vi.hoisted(() => ({
-  getStoreMock: vi.fn(),
-  getLastCycleResultMock: vi.fn(),
+  getLastCycleMock: vi.fn(),
   getSchedulerStatusMock: vi.fn(),
-  getChainPluginMock: vi.fn(),
+  // Default return value needed for rca-engine.ts module-level DEPENDENCY_GRAPH initialization
+  getChainPluginMock: vi.fn().mockReturnValue({
+    chainType: 'thanos',
+    displayName: 'Thanos L2 Rollup',
+    chainMode: 'legacy',
+    capabilities: {},
+    dependencyGraph: {},
+  }),
 }));
 
-vi.mock('@/lib/redis-store', () => ({
-  getStore: hoisted.getStoreMock,
-}));
-
-vi.mock('@/lib/agent-loop', () => ({
-  getLastCycleResult: hoisted.getLastCycleResultMock,
+vi.mock('@/lib/cycle-store', () => ({
+  getLastCycle: hoisted.getLastCycleMock,
 }));
 
 vi.mock('@/lib/scheduler', () => ({
@@ -31,10 +33,7 @@ describe('/api/health', () => {
     vi.setSystemTime(new Date('2026-02-23T16:00:00.000Z'));
     vi.clearAllMocks();
 
-    hoisted.getStoreMock.mockReturnValue({
-      getAgentLoopHeartbeat: vi.fn().mockResolvedValue('2026-02-23T15:59:00.000Z'),
-    });
-    hoisted.getLastCycleResultMock.mockResolvedValue({
+    hoisted.getLastCycleMock.mockResolvedValue({
       timestamp: '2026-02-23T15:58:00.000Z',
       phase: 'complete',
     });
@@ -47,24 +46,17 @@ describe('/api/health', () => {
         settlementMonitoring: true,
         eoaBalanceMonitoring: true,
       },
+      dependencyGraph: {},
     });
 
     hoisted.getSchedulerStatusMock.mockReturnValue({
       initialized: true,
       agentLoopEnabled: true,
+      agentV2Enabled: true,
       agentTaskRunning: false,
       snapshotTaskRunning: false,
       reportTaskRunning: false,
       scheduledScalingTaskRunning: false,
-      watchdogEnabled: true,
-      watchdogTaskRunning: false,
-      watchdogRecoveryRunning: false,
-      watchdogFailureStreak: 0,
-      watchdogLastError: null,
-      watchdogLastHealthyAt: '2026-02-23T15:59:00.000Z',
-      watchdogLastAlertAt: null,
-      watchdogLastRecoveryAt: null,
-      watchdogLastRecoveryStatus: 'idle',
     });
   });
 
@@ -73,7 +65,7 @@ describe('/api/health', () => {
     delete process.env.AGENT_HEARTBEAT_STALE_SECONDS;
   });
 
-  it('returns heartbeat lag and non-stale state when heartbeat is fresh', async () => {
+  it('returns ok status with chain and agentLoop info when healthy', async () => {
     const response = await GET();
     const body = await response.json();
 
@@ -81,29 +73,26 @@ describe('/api/health', () => {
     expect(body.status).toBe('ok');
     expect(body.chain.type).toBe('zkl2-generic');
     expect(body.chain.capabilities.proofMonitoring).toBe(true);
-    expect(body.agentLoop.heartbeatLagSec).toBe(60);
-    expect(body.agentLoop.stale).toBe(false);
     expect(body.agentLoop.lastCycleAt).toBe('2026-02-23T15:58:00.000Z');
+    expect(body.agentLoop.lastCyclePhase).toBe('complete');
+    expect(body.agentLoop.enabled).toBe(true);
+    expect(body.agentLoop.schedulerInitialized).toBe(true);
   });
 
-  it('marks stale when heartbeat is missing while loop is enabled', async () => {
-    hoisted.getStoreMock.mockReturnValue({
-      getAgentLoopHeartbeat: vi.fn().mockResolvedValue(null),
-    });
+  it('returns ok with null lastCycleAt when no cycle has run', async () => {
+    hoisted.getLastCycleMock.mockResolvedValue(null);
 
     const response = await GET();
     const body = await response.json();
 
     expect(response.status).toBe(200);
     expect(body.status).toBe('ok');
-    expect(body.agentLoop.heartbeatLagSec).toBeNull();
-    expect(body.agentLoop.stale).toBe(true);
+    expect(body.agentLoop.lastCycleAt).toBeNull();
+    expect(body.agentLoop.lastCyclePhase).toBeNull();
   });
 
-  it('returns degraded payload when health dependencies throw', async () => {
-    hoisted.getStoreMock.mockImplementation(() => {
-      throw new Error('store unavailable');
-    });
+  it('returns degraded status when dependencies throw', async () => {
+    hoisted.getLastCycleMock.mockRejectedValue(new Error('store unavailable'));
 
     const response = await GET();
     const body = await response.json();
@@ -125,6 +114,7 @@ describe('/api/health', () => {
         settlementMonitoring: true,
         eoaBalanceMonitoring: true,
       },
+      dependencyGraph: {},
     });
 
     const response = await GET();

@@ -186,6 +186,12 @@ describe('S-OP-01: OP Stack 클라이언트 자동 감지', () => {
 describe('S-OP-02: L2 동기화 지연 감지 (블록 플래토 기반)', () => {
   beforeEach(() => {
     resetAllStreaks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T12:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('blockHeight가 2분 이상 변하지 않으면 이상으로 감지해야 한다', () => {
@@ -193,6 +199,7 @@ describe('S-OP-02: L2 동기화 지연 감지 (블록 플래토 기반)', () => 
     const stuckBlockHeight = 99000;
 
     // 히스토리: 15초 간격, 15개 → 가장 오래된 항목이 now - 210s, recentHistory[0] = now - 120s
+    // 시간이 고정되어 있으므로 경계값 정확히 일치
     const history: MetricDataPoint[] = Array.from({ length: 15 }, (_, i) =>
       makeMetric({
         blockHeight: stuckBlockHeight, // 변화 없음

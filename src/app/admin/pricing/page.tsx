@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import type { MarketplacePricingConfig } from '@/types/marketplace';
 
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
 interface PricingFormData {
   traineePrice: number;
   juniorPrice: number;
@@ -33,7 +35,7 @@ export default function PricingPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/marketplace/pricing');
+      const res = await fetch(`${BASE_PATH}/api/marketplace/pricing`);
       if (!res.ok) throw new Error('Failed to fetch pricing');
       const data = (await res.json()) as { tiers: Record<string, { price: number }> };
 
@@ -67,7 +69,7 @@ export default function PricingPage() {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch('/api/marketplace/pricing', {
+      const res = await fetch(`${BASE_PATH}/api/marketplace/pricing`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

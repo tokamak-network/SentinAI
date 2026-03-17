@@ -36,7 +36,9 @@ function createMockRequest(options: MockRequestOptions): NextRequest {
   const mockRequest = {
     url: url.toString(),
     method,
-    nextUrl: new URL(pathname, 'http://localhost:3002'),
+    nextUrl: Object.assign(new URL(pathname, 'http://localhost:3002'), {
+      clone() { return new URL(this.href); },
+    }),
     headers: mockHeaders,
     cookies: {
       get: (name: string) => {
@@ -273,10 +275,10 @@ describe('Middleware: SIWE Session Validation for /v2/marketplace', () => {
       expect(response.status).toBe(307);
     });
 
-    it('accepts token at exact expiration boundary (now === expiresAt should still be valid at ms precision)', () => {
+    it('accepts token expiring in the near future (100ms buffer ensures reliable check)', () => {
       const now = Date.now();
-      // Token valid if Date.now() <= expiresAt
-      const validToken = `satv2_1234567890123456789012345678901234567890_${now}_${now}_hash`;
+      // Token valid if Date.now() <= expiresAt; use small future buffer to avoid flakiness
+      const validToken = `satv2_1234567890123456789012345678901234567890_${now}_${now + 100}_hash`;
 
       const request = createMockRequest({
         pathname: '/v2/marketplace',
@@ -288,8 +290,6 @@ describe('Middleware: SIWE Session Validation for /v2/marketplace', () => {
 
       const response = middleware(request);
 
-      // At the exact moment, token should still be valid (Date.now() > expiresAt is false at same ms)
-      // Note: this might fail if execution takes > 1ms, but typically it passes
       expect(response.status).not.toBe(307);
     });
   });

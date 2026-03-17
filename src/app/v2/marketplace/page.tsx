@@ -87,7 +87,7 @@ export default async function MarketplaceOpsPage({
       <div className="mx-auto max-w-6xl border border-[#C0C0C0] bg-white font-mono shadow-[0_4px_24px_rgba(0,0,0,0.12)]">
         <header className="flex items-center justify-between border-b-2 border-[#8B0000] bg-[#D40000] px-4 py-2 text-[11px] font-bold tracking-[0.08em] text-white">
           <span>SENTINAI MARKETPLACE OPS</span>
-          <form action="/api/auth/siwe/logout" method="post" style={{ display: 'inline' }}>
+          <form action={`${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/api/auth/siwe/logout`} method="post" style={{ display: 'inline' }}>
             <button
               type="submit"
               style={{

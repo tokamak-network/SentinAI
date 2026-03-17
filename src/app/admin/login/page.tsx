@@ -3,6 +3,8 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
 type LoginState = 'idle' | 'connecting' | 'signing' | 'verifying' | 'error' | 'success';
 
 function isValidSessionTokenClient(token: string): boolean {
@@ -68,7 +70,7 @@ export default function AdminLoginPage() {
       setState('signing');
 
       // 2. Get nonce from server
-      const nonceRes = await fetch(`/api/auth/siwe/nonce?address=${userAddress}`);
+      const nonceRes = await fetch(`${BASE_PATH}/api/auth/siwe/nonce?address=${userAddress}`);
       if (!nonceRes.ok) {
         throw new Error('Failed to get nonce from server');
       }
@@ -95,7 +97,7 @@ export default function AdminLoginPage() {
       setState('verifying');
 
       // 5. Verify on server
-      const verifyRes = await fetch('/api/auth/siwe/verify', {
+      const verifyRes = await fetch(`${BASE_PATH}/api/auth/siwe/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ address: userAddress, signature, message }),

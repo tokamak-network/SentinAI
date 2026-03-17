@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SentinAI — Verification Report</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #030712; color: #e5e7eb; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.5; padding: 32px 24px; }
+    code { font-family: 'SF Mono', 'Fira Code', monospace; background: #1f2937; padding: 1px 5px; border-radius: 3px; font-size: 11px; }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .stat-card { background: #111827; border: 1px solid #1f2937; border-radius: 8px; padding: 20px; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div style="margin-bottom:32px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px">
+      <div style="width:36px;height:36px;background:linear-gradient(135deg,#3b82f6,#8b5cf6);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px">🛡</div>
+      <h1 style="font-size:22px;font-weight:700;color:#f9fafb">SentinAI Verification Report</h1>
+    </div>
+    <p style="color:#6b7280;font-size:13px">Connect → .env → Playbook integrity check · Generated 2026-03-17 10:10:05 UTC</p>
+  </div>
+
+  <!-- Summary Cards -->
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:32px">
+    <div class="stat-card">
+      <div style="color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.05em">Total Playbooks</div>
+      <div style="font-size:28px;font-weight:700;color:#f9fafb;margin-top:4px">54</div>
+      <div style="color:#4ade80;font-size:12px">54 structure valid</div>
+    </div>
+    <div class="stat-card">
+      <div style="color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.05em">Avg Coverage</div>
+      <div style="font-size:28px;font-weight:700;color:#f87171;margin-top:4px">34%</div>
+      <div style="color:#6b7280;font-size:12px">fully functional</div>
+    </div>
+    <div class="stat-card">
+      <div style="color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.05em">Action Issues</div>
+      <div style="font-size:28px;font-weight:700;color:#f87171;margin-top:4px">1</div>
+      <div style="color:#6b7280;font-size:12px">unhandled action types</div>
+    </div>
+    <div class="stat-card">
+      <div style="color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.05em">Condition Issues</div>
+      <div style="font-size:28px;font-weight:700;color:#facc15;margin-top:4px">72</div>
+      <div style="color:#6b7280;font-size:12px">unmatchable conditions</div>
+    </div>
+    <div class="stat-card">
+      <div style="color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:.05em">.env Configs</div>
+      <div style="font-size:28px;font-weight:700;color:#4ade80;margin-top:4px">6</div>
+      <div style="color:#6b7280;font-size:12px">node types verified</div>
+    </div>
+  </div>
+
+  <!-- RPC Section -->
+  
+    <div style="margin-bottom:32px;background:#111827;border:1px solid #1f2937;border-radius:8px;overflow:hidden">
+      <div style="padding:16px 20px;background:#0d1117;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h2 style="margin:0;font-size:16px;color:#f9fafb">RPC Connectivity</h2>
+          <span style="color:#6b7280;font-size:12px">Live checks against public endpoints</span>
+        </div>
+        <div style="color:#facc15;font-size:14px;font-weight:600">
+          5/6 online
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#0d1117;border-bottom:1px solid #1f2937">
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Status</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Chain</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">URL</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Block</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Client</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Chain ID</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Latency</th>
+          </tr>
+        </thead>
+        <tbody style="color:#e5e7eb">
+          
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px;font-size:12px;color:#f9fafb">Ethereum (L1 EVM)</td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#9ca3af">https://ethereum-rpc.publicnode.com</td>
+          <td style="padding:10px 14px;font-size:12px">#24,676,529</td>
+          <td style="padding:10px 14px;font-size:12px;color:#9ca3af">Geth</td>
+          <td style="padding:10px 14px;font-size:12px;color:#9ca3af">1 (0x1)</td>
+          <td style="padding:10px 14px;font-size:12px">452ms</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px;font-size:12px;color:#f9fafb">OP Stack L2 (Optimism)</td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#9ca3af">https://optimism-rpc.publicnode.com</td>
+          <td style="padding:10px 14px;font-size:12px">#149,071,712</td>
+          <td style="padding:10px 14px;font-size:12px;color:#9ca3af">Geth</td>
+          <td style="padding:10px 14px;font-size:12px;color:#9ca3af">10 (0xa)</td>
+          <td style="padding:10px 14px;font-size:12px">439ms</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:10px 14px"><span style="background:#f8717122;color:#f87171;border:1px solid #f8717144;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✗</span></td>
+          <td style="padding:10px 14px;font-size:12px;color:#f9fafb">Thanos L2 (Tokamak)</td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#9ca3af">https://rpc.titan.tokamak.network</td>
+          <td style="padding:10px 14px;font-size:12px">-</td>
+          <td style="padding:10px 14px;font-size:12px;color:#9ca3af">-</td>
+          <td style="padding:10px 14px;font-size:12px;color:#9ca3af">-</td>
+          <td style="padding:10px 14px;font-size:12px"><span style="color:#f87171">fetch failed</span></td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px;font-size:12px;color:#f9fafb">Arbitrum Nitro</td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#9ca3af">https://arbitrum-one-rpc.publicnode.com</td>
+          <td style="padding:10px 14px;font-size:12px">#442,701,905</td>
+          <td style="padding:10px 14px;font-size:12px;color:#9ca3af">nitro</td>
+          <td style="padding:10px 14px;font-size:12px;color:#9ca3af">42161 (0xa4b1)</td>
+          <td style="padding:10px 14px;font-size:12px">399ms</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px;font-size:12px;color:#f9fafb">ZK Stack (zkSync Era)</td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#9ca3af">https://mainnet.era.zksync.io</td>
+          <td style="padding:10px 14px;font-size:12px">#69,116,776</td>
+          <td style="padding:10px 14px;font-size:12px;color:#9ca3af">zkSync</td>
+          <td style="padding:10px 14px;font-size:12px;color:#9ca3af">324 (0x144)</td>
+          <td style="padding:10px 14px;font-size:12px">300ms</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px;font-size:12px;color:#f9fafb">ZK L2 Generic (Scroll)</td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#9ca3af">https://rpc.scroll.io</td>
+          <td style="padding:10px 14px;font-size:12px">#32,062,432</td>
+          <td style="padding:10px 14px;font-size:12px;color:#9ca3af">Geth</td>
+          <td style="padding:10px 14px;font-size:12px;color:#9ca3af">534352 (0x82750)</td>
+          <td style="padding:10px 14px;font-size:12px">171ms</td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+
+  <!-- .env Section -->
+  
+    <div style="margin-bottom:32px;background:#111827;border:1px solid #1f2937;border-radius:8px;overflow:hidden">
+      <div style="padding:16px 20px;background:#0d1117">
+        <h2 style="margin:0;font-size:16px;color:#f9fafb">.env Generation (Connect Page Simulation)</h2>
+        <span style="color:#6b7280;font-size:12px">6 node types verified</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#0d1117;border-bottom:1px solid #1f2937">
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Chain</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">nodeType</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">CHAIN_TYPE</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">RPC URL</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">.env vars</th>
+          </tr>
+        </thead>
+        <tbody style="color:#e5e7eb">
+          
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:10px 14px;font-size:12px;color:#f9fafb">Ethereum (L1 EVM)</td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#6b7280">ethereum-el</td>
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#9ca3af"><div><span style="color:#60a5fa">SENTINAI_L1_RPC_URL</span>=<span style="color:#a3e635">https://ethereum-rpc.publicnode.com</span></div><div><span style="color:#60a5fa">CHAIN_TYPE</span>=<span style="color:#a3e635">l1-evm</span></div></td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:10px 14px;font-size:12px;color:#f9fafb">OP Stack L2 (Optimism)</td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#6b7280">opstack-l2</td>
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#9ca3af"><div><span style="color:#60a5fa">L2_RPC_URL</span>=<span style="color:#a3e635">https://optimism-rpc.publicnode.com</span></div><div><span style="color:#60a5fa">SENTINAI_L1_RPC_URL</span>=<span style="color:#a3e635">https://ethereum-rpc.publicnode.com</span></div><div><span style="color:#60a5fa">CHAIN_TYPE</span>=<span style="color:#a3e635">optimism</span></div></td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:10px 14px;font-size:12px;color:#f9fafb">Thanos L2 (Tokamak)</td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#6b7280">opstack-l2</td>
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#9ca3af"><div><span style="color:#60a5fa">L2_RPC_URL</span>=<span style="color:#a3e635">https://rpc.titan.tokamak.network</span></div><div><span style="color:#60a5fa">SENTINAI_L1_RPC_URL</span>=<span style="color:#a3e635">https://ethereum-rpc.publicnode.com</span></div><div><span style="color:#60a5fa">CHAIN_TYPE</span>=<span style="color:#a3e635">thanos</span></div></td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:10px 14px;font-size:12px;color:#f9fafb">Arbitrum Nitro</td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#6b7280">arbitrum-nitro</td>
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#9ca3af"><div><span style="color:#60a5fa">L2_RPC_URL</span>=<span style="color:#a3e635">https://arbitrum-one-rpc.publicnode.com</span></div><div><span style="color:#60a5fa">SENTINAI_L1_RPC_URL</span>=<span style="color:#a3e635">https://ethereum-rpc.publicnode.com</span></div><div><span style="color:#60a5fa">CHAIN_TYPE</span>=<span style="color:#a3e635">arbitrum</span></div></td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:10px 14px;font-size:12px;color:#f9fafb">ZK Stack (zkSync Era)</td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#6b7280">zkstack</td>
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#9ca3af"><div><span style="color:#60a5fa">L2_RPC_URL</span>=<span style="color:#a3e635">https://mainnet.era.zksync.io</span></div><div><span style="color:#60a5fa">SENTINAI_L1_RPC_URL</span>=<span style="color:#a3e635">https://ethereum-rpc.publicnode.com</span></div><div><span style="color:#60a5fa">CHAIN_TYPE</span>=<span style="color:#a3e635">zkstack</span></div></td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:10px 14px;font-size:12px;color:#f9fafb">ZK L2 Generic (Scroll)</td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#6b7280">zkl2-generic</td>
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:10px 14px;font-family:monospace;font-size:11px;color:#9ca3af"><div><span style="color:#60a5fa">L2_RPC_URL</span>=<span style="color:#a3e635">https://rpc.scroll.io</span></div><div><span style="color:#60a5fa">SENTINAI_L1_RPC_URL</span>=<span style="color:#a3e635">https://ethereum-rpc.publicnode.com</span></div><div><span style="color:#60a5fa">CHAIN_TYPE</span>=<span style="color:#a3e635">zkl2-generic</span></div></td>
+        </tr>
+        </tbody>
+      </table>
+    </div>
+
+  <!-- Plugin Sections -->
+  <h2 style="font-size:18px;color:#f9fafb;margin-bottom:16px">Playbook Analysis by Plugin</h2>
+  
+    <div style="margin-bottom:32px;background:#111827;border:1px solid #1f2937;border-radius:8px;overflow:hidden">
+      <div style="padding:16px 20px;background:#0d1117;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h2 style="margin:0;font-size:16px;color:#f9fafb">Thanos / Optimism L2 (OP Stack)</h2>
+          <span style="color:#6b7280;font-size:12px">17 playbooks · 17 structure-valid</span>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:24px;font-weight:700;color:#facc15">53%</div>
+          <div style="color:#6b7280;font-size:11px">coverage</div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#0d1117;border-bottom:1px solid #1f2937">
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Status</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Name</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Component</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Indicators</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody style="color:#e5e7eb">
+          
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">op-geth-resource-exhaustion</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">op-geth</td>
+          <td style="padding:8px 12px;font-size:12px">1/3 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">op-node-derivation-stall</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">op-node</td>
+          <td style="padding:8px 12px;font-size:12px">1/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">op-batcher-backlog</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">op-batcher</td>
+          <td style="padding:8px 12px;font-size:12px">1/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">general-resource-pressure</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">system</td>
+          <td style="padding:8px 12px;font-size:12px">2/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">batcher-eoa-balance-critical</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">op-batcher</td>
+          <td style="padding:8px 12px;font-size:12px">1/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">4 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">proposer-eoa-balance-critical</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">op-proposer</td>
+          <td style="padding:8px 12px;font-size:12px">1/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">4 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">eoa-balance-critical-escalation</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">system</td>
+          <td style="padding:8px 12px;font-size:12px">2/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">1 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">challenger-balance-low</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">op-challenger</td>
+          <td style="padding:8px 12px;font-size:12px">1/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">1 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">challenger-balance-critical</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">op-challenger</td>
+          <td style="padding:8px 12px;font-size:12px">1/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">4 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">op-challenger-failure</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">op-challenger</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">dispute-game-deadline-near</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">op-challenger</td>
+          <td style="padding:8px 12px;font-size:12px">0/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#f8717122;color:#f87171;border:1px solid #f8717144;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✗</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">unclaimed-bond-alert</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">op-challenger</td>
+          <td style="padding:8px 12px;font-size:12px">0/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">1 auto, <span style="color:#f87171">1 unhandled</span></td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">proof-generation-timeout</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">op-challenger</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-rpc-failover</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-sync-stall</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">4 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-peer-isolation</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-high-gas</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        </tbody>
+      </table>
+      <div style="padding:12px 20px;background:#0d1117;border-top:1px solid #1f2937"><ul style="margin:0;padding:0 0 0 16px;font-size:12px;line-height:2"><li style="color:#f87171">Action <code>claim_bond</code> in <code>unclaimed-bond-alert</code> — No case in action-executor switch</li><li style="color:#facc15">Condition <code>memoryPercent &gt; 85</code> in <code>op-geth-resource-exhaustion</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>out of memory|OOM killed</code> in <code>op-geth-resource-exhaustion</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>derivation pipeline|reset</code> in <code>op-node-derivation-stall</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>failed to submit|insufficient funds</code> in <code>op-batcher-backlog</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>proof generation failed|panic|fatal error</code> in <code>op-challenger-failure</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>pod restart count &gt; 3</code> in <code>op-challenger-failure</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>gameDeadlineProximity &lt; 1h</code> in <code>dispute-game-deadline-near</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>unclaimedBonds &gt; 0 &amp;&amp; unclaimedAge &gt; 24h</code> in <code>unclaimed-bond-alert</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>proofGenerationLatency &gt; 300s</code> in <code>proof-generation-timeout</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>proof generation timeout|MIPS execution stalled</code> in <code>proof-generation-timeout</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>l1BlockNumber stagnant</code> in <code>l1-rpc-failover</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>connection refused|timeout|ECONNRESET|rate limit</code> in <code>l1-rpc-failover</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>l1BlockNumber stagnant</code> in <code>l1-sync-stall</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>snap sync|state heal|database|corrupt|panic</code> in <code>l1-sync-stall</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>peerCount == 0</code> in <code>l1-peer-isolation</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>no peers|peer dropped|dial failed|discovery</code> in <code>l1-peer-isolation</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>gasPrice &gt; guardGwei</code> in <code>l1-high-gas</code> (metric) — unmatchable</li></ul></div>
+    </div>
+    <div style="margin-bottom:32px;background:#111827;border:1px solid #1f2937;border-radius:8px;overflow:hidden">
+      <div style="padding:16px 20px;background:#0d1117;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h2 style="margin:0;font-size:16px;color:#f9fafb">Arbitrum Nitro</h2>
+          <span style="color:#6b7280;font-size:12px">11 playbooks · 11 structure-valid</span>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:24px;font-weight:700;color:#f87171">36%</div>
+          <div style="color:#6b7280;font-size:11px">coverage</div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#0d1117;border-bottom:1px solid #1f2937">
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Status</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Name</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Component</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Indicators</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody style="color:#e5e7eb">
+          
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">nitro-resource-exhaustion</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">nitro-node</td>
+          <td style="padding:8px 12px;font-size:12px">1/3 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">sequencer-stall</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">nitro-node</td>
+          <td style="padding:8px 12px;font-size:12px">1/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">4 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">batch-poster-backlog</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">batch-poster</td>
+          <td style="padding:8px 12px;font-size:12px">1/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">validator-assertion-failure</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">validator</td>
+          <td style="padding:8px 12px;font-size:12px">0/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">batch-poster-balance</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">batch-poster</td>
+          <td style="padding:8px 12px;font-size:12px">0/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">4 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">validator-balance</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">validator</td>
+          <td style="padding:8px 12px;font-size:12px">0/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">4 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">general-resource-pressure</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">system</td>
+          <td style="padding:8px 12px;font-size:12px">2/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-rpc-failover</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-sync-stall</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">4 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-peer-isolation</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-high-gas</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        </tbody>
+      </table>
+      <div style="padding:12px 20px;background:#0d1117;border-top:1px solid #1f2937"><ul style="margin:0;padding:0 0 0 16px;font-size:12px;line-height:2"><li style="color:#facc15">Condition <code>memoryPercent &gt; 85</code> in <code>nitro-resource-exhaustion</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>out of memory|OOM killed</code> in <code>nitro-resource-exhaustion</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>sequencer stall|inbox derivation|reset</code> in <code>sequencer-stall</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>failed to post batch|insufficient funds|blob fee</code> in <code>batch-poster-backlog</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>assertion failed|challenge opened|validator stall</code> in <code>validator-assertion-failure</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>batchPosterBalance &lt; critical</code> in <code>batch-poster-balance</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>validatorBalance &lt; critical</code> in <code>validator-balance</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>l1BlockNumber stagnant</code> in <code>l1-rpc-failover</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>connection refused|timeout|ECONNRESET|rate limit</code> in <code>l1-rpc-failover</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>l1BlockNumber stagnant</code> in <code>l1-sync-stall</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>snap sync|state heal|database|corrupt|panic</code> in <code>l1-sync-stall</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>peerCount == 0</code> in <code>l1-peer-isolation</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>no peers|peer dropped|dial failed|discovery</code> in <code>l1-peer-isolation</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>gasPrice &gt; guardGwei</code> in <code>l1-high-gas</code> (metric) — unmatchable</li></ul></div>
+    </div>
+    <div style="margin-bottom:32px;background:#111827;border:1px solid #1f2937;border-radius:8px;overflow:hidden">
+      <div style="padding:16px 20px;background:#0d1117;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h2 style="margin:0;font-size:16px;color:#f9fafb">ZK Stack (zkSync Era)</h2>
+          <span style="color:#6b7280;font-size:12px">10 playbooks · 10 structure-valid</span>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:24px;font-weight:700;color:#f87171">40%</div>
+          <div style="color:#6b7280;font-size:11px">coverage</div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#0d1117;border-bottom:1px solid #1f2937">
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Status</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Name</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Component</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Indicators</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody style="color:#e5e7eb">
+          
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">zksync-server-resource-pressure</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">zksync-server</td>
+          <td style="padding:8px 12px;font-size:12px">1/3 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">zk-settlement-lag</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">zk-batcher</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">5 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">zk-proof-backlog</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">zk-prover</td>
+          <td style="padding:8px 12px;font-size:12px">1/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">zk-prover-resource-exhaustion</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">zk-prover</td>
+          <td style="padding:8px 12px;font-size:12px">0/3 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">zk-batcher-balance-critical</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">zk-batcher</td>
+          <td style="padding:8px 12px;font-size:12px">1/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">4 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">zk-general-resource-pressure</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">system</td>
+          <td style="padding:8px 12px;font-size:12px">2/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-rpc-failover</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-sync-stall</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">4 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-peer-isolation</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-high-gas</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        </tbody>
+      </table>
+      <div style="padding:12px 20px;background:#0d1117;border-top:1px solid #1f2937"><ul style="margin:0;padding:0 0 0 16px;font-size:12px;line-height:2"><li style="color:#facc15">Condition <code>memoryPercent &gt; 85</code> in <code>zksync-server-resource-pressure</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>out of memory|OOM killed</code> in <code>zksync-server-resource-pressure</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>settlementLag high</code> in <code>zk-settlement-lag</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>batch submit failed|timeout|nonce</code> in <code>zk-settlement-lag</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>proofQueueDepth increasing</code> in <code>zk-proof-backlog</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>cpuUsage &gt; 95</code> in <code>zk-prover-resource-exhaustion</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>memoryPercent &gt; 90</code> in <code>zk-prover-resource-exhaustion</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>out of memory|OOM killed|prover panic</code> in <code>zk-prover-resource-exhaustion</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>l1BlockNumber stagnant</code> in <code>l1-rpc-failover</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>connection refused|timeout|ECONNRESET|rate limit</code> in <code>l1-rpc-failover</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>l1BlockNumber stagnant</code> in <code>l1-sync-stall</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>snap sync|state heal|database|corrupt|panic</code> in <code>l1-sync-stall</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>peerCount == 0</code> in <code>l1-peer-isolation</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>no peers|peer dropped|dial failed|discovery</code> in <code>l1-peer-isolation</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>gasPrice &gt; guardGwei</code> in <code>l1-high-gas</code> (metric) — unmatchable</li></ul></div>
+    </div>
+    <div style="margin-bottom:32px;background:#111827;border:1px solid #1f2937;border-radius:8px;overflow:hidden">
+      <div style="padding:16px 20px;background:#0d1117;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h2 style="margin:0;font-size:16px;color:#f9fafb">ZK L2 Generic (Scroll, Linea)</h2>
+          <span style="color:#6b7280;font-size:12px">7 playbooks · 7 structure-valid</span>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:24px;font-weight:700;color:#f87171">29%</div>
+          <div style="color:#6b7280;font-size:11px">coverage</div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#0d1117;border-bottom:1px solid #1f2937">
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Status</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Name</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Component</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Indicators</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody style="color:#e5e7eb">
+          
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">zkl2-sequencer-resource-pressure</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">zk-sequencer</td>
+          <td style="padding:8px 12px;font-size:12px">1/3 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">zkl2-settlement-lag</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">zk-batcher</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">5 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">zkl2-proof-backlog</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">zk-prover</td>
+          <td style="padding:8px 12px;font-size:12px">1/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-rpc-failover</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-sync-stall</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">4 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-peer-isolation</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-high-gas</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        </tbody>
+      </table>
+      <div style="padding:12px 20px;background:#0d1117;border-top:1px solid #1f2937"><ul style="margin:0;padding:0 0 0 16px;font-size:12px;line-height:2"><li style="color:#facc15">Condition <code>memoryPercent &gt; 85</code> in <code>zkl2-sequencer-resource-pressure</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>out of memory|OOM killed</code> in <code>zkl2-sequencer-resource-pressure</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>settlementLag high</code> in <code>zkl2-settlement-lag</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>batch submit failed|timeout</code> in <code>zkl2-settlement-lag</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>proofQueueDepth increasing</code> in <code>zkl2-proof-backlog</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>l1BlockNumber stagnant</code> in <code>l1-rpc-failover</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>connection refused|timeout|ECONNRESET|rate limit</code> in <code>l1-rpc-failover</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>l1BlockNumber stagnant</code> in <code>l1-sync-stall</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>snap sync|state heal|database|corrupt|panic</code> in <code>l1-sync-stall</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>peerCount == 0</code> in <code>l1-peer-isolation</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>no peers|peer dropped|dial failed|discovery</code> in <code>l1-peer-isolation</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>gasPrice &gt; guardGwei</code> in <code>l1-high-gas</code> (metric) — unmatchable</li></ul></div>
+    </div>
+    <div style="margin-bottom:32px;background:#111827;border:1px solid #1f2937;border-radius:8px;overflow:hidden">
+      <div style="padding:16px 20px;background:#0d1117;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <h2 style="margin:0;font-size:16px;color:#f9fafb">L1 EVM (Ethereum)</h2>
+          <span style="color:#6b7280;font-size:12px">9 playbooks · 9 structure-valid</span>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:24px;font-weight:700;color:#f87171">11%</div>
+          <div style="color:#6b7280;font-size:11px">coverage</div>
+        </div>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <thead>
+          <tr style="background:#0d1117;border-bottom:1px solid #1f2937">
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Status</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Name</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Component</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Indicators</th>
+            <th style="padding:8px 12px;text-align:left;color:#6b7280;font-size:11px;text-transform:uppercase">Actions</th>
+          </tr>
+        </thead>
+        <tbody style="color:#e5e7eb">
+          
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#4ade8022;color:#4ade80;border:1px solid #4ade8044;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">✓</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-resource-pressure</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1-execution</td>
+          <td style="padding:8px 12px;font-size:12px">1/3 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-sync-lag</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1-execution</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-mempool-spike</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1-execution</td>
+          <td style="padding:8px 12px;font-size:12px">0/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-disk-pressure</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1-execution</td>
+          <td style="padding:8px 12px;font-size:12px">0/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-chain-reorg</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1-execution</td>
+          <td style="padding:8px 12px;font-size:12px">0/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-rpc-failover</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-sync-stall</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">4 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-peer-isolation</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/2 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">3 auto</td>
+        </tr>
+        <tr style="border-bottom:1px solid #1f2937">
+          <td style="padding:8px 12px"><span style="background:#facc1522;color:#facc15;border:1px solid #facc1544;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600">⚠</span></td>
+          <td style="padding:8px 12px;font-family:monospace;font-size:12px">l1-high-gas</td>
+          <td style="padding:8px 12px;color:#9ca3af;font-size:12px">l1</td>
+          <td style="padding:8px 12px;font-size:12px">0/1 matchable</td>
+          <td style="padding:8px 12px;font-size:12px">2 auto</td>
+        </tr>
+        </tbody>
+      </table>
+      <div style="padding:12px 20px;background:#0d1117;border-top:1px solid #1f2937"><ul style="margin:0;padding:0 0 0 16px;font-size:12px;line-height:2"><li style="color:#facc15">Condition <code>memoryPercent &gt; 85</code> in <code>l1-resource-pressure</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>out of memory|OOM killed|fatal error</code> in <code>l1-resource-pressure</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>syncGap increasing</code> in <code>l1-sync-lag</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>snap sync|state heal|behind by</code> in <code>l1-sync-lag</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>txPoolPending &gt; threshold</code> in <code>l1-mempool-spike</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>no space left|disk full|ENOSPC</code> in <code>l1-disk-pressure</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>chain reorg|reorg depth|block reorganis</code> in <code>l1-chain-reorg</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>l1BlockNumber stagnant</code> in <code>l1-rpc-failover</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>connection refused|timeout|ECONNRESET|rate limit</code> in <code>l1-rpc-failover</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>l1BlockNumber stagnant</code> in <code>l1-sync-stall</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>snap sync|state heal|database|corrupt|panic</code> in <code>l1-sync-stall</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>peerCount == 0</code> in <code>l1-peer-isolation</code> (metric) — unmatchable</li><li style="color:#facc15">Condition <code>no peers|peer dropped|dial failed|discovery</code> in <code>l1-peer-isolation</code> (log_pattern) — unmatchable</li><li style="color:#facc15">Condition <code>gasPrice &gt; guardGwei</code> in <code>l1-high-gas</code> (metric) — unmatchable</li><li style="color:#f87171">Component <code>l1</code> in <code>l1-rpc-failover</code> — not in plugin.components</li><li style="color:#f87171">Component <code>l1</code> in <code>l1-sync-stall</code> — not in plugin.components</li><li style="color:#f87171">Component <code>l1</code> in <code>l1-peer-isolation</code> — not in plugin.components</li><li style="color:#f87171">Component <code>l1</code> in <code>l1-high-gas</code> — not in plugin.components</li></ul></div>
+    </div>
+
+  <!-- Footer -->
+  <div style="text-align:center;color:#374151;font-size:12px;margin-top:32px;padding-top:16px;border-top:1px solid #1f2937">
+    SentinAI · 2026-03-17 10:10:05 UTC
+  </div>
+</div>
+</body>
+</html>

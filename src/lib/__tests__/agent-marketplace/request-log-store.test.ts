@@ -53,8 +53,8 @@ describe('agent-marketplace request-log-store', () => {
     await clearAgentMarketplaceRequestLogs();
   });
 
-  it('fails closed when REDIS_URL is missing', async () => {
-    await expect(getAgentMarketplaceRequestLogs()).rejects.toThrow('REDIS_URL is required');
+  it('returns empty array and silently no-ops when REDIS_URL is missing', async () => {
+    await expect(getAgentMarketplaceRequestLogs()).resolves.toEqual([]);
     await expect(
       recordAgentMarketplaceRequest({
         agentId: 'agent-1',
@@ -64,7 +64,7 @@ describe('agent-marketplace request-log-store', () => {
         verificationResult: 'verified',
         success: true,
       })
-    ).rejects.toThrow('REDIS_URL is required');
+    ).resolves.toBeUndefined();
   });
 
   it('records a successful paid request', async () => {

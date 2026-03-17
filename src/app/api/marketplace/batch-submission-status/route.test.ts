@@ -40,7 +40,7 @@ describe('/api/marketplace/batch-submission-status', () => {
         sepolia: {
           id: 'sepolia', enabled: true, chainId: 11155111, network: 'eip155:11155111', rpcUrl: 'https://sepolia.example',
           relayerPrivateKey: '0x3333333333333333333333333333333333333333333333333333333333333333',
-          facilitatorAddress: '0x7777777777777777777777777777777777777777',
+          facilitatorAddress: '0x6666666666666666666666666666666666666666',
           tonAssetAddress: '0xa30fe40285b8f5c0457dbc3b7c8a280373c40044',
         },
       },

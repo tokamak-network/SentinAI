@@ -39,6 +39,8 @@ export const L1_COMPONENT_ALIASES: Record<string, ChainComponent> = {
   erigon: 'l1-execution',
   'l1-node': 'l1-execution',
   node: 'l1-execution',
+  l1: 'l1',
+  system: 'system',
 };
 
 /**

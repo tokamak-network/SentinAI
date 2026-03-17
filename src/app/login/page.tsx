@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 type LoginState = 'idle' | 'connecting' | 'signing' | 'verifying' | 'error' | 'success';
 
 const MONO_FONT = "'IBM Plex Mono', monospace";
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
 function LoginPageContent() {
   const router = useRouter();
@@ -43,7 +44,7 @@ function LoginPageContent() {
       setState('signing');
 
       // Step 3: Get nonce from server
-      const nonceRes = await fetch(`/api/auth/siwe/nonce?address=${userAddress}`);
+      const nonceRes = await fetch(`${BASE_PATH}/api/auth/siwe/nonce?address=${userAddress}`);
       if (!nonceRes.ok) {
         throw new Error('Failed to get nonce from server');
       }
@@ -72,7 +73,7 @@ function LoginPageContent() {
       setState('verifying');
 
       // Step 6: Verify on server
-      const verifyRes = await fetch('/api/auth/siwe/verify', {
+      const verifyRes = await fetch(`${BASE_PATH}/api/auth/siwe/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
