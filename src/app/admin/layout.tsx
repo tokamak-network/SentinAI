@@ -35,6 +35,7 @@ export default function AdminLayout({
     { href: '/admin/pricing', label: 'Pricing' },
     { href: '/admin/orders', label: 'Orders' },
     { href: '/admin/analytics', label: 'Analytics' },
+    { href: '/admin/registry', label: 'Registry' },
   ];
 
   return (

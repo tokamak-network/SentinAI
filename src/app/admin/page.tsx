@@ -34,6 +34,13 @@ export default function AdminDashboard() {
       link: '/admin/analytics',
       icon: '📈',
     },
+    {
+      title: 'Registry',
+      description: 'ERC8004 registration',
+      count: 'On-chain registry',
+      link: '/admin/registry',
+      icon: '📋',
+    },
   ];
 
   return (
