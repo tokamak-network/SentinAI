@@ -300,7 +300,7 @@
   <h3>Evolution 상태 조회</h3>
 <pre>
 <span class="comment"># 플레이북 현황 (대시보드와 동일 데이터)</span>
-curl <span class="string">https://sentinai.tokamak.network/thanos-sepolia/api/playbook-evolution?action=status</span>
+curl <span class="string">http://localhost:3002/api/playbook-evolution?action=status</span>
 
 <span class="comment"># 응답 예시:</span>
 {
@@ -313,7 +313,7 @@ curl <span class="string">https://sentinai.tokamak.network/thanos-sepolia/api/pl
   <h3>수동 패턴 마이닝 + LLM 생성 트리거</h3>
 <pre>
 <span class="comment"># 패턴 마이닝 + LLM 플레이북 생성</span>
-curl -X POST <span class="string">https://sentinai.tokamak.network/thanos-sepolia/api/playbook-evolution?action=mine</span> \
+curl -X POST <span class="string">http://localhost:3002/api/playbook-evolution?action=mine</span> \
   -H <span class="string">"x-api-key: $API_KEY"</span>
 
 <span class="comment"># 응답 예시:</span>
@@ -333,7 +333,7 @@ curl -X POST <span class="string">https://sentinai.tokamak.network/thanos-sepoli
   <h3>Admin: LLM Evolution 트리거 + 버전 승격</h3>
 <pre>
 <span class="comment"># LLM 진화 트리거 (패턴 분석 → LLM 생성 → 자동 버전 승격)</span>
-curl -X POST <span class="string">https://sentinai.tokamak.network/thanos-sepolia/api/admin/playbook-evolution</span> \
+curl -X POST <span class="string">http://localhost:3002/api/admin/playbook-evolution</span> \
   -H <span class="string">"Authorization: Bearer $API_KEY"</span> \
   -H <span class="string">"Content-Type: application/json"</span> \
   -d <span class="string">'{"action": "trigger_evolution"}'</span>
@@ -355,7 +355,7 @@ curl -X POST <span class="string">https://sentinai.tokamak.network/thanos-sepoli
   <h3>버전 롤백</h3>
 <pre>
 <span class="comment"># 특정 버전으로 롤백</span>
-curl -X POST <span class="string">https://sentinai.tokamak.network/thanos-sepolia/api/admin/playbook-evolution</span> \
+curl -X POST <span class="string">http://localhost:3002/api/admin/playbook-evolution</span> \
   -H <span class="string">"Authorization: Bearer $API_KEY"</span> \
   -H <span class="string">"Content-Type: application/json"</span> \
   -d <span class="string">'{"action": "rollback", "versionId": "v-1"}'</span>
