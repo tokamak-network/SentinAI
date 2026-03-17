@@ -116,10 +116,10 @@ export async function getRegistrationStatus(): Promise<RegistrationStatus> {
   const l1RpcUrl = (process.env.SENTINAI_L1_RPC_URL || process.env.L1_RPC_URL)!.trim();
   const agentUriBase = process.env.MARKETPLACE_AGENT_URI_BASE!.trim();
   const agentUri = `${agentUriBase.replace(/\/+$/, '')}/api/agent-marketplace/agent.json`;
+  const walletAddress = privateKeyToAddress(walletKey as `0x${string}`);
 
   // 1. Redis cache (primary)
   try {
-    const walletAddress = privateKeyToAddress(walletKey as `0x${string}`);
     const redisData = await redisGet(`${REDIS_KEY_PREFIX}${walletAddress}`);
     if (redisData) return JSON.parse(redisData) as RegistrationStatus;
   } catch { /* fall through */ }
@@ -130,7 +130,6 @@ export async function getRegistrationStatus(): Promise<RegistrationStatus> {
 
   // 3. On-chain read
   try {
-    const walletAddress = privateKeyToAddress(walletKey as `0x${string}`);
     const publicClient = createPublicClient({
       chain: resolveChain(),
       transport: http(l1RpcUrl, { timeout: 10_000 }),

@@ -31,7 +31,7 @@ vi.mock('ioredis', () => ({
   })),
 }));
 
-const { getRegistrationStatus, saveRegistrationCache } = await import(
+const { getRegistrationStatus, saveRegistrationCache, clearRegistrationCache } = await import(
   '@/lib/agent-marketplace/registration-status'
 );
 
@@ -131,5 +131,16 @@ describe('registration-status', () => {
     const cache = (globalThis as Record<string, unknown>).__sentinaiRegistrationStatusCache as
       { value: unknown; cachedAt: number } | undefined;
     expect(cache?.value).toBeDefined();
+  });
+
+  it('clearRegistrationCache clears globalThis cache', async () => {
+    (globalThis as Record<string, unknown>).__sentinaiRegistrationStatusCache = {
+      value: { registered: false, envCheck: { registryAddress: true, agentUriBase: true, walletKey: true, l1RpcUrl: true }, agentUri: null },
+      cachedAt: Date.now(),
+    };
+
+    await clearRegistrationCache();
+
+    expect((globalThis as Record<string, unknown>).__sentinaiRegistrationStatusCache).toBeUndefined();
   });
 });
