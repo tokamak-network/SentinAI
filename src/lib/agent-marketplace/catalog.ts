@@ -3,6 +3,7 @@ import type {
   AgentMarketplaceServiceDefinition,
   AgentMarketplaceServiceKey,
 } from '@/types/agent-marketplace';
+import { getAllServiceOverrides } from '@/lib/agent-marketplace/service-catalog-store';
 
 const DEFAULT_UPDATED_AT = '2026-03-12T00:00:00.000Z';
 const DEFAULT_AUP_VERSION = '2026-03-11';
@@ -60,6 +61,26 @@ export const agentMarketplaceCatalog = defaultAgentMarketplaceCatalog;
 
 export function getAgentMarketplaceCatalog(): AgentMarketplaceCatalog {
   return agentMarketplaceCatalog;
+}
+
+export async function getAgentMarketplaceCatalogWithOverrides(): Promise<AgentMarketplaceCatalog> {
+  const overrides = await getAllServiceOverrides();
+  const services = agentMarketplaceCatalog.services.map((service) => {
+    const override = overrides[service.key];
+    if (!override) return service;
+    return {
+      ...service,
+      ...(override.state !== undefined ? { state: override.state } : {}),
+      ...(override.amount !== undefined && service.payment
+        ? { payment: { ...service.payment, amount: override.amount } }
+        : {}),
+    } satisfies AgentMarketplaceServiceDefinition;
+  });
+  return {
+    ...agentMarketplaceCatalog,
+    services,
+    updatedAt: new Date().toISOString(),
+  };
 }
 
 export function getAgentMarketplaceService(

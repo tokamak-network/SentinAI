@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import {
-  getAgentMarketplaceCatalog,
+  getAgentMarketplaceCatalogWithOverrides,
 } from '@/lib/agent-marketplace/catalog';
 import {
   toPublicAgentMarketplaceCatalogResponse,
@@ -9,7 +9,6 @@ import {
 export const dynamic = 'force-dynamic';
 
 export async function GET(): Promise<NextResponse> {
-  return NextResponse.json(
-    toPublicAgentMarketplaceCatalogResponse(getAgentMarketplaceCatalog())
-  );
+  const catalog = await getAgentMarketplaceCatalogWithOverrides();
+  return NextResponse.json(toPublicAgentMarketplaceCatalogResponse(catalog));
 }

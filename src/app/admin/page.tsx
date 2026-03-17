@@ -42,6 +42,13 @@ export default function AdminDashboard() {
       icon: '📋',
     },
     {
+      title: 'Services',
+      description: 'x402 service catalog & pricing',
+      count: '3 services',
+      link: '/admin/services',
+      icon: '🛒',
+    },
+    {
       title: 'Settlements',
       description: 'x402 payment settlements',
       count: 'TON payment records',
