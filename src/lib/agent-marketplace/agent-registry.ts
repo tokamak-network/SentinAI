@@ -17,7 +17,7 @@ export interface RegisterAgentMarketplaceIdentityInput {
 }
 
 export type RegisterAgentMarketplaceIdentityResult =
-  | { ok: true; agentId: string; txHash: `0x${string}` | string }
+  | { ok: true; agentId: string; txHash: `0x${string}` | string; registeredAt: string | null }
   | { ok: false; error: string };
 
 function normalizeAgentUri(agentUriBase: string): string {
@@ -109,10 +109,16 @@ export async function registerAgentMarketplaceIdentity(
 
     const parsedAgentId = extractRegisteredAgentId(receipt.logs);
 
+    const block = await publicClient.getBlock({ blockNumber: receipt.blockNumber }).catch(() => null);
+    const registeredAt = block
+      ? new Date(Number(block.timestamp) * 1000).toISOString()
+      : null;
+
     return {
       ok: true,
       agentId: parsedAgentId !== undefined ? String(parsedAgentId) : txHash,
       txHash,
+      registeredAt,
     };
   } catch (error) {
     return {

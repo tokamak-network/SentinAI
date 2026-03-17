@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const hoisted = vi.hoisted(() => ({
   createPublicClientMock: vi.fn(),
   createWalletClientMock: vi.fn(),
+  getBlockMock: vi.fn(),
   httpMock: vi.fn(),
   parseEventLogsMock: vi.fn(),
   privateKeyToAccountMock: vi.fn(),
@@ -48,8 +49,12 @@ describe('agent-marketplace agent-registry', () => {
     hoisted.createWalletClientMock.mockReturnValue({
       writeContract: hoisted.writeContractMock,
     });
+    hoisted.getBlockMock.mockResolvedValue({
+      timestamp: 1710339720n, // 2024-03-13T14:22:00Z
+    });
     hoisted.createPublicClientMock.mockReturnValue({
       waitForTransactionReceipt: hoisted.waitForTransactionReceiptMock,
+      getBlock: hoisted.getBlockMock,
     });
   });
 
@@ -86,6 +91,7 @@ describe('agent-marketplace agent-registry', () => {
     });
     expect(result.txHash).toBe('0xtxhash');
     expect(result.agentId).toBe('123');
+    expect(result.registeredAt).toBe('2024-03-13T14:22:00.000Z');
   });
 
   it('fails when no L1 RPC is configured', async () => {
@@ -152,5 +158,23 @@ describe('agent-marketplace agent-registry', () => {
 
     expect(result.agentId).toBe('0x00000000000000000000000000000000000000a1');
     expect(hoisted.parseEventLogsMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns registeredAt null when getBlock throws', async () => {
+    process.env.SENTINAI_L1_RPC_URL = 'https://rpc.example.com';
+    hoisted.getBlockMock.mockRejectedValueOnce(new Error('RPC error'));
+    hoisted.parseEventLogsMock.mockReturnValueOnce([
+      { eventName: 'AgentRegistered', args: { agentId: 1n, agent: '0xabc', agentURI: 'https://x.com/agent.json' } },
+    ]);
+
+    const result = await registerAgentMarketplaceIdentity({
+      agentUriBase: 'https://x.com',
+      walletKey: '0x' + '1'.repeat(64),
+      registryAddress: '0x00000000000000000000000000000000000000b1',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.registeredAt).toBeNull();
   });
 });
