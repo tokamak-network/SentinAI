@@ -127,6 +127,15 @@ function evalSingleMetricCondition(
     return anomaly.rule === 'monotonic-increase' || anomaly.direction === 'spike';
   }
 
+  // Pattern: "metric spike"
+  const spikeMatch = trimmed.match(/^(\S+)\s+spike$/i);
+  if (spikeMatch) {
+    const metric = normalizeMetric(spikeMatch[1]);
+    const anomaly = event.anomalies.find(a => a.metric === metric);
+    if (!anomaly) return false;
+    return anomaly.direction === 'spike';
+  }
+
   // Pattern: "metric high"
   const highMatch = trimmed.match(/^(\S+)\s+high$/i);
   if (highMatch) {

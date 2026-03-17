@@ -104,6 +104,41 @@ export const THANOS_PLAYBOOKS: Playbook[] = [
     maxAttempts: 1,
   },
 
+  // Playbook 5: op-geth Traffic Surge
+  {
+    name: 'op-geth-traffic-surge',
+    description: 'Sudden txPool growth from traffic spike — scale up op-geth capacity',
+    trigger: {
+      component: 'op-geth',
+      indicators: [
+        { type: 'metric', condition: 'txPoolPending spike' },
+        { type: 'metric', condition: 'txCountPerBlock spike' },
+      ],
+    },
+    actions: [
+      {
+        type: 'scale_up',
+        safetyLevel: 'guarded',
+        target: 'op-geth',
+        params: { targetVcpu: 'next_tier' },
+      },
+      {
+        type: 'health_check',
+        safetyLevel: 'safe',
+        target: 'op-geth',
+        waitAfterMs: 30000,
+      },
+    ],
+    fallback: [
+      {
+        type: 'escalate_operator',
+        safetyLevel: 'safe',
+        params: { urgency: 'medium', message: 'Traffic surge detected. op-geth scale-up attempted — verify capacity.' },
+      },
+    ],
+    maxAttempts: 2,
+  },
+
   // Playbook 4: General Resource Pressure
   {
     name: 'general-resource-pressure',
