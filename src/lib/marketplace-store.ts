@@ -10,6 +10,7 @@ import type {
   MarketplacePricingConfig,
   PricingUpdateRequest,
   OutcomeBonusConfig,
+  BracketPricingConfig,
   CatalogAgent,
   MarketplaceOrder,
 } from '@/types/marketplace';
@@ -27,6 +28,20 @@ export const DEFAULT_PRICING: MarketplacePricingConfig = {
   juniorPrice: 19900, // $199.00
   seniorPrice: 49900, // $499.00
   expertPrice: 79900, // $799.00
+  updatedAt: new Date().toISOString(),
+};
+
+/**
+ * Default bracket pricing configuration.
+ * Brackets sorted by floor descending.
+ */
+export const DEFAULT_BRACKET_PRICING: BracketPricingConfig = {
+  brackets: [
+    { floor: 80, priceCents: 79900, label: 'Expert' },
+    { floor: 60, priceCents: 49900, label: 'Advanced' },
+    { floor: 30, priceCents: 19900, label: 'Standard' },
+    { floor: 0, priceCents: 0, label: 'Starter' },
+  ],
   updatedAt: new Date().toISOString(),
 };
 
@@ -149,6 +164,21 @@ export interface IMarketplaceStore {
    * @returns Promise resolving to { totalCount, totalRevenueInCents }
    */
   getOrdersSummary(): Promise<{ totalCount: number; totalRevenueInCents: number }>;
+
+  /**
+   * Retrieve bracket pricing configuration.
+   */
+  getBracketPricingConfig(): Promise<BracketPricingConfig>;
+
+  /**
+   * Update bracket pricing configuration.
+   */
+  updateBracketPricing(config: BracketPricingConfig): Promise<BracketPricingConfig>;
+
+  /**
+   * Reset bracket pricing to defaults.
+   */
+  resetBracketPricingToDefaults(): Promise<BracketPricingConfig>;
 }
 
 // ---------------------------------------------------------------------------

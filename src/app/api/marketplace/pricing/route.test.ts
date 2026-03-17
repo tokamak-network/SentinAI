@@ -8,6 +8,9 @@ const hoisted = vi.hoisted(() => {
     resetPricingToDefaults: vi.fn(),
     getBonusConfig: vi.fn(),
     updateBonusConfig: vi.fn(),
+    getBracketPricingConfig: vi.fn(),
+    updateBracketPricing: vi.fn(),
+    resetBracketPricingToDefaults: vi.fn(),
   };
 
   return {
@@ -31,6 +34,16 @@ describe('/api/marketplace/pricing', () => {
     vi.clearAllMocks();
     process.env.SENTINAI_API_KEY = 'test-api-key';
 
+    hoisted.store.getBracketPricingConfig.mockResolvedValue({
+      brackets: [
+        { floor: 80, priceCents: 79900, label: 'Expert' },
+        { floor: 60, priceCents: 49900, label: 'Advanced' },
+        { floor: 30, priceCents: 19900, label: 'Standard' },
+        { floor: 0, priceCents: 0, label: 'Starter' },
+      ],
+      updatedAt: '2026-03-11T10:00:00.000Z',
+    });
+
     hoisted.store.getPricingConfig.mockResolvedValue({
       traineePrice: 0,
       juniorPrice: 19900,
@@ -38,61 +51,109 @@ describe('/api/marketplace/pricing', () => {
       expertPrice: 79900,
       updatedAt: '2026-03-11T10:00:00.000Z',
     });
-    hoisted.store.updatePricing.mockImplementation(async (update) => ({
-      traineePrice: update.traineePrice ?? 0,
-      juniorPrice: update.juniorPrice ?? 19900,
-      seniorPrice: update.seniorPrice ?? 49900,
-      expertPrice: update.expertPrice ?? 79900,
+
+    hoisted.store.updateBracketPricing.mockImplementation(async (config) => ({
+      ...config,
       updatedAt: '2026-03-11T10:05:00.000Z',
     }));
   });
 
-  it('reads pricing from the shared marketplace store on GET', async () => {
+  it('reads bracket pricing from the shared marketplace store on GET', async () => {
     const response = await GET();
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(hoisted.getMarketplaceStoreMock).toHaveBeenCalledTimes(1);
-    expect(hoisted.store.getPricingConfig).toHaveBeenCalledTimes(1);
+    expect(hoisted.getMarketplaceStoreMock).toHaveBeenCalled();
+    expect(hoisted.store.getBracketPricingConfig).toHaveBeenCalledTimes(1);
+    expect(body.data.brackets).toHaveLength(4);
     expect(body.data.updatedAt).toBe('2026-03-11T10:00:00.000Z');
+    // Also returns legacy config
+    expect(body.legacy).toBeDefined();
   });
 
-  it('updates pricing through the shared marketplace store on PUT', async () => {
+  it('updates bracket pricing through the shared marketplace store on PUT', async () => {
     const request = new NextRequest('http://localhost/api/marketplace/pricing', {
       method: 'PUT',
       headers: {
         authorization: 'Bearer test-api-key',
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ juniorPrice: 25000 }),
+      body: JSON.stringify({
+        brackets: [
+          { floor: 80, priceCents: 89900, label: 'Expert' },
+          { floor: 0, priceCents: 0, label: 'Starter' },
+        ],
+      }),
     });
 
     const response = await PUT(request);
     const body = await response.json();
 
     expect(response.status).toBe(200);
-    expect(hoisted.getMarketplaceStoreMock).toHaveBeenCalledTimes(1);
-    expect(hoisted.store.updatePricing).toHaveBeenCalledWith({ juniorPrice: 25000 });
-    expect(body.data.juniorPrice).toBe(25000);
-    expect(body.data.updatedAt).toBe('2026-03-11T10:05:00.000Z');
+    expect(hoisted.store.updateBracketPricing).toHaveBeenCalledTimes(1);
+    expect(body.data.brackets).toHaveLength(2);
   });
 
-  it('rejects unknown pricing keys', async () => {
+  it('rejects brackets without floor=0', async () => {
     const request = new NextRequest('http://localhost/api/marketplace/pricing', {
       method: 'PUT',
       headers: {
         authorization: 'Bearer test-api-key',
         'content-type': 'application/json',
       },
-      body: JSON.stringify({ juniorPrice: 25000, foo: 1 }),
+      body: JSON.stringify({
+        brackets: [
+          { floor: 80, priceCents: 79900, label: 'Expert' },
+        ],
+      }),
     });
 
     const response = await PUT(request);
     const body = await response.json();
 
     expect(response.status).toBe(400);
-    expect(body.error).toContain('foo');
-    expect(hoisted.store.updatePricing).not.toHaveBeenCalled();
+    expect(body.error).toContain('floor=0');
+    expect(hoisted.store.updateBracketPricing).not.toHaveBeenCalled();
+  });
+
+  it('rejects duplicate floors', async () => {
+    const request = new NextRequest('http://localhost/api/marketplace/pricing', {
+      method: 'PUT',
+      headers: {
+        authorization: 'Bearer test-api-key',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        brackets: [
+          { floor: 0, priceCents: 0, label: 'Starter' },
+          { floor: 0, priceCents: 100, label: 'Also Starter' },
+        ],
+      }),
+    });
+
+    const response = await PUT(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toContain('unique');
+    expect(hoisted.store.updateBracketPricing).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-array brackets', async () => {
+    const request = new NextRequest('http://localhost/api/marketplace/pricing', {
+      method: 'PUT',
+      headers: {
+        authorization: 'Bearer test-api-key',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ brackets: 'not-array' }),
+    });
+
+    const response = await PUT(request);
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body.error).toContain('array');
   });
 
   it('returns CORS headers on OPTIONS', async () => {

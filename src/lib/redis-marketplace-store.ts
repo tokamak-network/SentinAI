@@ -10,11 +10,13 @@ import {
   IMarketplaceStore,
   DEFAULT_PRICING,
   DEFAULT_BONUS_CONFIG,
+  DEFAULT_BRACKET_PRICING,
 } from '@/lib/marketplace-store';
 import type {
   MarketplacePricingConfig,
   PricingUpdateRequest,
   OutcomeBonusConfig,
+  BracketPricingConfig,
   CatalogAgent,
   MarketplaceOrder,
 } from '@/types/marketplace';
@@ -22,17 +24,56 @@ import { getStore } from '@/lib/redis-store';
 import logger from '@/lib/logger';
 
 /**
+ * Lazy migration: convert legacy tier-based order to ops-score based order.
+ */
+function migrateOrder(order: any): MarketplaceOrder {
+  // Already migrated
+  if (order.opsScoreAtPurchase !== undefined && order.bracketLabel !== undefined) {
+    return order as MarketplaceOrder;
+  }
+
+  // Legacy order with tier field — map to opsScore/bracketLabel
+  const tierMapping: Record<string, { opsScore: number; bracketLabel: string }> = {
+    trainee: { opsScore: 15, bracketLabel: 'Starter' },
+    junior: { opsScore: 45, bracketLabel: 'Standard' },
+    senior: { opsScore: 70, bracketLabel: 'Advanced' },
+    expert: { opsScore: 90, bracketLabel: 'Expert' },
+  };
+
+  const mapping = tierMapping[order.tier] ?? { opsScore: 0, bracketLabel: 'Starter' };
+
+  return {
+    id: order.id,
+    agentId: order.agentId,
+    buyerAddress: order.buyerAddress,
+    opsScoreAtPurchase: mapping.opsScore,
+    bracketLabel: mapping.bracketLabel,
+    priceInCents: order.priceInCents,
+    createdAt: order.createdAt,
+  };
+}
+
+/**
+ * Lazy migration: convert legacy tier-based agent to status-based agent.
+ */
+function migrateCatalogAgent(agent: any): CatalogAgent {
+  // Already migrated
+  if (agent.status !== undefined && agent.tier === undefined) {
+    return agent as CatalogAgent;
+  }
+
+  // Legacy agent with tier field — convert to status
+  const { tier, ...rest } = agent;
+  return {
+    ...rest,
+    status: rest.status ?? 'active',
+  } as CatalogAgent;
+}
+
+/**
  * Redis-based implementation of IMarketplaceStore.
- * Persists pricing and bonus configurations to Redis with error handling
- * and fallback to hardcoded defaults.
  */
 export class RedisMarketplaceStore implements IMarketplaceStore {
-  /**
-   * Retrieve current pricing configuration from Redis.
-   * Falls back to DEFAULT_PRICING if retrieval fails.
-   *
-   * @returns Promise resolving to current MarketplacePricingConfig
-   */
   async getPricingConfig(): Promise<MarketplacePricingConfig> {
     try {
       const state = getStore();
@@ -46,14 +87,6 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
     }
   }
 
-  /**
-   * Update pricing configuration with partial overrides.
-   * Merges provided tier prices with existing configuration,
-   * preserving unspecified tiers at their current values.
-   *
-   * @param update - Partial pricing update containing optional tier prices
-   * @returns Promise resolving to updated MarketplacePricingConfig
-   */
   async updatePricing(
     update: PricingUpdateRequest
   ): Promise<MarketplacePricingConfig> {
@@ -90,12 +123,6 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
     }
   }
 
-  /**
-   * Reset pricing configuration to hardcoded defaults.
-   * Useful for reverting to initial state or fixing corrupted data.
-   *
-   * @returns Promise resolving to default MarketplacePricingConfig
-   */
   async resetPricingToDefaults(): Promise<MarketplacePricingConfig> {
     try {
       const state = getStore();
@@ -120,12 +147,76 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
     }
   }
 
-  /**
-   * Retrieve current outcome bonus configuration from Redis.
-   * Falls back to DEFAULT_BONUS_CONFIG if retrieval fails.
-   *
-   * @returns Promise resolving to current OutcomeBonusConfig
-   */
+  // =====================================================================
+  // Bracket Pricing
+  // =====================================================================
+
+  async getBracketPricingConfig(): Promise<BracketPricingConfig> {
+    try {
+      const state = getStore();
+      return await state.getMarketplaceBracketPricingConfig(DEFAULT_BRACKET_PRICING);
+    } catch (error) {
+      logger.error(
+        '[Marketplace Store] Failed to get bracket pricing config:',
+        error instanceof Error ? error.message : String(error)
+      );
+      return DEFAULT_BRACKET_PRICING;
+    }
+  }
+
+  async updateBracketPricing(config: BracketPricingConfig): Promise<BracketPricingConfig> {
+    try {
+      const state = getStore();
+      const updated: BracketPricingConfig = {
+        ...config,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await state.setMarketplaceBracketPricingConfig(updated);
+
+      logger.info('[Marketplace Store] Bracket pricing updated:', {
+        bracketCount: updated.brackets.length,
+        updatedAt: updated.updatedAt,
+      });
+
+      return updated;
+    } catch (error) {
+      logger.error(
+        '[Marketplace Store] Failed to update bracket pricing:',
+        error instanceof Error ? error.message : String(error)
+      );
+      throw error;
+    }
+  }
+
+  async resetBracketPricingToDefaults(): Promise<BracketPricingConfig> {
+    try {
+      const state = getStore();
+      const reset: BracketPricingConfig = {
+        ...DEFAULT_BRACKET_PRICING,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await state.setMarketplaceBracketPricingConfig(reset);
+
+      logger.info('[Marketplace Store] Bracket pricing reset to defaults:', {
+        updatedAt: reset.updatedAt,
+      });
+
+      return reset;
+    } catch (error) {
+      logger.error(
+        '[Marketplace Store] Failed to reset bracket pricing:',
+        error instanceof Error ? error.message : String(error)
+      );
+      throw error;
+    }
+  }
+
+  // =====================================================================
+  // Bonus Config
+  // =====================================================================
+
   async getBonusConfig(): Promise<OutcomeBonusConfig> {
     try {
       const state = getStore();
@@ -139,14 +230,6 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
     }
   }
 
-  /**
-   * Update outcome bonus configuration with partial overrides.
-   * Merges provided bonus settings with existing configuration,
-   * preserving unspecified fields at their current values.
-   *
-   * @param update - Partial bonus configuration update
-   * @returns Promise resolving to updated OutcomeBonusConfig
-   */
   async updateBonusConfig(
     update: Partial<OutcomeBonusConfig>
   ): Promise<OutcomeBonusConfig> {
@@ -181,17 +264,15 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
     }
   }
 
-  /**
-   * Retrieve all catalog agents from Redis.
-   * Falls back to empty array if retrieval fails.
-   *
-   * @returns Promise resolving to array of CatalogAgent
-   */
+  // =====================================================================
+  // Catalog Agents (with lazy migration from tier to status)
+  // =====================================================================
+
   async getCatalogAgents(): Promise<CatalogAgent[]> {
     try {
       const state = getStore();
-      const agents = await state.getMarketplaceCatalogAgents([]);
-      return agents;
+      const rawAgents = await state.getMarketplaceCatalogAgents([]);
+      return rawAgents.map(migrateCatalogAgent);
     } catch (error) {
       logger.error(
         '[Marketplace Store] Failed to get catalog agents:',
@@ -201,12 +282,6 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
     }
   }
 
-  /**
-   * Create a new catalog agent in Redis.
-   *
-   * @param agent - CatalogAgent without id
-   * @returns Promise resolving to created CatalogAgent with id
-   */
   async createCatalogAgent(
     agent: Omit<CatalogAgent, 'id' | 'createdAt' | 'updatedAt'>
   ): Promise<CatalogAgent> {
@@ -223,7 +298,7 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
       };
 
       const agents = await state.getMarketplaceCatalogAgents([]);
-      agents.push(newAgent);
+      agents.push(newAgent as any);
       await state.setMarketplaceCatalogAgents(agents);
 
       logger.info('[Marketplace Store] Catalog agent created:', {
@@ -241,34 +316,28 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
     }
   }
 
-  /**
-   * Update an existing catalog agent in Redis.
-   *
-   * @param id - Agent ID
-   * @param updates - Partial agent updates
-   * @returns Promise resolving to updated CatalogAgent
-   */
   async updateCatalogAgent(
     id: string,
     updates: Partial<Omit<CatalogAgent, 'id' | 'createdAt'>>
   ): Promise<CatalogAgent> {
     try {
       const state = getStore();
-      const agents = await state.getMarketplaceCatalogAgents([]);
+      const rawAgents = await state.getMarketplaceCatalogAgents([]);
 
-      const agentIndex = agents.findIndex(a => a.id === id);
+      const agentIndex = rawAgents.findIndex((a: any) => a.id === id);
       if (agentIndex === -1) {
         throw new Error(`Agent not found: ${id}`);
       }
 
+      const migrated = migrateCatalogAgent(rawAgents[agentIndex]);
       const updated: CatalogAgent = {
-        ...agents[agentIndex],
+        ...migrated,
         ...updates,
         updatedAt: Date.now(),
       };
 
-      agents[agentIndex] = updated;
-      await state.setMarketplaceCatalogAgents(agents);
+      rawAgents[agentIndex] = updated as any;
+      await state.setMarketplaceCatalogAgents(rawAgents);
 
       logger.info('[Marketplace Store] Catalog agent updated:', {
         id: updated.id,
@@ -285,25 +354,19 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
     }
   }
 
-  /**
-   * Delete a catalog agent from Redis.
-   *
-   * @param id - Agent ID
-   * @returns Promise resolving to deleted CatalogAgent
-   */
   async deleteCatalogAgent(id: string): Promise<CatalogAgent> {
     try {
       const state = getStore();
-      const agents = await state.getMarketplaceCatalogAgents([]);
+      const rawAgents = await state.getMarketplaceCatalogAgents([]);
 
-      const agentIndex = agents.findIndex(a => a.id === id);
+      const agentIndex = rawAgents.findIndex((a: any) => a.id === id);
       if (agentIndex === -1) {
         throw new Error(`Agent not found: ${id}`);
       }
 
-      const deleted = agents[agentIndex];
-      agents.splice(agentIndex, 1);
-      await state.setMarketplaceCatalogAgents(agents);
+      const deleted = migrateCatalogAgent(rawAgents[agentIndex]);
+      rawAgents.splice(agentIndex, 1);
+      await state.setMarketplaceCatalogAgents(rawAgents);
 
       logger.info('[Marketplace Store] Catalog agent deleted:', {
         id: deleted.id,
@@ -320,13 +383,10 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
     }
   }
 
-  /**
-   * Retrieve paginated list of orders.
-   *
-   * @param page - Page number (1-indexed)
-   * @param limit - Items per page
-   * @returns Promise resolving to array of MarketplaceOrder
-   */
+  // =====================================================================
+  // Orders (with lazy migration from tier to opsScore/bracketLabel)
+  // =====================================================================
+
   async getOrders(page: number, limit: number): Promise<MarketplaceOrder[]> {
     try {
       const state = getStore();
@@ -334,7 +394,7 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
 
       const start = (page - 1) * limit;
       const end = start + limit;
-      return allOrders.slice(start, end);
+      return allOrders.slice(start, end).map(migrateOrder);
     } catch (error) {
       logger.error(
         '[Marketplace Store] Failed to get orders:',
@@ -344,12 +404,6 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
     }
   }
 
-  /**
-   * Create a new order.
-   *
-   * @param order - MarketplaceOrder without id
-   * @returns Promise resolving to created MarketplaceOrder with id
-   */
   async createOrder(
     order: Omit<MarketplaceOrder, 'id'>
   ): Promise<MarketplaceOrder> {
@@ -363,7 +417,7 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
       };
 
       const allOrders = await state.getMarketplaceOrders([]);
-      allOrders.push(newOrder);
+      allOrders.push(newOrder as any);
       await state.setMarketplaceOrders(allOrders);
 
       logger.info('[Marketplace Store] Order created:', {
@@ -381,18 +435,13 @@ export class RedisMarketplaceStore implements IMarketplaceStore {
     }
   }
 
-  /**
-   * Get orders summary.
-   *
-   * @returns Promise resolving to { totalCount, totalRevenueInCents }
-   */
   async getOrdersSummary(): Promise<{ totalCount: number; totalRevenueInCents: number }> {
     try {
       const state = getStore();
       const allOrders = await state.getMarketplaceOrders([]);
 
       const totalCount = allOrders.length;
-      const totalRevenueInCents = allOrders.reduce((sum, order) => sum + order.priceInCents, 0);
+      const totalRevenueInCents = allOrders.reduce((sum, order) => sum + (order as any).priceInCents, 0);
 
       return { totalCount, totalRevenueInCents };
     } catch (error) {

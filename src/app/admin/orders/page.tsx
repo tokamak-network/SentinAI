@@ -17,6 +17,13 @@ interface OrdersResponse {
   };
 }
 
+function getScoreColor(score: number): string {
+  if (score >= 80) return '#3b82f6';
+  if (score >= 60) return '#10b981';
+  if (score >= 30) return '#f59e0b';
+  return '#ef4444';
+}
+
 export default function OrdersPage() {
   const [orders, setOrders] = useState<MarketplaceOrder[]>([]);
   const [summary, setSummary] = useState<{ totalCount: number; totalRevenueInCents: number }>({
@@ -30,7 +37,6 @@ export default function OrdersPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Fetch orders on mount and when page/limit changes
   useEffect(() => {
     fetchOrders();
   }, [currentPage, limit]);
@@ -66,13 +72,6 @@ export default function OrdersPage() {
       hour: '2-digit',
       minute: '2-digit',
     });
-  };
-
-  const tierColors: Record<string, { bg: string; text: string }> = {
-    trainee: { bg: '#dbeafe', text: '#1e40af' },
-    junior: { bg: '#dcfce7', text: '#15803d' },
-    senior: { bg: '#fed7aa', text: '#b45309' },
-    expert: { bg: '#fce7f3', text: '#be185d' },
   };
 
   const filteredOrders = orders.filter(
@@ -113,7 +112,6 @@ export default function OrdersPage() {
 
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '24px' }}>
-        {/* Total Orders */}
         <div
           style={{
             backgroundColor: '#ffffff',
@@ -130,7 +128,6 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        {/* Total Revenue */}
         <div
           style={{
             backgroundColor: '#ffffff',
@@ -193,7 +190,10 @@ export default function OrdersPage() {
                   Buyer Address
                 </th>
                 <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151', fontSize: '13px' }}>
-                  Tier
+                  Ops Score
+                </th>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151', fontSize: '13px' }}>
+                  Bracket
                 </th>
                 <th style={{ padding: '12px', textAlign: 'right', fontWeight: '600', color: '#374151', fontSize: '13px' }}>
                   Price
@@ -229,20 +229,31 @@ export default function OrdersPage() {
                     {order.buyerAddress.substring(0, 10)}...
                   </td>
                   <td style={{ padding: '12px', color: '#111827', fontSize: '13px' }}>
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        padding: '4px 8px',
-                        backgroundColor: tierColors[order.tier].bg,
-                        color: tierColors[order.tier].text,
-                        borderRadius: '4px',
-                        fontSize: '12px',
-                        fontWeight: '500',
-                        textTransform: 'capitalize',
-                      }}
-                    >
-                      {order.tier}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <div
+                        style={{
+                          width: '40px',
+                          height: '6px',
+                          backgroundColor: '#f3f4f6',
+                          borderRadius: '3px',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          style={{
+                            height: '100%',
+                            width: `${order.opsScoreAtPurchase}%`,
+                            backgroundColor: getScoreColor(order.opsScoreAtPurchase),
+                          }}
+                        />
+                      </div>
+                      <span style={{ fontWeight: '500', color: getScoreColor(order.opsScoreAtPurchase) }}>
+                        {order.opsScoreAtPurchase}
+                      </span>
+                    </div>
+                  </td>
+                  <td style={{ padding: '12px', color: '#6b7280', fontSize: '12px' }}>
+                    {order.bracketLabel}
                   </td>
                   <td style={{ padding: '12px', color: '#059669', fontSize: '13px', textAlign: 'right', fontWeight: '500' }}>
                     {formatPrice(order.priceInCents)}

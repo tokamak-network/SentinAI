@@ -1,6 +1,6 @@
 /**
  * Catalog Item API routes (PATCH, DELETE)
- * - PATCH: Update an existing catalog agent
+ * - PATCH: Update an existing catalog agent (status, not tier)
  * - DELETE: Delete a catalog agent
  * - Requires: sentinai_admin_session cookie (validated in middleware)
  */
@@ -13,12 +13,12 @@ import logger from '@/lib/logger';
 interface UpdateCatalogAgentRequest {
   name?: string;
   description?: string;
-  tier?: 'trainee' | 'junior' | 'senior' | 'expert';
+  status?: 'active' | 'suspended' | 'probation';
   capabilities?: string[];
 }
 
-function validateTier(tier: unknown): tier is 'trainee' | 'junior' | 'senior' | 'expert' {
-  return tier === 'trainee' || tier === 'junior' || tier === 'senior' || tier === 'expert';
+function validateStatus(status: unknown): status is 'active' | 'suspended' | 'probation' {
+  return status === 'active' || status === 'suspended' || status === 'probation';
 }
 
 function validateUpdateRequest(body: unknown): { valid: boolean; errors: string[] } {
@@ -47,10 +47,10 @@ function validateUpdateRequest(body: unknown): { valid: boolean; errors: string[
     }
   }
 
-  // Validate tier (optional)
-  if (req.tier !== undefined) {
-    if (!validateTier(req.tier)) {
-      errors.push('tier must be one of: trainee, junior, senior, expert');
+  // Validate status (optional)
+  if (req.status !== undefined) {
+    if (!validateStatus(req.status)) {
+      errors.push('status must be one of: active, suspended, probation');
     }
   }
 
@@ -107,8 +107,8 @@ export async function PATCH(
     if (updateReq.description !== undefined) {
       updates.description = updateReq.description.trim();
     }
-    if (updateReq.tier !== undefined) {
-      updates.tier = updateReq.tier;
+    if (updateReq.status !== undefined) {
+      updates.status = updateReq.status;
     }
     if (updateReq.capabilities !== undefined) {
       updates.capabilities = updateReq.capabilities;

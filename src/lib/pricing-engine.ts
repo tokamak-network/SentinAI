@@ -19,8 +19,9 @@
 import { generateResume } from '@/lib/agent-resume';
 import { getExperienceByInstance } from '@/lib/experience-store';
 import { getMarketplaceStore } from '@/lib/marketplace-store';
+import { calculateOpsScore, resolveBracket } from '@/lib/ops-score-calculator';
 import type { ExperienceTier } from '@/types/agent-resume';
-import type { OutcomeBonus, PricingResult } from '@/types/billing';
+import type { OutcomeBonus, PricingResult, OpsPricingResult } from '@/types/billing';
 import logger from '@/lib/logger';
 
 /** Monthly rate per chain by tier (USD). */
@@ -86,6 +87,42 @@ export async function calculateOutcomeBonuses(
 }
 
 /**
+ * Calculate ops-score based pricing for an agent instance.
+ */
+export async function calculateOpsBasedPricing(
+  instanceId: string,
+  protocolId: string,
+): Promise<OpsPricingResult> {
+  const { opsScore } = await calculateOpsScore(instanceId, protocolId);
+
+  // Load bracket pricing config
+  const bracketConfig = await getMarketplaceStore().getBracketPricingConfig();
+  const bracket = resolveBracket(opsScore, bracketConfig.brackets);
+
+  const monthlyRate = bracket.priceCents / 100;
+
+  // Get this month's experience entries for bonuses
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const allEntries = await getExperienceByInstance(instanceId, 5000);
+  const monthEntries = allEntries.filter((e) => new Date(e.timestamp) >= monthStart);
+
+  const outcomeBonuses = await calculateOutcomeBonuses(monthEntries);
+  const bonusTotal = outcomeBonuses.reduce((sum, b) => sum + b.amount, 0);
+
+  return {
+    instanceId,
+    opsScore,
+    bracketLabel: bracket.label,
+    monthlyRate,
+    outcomeBonuses,
+    totalMonthlyValue: monthlyRate + bonusTotal,
+    calculatedAt: new Date().toISOString(),
+  };
+}
+
+/**
+ * @deprecated Use calculateOpsBasedPricing instead.
  * Calculate complete pricing for an agent instance.
  */
 export async function calculatePricing(

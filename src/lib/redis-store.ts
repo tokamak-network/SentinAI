@@ -1474,6 +1474,27 @@ export class RedisStateStore implements IStateStore {
     await this.client.set(key, JSON.stringify(config));
   }
 
+  // === Marketplace Bracket Pricing ===
+
+  async getMarketplaceBracketPricingConfig(
+    defaultConfig: import('@/types/marketplace').BracketPricingConfig
+  ): Promise<import('@/types/marketplace').BracketPricingConfig> {
+    const key = this.key('marketplace:bracket-pricing');
+    try {
+      const data = await this.client.get(key);
+      if (!data) return defaultConfig;
+      return JSON.parse(data) as import('@/types/marketplace').BracketPricingConfig;
+    } catch (error) {
+      logger.error('Failed to parse marketplace bracket pricing config:', error);
+      return defaultConfig;
+    }
+  }
+
+  async setMarketplaceBracketPricingConfig(config: import('@/types/marketplace').BracketPricingConfig): Promise<void> {
+    const key = this.key('marketplace:bracket-pricing');
+    await this.client.set(key, JSON.stringify(config));
+  }
+
   // === Marketplace Catalog ===
 
   async getMarketplaceCatalogAgents(defaultAgents: CatalogAgent[]): Promise<CatalogAgent[]> {
@@ -2702,6 +2723,19 @@ export class InMemoryStateStore implements IStateStore {
 
   async setMarketplaceBonusConfig(config: OutcomeBonusConfig): Promise<void> {
     this.marketplaceBonusConfig = config;
+  }
+
+  // === Marketplace Bracket Pricing ===
+  private bracketPricingConfig: import('@/types/marketplace').BracketPricingConfig | null = null;
+
+  async getMarketplaceBracketPricingConfig(
+    defaultConfig: import('@/types/marketplace').BracketPricingConfig
+  ): Promise<import('@/types/marketplace').BracketPricingConfig> {
+    return this.bracketPricingConfig ?? defaultConfig;
+  }
+
+  async setMarketplaceBracketPricingConfig(config: import('@/types/marketplace').BracketPricingConfig): Promise<void> {
+    this.bracketPricingConfig = config;
   }
 
   // === Marketplace Catalog ===

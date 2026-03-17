@@ -48,3 +48,14 @@ export interface PricingResult {
   totalMonthlyValue: number;
   calculatedAt: string;
 }
+
+/** Ops-score based pricing result. */
+export interface OpsPricingResult {
+  instanceId: string;
+  opsScore: number;
+  bracketLabel: string;
+  monthlyRate: number;
+  outcomeBonuses: OutcomeBonus[];
+  totalMonthlyValue: number;
+  calculatedAt: string;
+}

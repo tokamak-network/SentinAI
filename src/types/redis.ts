@@ -216,6 +216,12 @@ export interface IStateStore {
   getMarketplaceBonusConfig(defaultConfig: OutcomeBonusConfig): Promise<OutcomeBonusConfig>;
   setMarketplaceBonusConfig(config: OutcomeBonusConfig): Promise<void>;
 
+  // === Marketplace Bracket Pricing ===
+  getMarketplaceBracketPricingConfig(
+    defaultConfig: import('@/types/marketplace').BracketPricingConfig
+  ): Promise<import('@/types/marketplace').BracketPricingConfig>;
+  setMarketplaceBracketPricingConfig(config: import('@/types/marketplace').BracketPricingConfig): Promise<void>;
+
   // === Marketplace Catalog ===
   // Catalog agents list (admin management)
   getMarketplaceCatalogAgents(defaultAgents: CatalogAgent[]): Promise<CatalogAgent[]>;

@@ -1,35 +1,58 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import type { CatalogAgent } from '@/types/marketplace';
+import type { CatalogAgent, OpsBreakdown } from '@/types/marketplace';
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
+
+interface CatalogAgentWithScore extends CatalogAgent {
+  opsScore: number;
+  opsBreakdown: OpsBreakdown | null;
+}
 
 interface CreateFormData {
   name: string;
   description: string;
-  tier: 'trainee' | 'junior' | 'senior' | 'expert';
+  status: 'active' | 'suspended' | 'probation';
   capabilities: string;
 }
 
+function getScoreColor(score: number): string {
+  if (score >= 80) return '#3b82f6'; // blue
+  if (score >= 60) return '#10b981'; // green
+  if (score >= 30) return '#f59e0b'; // yellow
+  return '#ef4444'; // red
+}
+
+function getScoreBg(score: number): string {
+  if (score >= 80) return '#dbeafe';
+  if (score >= 60) return '#dcfce7';
+  if (score >= 30) return '#fef3c7';
+  return '#fee2e2';
+}
+
+const statusColors: Record<string, { bg: string; text: string }> = {
+  active: { bg: '#dcfce7', text: '#15803d' },
+  suspended: { bg: '#fee2e2', text: '#991b1b' },
+  probation: { bg: '#fef3c7', text: '#92400e' },
+};
+
 export default function CatalogPage() {
-  const [agents, setAgents] = useState<CatalogAgent[]>([]);
+  const [agents, setAgents] = useState<CatalogAgentWithScore[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const deleteConfirmRef = useRef<{ id: string; name: string } | null>(null);
 
   const [formData, setFormData] = useState<CreateFormData>({
     name: '',
     description: '',
-    tier: 'junior',
+    status: 'active',
     capabilities: '',
   });
 
-  // Fetch agents on mount
   useEffect(() => {
     fetchAgents();
   }, []);
@@ -40,7 +63,7 @@ export default function CatalogPage() {
     try {
       const res = await fetch(`${BASE_PATH}/api/admin/catalog`);
       if (!res.ok) throw new Error('Failed to fetch agents');
-      const data = (await res.json()) as { success: boolean; agents: CatalogAgent[] };
+      const data = (await res.json()) as { success: boolean; agents: CatalogAgentWithScore[] };
       setAgents(data.agents || []);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch agents');
@@ -71,7 +94,7 @@ export default function CatalogPage() {
         body: JSON.stringify({
           name: formData.name.trim(),
           description: formData.description.trim(),
-          tier: formData.tier,
+          status: formData.status,
           capabilities,
         }),
       });
@@ -83,7 +106,7 @@ export default function CatalogPage() {
 
       await fetchAgents();
       setShowAddForm(false);
-      setFormData({ name: '', description: '', tier: 'junior', capabilities: '' });
+      setFormData({ name: '', description: '', status: 'active', capabilities: '' });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create agent');
     } finally {
@@ -108,17 +131,24 @@ export default function CatalogPage() {
     }
   };
 
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    try {
+      const res = await fetch(`${BASE_PATH}/api/admin/catalog/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      if (!res.ok) throw new Error('Failed to update status');
+      await fetchAgents();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update status');
+    }
+  };
+
   const filteredAgents = agents.filter((agent) =>
     agent.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    agent.tier.toLowerCase().includes(searchQuery.toLowerCase())
+    agent.status.toLowerCase().includes(searchQuery.toLowerCase())
   );
-
-  const tierColors: Record<string, { bg: string; text: string }> = {
-    trainee: { bg: '#dbeafe', text: '#1e40af' },
-    junior: { bg: '#dcfce7', text: '#15803d' },
-    senior: { bg: '#fed7aa', text: '#b45309' },
-    expert: { bg: '#fce7f3', text: '#be185d' },
-  };
 
   return (
     <div style={{ padding: '0' }}>
@@ -128,7 +158,8 @@ export default function CatalogPage() {
           Catalog Management
         </h1>
         <p style={{ fontSize: '14px', color: '#6b7280', margin: '0' }}>
-          Manage agents available in the marketplace ({agents.length} total)
+          Manage agents available in the marketplace ({agents.length} total
+          {agents.length > 0 && `, avg score: ${Math.round(agents.reduce((s, a) => s + a.opsScore, 0) / agents.length)}`})
         </p>
       </div>
 
@@ -153,7 +184,7 @@ export default function CatalogPage() {
       <div style={{ display: 'flex', gap: '12px', marginBottom: '24px' }}>
         <input
           type="text"
-          placeholder="Search by name or tier..."
+          placeholder="Search by name or status..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           style={{
@@ -181,7 +212,7 @@ export default function CatalogPage() {
         </button>
       </div>
 
-      {/* Add/Edit form modal */}
+      {/* Add form modal */}
       {showAddForm && (
         <div
           style={{
@@ -256,11 +287,11 @@ export default function CatalogPage() {
 
               <div>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '4px', color: '#374151' }}>
-                  Tier *
+                  Status *
                 </label>
                 <select
-                  value={formData.tier}
-                  onChange={(e) => setFormData({ ...formData, tier: e.target.value as any })}
+                  value={formData.status}
+                  onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
                   style={{
                     width: '100%',
                     padding: '8px 12px',
@@ -270,10 +301,9 @@ export default function CatalogPage() {
                     boxSizing: 'border-box',
                   }}
                 >
-                  <option value="trainee">Trainee</option>
-                  <option value="junior">Junior</option>
-                  <option value="senior">Senior</option>
-                  <option value="expert">Expert</option>
+                  <option value="active">Active</option>
+                  <option value="suspended">Suspended</option>
+                  <option value="probation">Probation</option>
                 </select>
               </div>
 
@@ -359,10 +389,19 @@ export default function CatalogPage() {
                   Name
                 </th>
                 <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151', fontSize: '13px' }}>
-                  Tier
+                  Ops Score
                 </th>
                 <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151', fontSize: '13px' }}>
-                  Capabilities
+                  SLA
+                </th>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151', fontSize: '13px' }}>
+                  Success Rate
+                </th>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151', fontSize: '13px' }}>
+                  Operations
+                </th>
+                <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600', color: '#374151', fontSize: '13px' }}>
+                  Status
                 </th>
                 <th style={{ padding: '12px', textAlign: 'center', fontWeight: '600', color: '#374151', fontSize: '13px' }}>
                   Actions
@@ -389,24 +428,63 @@ export default function CatalogPage() {
                     <div style={{ fontWeight: '500' }}>{agent.name}</div>
                     <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>{agent.description}</div>
                   </td>
+                  <td style={{ padding: '12px', color: '#111827', fontSize: '13px', minWidth: '120px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <div
+                        style={{
+                          width: '60px',
+                          height: '8px',
+                          backgroundColor: '#f3f4f6',
+                          borderRadius: '4px',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <div
+                          style={{
+                            height: '100%',
+                            width: `${agent.opsScore}%`,
+                            backgroundColor: getScoreColor(agent.opsScore),
+                            transition: 'width 300ms ease',
+                          }}
+                        />
+                      </div>
+                      <span style={{
+                        fontWeight: '600',
+                        color: getScoreColor(agent.opsScore),
+                        fontSize: '13px',
+                      }}>
+                        {agent.opsScore}
+                      </span>
+                    </div>
+                  </td>
+                  <td style={{ padding: '12px', color: '#6b7280', fontSize: '12px' }}>
+                    {agent.opsBreakdown?.slaScore ?? '-'}
+                  </td>
+                  <td style={{ padding: '12px', color: '#6b7280', fontSize: '12px' }}>
+                    {agent.opsBreakdown ? `${(agent.opsBreakdown.successRate * 100).toFixed(1)}%` : '-'}
+                  </td>
+                  <td style={{ padding: '12px', color: '#6b7280', fontSize: '12px' }}>
+                    {agent.opsBreakdown?.totalOperations ?? '-'}
+                  </td>
                   <td style={{ padding: '12px', color: '#111827', fontSize: '13px' }}>
-                    <span
+                    <select
+                      value={agent.status}
+                      onChange={(e) => handleStatusChange(agent.id, e.target.value)}
                       style={{
-                        display: 'inline-block',
                         padding: '4px 8px',
-                        backgroundColor: tierColors[agent.tier].bg,
-                        color: tierColors[agent.tier].text,
+                        backgroundColor: statusColors[agent.status]?.bg ?? '#f3f4f6',
+                        color: statusColors[agent.status]?.text ?? '#374151',
                         borderRadius: '4px',
                         fontSize: '12px',
                         fontWeight: '500',
-                        textTransform: 'capitalize',
+                        border: '1px solid transparent',
+                        cursor: 'pointer',
                       }}
                     >
-                      {agent.tier}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px', color: '#6b7280', fontSize: '12px' }}>
-                    {agent.capabilities.join(', ')}
+                      <option value="active">Active</option>
+                      <option value="suspended">Suspended</option>
+                      <option value="probation">Probation</option>
+                    </select>
                   </td>
                   <td style={{ padding: '12px', textAlign: 'center' }}>
                     <button
@@ -467,7 +545,7 @@ export default function CatalogPage() {
               Delete Agent?
             </h3>
             <p style={{ color: '#6b7280', fontSize: '14px', margin: '0 0 20px 0' }}>
-              Are you sure you want to delete "{deleteConfirmRef.current.name}"? This action cannot be undone.
+              Are you sure you want to delete &quot;{deleteConfirmRef.current.name}&quot;? This action cannot be undone.
             </p>
 
             <div style={{ display: 'flex', gap: '12px' }}>

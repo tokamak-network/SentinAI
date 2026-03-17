@@ -1,32 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import type { MarketplacePricingConfig } from '@/types/marketplace';
+import type { BracketPricingConfig, PricingBracket } from '@/types/marketplace';
 
 const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
 
-interface PricingFormData {
-  traineePrice: number;
-  juniorPrice: number;
-  seniorPrice: number;
-  expertPrice: number;
-}
-
 export default function PricingPage() {
-  const [pricing, setPricing] = useState<MarketplacePricingConfig | null>(null);
-  const [formData, setFormData] = useState<PricingFormData>({
-    traineePrice: 0,
-    juniorPrice: 0,
-    seniorPrice: 0,
-    expertPrice: 0,
-  });
+  const [brackets, setBrackets] = useState<PricingBracket[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
 
-  // Fetch pricing on mount
   useEffect(() => {
     fetchPricing();
   }, []);
@@ -37,16 +23,9 @@ export default function PricingPage() {
     try {
       const res = await fetch(`${BASE_PATH}/api/marketplace/pricing`);
       if (!res.ok) throw new Error('Failed to fetch pricing');
-      const data = (await res.json()) as { tiers: Record<string, { price: number }> };
+      const data = (await res.json()) as { data: BracketPricingConfig };
 
-      const config: PricingFormData = {
-        traineePrice: data.tiers.trainee?.price ?? 0,
-        juniorPrice: data.tiers.junior?.price ?? 0,
-        seniorPrice: data.tiers.senior?.price ?? 0,
-        expertPrice: data.tiers.expert?.price ?? 0,
-      };
-
-      setFormData(config);
+      setBrackets(data.data?.brackets ?? []);
       setHasChanges(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch pricing');
@@ -55,9 +34,30 @@ export default function PricingPage() {
     }
   };
 
-  const handlePriceChange = (tier: keyof PricingFormData, value: string) => {
-    const numValue = Math.max(0, parseInt(value, 10) || 0);
-    setFormData((prev) => ({ ...prev, [tier]: numValue }));
+  const handleBracketChange = (index: number, field: keyof PricingBracket, value: string) => {
+    setBrackets((prev) => {
+      const updated = [...prev];
+      if (field === 'floor') {
+        updated[index] = { ...updated[index], floor: Math.max(0, Math.min(100, parseInt(value, 10) || 0)) };
+      } else if (field === 'priceCents') {
+        updated[index] = { ...updated[index], priceCents: Math.max(0, parseInt(value, 10) || 0) };
+      } else if (field === 'label') {
+        updated[index] = { ...updated[index], label: value };
+      }
+      return updated;
+    });
+    setHasChanges(true);
+    setSuccess(null);
+  };
+
+  const handleAddBracket = () => {
+    setBrackets((prev) => [...prev, { floor: 0, priceCents: 0, label: '' }]);
+    setHasChanges(true);
+    setSuccess(null);
+  };
+
+  const handleRemoveBracket = (index: number) => {
+    setBrackets((prev) => prev.filter((_, i) => i !== index));
     setHasChanges(true);
     setSuccess(null);
   };
@@ -66,18 +66,33 @@ export default function PricingPage() {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+
+    // Validate
+    if (!brackets.some((b) => b.floor === 0)) {
+      setError('At least one bracket with floor=0 is required');
+      return;
+    }
+
+    const floors = brackets.map((b) => b.floor);
+    if (new Set(floors).size !== floors.length) {
+      setError('Bracket floors must be unique');
+      return;
+    }
+
+    for (const b of brackets) {
+      if (!b.label.trim()) {
+        setError('All brackets must have a label');
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
       const res = await fetch(`${BASE_PATH}/api/marketplace/pricing`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          traineePrice: formData.traineePrice,
-          juniorPrice: formData.juniorPrice,
-          seniorPrice: formData.seniorPrice,
-          expertPrice: formData.expertPrice,
-        }),
+        body: JSON.stringify({ brackets }),
       });
 
       if (!res.ok) {
@@ -86,7 +101,7 @@ export default function PricingPage() {
       }
 
       await fetchPricing();
-      setSuccess('Pricing updated successfully');
+      setSuccess('Bracket pricing updated successfully');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save pricing');
     } finally {
@@ -94,16 +109,20 @@ export default function PricingPage() {
     }
   };
 
+  const handleReset = () => {
+    setBrackets([
+      { floor: 80, priceCents: 79900, label: 'Expert' },
+      { floor: 60, priceCents: 49900, label: 'Advanced' },
+      { floor: 30, priceCents: 19900, label: 'Standard' },
+      { floor: 0, priceCents: 0, label: 'Starter' },
+    ]);
+    setHasChanges(true);
+    setSuccess(null);
+  };
+
   const formatPrice = (cents: number): string => {
     return (cents / 100).toFixed(2);
   };
-
-  const tiers = [
-    { key: 'traineePrice', label: 'Trainee', description: 'Basic tier for new users' },
-    { key: 'juniorPrice', label: 'Junior', description: 'For developing users' },
-    { key: 'seniorPrice', label: 'Senior', description: 'For experienced users' },
-    { key: 'expertPrice', label: 'Expert', description: 'For professional users' },
-  ] as const;
 
   return (
     <div style={{ padding: '0' }}>
@@ -113,7 +132,7 @@ export default function PricingPage() {
           Pricing Management
         </h1>
         <p style={{ fontSize: '14px', color: '#6b7280', margin: '0' }}>
-          Configure pricing tiers for marketplace agents
+          Configure score-based pricing brackets for marketplace agents
         </p>
       </div>
 
@@ -156,7 +175,7 @@ export default function PricingPage() {
         </div>
       ) : (
         <form onSubmit={handleSave} style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-          {/* Pricing Tiers Grid */}
+          {/* Bracket Cards */}
           <div
             style={{
               display: 'grid',
@@ -164,33 +183,95 @@ export default function PricingPage() {
               gap: '20px',
             }}
           >
-            {tiers.map(({ key, label, description }) => (
+            {brackets
+              .sort((a, b) => b.floor - a.floor)
+              .map((bracket, index) => (
               <div
-                key={key}
+                key={index}
                 style={{
                   padding: '20px',
                   border: '1px solid #e5e7eb',
                   borderRadius: '8px',
                   backgroundColor: '#ffffff',
+                  position: 'relative',
                 }}
               >
+                {brackets.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveBracket(brackets.indexOf(bracket))}
+                    style={{
+                      position: 'absolute',
+                      top: '8px',
+                      right: '8px',
+                      width: '24px',
+                      height: '24px',
+                      borderRadius: '4px',
+                      border: '1px solid #fecaca',
+                      backgroundColor: '#fee2e2',
+                      color: '#991b1b',
+                      fontSize: '14px',
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    x
+                  </button>
+                )}
+
                 <div style={{ marginBottom: '16px' }}>
-                  <h3 style={{ fontSize: '16px', fontWeight: '600', margin: '0 0 4px 0', color: '#111827' }}>
-                    {label}
-                  </h3>
-                  <p style={{ fontSize: '12px', color: '#6b7280', margin: '0' }}>{description}</p>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', marginBottom: '4px', color: '#374151' }}>
+                    Label
+                  </label>
+                  <input
+                    type="text"
+                    value={bracket.label}
+                    onChange={(e) => handleBracketChange(brackets.indexOf(bracket), 'label', e.target.value)}
+                    placeholder="e.g., Expert"
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', marginBottom: '4px', color: '#374151' }}>
+                    Min Score (0-100)
+                  </label>
+                  <input
+                    type="number"
+                    value={bracket.floor}
+                    onChange={(e) => handleBracketChange(brackets.indexOf(bracket), 'floor', e.target.value)}
+                    min="0"
+                    max="100"
+                    style={{
+                      width: '100%',
+                      padding: '8px 12px',
+                      border: '1px solid #d1d5db',
+                      borderRadius: '6px',
+                      fontSize: '14px',
+                      boxSizing: 'border-box',
+                    }}
+                  />
                 </div>
 
                 <div>
-                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', marginBottom: '8px', color: '#374151' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: '500', marginBottom: '4px', color: '#374151' }}>
                     Price (USD cents)
                   </label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontSize: '13px', color: '#6b7280' }}>$</span>
                     <input
                       type="number"
-                      value={formData[key]}
-                      onChange={(e) => handlePriceChange(key, e.target.value)}
+                      value={bracket.priceCents}
+                      onChange={(e) => handleBracketChange(brackets.indexOf(bracket), 'priceCents', e.target.value)}
                       min="0"
                       step="100"
                       style={{
@@ -201,14 +282,32 @@ export default function PricingPage() {
                         fontSize: '14px',
                       }}
                     />
-                    <span style={{ fontSize: '13px', color: '#6b7280', minWidth: '40px', textAlign: 'right' }}>
-                      {formatPrice(formData[key])}
+                    <span style={{ fontSize: '13px', color: '#6b7280', minWidth: '60px', textAlign: 'right' }}>
+                      ${formatPrice(bracket.priceCents)}
                     </span>
                   </div>
                 </div>
               </div>
             ))}
           </div>
+
+          {/* Add Bracket button */}
+          <button
+            type="button"
+            onClick={handleAddBracket}
+            style={{
+              padding: '10px 16px',
+              backgroundColor: '#f0f9ff',
+              color: '#0c4a6e',
+              border: '1px dashed #bfdbfe',
+              borderRadius: '6px',
+              fontWeight: '500',
+              fontSize: '14px',
+              cursor: 'pointer',
+            }}
+          >
+            + Add Bracket
+          </button>
 
           {/* Info box */}
           <div
@@ -222,13 +321,13 @@ export default function PricingPage() {
             }}
           >
             <div style={{ marginBottom: '8px' }}>
-              <strong>Pricing Details:</strong>
+              <strong>Bracket Pricing Details:</strong>
             </div>
             <ul style={{ margin: '0', paddingLeft: '20px' }}>
+              <li>Agents are priced based on their Ops Score (0-100)</li>
+              <li>The bracket with the highest floor &le; agent score is applied</li>
+              <li>At least one bracket with floor=0 is required (catches all agents)</li>
               <li>Prices are in USD cents (100 cents = $1.00)</li>
-              <li>Enter prices without currency symbols or decimals</li>
-              <li>Prices must be non-negative integers</li>
-              <li>Changes are saved immediately to Redis</li>
             </ul>
           </div>
 
@@ -236,15 +335,7 @@ export default function PricingPage() {
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
             <button
               type="button"
-              onClick={() => {
-                setFormData({
-                  traineePrice: 0,
-                  juniorPrice: 19900,
-                  seniorPrice: 49900,
-                  expertPrice: 79900,
-                });
-                setHasChanges(true);
-              }}
+              onClick={handleReset}
               disabled={isSubmitting}
               style={{
                 padding: '10px 16px',

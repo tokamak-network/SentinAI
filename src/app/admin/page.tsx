@@ -8,15 +8,15 @@ export default function AdminDashboard() {
   const cards = [
     {
       title: 'Catalog',
-      description: 'Manage agents',
+      description: 'Manage agents & ops scores',
       count: '0 agents',
       link: '/admin/catalog',
       icon: '📦',
     },
     {
       title: 'Pricing',
-      description: 'Manage pricing tiers',
-      count: '4 tiers',
+      description: 'Manage pricing brackets',
+      count: 'Score-based brackets',
       link: '/admin/pricing',
       icon: '💰',
     },
@@ -145,8 +145,8 @@ export default function AdminDashboard() {
         }}
       >
         <p style={{ margin: '0' }}>
-          <strong>Quick Start:</strong> Begin by managing your agent catalog. Each agent can be assigned
-          to pricing tiers and tracked through orders.
+          <strong>Quick Start:</strong> Begin by managing your agent catalog. Each agent is scored
+          based on operational data and priced according to score brackets.
         </p>
       </div>
     </div>

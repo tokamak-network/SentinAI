@@ -1,24 +1,25 @@
 /**
  * Catalog API routes (GET, POST)
- * - GET: Retrieve all catalog agents
+ * - GET: Retrieve all catalog agents with ops scores
  * - POST: Create a new catalog agent
  * - Requires: sentinai_admin_session cookie (validated in middleware)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getMarketplaceStore } from '@/lib/marketplace-store';
+import { calculateOpsScore } from '@/lib/ops-score-calculator';
 import type { CatalogAgent } from '@/types/marketplace';
 import logger from '@/lib/logger';
 
 interface CreateCatalogAgentRequest {
   name: string;
   description: string;
-  tier: 'trainee' | 'junior' | 'senior' | 'expert';
+  status: 'active' | 'suspended' | 'probation';
   capabilities: string[];
 }
 
-function validateTier(tier: unknown): tier is 'trainee' | 'junior' | 'senior' | 'expert' {
-  return tier === 'trainee' || tier === 'junior' || tier === 'senior' || tier === 'expert';
+function validateStatus(status: unknown): status is 'active' | 'suspended' | 'probation' {
+  return status === 'active' || status === 'suspended' || status === 'probation';
 }
 
 function validateCreateRequest(body: unknown): { valid: boolean; errors: string[] } {
@@ -43,9 +44,9 @@ function validateCreateRequest(body: unknown): { valid: boolean; errors: string[
     errors.push('description is required and must be a non-empty string');
   }
 
-  // Validate tier
-  if (!validateTier(req.tier)) {
-    errors.push('tier must be one of: trainee, junior, senior, expert');
+  // Validate status
+  if (!validateStatus(req.status)) {
+    errors.push('status must be one of: active, suspended, probation');
   }
 
   // Validate capabilities
@@ -62,15 +63,27 @@ function validateCreateRequest(body: unknown): { valid: boolean; errors: string[
 
 /**
  * GET /api/admin/catalog
- * Returns all catalog agents
+ * Returns all catalog agents with computed ops scores
  */
 export async function GET(_req: NextRequest): Promise<NextResponse> {
   try {
     const store = getMarketplaceStore();
     const agents = await store.getCatalogAgents();
 
+    // Compute ops scores for each agent in parallel
+    const agentsWithScores = await Promise.all(
+      agents.map(async (agent) => {
+        try {
+          const { opsScore, breakdown } = await calculateOpsScore(agent.id, 'default');
+          return { ...agent, opsScore, opsBreakdown: breakdown };
+        } catch {
+          return { ...agent, opsScore: 0, opsBreakdown: null };
+        }
+      })
+    );
+
     return NextResponse.json(
-      { success: true, agents },
+      { success: true, agents: agentsWithScores },
       { status: 200 }
     );
   } catch (error) {
@@ -104,14 +117,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const newAgent = await store.createCatalogAgent({
       name: createReq.name.trim(),
       description: createReq.description.trim(),
-      tier: createReq.tier,
+      status: createReq.status,
       capabilities: createReq.capabilities,
     });
 
     logger.info('[Catalog API] Agent created:', {
       id: newAgent.id,
       name: newAgent.name,
-      tier: newAgent.tier,
+      status: newAgent.status,
     });
 
     return NextResponse.json(
