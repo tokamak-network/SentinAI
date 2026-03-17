@@ -44,6 +44,7 @@ const SUSTAINED_COUNT: Record<string, number> = {
   txPoolPending: parseInt(process.env.ANOMALY_SUSTAINED_COUNT_TXPOOL || String(DEFAULT_SUSTAINED_COUNT), 10),
   l2BlockInterval: parseInt(process.env.ANOMALY_SUSTAINED_COUNT_BLOCK_INTERVAL || String(DEFAULT_SUSTAINED_COUNT), 10),
   memoryPercent: parseInt(process.env.ANOMALY_SUSTAINED_COUNT_MEMORY || String(DEFAULT_SUSTAINED_COUNT), 10),
+  txCountPerBlock: parseInt(process.env.ANOMALY_SUSTAINED_COUNT_TX_COUNT || '1', 10),
 };
 
 /**
@@ -58,6 +59,7 @@ const MIN_STD_DEV: Partial<Record<string, number>> = {
   txPoolPending: parseFloat(process.env.ANOMALY_MIN_STD_DEV_TXPOOL || '5'),
   l2BlockInterval: parseFloat(process.env.ANOMALY_MIN_STD_DEV_BLOCK_INTERVAL || '0.3'),
   memoryPercent: parseFloat(process.env.ANOMALY_MIN_STD_DEV_MEMORY || '0.5'),
+  txCountPerBlock: parseFloat(process.env.ANOMALY_MIN_STD_DEV_TX_COUNT || '0'),
 };
 
 // ============================================================================
@@ -413,6 +415,21 @@ export function detectAnomalies(
         memHistory
       );
       if (memAnomaly) anomalies.push(memAnomaly);
+    }
+  }
+
+  // Tx Count Per Block Z-Score (only if txCountPerBlock data is available)
+  if (current.txCountPerBlock !== undefined && current.txCountPerBlock >= 0) {
+    const txCountHistory = history
+      .map(p => p.txCountPerBlock)
+      .filter((v): v is number => v !== undefined && v >= 0);
+    if (txCountHistory.length >= MIN_HISTORY_POINTS) {
+      const txCountAnomaly = detectZScoreAnomaly(
+        'txCountPerBlock',
+        current.txCountPerBlock,
+        txCountHistory
+      );
+      if (txCountAnomaly) anomalies.push(txCountAnomaly);
     }
   }
 

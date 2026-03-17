@@ -757,4 +757,63 @@ describe('anomaly-detector', () => {
       expect(memAnomaly).toBeUndefined();
     });
   });
+
+  describe('txCountPerBlock Z-Score detection', () => {
+    function makeMetricWithTx(txCount: number): MetricDataPoint {
+      return {
+        timestamp: new Date().toISOString(),
+        cpuUsage: 50,
+        txPoolPending: 100,
+        gasUsedRatio: 0.5,
+        blockHeight: 1000,
+        blockInterval: 2.0,
+        currentVcpu: 2,
+        txCountPerBlock: txCount,
+      };
+    }
+
+    it('should not detect anomaly for stable tx count', () => {
+      const history = Array.from({ length: 15 }, (_, i) =>
+        makeMetricWithTx(20 + (i % 3))
+      );
+      const current = makeMetricWithTx(22);
+      const anomalies = detectAnomalies(current, history);
+      const txAnomaly = anomalies.find(a => a.metric === 'txCountPerBlock');
+      expect(txAnomaly).toBeUndefined();
+    });
+
+    it('should detect spike when tx count surges above historical mean', () => {
+      const history = Array.from({ length: 15 }, (_, i) => makeMetricWithTx(18 + (i % 5)));
+      const current = makeMetricWithTx(200);
+      const anomalies = detectAnomalies(current, history);
+      const txAnomaly = anomalies.find(a => a.metric === 'txCountPerBlock');
+      expect(txAnomaly).toBeDefined();
+      expect(txAnomaly?.direction).toBe('spike');
+    });
+
+    it('should skip detection when txCountPerBlock is undefined', () => {
+      const history = Array.from({ length: 15 }, (_, i) => makeMetricWithTx(20 + i));
+      const current: MetricDataPoint = {
+        timestamp: new Date().toISOString(),
+        cpuUsage: 50,
+        txPoolPending: 100,
+        gasUsedRatio: 0.5,
+        blockHeight: 1000,
+        blockInterval: 2.0,
+        currentVcpu: 2,
+        // txCountPerBlock omitted
+      };
+      const anomalies = detectAnomalies(current, history);
+      const txAnomaly = anomalies.find(a => a.metric === 'txCountPerBlock');
+      expect(txAnomaly).toBeUndefined();
+    });
+
+    it('should skip detection when history has insufficient txCountPerBlock data', () => {
+      const history = [makeMetricWithTx(20), makeMetricWithTx(20)];
+      const current = makeMetricWithTx(200);
+      const anomalies = detectAnomalies(current, history);
+      const txAnomaly = anomalies.find(a => a.metric === 'txCountPerBlock');
+      expect(txAnomaly).toBeUndefined();
+    });
+  });
 });
