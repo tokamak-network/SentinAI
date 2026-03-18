@@ -23,7 +23,7 @@ export const defaultAgentMarketplaceCatalog: AgentMarketplaceCatalog = {
       description: 'Decision-ready execution health snapshot for agent gating',
       payment: {
         scheme: 'exact',
-        network: 'eip155:1',
+        network: 'eip155:11155111',
         token: 'ton',
         amount: '100000000000000000',
       },
@@ -35,7 +35,7 @@ export const defaultAgentMarketplaceCatalog: AgentMarketplaceCatalog = {
       description: 'Current incident state and recent reliability summary',
       payment: {
         scheme: 'exact',
-        network: 'eip155:1',
+        network: 'eip155:11155111',
         token: 'ton',
         amount: '150000000000000000',
       },
@@ -47,7 +47,7 @@ export const defaultAgentMarketplaceCatalog: AgentMarketplaceCatalog = {
       description: 'Recent batch posting health, lag, and settlement risk',
       payment: {
         scheme: 'exact',
-        network: 'eip155:1',
+        network: 'eip155:11155111',
         token: 'ton',
         amount: '150000000000000000',
       },
@@ -59,7 +59,7 @@ export const defaultAgentMarketplaceCatalog: AgentMarketplaceCatalog = {
       description: 'L2-to-L1 derivation pipeline health with block-level lag tracking',
       payment: {
         scheme: 'exact',
-        network: 'eip155:1',
+        network: 'eip155:11155111',
         token: 'ton',
         amount: '100000000000000000',
       },
@@ -71,7 +71,7 @@ export const defaultAgentMarketplaceCatalog: AgentMarketplaceCatalog = {
       description: 'Real-time anomaly detection events with severity and status tracking',
       payment: {
         scheme: 'exact',
-        network: 'eip155:1',
+        network: 'eip155:11155111',
         token: 'ton',
         amount: '100000000000000000',
       },
@@ -83,7 +83,7 @@ export const defaultAgentMarketplaceCatalog: AgentMarketplaceCatalog = {
       description: 'Comprehensive system health check across metrics, anomalies, L1 RPC, and components',
       payment: {
         scheme: 'exact',
-        network: 'eip155:1',
+        network: 'eip155:11155111',
         token: 'ton',
         amount: '150000000000000000',
       },
@@ -95,7 +95,7 @@ export const defaultAgentMarketplaceCatalog: AgentMarketplaceCatalog = {
       description: 'Root cause analysis history with causal chains and remediation recommendations',
       payment: {
         scheme: 'exact',
-        network: 'eip155:1',
+        network: 'eip155:11155111',
         token: 'ton',
         amount: '250000000000000000',
       },
