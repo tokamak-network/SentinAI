@@ -11,19 +11,21 @@ export async function GET(_request: NextRequest) {
   try {
     const catalog = getServiceCatalog();
 
-    // Fetch on-chain operator address from the main SentinAI app
-    let operatorAddress: string | undefined;
-    const operatorApiUrl = process.env.NEXT_PUBLIC_OPERATOR_API_URL?.replace(/\/$/, '') ?? 'http://localhost:3002';
-    try {
-      const res = await fetch(`${operatorApiUrl}/api/agent-marketplace/ops/operator-info`, {
-        next: { revalidate: 60 },
-      });
-      if (res.ok) {
-        const info = await res.json() as { address: string | null };
-        if (info.address) operatorAddress = info.address;
+    // Fetch on-chain operator address: env var → operator-info API → fallback
+    let operatorAddress: string | undefined = process.env.OPERATOR_ADDRESS || undefined;
+    if (!operatorAddress) {
+      const operatorApiUrl = process.env.NEXT_PUBLIC_OPERATOR_API_URL?.replace(/\/$/, '') ?? 'http://localhost:3002';
+      try {
+        const res = await fetch(`${operatorApiUrl}/api/agent-marketplace/ops/operator-info`, {
+          next: { revalidate: 60 },
+        });
+        if (res.ok) {
+          const info = await res.json() as { address: string | null };
+          if (info.address) operatorAddress = info.address;
+        }
+      } catch {
+        // Non-fatal: fall back to static operator name
       }
-    } catch {
-      // Non-fatal: fall back to static operator name
     }
 
     const enriched = operatorAddress
