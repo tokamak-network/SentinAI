@@ -25,6 +25,7 @@ export interface MarketplaceAgentMetadata {
   status: 'active' | 'inactive';
   version: string;
   operator: string;
+  baseUrl: string; // operator's SentinAI API base URL
 }
 
 export interface AgentMarketplaceCatalog {
@@ -36,10 +37,11 @@ export interface AgentMarketplaceCatalog {
 
 // ─── Static Catalog (mirrors src/lib/agent-marketplace/catalog.ts) ─────────────
 
-export const SERVICE_CATALOG: AgentMarketplaceCatalog = {
+// baseUrl is injected dynamically by getServiceCatalog() — not hardcoded here
+const SERVICE_CATALOG_BASE = {
   agent: {
     id: 'sentinai-agent-marketplace',
-    status: 'active',
+    status: 'active' as const,
     version: '2026-03-12',
     operator: 'sentinai-operator',
   },
@@ -142,10 +144,14 @@ export function formatTONPrice(weiStr: string): string {
   return `${ton.toFixed(2)} TON`;
 }
 
-/** Convert service key to API endpoint path: "sequencer_health" → "/api/agent-marketplace/sequencer-health" */
-export function serviceKeyToEndpoint(key: string): string {
+/**
+ * Convert service key to full API endpoint URL.
+ * "sequencer_health" + "https://sentinai-a.example.com"
+ *   → "https://sentinai-a.example.com/api/agent-marketplace/sequencer-health"
+ */
+export function serviceKeyToEndpoint(key: string, baseUrl: string): string {
   const slug = key.replace(/_/g, '-');
-  return `/api/agent-marketplace/${slug}`;
+  return `${baseUrl}/api/agent-marketplace/${slug}`;
 }
 
 /** Format network identifier to human-readable string */
@@ -157,14 +163,25 @@ export function formatNetworkName(network: string): string {
   return names[network] ?? network;
 }
 
-/** Returns the static service catalog */
+/**
+ * Returns the service catalog with the operator's baseUrl injected at call time.
+ * baseUrl comes from NEXT_PUBLIC_OPERATOR_API_URL (set per deployment),
+ * or falls back to localhost for local dev.
+ * Each operator running their own SentinAI will have a different baseUrl.
+ */
 export function getServiceCatalog(): AgentMarketplaceCatalog {
-  return SERVICE_CATALOG;
+  const baseUrl =
+    process.env.NEXT_PUBLIC_OPERATOR_API_URL?.replace(/\/$/, '') ??
+    'http://localhost:3002';
+  return {
+    ...SERVICE_CATALOG_BASE,
+    agent: { ...SERVICE_CATALOG_BASE.agent, baseUrl },
+  } as AgentMarketplaceCatalog;
 }
 
 /** Returns the service catalog as a manifest (alias for getServiceCatalog, kept for route compatibility) */
 export function getManifestCatalog(): AgentMarketplaceCatalog {
-  return SERVICE_CATALOG;
+  return getServiceCatalog();
 }
 
 /** Verify that a payment header exists (kept for mock API route compatibility) */

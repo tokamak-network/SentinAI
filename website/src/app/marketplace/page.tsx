@@ -226,7 +226,7 @@ export default function MarketplacePage() {
   }, []);
 
   function handleBuy(service: AgentMarketplaceServiceDefinition) {
-    const endpoint = serviceKeyToEndpoint(service.key);
+    const endpoint = serviceKeyToEndpoint(service.key, catalog!.agent.baseUrl);
     setPurchaseTarget({ service, endpoint });
   }
 

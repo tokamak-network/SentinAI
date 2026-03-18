@@ -13,8 +13,6 @@ import {
 } from '@/lib/x402-buyer';
 
 const FONT = "'IBM Plex Mono', monospace";
-const OPERATOR_API_URL =
-  process.env.NEXT_PUBLIC_OPERATOR_API_URL ?? 'http://localhost:3002';
 const SEPOLIA_CHAIN_ID = 11155111;
 
 export interface PurchaseModalProps {
@@ -125,7 +123,7 @@ function StatusBadge({ label, color }: { label: string; color: string }) {
 export default function PurchaseModal({ agentName, endpoint, onClose }: PurchaseModalProps) {
   const [state, setState] = useState<StepState>({ step: 'connect' });
 
-  const fullEndpoint = `${OPERATOR_API_URL}${endpoint}`;
+  const fullEndpoint = endpoint; // already a full URL from serviceKeyToEndpoint(key, baseUrl)
 
   const setLoading = (loading: boolean) =>
     setState((prev) => ({ ...prev, loading, error: loading ? undefined : prev.error }));
