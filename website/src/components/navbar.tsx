@@ -22,15 +22,15 @@ export function Navbar() {
       display: 'flex', alignItems: 'stretch', height: 40,
     }}>
       {/* Brand block */}
-      <div style={{
-        background: '#D40000', color: 'white',
+      <a href="/" style={{
+        background: '#D40000', color: 'white', textDecoration: 'none',
         padding: '0 18px', display: 'flex', alignItems: 'center',
         borderRight: '2px solid #8B0000', flexShrink: 0,
       }}>
         <span style={{ fontFamily: FONT, fontSize: 13, fontWeight: 700, letterSpacing: '0.05em' }}>
           SENTINAI
         </span>
-      </div>
+      </a>
 
       {/* Nav links */}
       <nav style={{
