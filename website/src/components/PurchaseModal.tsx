@@ -135,7 +135,10 @@ export default function PurchaseModal({ agentName, endpoint, onClose }: Purchase
   const handleConnect = useCallback(async () => {
     setLoading(true);
     try {
-      const { account, chainId } = await connectWallet(SEPOLIA_CHAIN_ID);
+      const timeout = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Connection timed out. Check your MetaMask popup and try again.')), 30_000)
+      );
+      const { account, chainId } = await Promise.race([connectWallet(SEPOLIA_CHAIN_ID), timeout]);
       setState((prev) => ({ ...prev, step: 'requirements', account, chainId, loading: false }));
       // Immediately fetch 402 requirements
       handleFetchRequirements(account);
@@ -322,10 +325,20 @@ export default function PurchaseModal({ agentName, endpoint, onClose }: Purchase
                 Connect MetaMask to purchase access to this agent service via x402 TON payment on Sepolia.
               </p>
               <Row label="Endpoint" value={endpoint} />
-              <div style={{ marginTop: '20px' }}>
+              {state.loading && (
+                <p style={{ fontSize: '9px', color: '#A0A0A0', marginTop: '10px' }}>
+                  Check your MetaMask popup. If prompted to switch network, approve Sepolia.
+                </p>
+              )}
+              <div style={{ marginTop: '20px', display: 'flex', gap: '8px' }}>
                 <Btn onClick={handleConnect} disabled={state.loading}>
                   {state.loading ? 'CONNECTING...' : 'CONNECT METAMASK'}
                 </Btn>
+                {state.loading && (
+                  <Btn variant="secondary" onClick={() => setState({ step: 'connect' })}>
+                    CANCEL
+                  </Btn>
+                )}
               </div>
             </div>
           )}
