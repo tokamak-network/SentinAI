@@ -179,6 +179,26 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // CORS: agent-marketplace endpoints are public APIs called from external browser origins
+  if (pathname.startsWith('/api/agent-marketplace/')) {
+    if (method === 'OPTIONS') {
+      return new NextResponse(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, x-payment',
+          'Access-Control-Max-Age': '86400',
+        },
+      });
+    }
+    const response = NextResponse.next();
+    response.headers.set('Access-Control-Allow-Origin', '*');
+    response.headers.set('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, x-payment');
+    return response;
+  }
+
   // Allow all GET requests (read-only operations)
   if (method === 'GET') {
     return NextResponse.next();
