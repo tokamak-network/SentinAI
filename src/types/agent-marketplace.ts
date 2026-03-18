@@ -2,6 +2,10 @@ export const agentMarketplaceServiceKeys = [
   'sequencer_health',
   'incident_summary',
   'batch_submission_status',
+  'derivation_lag',
+  'anomaly_feed',
+  'health_diagnostics',
+  'rca_report',
 ] as const;
 
 export type AgentMarketplaceServiceKey =
@@ -114,4 +118,69 @@ export interface BatchSubmissionStatusSnapshot {
   submissionLagSec: number;
   riskLevel: BatchRiskLevel;
   reasons: string[];
+}
+
+// derivation_lag
+export type DerivationLagLevel = 'normal' | 'warning' | 'critical' | 'emergency' | 'unknown';
+
+export interface DerivationLagSnapshot {
+  available: boolean;
+  lag: number | null;
+  level: DerivationLagLevel;
+  currentL1: number | null;
+  headL1: number | null;
+  unsafeL2: number | null;
+  safeL2: number | null;
+  finalizedL2: number | null;
+  checkedAt: string;
+  message?: string;
+}
+
+// anomaly_feed
+export type AnomalyFeedStatus = 'normal' | 'elevated' | 'critical';
+
+export interface AnomalyFeedSnapshot {
+  status: AnomalyFeedStatus;
+  activeCount: number;
+  totalRecent: number;
+  events: Array<{
+    id: string;
+    type: string;
+    severity: IncidentSeverity;
+    status: string;
+    description: string;
+    detectedAt: string;
+    resolvedAt: string | null;
+  }>;
+  updatedAt: string;
+}
+
+// health_diagnostics
+export interface HealthDiagnosticsSnapshot {
+  generatedAt: string;
+  metrics: {
+    count: number;
+    latestCpuUsage: number | null;
+    latestTxPoolPending: number | null;
+    currentVcpu: number;
+    cooldownRemaining: number;
+  };
+  anomalies: { total: number; active: number };
+  l1Rpc: { activeUrl: string; healthy: boolean; endpointCount: number };
+  components: Array<{ component: string; healthy: boolean; details: string }>;
+}
+
+// rca_report
+export interface RCAReportSnapshot {
+  available: boolean;
+  totalCount: number;
+  reports: Array<{
+    id: string;
+    rootCause: { component: string; description: string; confidence: number };
+    affectedComponents: string[];
+    remediation: { immediate: string[]; preventive: string[] };
+    triggeredBy: 'manual' | 'auto';
+    triggeredAt: string;
+  }>;
+  updatedAt: string;
 }

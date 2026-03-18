@@ -14,6 +14,10 @@ describe('/api/agent-marketplace/agent.json', () => {
       'sequencer_health',
       'incident_summary',
       'batch_submission_status',
+      'derivation_lag',
+      'anomaly_feed',
+      'health_diagnostics',
+      'rca_report',
     ]);
     expect(body.endpoint).toBe('/api/agent-marketplace');
     expect(body.payment).toMatchObject({

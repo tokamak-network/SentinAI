@@ -14,6 +14,10 @@ describe('/api/agent-marketplace/catalog', () => {
       'sequencer_health',
       'incident_summary',
       'batch_submission_status',
+      'derivation_lag',
+      'anomaly_feed',
+      'health_diagnostics',
+      'rca_report',
     ]);
     expect(body.services[0].payment.amount).toBe('100000000000000000');
     expect(body.internalNotes).toBeUndefined();
