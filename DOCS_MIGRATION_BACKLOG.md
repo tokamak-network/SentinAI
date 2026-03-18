@@ -2,8 +2,8 @@
 
 ## Phase 1: 스캐폴딩 및 모노레포 연동
 - [x] `SentinAI` 레포지토리 최상단 디렉토리에 `docs-site` 폴더 생성 (`npx create-docusaurus@latest docs-site classic --typescript`).
-- [ ] 패키지 매니저 워크스페이스(Monorepo) 의존성 충돌 방지 및 `docusaurus.config.ts` 기본 세팅.
-- [ ] 기존 레포지토리 최상단의 `docs/` 디렉토리(마크다운 원본)를 Docusaurus 내부로 이관.
+- [x] 패키지 매니저 워크스페이스(Monorepo) 의존성 충돌 방지 및 `docusaurus.config.ts` 기본 세팅.
+- [x] 기존 레포지토리 최상단의 `docs/` 디렉토리(마크다운 원본)를 Docusaurus 내부로 이관.
 
 ## Phase 2: 콘텐츠 자동화 및 메타데이터 주입
 - [ ] 기존 `website/src/app/docs/[[...slug]]/page.tsx` 내에 하드코딩된 `NAV_ORDER` 배열 제거.
