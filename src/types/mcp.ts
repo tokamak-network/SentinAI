@@ -20,7 +20,10 @@ export type McpToolName =
   | 'plan_autonomous_operation'
   | 'execute_autonomous_operation'
   | 'verify_autonomous_operation'
-  | 'rollback_autonomous_operation';
+  | 'rollback_autonomous_operation'
+  | 'discover_agents'
+  | 'get_agent_details'
+  | 'get_service_pricing';
 
 export type McpAuthMode = 'api-key' | 'approval-token' | 'dual';
 

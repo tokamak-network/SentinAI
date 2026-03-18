@@ -31,6 +31,24 @@ export interface AgentMarketplaceAgentManifest {
     endpoint: string;
     description: string;
   };
+  discovery: {
+    catalogEndpoint: string;
+    discoveryEndpoint: string;
+  };
+  dataCatalog: Array<{
+    key: string;
+    displayName: string;
+    description: string;
+    pricing: {
+      amount: string;
+      token: string;
+      network: string;
+    } | null;
+  }>;
+  operator: {
+    id: string;
+    status: string;
+  };
 }
 
 export function toAgentMarketplaceAgentManifest(
@@ -50,6 +68,26 @@ export function toAgentMarketplaceAgentManifest(
     opsSnapshot: {
       endpoint: '/api/agent-marketplace/ops-snapshot.json',
       description: 'Live operational data: metrics, scaling state, and anomaly summary',
+    },
+    discovery: {
+      catalogEndpoint: '/api/agent-marketplace/catalog',
+      discoveryEndpoint: '/api/discovery',
+    },
+    dataCatalog: catalog.services.map((service) => ({
+      key: service.key,
+      displayName: service.displayName,
+      description: service.description,
+      pricing: service.payment
+        ? {
+            amount: service.payment.amount,
+            token: service.payment.token,
+            network: service.payment.network,
+          }
+        : null,
+    })),
+    operator: {
+      id: catalog.agent.operator,
+      status: catalog.agent.status,
     },
   };
 }

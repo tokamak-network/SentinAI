@@ -37,6 +37,11 @@ import {
   verifyAutonomousOperation,
   planAutonomousOperation,
 } from '@/lib/autonomous/service';
+import {
+  getDiscoveredAgents,
+  getDiscoveredAgentByAddress,
+  getServicePricingComparison,
+} from '@/lib/agent-marketplace/discovery';
 import type { TargetMemoryGiB, TargetVcpu } from '@/types/scaling';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 import type {
@@ -95,6 +100,9 @@ const TOOL_NAMES = new Set<McpToolName>([
   'execute_autonomous_operation',
   'verify_autonomous_operation',
   'rollback_autonomous_operation',
+  'discover_agents',
+  'get_agent_details',
+  'get_service_pricing',
 ]);
 
 const DEFAULT_APPROVAL_TTL_SECONDS = 300;
@@ -315,6 +323,42 @@ export const MCP_TOOLS: McpToolDefinition[] = [
       required: ['operationId'],
     },
     writeOperation: true,
+  },
+  {
+    name: 'discover_agents',
+    description: 'Lists all registered agents from the ERC8004 registry with their services and pricing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        page: { type: 'number', minimum: 1, default: 1 },
+        pageSize: { type: 'number', minimum: 1, maximum: 50, default: 10 },
+      },
+    },
+    writeOperation: false,
+  },
+  {
+    name: 'get_agent_details',
+    description: 'Returns detailed information for a specific registered agent by Ethereum address.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        address: { type: 'string', description: 'Ethereum address (0x...)' },
+      },
+      required: ['address'],
+    },
+    writeOperation: false,
+  },
+  {
+    name: 'get_service_pricing',
+    description: 'Compares pricing for a specific service key across all registered agents.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        serviceKey: { type: 'string', description: 'Service key (e.g. sequencer_health)' },
+      },
+      required: ['serviceKey'],
+    },
+    writeOperation: false,
   },
 ];
 
@@ -827,6 +871,44 @@ async function executeRollbackAutonomousOperationTool(params: unknown): Promise<
   });
 }
 
+async function executeDiscoverAgents(params: unknown): Promise<unknown> {
+  const p = isObject(params) ? params : {};
+  const page = clampNumber(p.page, 1, 10_000, 1);
+  const pageSize = clampNumber(p.pageSize, 1, 50, 10);
+  return getDiscoveredAgents({ page, pageSize });
+}
+
+async function executeGetAgentDetails(params: unknown): Promise<unknown> {
+  if (!isObject(params) || typeof params.address !== 'string') {
+    throw new Error('address parameter is required.');
+  }
+
+  const address = params.address.trim();
+  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
+    throw new Error('address must be a valid Ethereum address (0x + 40 hex chars).');
+  }
+
+  const agent = await getDiscoveredAgentByAddress(address);
+  if (!agent) {
+    return { found: false, agent: null };
+  }
+
+  return { found: true, agent };
+}
+
+async function executeGetServicePricing(params: unknown): Promise<unknown> {
+  if (!isObject(params) || typeof params.serviceKey !== 'string') {
+    throw new Error('serviceKey parameter is required.');
+  }
+
+  const serviceKey = params.serviceKey.trim();
+  if (!serviceKey) {
+    throw new Error('serviceKey must be a non-empty string.');
+  }
+
+  return getServicePricingComparison(serviceKey);
+}
+
 async function executeTool(toolName: McpToolName, params: unknown): Promise<unknown> {
   switch (toolName) {
     case 'get_metrics':
@@ -863,6 +945,12 @@ async function executeTool(toolName: McpToolName, params: unknown): Promise<unkn
       return executeVerifyAutonomousOperationTool(params);
     case 'rollback_autonomous_operation':
       return executeRollbackAutonomousOperationTool(params);
+    case 'discover_agents':
+      return executeDiscoverAgents(params);
+    case 'get_agent_details':
+      return executeGetAgentDetails(params);
+    case 'get_service_pricing':
+      return executeGetServicePricing(params);
     default: {
       const exhaustiveCheck: never = toolName;
       throw new Error(`Unknown MCP tool: ${exhaustiveCheck}`);
