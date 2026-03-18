@@ -9,8 +9,9 @@ export const dynamic = 'force-dynamic';
  * Public, unauthenticated. Used by the website marketplace to show the actual registered address.
  *
  * Address resolution order:
- *   1. MARKETPLACE_WALLET_KEY env var (server-managed key)
- *   2. Redis-persisted address from last wallet-connect registration
+ *   1. MARKETPLACE_WALLET_KEY env var (server-managed private key → derives address)
+ *   2. OPERATOR_ADDRESS env var (public address, no private key required)
+ *   3. Redis-persisted address from last wallet-connect registration
  */
 export async function GET(): Promise<Response> {
   const walletKey = process.env.MARKETPLACE_WALLET_KEY?.trim();
@@ -20,6 +21,14 @@ export async function GET(): Promise<Response> {
     try {
       address = privateKeyToAddress(walletKey as `0x${string}`);
     } catch { /* invalid key */ }
+  }
+
+  // Fall back to explicit public address (no private key needed)
+  if (!address) {
+    const operatorAddress = process.env.OPERATOR_ADDRESS?.trim();
+    if (operatorAddress && /^0x[0-9a-fA-F]{40}$/.test(operatorAddress)) {
+      address = operatorAddress;
+    }
   }
 
   // Fall back to address saved by save-registration (wallet-connect flow)
