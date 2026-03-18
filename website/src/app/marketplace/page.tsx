@@ -10,6 +10,8 @@ import {
 } from '@/lib/agent-marketplace';
 import PurchaseModal from '@/components/PurchaseModal';
 import TradeStatsBanner from '@/components/TradeStatsBanner';
+import InstancePanel from '@/components/InstancePanel';
+import SandboxPanel from '@/components/SandboxPanel';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
@@ -390,15 +392,7 @@ export default function MarketplacePage() {
         )}
 
         {activeTab === 'instance' && (
-          <div style={{
-            padding: '24px',
-            background: '#F7F7F7',
-            border: '1px solid #D0D0D0',
-          }}>
-            <div style={{ fontFamily: FONT, fontSize: '10px', color: '#707070' }}>
-              Instance deployment information coming soon
-            </div>
-          </div>
+          <InstancePanel />
         )}
 
         {activeTab === 'guide' && (
@@ -414,15 +408,7 @@ export default function MarketplacePage() {
         )}
 
         {activeTab === 'sandbox' && (
-          <div style={{
-            padding: '24px',
-            background: '#F7F7F7',
-            border: '1px solid #D0D0D0',
-          }}>
-            <div style={{ fontFamily: FONT, fontSize: '10px', color: '#707070' }}>
-              Sandbox testing environment coming soon
-            </div>
-          </div>
+          <SandboxPanel />
         )}
       </main>
 
