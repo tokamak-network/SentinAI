@@ -26,9 +26,10 @@ type WizardStep = 1 | 2 | 3 | 4;
 /* ------------------------------------------------------------------ */
 
 function encodeRegisterCalldata(agentUri: string): `0x${string}` {
-  // register(string agentURI) — selector 0x1aa3a008
+  // register(string agentURI) — selector 0xf2c298be
+  // keccak256("register(string)") = f2c298be... (verified from compiled methodIdentifiers)
   // ABI-encode: selector + offset (32) + length (32) + utf8 data (padded to 32)
-  const selector = '1aa3a008';
+  const selector = 'f2c298be';
   const encoder = new TextEncoder();
   const uriBytes = encoder.encode(agentUri);
   const len = uriBytes.length;
