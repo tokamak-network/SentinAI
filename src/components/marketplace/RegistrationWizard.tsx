@@ -188,11 +188,12 @@ export function RegistrationWizard({
     { ok: true; agentId: string; txHash: string } | { ok: false; error: string } | null
   >(null);
 
-  // URI to register — derived from current page origin
+  // URI to register — derived from current page origin + basePath
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
   const agentUri =
     typeof window !== 'undefined'
-      ? `${window.location.origin}/api/agent-marketplace/agent.json`
-      : '/api/agent-marketplace/agent.json';
+      ? `${window.location.origin}${basePath}/api/agent-marketplace/agent.json`
+      : `${basePath}/api/agent-marketplace/agent.json`;
 
   function openWizard() {
     setStep(1);
