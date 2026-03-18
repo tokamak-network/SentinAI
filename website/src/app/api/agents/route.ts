@@ -1,17 +1,14 @@
 import { NextResponse } from 'next/server';
-import { getAgentCatalog } from '@/lib/agent-marketplace';
+import { getServiceCatalog } from '@/lib/agent-marketplace';
 
 /**
  * GET /api/agents
- * Returns list of available agents from the marketplace.
+ * Returns the agent marketplace service catalog.
  */
 export async function GET() {
-  const agents = getAgentCatalog();
+  const catalog = getServiceCatalog();
 
-  return NextResponse.json({
-    agents,
-    total: agents.length,
-  });
+  return NextResponse.json(catalog);
 }
 
 export const dynamic = 'force-dynamic';

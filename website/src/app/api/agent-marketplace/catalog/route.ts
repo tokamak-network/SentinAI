@@ -1,14 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAgentCatalog } from '@/lib/agent-marketplace';
+import { getServiceCatalog } from '@/lib/agent-marketplace';
 
 /**
  * GET /api/agent-marketplace/catalog
- * Returns the list of available agents in the marketplace
+ * Returns the agent marketplace service catalog (AgentMarketplaceCatalog format)
  * Public endpoint - no authentication required
  */
 export async function GET(_request: NextRequest) {
   try {
-    const catalog = getAgentCatalog();
+    const catalog = getServiceCatalog();
     return NextResponse.json(catalog, {
       headers: {
         'Content-Type': 'application/json',
