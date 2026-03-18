@@ -1,5 +1,6 @@
-import { createWalletClient, erc20Abi, getAddress, http } from 'viem';
+import { createWalletClient, getAddress, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
+import { facilitatorAbi } from '@/lib/marketplace/facilitator/abi';
 import type { SettleTransferInput, SettleTransferResult } from '@/lib/marketplace/facilitator/types';
 
 export async function settleTransfer(input: SettleTransferInput): Promise<SettleTransferResult> {
@@ -18,10 +19,20 @@ export async function settleTransfer(input: SettleTransferInput): Promise<Settle
 
   const txHash = await walletClient.writeContract({
     chain: undefined,
-    address: input.profile.tonAssetAddress,
-    abi: erc20Abi,
-    functionName: 'transferFrom',
-    args: [getAddress(input.buyer), merchant, input.amount],
+    address: input.profile.facilitatorAddress,
+    abi: facilitatorAbi,
+    functionName: 'settle',
+    args: [
+      getAddress(input.buyer),
+      merchant,
+      input.profile.tonAssetAddress,
+      input.amount,
+      input.resource,
+      input.nonce,
+      input.validAfter,
+      input.validBefore,
+      input.signature,
+    ],
   });
 
   return {
