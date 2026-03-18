@@ -1,5 +1,5 @@
 import { privateKeyToAddress } from 'viem/accounts';
-import { getRegistrationStatus } from '@/lib/agent-marketplace/registration-status';
+import { getRegistrationStatus, getRegisteredOperatorAddress } from '@/lib/agent-marketplace/registration-status';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,6 +7,10 @@ export const dynamic = 'force-dynamic';
  * GET /api/agent-marketplace/ops/operator-info
  * Returns the operator's on-chain identity: wallet address + ERC8004 registration status.
  * Public, unauthenticated. Used by the website marketplace to show the actual registered address.
+ *
+ * Address resolution order:
+ *   1. MARKETPLACE_WALLET_KEY env var (server-managed key)
+ *   2. Redis-persisted address from last wallet-connect registration
  */
 export async function GET(): Promise<Response> {
   const walletKey = process.env.MARKETPLACE_WALLET_KEY?.trim();
@@ -18,7 +22,12 @@ export async function GET(): Promise<Response> {
     } catch { /* invalid key */ }
   }
 
-  const status = await getRegistrationStatus();
+  // Fall back to address saved by save-registration (wallet-connect flow)
+  if (!address) {
+    address = await getRegisteredOperatorAddress();
+  }
+
+  const status = await getRegistrationStatus(address ?? undefined);
 
   const body = {
     address,

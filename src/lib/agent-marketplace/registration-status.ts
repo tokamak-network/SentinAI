@@ -5,6 +5,7 @@ import { mainnet, sepolia } from 'viem/chains';
 import { agentMarketplaceRegistryAbi } from '@/lib/agent-marketplace/abi/agent-registry';
 
 const REDIS_KEY_PREFIX = 'marketplace:registry:registration:';
+const REDIS_OPERATOR_ADDRESS_KEY = 'marketplace:registry:operator-address';
 const CACHE_TTL_S = 300;
 const CACHE_TTL_MS = CACHE_TTL_S * 1000;
 
@@ -47,6 +48,19 @@ async function redisSetex(key: string, ttl: number, value: string): Promise<void
 
 async function redisDel(key: string): Promise<void> {
   await getRedis()?.del(key).catch(() => null);
+}
+
+async function redisSet(key: string, value: string): Promise<void> {
+  await getRedis()?.set(key, value).catch(() => null);
+}
+
+/**
+ * Returns the wallet address used for the last successful registration.
+ * Saved by saveRegistrationCache() when walletAddress is known.
+ * This allows operator-info to work without MARKETPLACE_WALLET_KEY.
+ */
+export async function getRegisteredOperatorAddress(): Promise<string | null> {
+  return redisGet(REDIS_OPERATOR_ADDRESS_KEY);
 }
 
 // ---- globalThis fallback ----
@@ -92,6 +106,10 @@ export async function saveRegistrationCache(
   const address = resolveWalletAddress(walletAddress);
   if (!address) return;
   await redisSetex(`${REDIS_KEY_PREFIX}${address}`, CACHE_TTL_S, JSON.stringify(status));
+  // Persist the operator address so operator-info can retrieve it without MARKETPLACE_WALLET_KEY
+  if (status.registered) {
+    await redisSet(REDIS_OPERATOR_ADDRESS_KEY, address);
+  }
 }
 
 function buildEnvCheck(): EnvCheck {
