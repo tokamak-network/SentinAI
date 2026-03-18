@@ -123,9 +123,11 @@ interface StatusBarProps {
   lastTimestamp: string | null;
   onRunNow: () => void;
   running: boolean;
+  onSimulate: () => void;
+  simulating: boolean;
 }
 
-function StatusBar({ totalRecords, lastTimestamp, onRunNow, running }: StatusBarProps) {
+function StatusBar({ totalRecords, lastTimestamp, onRunNow, running, onSimulate, simulating }: StatusBarProps) {
   const font = "'IBM Plex Mono', monospace";
   return (
     <div
@@ -168,24 +170,42 @@ function StatusBar({ totalRecords, lastTimestamp, onRunNow, running }: StatusBar
           DAILY
         </span>
       </span>
-      <button
-        onClick={onRunNow}
-        disabled={running}
-        style={{
-          marginLeft: 'auto',
-          background: running ? '#888' : '#0A0A0A',
-          color: '#FFF',
-          border: 'none',
-          padding: '4px 10px',
-          fontSize: 10,
-          fontFamily: font,
-          fontWeight: 700,
-          cursor: running ? 'not-allowed' : 'pointer',
-          letterSpacing: 0.5,
-        }}
-      >
-        {running ? '⏳ RUNNING…' : '▶ RUN NOW'}
-      </button>
+      <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+        <button
+          onClick={onSimulate}
+          disabled={simulating || running}
+          style={{
+            background: simulating ? '#888' : '#007A00',
+            color: '#FFF',
+            border: 'none',
+            padding: '4px 10px',
+            fontSize: 10,
+            fontFamily: font,
+            fontWeight: 700,
+            cursor: simulating || running ? 'not-allowed' : 'pointer',
+            letterSpacing: 0.5,
+          }}
+        >
+          {simulating ? '⏳ SIMULATING…' : '⚡ SIMULATE'}
+        </button>
+        <button
+          onClick={onRunNow}
+          disabled={running || simulating}
+          style={{
+            background: running ? '#888' : '#0A0A0A',
+            color: '#FFF',
+            border: 'none',
+            padding: '4px 10px',
+            fontSize: 10,
+            fontFamily: font,
+            fontWeight: 700,
+            cursor: running || simulating ? 'not-allowed' : 'pointer',
+            letterSpacing: 0.5,
+          }}
+        >
+          {running ? '⏳ RUNNING…' : '▶ RUN NOW'}
+        </button>
+      </div>
     </div>
   );
 }
@@ -193,9 +213,10 @@ function StatusBar({ totalRecords, lastTimestamp, onRunNow, running }: StatusBar
 interface PlaybookCardProps {
   playbook: EvolvedPlaybook;
   onAction: (id: string, action: 'approve' | 'promote' | 'suspend' | 'reactivate') => void;
+  isUpdated?: boolean;
 }
 
-function PlaybookCard({ playbook, onAction }: PlaybookCardProps) {
+function PlaybookCard({ playbook, onAction, isUpdated = false }: PlaybookCardProps) {
   const font = "'IBM Plex Mono', monospace";
   const { when, anomalyType } = parseSignature(playbook.triggerSignature);
   const action = humanAction(playbook.action);
@@ -233,13 +254,14 @@ function PlaybookCard({ playbook, onAction }: PlaybookCardProps) {
   return (
     <div
       style={{
-        background: '#FFF',
-        borderLeft: `3px solid ${borderColor}`,
-        border: `1px solid #E0E0E0`,
+        background: isUpdated ? '#F0FFF8' : '#FFF',
+        borderLeft: `3px solid ${isUpdated ? '#007A00' : borderColor}`,
+        border: `1px solid ${isUpdated ? '#007A00' : '#E0E0E0'}`,
         borderLeftWidth: 3,
-        borderLeftColor: borderColor,
+        borderLeftColor: isUpdated ? '#007A00' : borderColor,
         padding: '10px 12px',
         fontFamily: font,
+        transition: 'background 0.4s ease, border-color 0.4s ease',
       }}
     >
       {/* Header row */}
@@ -263,6 +285,22 @@ function PlaybookCard({ playbook, onAction }: PlaybookCardProps) {
           >
             v{playbook.evolution.version} {showHistory ? '▲' : '▼'}
           </span>
+          {isUpdated && (
+            <span
+              style={{
+                marginLeft: 6,
+                background: '#007A00',
+                color: '#FFF',
+                fontSize: 8,
+                fontWeight: 700,
+                letterSpacing: 1,
+                padding: '1px 5px',
+                fontFamily: font,
+              }}
+            >
+              ↑ UPDATED
+            </span>
+          )}
         </div>
         <span style={badgeStyle}>{playbook.reviewStatus.toUpperCase()}</span>
       </div>
@@ -678,6 +716,8 @@ export function PlaybooksTab() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [simulating, setSimulating] = useState(false);
+  const [updatedPlaybookIds, setUpdatedPlaybookIds] = useState<Set<string>>(new Set());
   const [result, setResult] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   const fetchAll = useCallback(async () => {
@@ -761,6 +801,55 @@ export function PlaybooksTab() {
     }
   }, [fetchAll]);
 
+  const handleSimulate = useCallback(async () => {
+    setSimulating(true);
+    setResult(null);
+    try {
+      const res = await fetch(`${BASE_PATH}/api/test/demo-scenario?scenario=simulate`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(body.error || `Simulation failed (${res.status})`);
+      }
+      const data = await res.json() as {
+        ok: boolean;
+        seeded: number;
+        patternsFound: number;
+        targetPlaybookId: string | null;
+        diff: {
+          id: string | null;
+          versionBefore: number;
+          versionAfter: number;
+          confidenceBefore: number;
+          confidenceAfter: number;
+          statusBefore: string;
+          statusAfter: string;
+        } | null;
+      };
+      await fetchAll();
+      if (data.targetPlaybookId) {
+        setUpdatedPlaybookIds(new Set([data.targetPlaybookId]));
+        setTimeout(() => setUpdatedPlaybookIds(new Set()), 4000);
+      }
+      if (data.diff) {
+        const { versionBefore, versionAfter, confidenceBefore, confidenceAfter } = data.diff;
+        setResult({
+          type: 'success',
+          message: `Simulated ${data.seeded} incidents → playbook evolved v${versionBefore}→v${versionAfter}, confidence ${confidenceBefore}%→${confidenceAfter}%`,
+        });
+      } else {
+        setResult({
+          type: 'success',
+          message: `Simulated ${data.seeded} incidents, found ${data.patternsFound} patterns.`,
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      setResult({ type: 'error', message: msg });
+    } finally {
+      setSimulating(false);
+    }
+  }, [fetchAll]);
+
   // ── Derived state ──
 
   const needsReview = playbooks.filter(
@@ -829,6 +918,8 @@ export function PlaybooksTab() {
         lastTimestamp={status?.ledger.lastTimestamp ?? null}
         onRunNow={() => void handleRunNow()}
         running={running}
+        onSimulate={() => void handleSimulate()}
+        simulating={simulating}
       />
 
       {/* Result banner */}
@@ -896,7 +987,7 @@ export function PlaybooksTab() {
           <SectionHeader label="Needs Review" count={needsReview.length} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
             {needsReview.map(p => (
-              <PlaybookCard key={p.playbookId} playbook={p} onAction={handleAction} />
+              <PlaybookCard key={p.playbookId} playbook={p} onAction={handleAction} isUpdated={updatedPlaybookIds.has(p.playbookId)} />
             ))}
           </div>
         </div>
@@ -908,7 +999,7 @@ export function PlaybooksTab() {
           <SectionHeader label="Active Playbooks" count={activePlaybooks.length} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
             {activePlaybooks.map(p => (
-              <PlaybookCard key={p.playbookId} playbook={p} onAction={handleAction} />
+              <PlaybookCard key={p.playbookId} playbook={p} onAction={handleAction} isUpdated={updatedPlaybookIds.has(p.playbookId)} />
             ))}
           </div>
         </div>
@@ -920,7 +1011,7 @@ export function PlaybooksTab() {
           <SectionHeader label="Suspended" count={suspended.length} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
             {suspended.map(p => (
-              <PlaybookCard key={p.playbookId} playbook={p} onAction={handleAction} />
+              <PlaybookCard key={p.playbookId} playbook={p} onAction={handleAction} isUpdated={updatedPlaybookIds.has(p.playbookId)} />
             ))}
           </div>
         </div>
