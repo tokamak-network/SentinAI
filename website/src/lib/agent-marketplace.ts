@@ -25,6 +25,7 @@ export interface MarketplaceAgentMetadata {
   status: 'active' | 'inactive';
   version: string;
   operator: string;
+  operatorAddress?: string; // on-chain wallet address from ERC8004 registry
   baseUrl: string; // operator's SentinAI API base URL
 }
 

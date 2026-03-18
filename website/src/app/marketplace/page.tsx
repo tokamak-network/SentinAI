@@ -430,7 +430,7 @@ export default function MarketplacePage() {
                 }}>
                   <span>
                     <span style={{ color: '#A0A0A0', letterSpacing: '0.1em', textTransform: 'uppercase' }}>OPERATOR: </span>
-                    <span style={{ color: '#0A0A0A', fontWeight: 700 }}>{catalog.agent.operator}</span>
+                    <span style={{ color: '#0A0A0A', fontWeight: 700 }}>{catalog.agent.operatorAddress ?? catalog.agent.operator}</span>
                   </span>
                   <span>
                     <span style={{ color: '#A0A0A0', letterSpacing: '0.1em', textTransform: 'uppercase' }}>VERSION: </span>
@@ -454,7 +454,7 @@ export default function MarketplacePage() {
                   <ServiceCard
                     key={service.key}
                     service={service}
-                    operator={catalog.agent.operator}
+                    operator={catalog.agent.operatorAddress ?? catalog.agent.operator}
                     onBuy={() => handleBuy(service)}
                   />
                 ))}

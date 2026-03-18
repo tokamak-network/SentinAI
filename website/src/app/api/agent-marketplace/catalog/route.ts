@@ -4,15 +4,36 @@ import { getServiceCatalog } from '@/lib/agent-marketplace';
 /**
  * GET /api/agent-marketplace/catalog
  * Returns the agent marketplace service catalog (AgentMarketplaceCatalog format)
+ * Enriches agent metadata with on-chain operator address from operator-info endpoint.
  * Public endpoint - no authentication required
  */
 export async function GET(_request: NextRequest) {
   try {
     const catalog = getServiceCatalog();
-    return NextResponse.json(catalog, {
+
+    // Fetch on-chain operator address from the main SentinAI app
+    let operatorAddress: string | undefined;
+    const operatorApiUrl = process.env.NEXT_PUBLIC_OPERATOR_API_URL?.replace(/\/$/, '') ?? 'http://localhost:3002';
+    try {
+      const res = await fetch(`${operatorApiUrl}/api/agent-marketplace/ops/operator-info`, {
+        next: { revalidate: 60 },
+      });
+      if (res.ok) {
+        const info = await res.json() as { address: string | null };
+        if (info.address) operatorAddress = info.address;
+      }
+    } catch {
+      // Non-fatal: fall back to static operator name
+    }
+
+    const enriched = operatorAddress
+      ? { ...catalog, agent: { ...catalog.agent, operatorAddress } }
+      : catalog;
+
+    return NextResponse.json(enriched, {
       headers: {
         'Content-Type': 'application/json',
-        'Cache-Control': 'public, max-age=300', // 5 minute cache
+        'Cache-Control': 'public, max-age=60',
       },
     });
   } catch (error) {
