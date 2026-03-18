@@ -173,7 +173,7 @@ export function formatNetworkName(network: string): string {
 export function getServiceCatalog(): AgentMarketplaceCatalog {
   const baseUrl =
     process.env.NEXT_PUBLIC_OPERATOR_API_URL?.replace(/\/$/, '') ??
-    'http://localhost:3002';
+    '';
   return {
     ...SERVICE_CATALOG_BASE,
     agent: { ...SERVICE_CATALOG_BASE.agent, baseUrl },
