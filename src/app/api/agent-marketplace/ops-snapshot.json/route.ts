@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 export async function GET(): Promise<Response> {
   try {
-    const snapshot = await buildOpsSnapshot();
+    const snapshot = await buildOpsSnapshot(process.env.OPERATOR_ADDRESS);
     return Response.json(snapshot);
   } catch (error) {
     return Response.json(
