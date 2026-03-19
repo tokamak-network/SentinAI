@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { formatTONPrice } from '@/lib/agent-marketplace';
+import PurchaseModal from '@/components/PurchaseModal';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
@@ -88,6 +89,13 @@ function MetricCell({ label, value, last }: { label: string; value: string; last
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+interface PurchaseTarget {
+  serviceKey: string;
+  displayName: string;
+  endpoint: string;
+  amount: string;
+}
+
 export default function OperatorDetailPage() {
   const params = useParams();
   const address = typeof params.address === 'string' ? params.address : '';
@@ -97,6 +105,7 @@ export default function OperatorDetailPage() {
   const [catalog, setCatalog] = useState<CatalogData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [purchaseTarget, setPurchaseTarget] = useState<PurchaseTarget | null>(null);
 
   useEffect(() => {
     if (!address) return;
@@ -245,6 +254,16 @@ export default function OperatorDetailPage() {
                     </div>
                     <button
                       disabled={!isActive}
+                      onClick={() => {
+                        if (isActive && catalog) {
+                          setPurchaseTarget({
+                            serviceKey: service.key,
+                            displayName: service.displayName,
+                            endpoint: `/api/marketplace/services/${service.key}`,
+                            amount: service.payment.amount,
+                          });
+                        }
+                      }}
                       style={{
                         fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
                         padding: '4px 14px',
@@ -266,6 +285,16 @@ export default function OperatorDetailPage() {
             </div>
           )}
         </>
+      )}
+      
+      {/* Purchase Modal */}
+      {purchaseTarget && (
+        <PurchaseModal
+          agentId={address}
+          agentName={catalog?.agent.operator ?? 'Unknown Operator'}
+          endpoint={purchaseTarget.endpoint}
+          onClose={() => setPurchaseTarget(null)}
+        />
       )}
     </div>
   );
