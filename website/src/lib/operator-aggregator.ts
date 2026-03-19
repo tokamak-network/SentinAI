@@ -20,6 +20,14 @@ export interface OperatorSnapshot {
   version?: string;
   chain?: string;
   fetchedAt: string;
+  // Trust metrics
+  metrics?: {
+    rating?: number; // 0-5 (e.g., 4.8)
+    reviewCount?: number; // e.g., 127
+    uptimePercent?: number; // 0-100 (e.g., 99.9)
+    avgLatencyMs?: number; // e.g., 234
+    monthlyCallCount?: number; // e.g., 847
+  };
 }
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
