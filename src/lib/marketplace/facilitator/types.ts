@@ -113,11 +113,16 @@ export interface CheckFundsResult {
 }
 
 export interface SettleTransferInput {
-  profile: Pick<FacilitatorProfile, 'chainId' | 'rpcUrl' | 'relayerPrivateKey' | 'tonAssetAddress'>;
+  profile: Pick<FacilitatorProfile, 'chainId' | 'rpcUrl' | 'relayerPrivateKey' | 'tonAssetAddress' | 'facilitatorAddress'>;
   buyer: Address;
   merchant: Address;
   expectedMerchant: Address;
   amount: bigint;
+  resource: string;
+  nonce: `0x${string}`;
+  validAfter: bigint;
+  validBefore: bigint;
+  signature: `0x${string}`;
 }
 
 export interface SettleTransferResult {

@@ -27,12 +27,31 @@ vi.mock('viem/accounts', () => ({
   })),
 }));
 
+const FACILITATOR_ADDRESS = '0x3333333333333333333333333333333333333333';
+const TON_ASSET = '0x2be5e8c109e2197D077D13A82dAead6a9b3433C5';
+const BUYER = '0x1111111111111111111111111111111111111111';
+const MERCHANT = '0x4444444444444444444444444444444444444444';
+const AMOUNT = 100000000000000000n;
+const RESOURCE = '/api/marketplace/data';
+const NONCE = '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890' as `0x${string}`;
+const VALID_AFTER = 0n;
+const VALID_BEFORE = 9999999999n;
+const SIGNATURE = '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefde' as `0x${string}`;
+
+const BASE_PROFILE = {
+  chainId: 1 as const,
+  rpcUrl: 'https://mainnet.example',
+  relayerPrivateKey: '0x1111111111111111111111111111111111111111111111111111111111111111' as `0x${string}`,
+  tonAssetAddress: TON_ASSET as `0x${string}`,
+  facilitatorAddress: FACILITATOR_ADDRESS as `0x${string}`,
+};
+
 describe('settle transfer', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it('submits transferFrom for the expected merchant', async () => {
+  it('calls settle() on the facilitator contract for the expected merchant', async () => {
     hoisted.writeContract.mockResolvedValueOnce(
       '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc'
     );
@@ -40,16 +59,16 @@ describe('settle transfer', () => {
     const { settleTransfer } = await import('@/lib/marketplace/facilitator/settle-transfer');
 
     const result = await settleTransfer({
-      profile: {
-        chainId: 1,
-        rpcUrl: 'https://mainnet.example',
-        relayerPrivateKey: '0x1111111111111111111111111111111111111111111111111111111111111111',
-        tonAssetAddress: '0x2be5e8c109e2197D077D13A82dAead6a9b3433C5',
-      },
-      buyer: '0x1111111111111111111111111111111111111111',
-      merchant: '0x4444444444444444444444444444444444444444',
-      expectedMerchant: '0x4444444444444444444444444444444444444444',
-      amount: 100000000000000000n,
+      profile: BASE_PROFILE,
+      buyer: BUYER,
+      merchant: MERCHANT,
+      expectedMerchant: MERCHANT,
+      amount: AMOUNT,
+      resource: RESOURCE,
+      nonce: NONCE,
+      validAfter: VALID_AFTER,
+      validBefore: VALID_BEFORE,
+      signature: SIGNATURE,
     });
 
     expect(result).toEqual({
@@ -58,11 +77,18 @@ describe('settle transfer', () => {
     });
     expect(hoisted.writeContract).toHaveBeenCalledWith(
       expect.objectContaining({
-        functionName: 'transferFrom',
+        address: FACILITATOR_ADDRESS,
+        functionName: 'settle',
         args: [
-          '0x1111111111111111111111111111111111111111',
-          '0x4444444444444444444444444444444444444444',
-          100000000000000000n,
+          BUYER,
+          MERCHANT,
+          TON_ASSET,
+          AMOUNT,
+          RESOURCE,
+          NONCE,
+          VALID_AFTER,
+          VALID_BEFORE,
+          SIGNATURE,
         ],
       })
     );
@@ -73,16 +99,16 @@ describe('settle transfer', () => {
 
     await expect(
       settleTransfer({
-        profile: {
-          chainId: 1,
-          rpcUrl: 'https://mainnet.example',
-          relayerPrivateKey: '0x1111111111111111111111111111111111111111111111111111111111111111',
-          tonAssetAddress: '0x2be5e8c109e2197D077D13A82dAead6a9b3433C5',
-        },
-        buyer: '0x1111111111111111111111111111111111111111',
+        profile: BASE_PROFILE,
+        buyer: BUYER,
         merchant: '0x5555555555555555555555555555555555555555',
-        expectedMerchant: '0x4444444444444444444444444444444444444444',
-        amount: 100000000000000000n,
+        expectedMerchant: MERCHANT,
+        amount: AMOUNT,
+        resource: RESOURCE,
+        nonce: NONCE,
+        validAfter: VALID_AFTER,
+        validBefore: VALID_BEFORE,
+        signature: SIGNATURE,
       })
     ).rejects.toThrow(/merchant/i);
 
@@ -96,16 +122,16 @@ describe('settle transfer', () => {
 
     await expect(
       settleTransfer({
-        profile: {
-          chainId: 1,
-          rpcUrl: 'https://mainnet.example',
-          relayerPrivateKey: '0x1111111111111111111111111111111111111111111111111111111111111111',
-          tonAssetAddress: '0x2be5e8c109e2197D077D13A82dAead6a9b3433C5',
-        },
-        buyer: '0x1111111111111111111111111111111111111111',
-        merchant: '0x4444444444444444444444444444444444444444',
-        expectedMerchant: '0x4444444444444444444444444444444444444444',
-        amount: 100000000000000000n,
+        profile: BASE_PROFILE,
+        buyer: BUYER,
+        merchant: MERCHANT,
+        expectedMerchant: MERCHANT,
+        amount: AMOUNT,
+        resource: RESOURCE,
+        nonce: NONCE,
+        validAfter: VALID_AFTER,
+        validBefore: VALID_BEFORE,
+        signature: SIGNATURE,
       })
     ).rejects.toThrow(/reverted/i);
   });

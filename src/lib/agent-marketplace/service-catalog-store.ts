@@ -7,37 +7,40 @@
 
 import { getCoreRedis } from '@/core/redis';
 import type { AgentMarketplaceServiceKey } from '@/types/agent-marketplace';
+import { operatorKey } from '@/lib/agent-marketplace/operator-key';
 
 export interface ServiceOverride {
   amount?: string;   // TON wei string
   state?: 'active' | 'planned';
 }
 
-function getOverrideKey(serviceKey: AgentMarketplaceServiceKey): string {
-  return `sentinai:agent-marketplace:service-override:${serviceKey}`;
+function getOverrideKey(serviceKey: AgentMarketplaceServiceKey, operatorAddress?: string): string {
+  return `sentinai:agent-marketplace:service-override:${serviceKey}${operatorKey(operatorAddress)}`;
 }
 
 export async function getServiceOverride(
-  serviceKey: AgentMarketplaceServiceKey
+  serviceKey: AgentMarketplaceServiceKey,
+  operatorAddress?: string
 ): Promise<ServiceOverride | null> {
   const redis = getCoreRedis();
   if (!redis) return null;
-  const raw = await redis.get(getOverrideKey(serviceKey));
+  const raw = await redis.get(getOverrideKey(serviceKey, operatorAddress));
   return raw ? (JSON.parse(raw) as ServiceOverride) : null;
 }
 
 export async function setServiceOverride(
   serviceKey: AgentMarketplaceServiceKey,
-  override: ServiceOverride
+  override: ServiceOverride,
+  operatorAddress?: string
 ): Promise<void> {
   const redis = getCoreRedis();
   if (!redis) throw new Error('Redis is required to persist service overrides');
-  await redis.set(getOverrideKey(serviceKey), JSON.stringify(override));
+  await redis.set(getOverrideKey(serviceKey, operatorAddress), JSON.stringify(override));
 }
 
-export async function getAllServiceOverrides(): Promise<
-  Partial<Record<AgentMarketplaceServiceKey, ServiceOverride>>
-> {
+export async function getAllServiceOverrides(
+  operatorAddress?: string
+): Promise<Partial<Record<AgentMarketplaceServiceKey, ServiceOverride>>> {
   const redis = getCoreRedis();
   if (!redis) return {};
 
@@ -47,7 +50,7 @@ export async function getAllServiceOverrides(): Promise<
     'batch_submission_status',
   ];
 
-  const raws = await redis.mget(...keys.map(getOverrideKey));
+  const raws = await redis.mget(...keys.map((k) => getOverrideKey(k, operatorAddress)));
   const result: Partial<Record<AgentMarketplaceServiceKey, ServiceOverride>> = {};
   keys.forEach((key, i) => {
     const raw = raws[i];

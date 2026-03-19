@@ -128,6 +128,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       merchant: authorization.merchant,
       expectedMerchant: allowlistedMerchant.address,
       amount: authorization.amount,
+      resource: authorization.resource,
+      nonce: authorization.nonce,
+      validAfter: authorization.validAfter,
+      validBefore: authorization.validBefore,
+      signature: body.signature,
     });
 
     const settlementId = randomUUID();
