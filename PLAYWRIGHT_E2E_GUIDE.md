@@ -79,14 +79,18 @@ sudo usermod -aG docker $USER
 sudo su - $USER  # Refresh group membership
 ```
 
-### Step 3: Run Playwright in Docker
+### Step 3: Run Playwright in Docker (v1.58.2)
 ```bash
 cd /home/theo/.openclaw/workspace/SentinAI/website
 
+# Pull latest Playwright image (v1.58.2+)
+docker pull mcr.microsoft.com/playwright:v1.58.2-jammy
+
+# Run tests
 docker run --rm \
   -v $(pwd):/app \
   -w /app \
-  mcr.microsoft.com/playwright:latest \
+  mcr.microsoft.com/playwright:v1.58.2-jammy \
   npx playwright test e2e/marketplace-page.spec.ts
 ```
 

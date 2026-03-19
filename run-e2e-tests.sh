@@ -49,15 +49,15 @@ run_option_b() {
     exit 1
   fi
   
-  echo "Pulling Playwright Docker image..."
-  docker pull mcr.microsoft.com/playwright:latest
+  echo "Pulling Playwright Docker image (v1.58.2)..."
+  docker pull mcr.microsoft.com/playwright:v1.58.2-jammy
   
   echo ""
   echo "Running tests in Docker..."
   docker run --rm \
     -v "$(pwd)":/app \
     -w /app \
-    mcr.microsoft.com/playwright:latest \
+    mcr.microsoft.com/playwright:v1.58.2-jammy \
     npx playwright test e2e/marketplace-page.spec.ts \
     --reporter=list
   
