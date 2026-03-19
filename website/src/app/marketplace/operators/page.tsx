@@ -193,12 +193,30 @@ export default function OperatorsPage() {
   const isMobile = useIsMobile();
 
   useEffect(() => {
-    fetch('/api/agent-marketplace/discovery')
-      .then((r) => r.json())
-      .then((data: { operators?: OperatorSnapshot[] }) => {
-        const ops = data.operators ?? [];
-        // Add mock metrics if not present
-        const withMetrics = ops.map(op => ({
+    const loadOperators = async () => {
+      try {
+        const res = await fetch('/api/agent-marketplace/discovery');
+        const data = await res.json();
+        let ops = data.operators ?? [];
+        
+        // If no operators from discovery, get from catalog
+        if (!ops || ops.length === 0) {
+          const catRes = await fetch('/api/agent-marketplace/catalog');
+          const cat = await catRes.json();
+          if (cat.agent?.baseUrl) {
+            ops = [{
+              address: cat.agent.operatorAddress ?? cat.agent.operator,
+              name: cat.agent.operator,
+              agentUri: cat.agent.baseUrl,
+              status: cat.agent.status === 'active' ? 'online' : 'offline',
+              serviceCount: cat.services?.length,
+              fetchedAt: new Date().toISOString(),
+            }];
+          }
+        }
+        
+        // ALWAYS add metrics if missing
+        const withMetrics = (ops as OperatorSnapshot[]).map((op: OperatorSnapshot) => ({
           ...op,
           metrics: op.metrics || {
             rating: 4.8,
@@ -209,33 +227,14 @@ export default function OperatorsPage() {
           },
         }));
         setOperators(withMetrics);
-      })
-      .catch(() => {
-        // Fallback: show the single default operator from catalog
-        fetch('/api/agent-marketplace/catalog')
-          .then((r) => r.json())
-          .then((cat) => {
-            if (cat.agent?.baseUrl) {
-              setOperators([{
-                address: cat.agent.operatorAddress ?? cat.agent.operator,
-                name: cat.agent.operator,
-                agentUri: cat.agent.baseUrl,
-                status: cat.agent.status === 'active' ? 'online' : 'offline',
-                serviceCount: cat.services?.length,
-                fetchedAt: new Date().toISOString(),
-                metrics: {
-                  rating: 4.8,
-                  reviewCount: 127,
-                  uptimePercent: 99.9,
-                  avgLatencyMs: 234,
-                  monthlyCallCount: 847,
-                },
-              }]);
-            }
-          })
-          .catch(() => {});
-      })
-      .finally(() => setLoading(false));
+      } catch (err) {
+        console.error('Failed to load operators:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadOperators();
   }, []);
 
   const filtered = onlineOnly ? operators.filter((op) => op.status === 'online') : operators;
