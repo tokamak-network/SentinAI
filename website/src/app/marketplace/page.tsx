@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import type { OperatorSnapshot } from '@/lib/operator-aggregator';
 import {
   AgentMarketplaceCatalog,
   AgentMarketplaceServiceDefinition,
@@ -204,27 +206,51 @@ function ServiceCard({
 export default function MarketplacePage() {
   const [activeTab, setActiveTab] = useState<TabType>('registry');
   const [catalog, setCatalog] = useState<AgentMarketplaceCatalog | null>(null);
+  const [operators, setOperators] = useState<OperatorSnapshot[]>([]);
+  const [selectedOperatorAddress, setSelectedOperatorAddress] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [purchaseTarget, setPurchaseTarget] = useState<PurchaseTarget | null>(null);
 
   useEffect(() => {
-    const loadCatalog = async () => {
+    const loadData = async () => {
       try {
-        const response = await fetch('/api/agent-marketplace/catalog');
-        if (!response.ok) {
-          throw new Error(`Failed to fetch catalog: ${response.status}`);
+        // Load default catalog
+        const catalogResponse = await fetch('/api/agent-marketplace/catalog');
+        if (catalogResponse.ok) {
+          const data: AgentMarketplaceCatalog = await catalogResponse.json();
+          setCatalog(data);
+          setSelectedOperatorAddress(data.agent.operatorAddress ?? data.agent.operator);
         }
-        const data: AgentMarketplaceCatalog = await response.json();
-        setCatalog(data);
+
+        // Load all operators
+        try {
+          const operatorsResponse = await fetch('/api/agent-marketplace/discovery');
+          if (operatorsResponse.ok) {
+            const data: { operators?: OperatorSnapshot[] } = await operatorsResponse.json();
+            setOperators(data.operators ?? []);
+          }
+        } catch {
+          // Fallback if discovery fails
+          if (catalog?.agent) {
+            setOperators([{
+              address: catalog.agent.operatorAddress ?? catalog.agent.operator,
+              name: catalog.agent.operator,
+              agentUri: catalog.agent.baseUrl,
+              status: catalog.agent.status === 'active' ? 'online' : 'offline',
+              serviceCount: catalog.services?.length,
+              fetchedAt: new Date().toISOString(),
+            }]);
+          }
+        }
       } catch (error) {
-        console.error('Failed to load catalog:', error);
+        console.error('Failed to load data:', error);
         setCatalog(null);
       } finally {
         setLoading(false);
       }
     };
 
-    loadCatalog();
+    loadData();
   }, []);
 
   function handleBuy(service: AgentMarketplaceServiceDefinition) {
@@ -259,6 +285,71 @@ export default function MarketplacePage() {
         }}>
           Agent Marketplace
         </h1>
+
+        {/* Operator Selector (only if multiple operators available) */}
+        {operators.length > 0 && (
+          <div style={{
+            marginBottom: '24px',
+            padding: '12px 16px',
+            background: '#F7F7F7',
+            border: '1px solid #E0E0E0',
+          }}>
+            <div style={{
+              fontFamily: FONT,
+              fontSize: '9px',
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+              textTransform: 'uppercase',
+              color: '#707070',
+              marginBottom: '8px',
+            }}>
+              SELECT OPERATOR
+            </div>
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}>
+              {operators.map((op) => (
+                <button
+                  key={op.address}
+                  onClick={() => setSelectedOperatorAddress(op.address)}
+                  style={{
+                    fontFamily: FONT,
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    letterSpacing: '0.08em',
+                    padding: '6px 14px',
+                    background: selectedOperatorAddress === op.address ? '#D40000' : '#FFFFFF',
+                    color: selectedOperatorAddress === op.address ? 'white' : '#3A3A3A',
+                    border: `1px solid ${selectedOperatorAddress === op.address ? '#D40000' : '#D0D0D0'}`,
+                    cursor: 'pointer',
+                    borderRadius: '2px',
+                  }}
+                >
+                  {op.name ?? op.address.slice(0, 10)}...
+                </button>
+              ))}
+              <Link href="/marketplace/operators" style={{
+                fontFamily: FONT,
+                fontSize: '9px',
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                padding: '6px 14px',
+                background: '#FFFFFF',
+                color: '#007A00',
+                border: '1px solid #007A00',
+                cursor: 'pointer',
+                borderRadius: '2px',
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+              }}>
+                VIEW ALL OPERATORS →
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* Tab Navigation */}
         <div style={{
