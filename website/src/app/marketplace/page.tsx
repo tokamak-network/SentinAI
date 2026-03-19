@@ -215,32 +215,39 @@ export default function MarketplacePage() {
     const loadData = async () => {
       try {
         // Load default catalog
+        let loadedCatalog: AgentMarketplaceCatalog | null = null;
         const catalogResponse = await fetch('/api/agent-marketplace/catalog');
         if (catalogResponse.ok) {
-          const data: AgentMarketplaceCatalog = await catalogResponse.json();
-          setCatalog(data);
-          setSelectedOperatorAddress(data.agent.operatorAddress ?? data.agent.operator);
+          loadedCatalog = await catalogResponse.json() as AgentMarketplaceCatalog;
+          setCatalog(loadedCatalog);
+          if (loadedCatalog) {
+            const operatorAddr = loadedCatalog.agent.operatorAddress ?? loadedCatalog.agent.operator;
+            setSelectedOperatorAddress(operatorAddr);
+            
+            // Set default operator immediately from catalog
+            setOperators([{
+              address: operatorAddr,
+              name: loadedCatalog.agent.operator,
+              agentUri: loadedCatalog.agent.baseUrl,
+              status: loadedCatalog.agent.status === 'active' ? 'online' : 'offline',
+              serviceCount: loadedCatalog.services?.length,
+              fetchedAt: new Date().toISOString(),
+            }]);
+          }
         }
 
-        // Load all operators
+        // Try to load additional operators from discovery
         try {
           const operatorsResponse = await fetch('/api/agent-marketplace/discovery');
           if (operatorsResponse.ok) {
             const data: { operators?: OperatorSnapshot[] } = await operatorsResponse.json();
-            setOperators(data.operators ?? []);
+            if (data.operators && data.operators.length > 0) {
+              setOperators(data.operators);
+            }
           }
-        } catch {
-          // Fallback if discovery fails
-          if (catalog?.agent) {
-            setOperators([{
-              address: catalog.agent.operatorAddress ?? catalog.agent.operator,
-              name: catalog.agent.operator,
-              agentUri: catalog.agent.baseUrl,
-              status: catalog.agent.status === 'active' ? 'online' : 'offline',
-              serviceCount: catalog.services?.length,
-              fetchedAt: new Date().toISOString(),
-            }]);
-          }
+        } catch (discoveryError) {
+          console.warn('Discovery API unavailable, using catalog fallback:', discoveryError);
+          // Already set default operator above, so fallback is implicit
         }
       } catch (error) {
         console.error('Failed to load data:', error);
