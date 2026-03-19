@@ -186,9 +186,28 @@ function OperatorCard({ op }: { op: OperatorSnapshot }) {
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
+const MOCK_OPERATOR: OperatorSnapshot = {
+  address: '0xd7d57ba9f40629d48c4009a87654cdda8a5433e9',
+  name: 'sentinai-operator',
+  agentUri: 'https://sentinai.tokamak.network/thanos-sepolia',
+  status: 'online',
+  serviceCount: 7,
+  cpuMean: 45,
+  memoryGiB: 8,
+  activeAnomalies: 0,
+  fetchedAt: new Date().toISOString(),
+  metrics: {
+    rating: 4.8,
+    reviewCount: 127,
+    uptimePercent: 99.9,
+    avgLatencyMs: 234,
+    monthlyCallCount: 847,
+  },
+};
+
 export default function OperatorsPage() {
-  const [operators, setOperators] = useState<OperatorSnapshot[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [operators, setOperators] = useState<OperatorSnapshot[]>([MOCK_OPERATOR]);
+  const [loading, setLoading] = useState(false);
   const [onlineOnly, setOnlineOnly] = useState(false);
   const isMobile = useIsMobile();
 
