@@ -463,4 +463,4 @@ curl -X PUT "http://localhost:3002/api/anomalies/config" \
 
 - [Anomaly Detection Proposal](../done/proposal-2-anomaly-detection.md)
 - [RCA Engine Guide](../done/proposal-3-rca-engine.md)
-- [Alert Configuration API](../../src/app/api/anomalies/config/route.ts)
+- [Alert Configuration API](https://github.com/tokamak-network/SentinAI/tree/main/src/app/api/anomalies/config/route.ts)

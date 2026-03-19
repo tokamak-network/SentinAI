@@ -179,9 +179,9 @@ For the complete technical whitepaper with detailed architecture, evaluation met
 
 - **Documentation**: [https://sentinai-xi.vercel.app/docs](https://sentinai-xi.vercel.app/docs)
 - **GitHub Repository**: [https://github.com/tokamak-network/SentinAI](https://github.com/tokamak-network/SentinAI)
-- **Quick Start Guide**: [5-minute setup guide](/docs/guide/quickstart)
-- **Architecture Deep Dive**: [System design documentation](/docs/guide/architecture)
-- **API Reference**: [Complete API documentation](/docs/guide/api-reference)
+- **Quick Start Guide**: [5-minute setup guide](/guide/quickstart)
+- **Architecture Deep Dive**: [System design documentation](/guide/architecture)
+- **API Reference**: [Complete API documentation](/guide/api-reference)
 
 ### Community & Support
 

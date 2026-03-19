@@ -26,7 +26,7 @@ Set `CHAIN_TYPE` in your `.env.local` to select the active plugin.
 ### Intelligent Scaling
 - **Hybrid Auto-Scaling**: Scoring engine (0–100) using CPU, Gas, TxPool, and AI insights
 - **Predictive Scaling**: AI-powered time-series analysis predicts vCPU/MEM needs 5 minutes ahead
-- **Adaptive Tiers**: Idle (<30) → 1 vCPU | Normal (30–70) → 2 vCPU | High (70–77) → 4 vCPU | Emergency (≥77) → 8 vCPU
+- **Adaptive Tiers**: Idle (< 30) → 1 vCPU | Normal (30–70) → 2 vCPU | High (70–77) → 4 vCPU | Emergency (≥77) → 8 vCPU
 - **Zero-Downtime Pod Swap**: State-machine-based traffic switchover with block sync and TX drain safety gates
 
 ### AI-Powered Analysis

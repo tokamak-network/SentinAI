@@ -509,4 +509,4 @@ Stop SentinAI: press `Ctrl+C` in the terminal.
 - [Arbitrum Nitro Architecture](https://docs.arbitrum.io/how-arbitrum-works/inside-arbitrum-nitro)
 - [Run an Orbit Node](https://docs.arbitrum.io/run-arbitrum-node/run-full-node)
 - [Run a Batch Poster](https://docs.arbitrum.io/launch-arbitrum-chain/arbitrum-node-runners/run-batch-poster)
-- [examples/arbitrum-orbit/create-rollup-eth/](../../examples/arbitrum-orbit/create-rollup-eth/) — rollup deployment example in this repository
+- [examples/arbitrum-orbit/create-rollup-eth/](https://github.com/tokamak-network/SentinAI/tree/main/examples/arbitrum-orbit/create-rollup-eth/) — rollup deployment example in this repository

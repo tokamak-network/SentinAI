@@ -24,35 +24,35 @@ const docStructure: DocSection[] = [
   {
     title: 'Get Started',
     items: [
-      { title: 'Overview', href: '/docs/guide/overview', emoji: '📖' },
-      { title: 'Quick Start', href: '/docs/guide/quickstart', emoji: '⚡' },
-      { title: 'Demo Scenarios', href: '/docs/guide/demo-scenarios' },
-      { title: 'Troubleshooting', href: '/docs/guide/troubleshooting', emoji: '🔧' },
+      { title: 'Overview', href: '/guide/overview', emoji: '📖' },
+      { title: 'Quick Start', href: '/guide/quickstart', emoji: '⚡' },
+      { title: 'Demo Scenarios', href: '/guide/demo-scenarios' },
+      { title: 'Troubleshooting', href: '/guide/troubleshooting', emoji: '🔧' },
     ],
   },
   {
     title: 'Deploy',
     items: [
-      { title: 'Setup Guide', href: '/docs/guide/setup' },
-      { title: 'EC2 Deployment', href: '/docs/guide/ec2-setup-guide' },
-      { title: 'OP Stack Runbook', href: '/docs/guide/opstack-example-runbook' },
+      { title: 'Setup Guide', href: '/guide/setup' },
+      { title: 'EC2 Deployment', href: '/guide/ec2-setup-guide' },
+      { title: 'OP Stack Runbook', href: '/guide/opstack-example-runbook' },
     ],
   },
   {
     title: 'Operations',
     items: [
-      { title: 'Daily Operations', href: '/docs/guide/agentic-q1-operations-runbook' },
-      { title: 'Autonomy Cockpit', href: '/docs/guide/autonomy-cockpit-user-guide' },
-      { title: 'MCP User Guide', href: '/docs/guide/sentinai-mcp-user-guide' },
+      { title: 'Daily Operations', href: '/guide/agentic-q1-operations-runbook' },
+      { title: 'Autonomy Cockpit', href: '/guide/autonomy-cockpit-user-guide' },
+      { title: 'MCP User Guide', href: '/guide/sentinai-mcp-user-guide' },
     ],
   },
   {
     title: 'Reference',
     items: [
-      { title: 'Architecture', href: '/docs/guide/architecture', emoji: '🏗️' },
-      { title: 'API Reference', href: '/docs/guide/api-reference', emoji: '📡' },
-      { title: 'Anomaly Detection', href: '/docs/spec/anomaly-detection-guide' },
-      { title: 'RCA Engine', href: '/docs/spec/rca-engine-guide' },
+      { title: 'Architecture', href: '/guide/architecture', emoji: '🏗️' },
+      { title: 'API Reference', href: '/guide/api-reference', emoji: '📡' },
+      { title: 'Anomaly Detection', href: '/spec/anomaly-detection-guide' },
+      { title: 'RCA Engine', href: '/spec/rca-engine-guide' },
     ],
   },
 ];
@@ -182,10 +182,10 @@ const CARDS = [
     title: 'Get Started',
     description: 'Install, connect, and run your first simulation.',
     links: [
-      { label: 'Overview', href: '/docs/guide/overview' },
-      { label: 'Quick Start (5 min)', href: '/docs/guide/quickstart' },
-      { label: 'Demo Scenarios', href: '/docs/guide/demo-scenarios' },
-      { label: 'Troubleshooting', href: '/docs/guide/troubleshooting' },
+      { label: 'Overview', href: '/guide/overview' },
+      { label: 'Quick Start (5 min)', href: '/guide/quickstart' },
+      { label: 'Demo Scenarios', href: '/guide/demo-scenarios' },
+      { label: 'Troubleshooting', href: '/guide/troubleshooting' },
     ],
   },
   {
@@ -193,10 +193,10 @@ const CARDS = [
     title: 'Deploy',
     description: 'Run SentinAI on Docker, EC2, or alongside your OP Stack node.',
     links: [
-      { label: 'Local Setup (Docker)', href: '/docs/guide/setup' },
-      { label: 'EC2 Deployment', href: '/docs/guide/ec2-setup-guide' },
-      { label: 'OP Stack Runbook', href: '/docs/guide/opstack-example-runbook' },
-      { label: 'Environment Variables', href: '/docs/guide/setup' },
+      { label: 'Local Setup (Docker)', href: '/guide/setup' },
+      { label: 'EC2 Deployment', href: '/guide/ec2-setup-guide' },
+      { label: 'OP Stack Runbook', href: '/guide/opstack-example-runbook' },
+      { label: 'Environment Variables', href: '/guide/setup' },
     ],
   },
   {
@@ -204,10 +204,10 @@ const CARDS = [
     title: 'Integrate & Extend',
     description: 'Connect via API or MCP, understand the architecture, add custom chains.',
     links: [
-      { label: 'Architecture', href: '/docs/guide/architecture' },
-      { label: 'API Reference', href: '/docs/guide/api-reference' },
-      { label: 'MCP Setup', href: '/docs/guide/sentinai-mcp-user-guide' },
-      { label: 'Anomaly Detection', href: '/docs/spec/anomaly-detection-guide' },
+      { label: 'Architecture', href: '/guide/architecture' },
+      { label: 'API Reference', href: '/guide/api-reference' },
+      { label: 'MCP Setup', href: '/guide/sentinai-mcp-user-guide' },
+      { label: 'Anomaly Detection', href: '/spec/anomaly-detection-guide' },
     ],
   },
   {
@@ -243,13 +243,13 @@ export default function DocsLandingPage() {
             </p>
             <div className="flex gap-3 flex-wrap">
               <Link
-                href="/docs/guide/quickstart"
+                href="/guide/quickstart"
                 className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
               >
                 ⚡ Quick Start
               </Link>
               <Link
-                href="/docs/guide/architecture"
+                href="/guide/architecture"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 🏗️ Architecture

@@ -5,7 +5,7 @@
 > 대상 컨트랙트: `SentinAIERC8004Registry`
 > 체인: Sepolia (`11155111`)
 > 주소: `0x64c8f8cB66657349190c7AF783f8E0254dCF1467`
-> Etherscan: <https://sepolia.etherscan.io/address/0x64c8f8cb66657349190c7af783f8e0254dcf1467>
+> Etherscan: [Etherscan](https://sepolia.etherscan.io/address/0x64c8f8cb66657349190c7af783f8e0254dcf1467)
 
 ---
 

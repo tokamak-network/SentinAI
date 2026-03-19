@@ -12,7 +12,7 @@
 | # | Subsystem | Algorithm | Key Parameters |
 |---|-----------|-----------|----------------|
 | 1 | Scaling Engine | Hybrid Scoring (weighted average) | CPU 30% + Gas 30% + TxPool 20% + AI 20% |
-| 2 | | 4-Tier vCPU Mapping | Idle(<30)→1, Normal(30-70)→2, High(70-77)→4, Emergency(≥77)→8 |
+| 2 | | 4-Tier vCPU Mapping | Idle(\< 30)→1, Normal(30-70)→2, High(70-77)→4, Emergency(≥77)→8 |
 | 3 | | Predictive Override | AI prediction confidence ≥ 0.65 + scale_up only |
 | 4 | | Zero-Downtime Pod Swap | 7-phase state machine (idle→completed), rollback included |
 | 5 | | Cooldown Enforcement | 5min(prod)/10s(dev), time-based |
@@ -259,7 +259,7 @@ Final Score = (CPU × 0.3) + (Gas × 0.3) + (TxPool × 0.2) + (AI × 0.2)
 
 | Tier | Score 범위 | vCPU | Memory | 프로덕션 노트 |
 |------|------------|------|--------|-----------------|
-| IDLE | < 30 | 1 | 2 GiB | 저트래픽 체인(야간, 주말) |
+| IDLE | \< 30 | 1 | 2 GiB | 저트래픽 체인(야간, 주말) |
 | NORMAL | 30–69 | 2 | 4 GiB | 정상 상태 운영 |
 | HIGH | 70–76 | 4 | 8 GiB | **경고: 7pt 범위만** |
 | EMERGENCY | ≥ 77 | 8 | 16 GiB | 스트레스 상황 |

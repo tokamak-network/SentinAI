@@ -32,7 +32,7 @@ score = cpu * 0.3 + gas * 100 * 0.3 + min(txPool/200, 1) * 100 * 0.2 + aiScore *
 
 | Score range | Tier | vCPU | memory |
 |-----------|------|------|--------|
-| < 30 | Idle | 1 | 2 GiB |
+| \< 30 | Idle | 1 | 2 GiB |
 | 30 ~ 70 | Normal | 2 | 4 GiB |
 | 70 ~ 77 | High | 4 | 8 GiB |
 | >= 77 | Critical | 8 | 16 GiB |
@@ -262,7 +262,7 @@ npx vitest run src/lib/__tests__/scaling-decision.test.ts \
 | 90%+ | Excellent — Algorithm closely matches operator | Maintenance |
 | 70~90% | Good — Deviation under certain scenarios | Fine-tune the threshold after analyzing under/over patterns |
 | 50~70% | Poor — weights or thresholds need to be redesigned | Detailed analysis by scenario |
-| <50% | Serious — structural problems with the formula itself | Weight ratio, metric composition revisited |
+| \< 50% | Serious — structural problems with the formula itself | Weight ratio, metric composition revisited |
 
 ---
 

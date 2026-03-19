@@ -31,5 +31,5 @@ Architecture deep-dives, API reference, and subsystem specs.
 
 - [Architecture](architecture.md) — System design and data flow
 - [API Reference](api-reference.md) — REST API endpoints
-- [Anomaly Detection](/docs/spec/anomaly-detection-guide) — Detection pipeline spec
-- [RCA Engine](/docs/spec/rca-engine-guide) — Root cause analysis spec
+- [Anomaly Detection](/spec/anomaly-detection-guide) — Detection pipeline spec
+- [RCA Engine](/spec/rca-engine-guide) — Root cause analysis spec

@@ -33,7 +33,7 @@
 
 ## 3) Integrate & Extend
 - [🏗️ Architecture Guide](guide/architecture.md)
-- [Codebase directory structure](../ARCHITECTURE.md)
+- [Codebase directory structure](/guide/architecture)
 - [Arbitrum Orbit example (ETH gas token rollup)](../examples/arbitrum-orbit/create-rollup-eth/README.md)
 - [📡 API Reference](guide/api-reference.md)
 - [SentinAI MCP user guide](guide/sentinai-mcp-user-guide.md)
