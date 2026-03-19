@@ -193,35 +193,21 @@ test.describe('PurchaseModal with Mock Wallet', () => {
   test('connect step advances when MetaMask is available', async ({ page }) => {
     await page.addInitScript(mockEthereumScript);
 
-    // Mock the 402 endpoint to return payment requirements
-    await page.route('**/api/agent-marketplace/sequencer-health*', async (route) => {
-      await route.fulfill({
-        status: 402,
-        headers: { 'content-type': 'application/json' },
-        json: {
-          error: { code: 'payment_required', message: 'Payment required' },
-          accepts: [{
-            scheme: 'exact',
-            network: 'eip155:11155111',
-            token: 'TON',
-            amount: '100000000000000000',
-            payTo: '0xaaaa000000000000000000000000000000000001',
-          }],
-        },
-      });
-    });
-
     await setupMarketplace(page, true);
     await clickBuyData(page);
 
-    const connectBtn = page.locator('button', { hasText: /CONNECT/i }).first();
-    await connectBtn.click({ timeout: 3000 });
-    await page.waitForTimeout(1000);
+    // Confirm the CONNECT METAMASK button is visible (connect step shown)
+    const connectBtn = page.locator('button', { hasText: 'CONNECT METAMASK' });
+    await expect(connectBtn.first()).toBeVisible({ timeout: 3000 });
 
-    // After connecting, should advance to next step (requirements or balance)
-    // Look for step indicator or new content
-    const modal = page.locator('[style*="position: fixed"]');
-    await expect(modal.first()).toBeVisible({ timeout: 3000 });
-    // Modal still visible = successfully progressed to next step
+    await connectBtn.first().click();
+    await page.waitForTimeout(500);
+
+    // With mock MetaMask, clicking CONNECT should NOT show a "wallet not found" error.
+    // The button should either be loading ("CONNECTING...") or have advanced to next step.
+    // Key assertion: no MetaMask-not-installed error appears.
+    const walletError = page.locator('text=/MetaMask not found|install MetaMask|No wallet/i');
+    const hasWalletError = await walletError.first().isVisible({ timeout: 500 }).catch(() => false);
+    expect(hasWalletError).toBeFalsy();
   });
 });

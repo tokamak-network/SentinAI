@@ -68,9 +68,9 @@ test.describe('Operators List Page', () => {
   });
 
   test('shows stats bar with operator counts', async ({ page }) => {
-    // At least one stat cell should be visible
-    const statValues = page.locator('[style*="font-size: 20px"]');
-    await expect(statValues.first()).toBeVisible();
+    // At least one stat label should be visible (font-size style format varies by React version)
+    const statLabel = page.locator('text=Total Operators');
+    await expect(statLabel).toBeVisible();
   });
 
   test('renders at least one operator card', async ({ page }) => {
