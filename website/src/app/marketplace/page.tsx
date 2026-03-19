@@ -294,7 +294,7 @@ export default function MarketplacePage() {
         </h1>
 
         {/* Operator Selector - always visible */}
-        {catalog && (
+        {!loading && (
           <div style={{
             marginBottom: '24px',
             padding: '12px 16px',
