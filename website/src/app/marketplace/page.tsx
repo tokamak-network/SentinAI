@@ -293,8 +293,8 @@ export default function MarketplacePage() {
           Agent Marketplace
         </h1>
 
-        {/* Operator Selector (only if multiple operators available) */}
-        {operators.length > 0 && (
+        {/* Operator Selector - always visible */}
+        {catalog && (
           <div style={{
             marginBottom: '24px',
             padding: '12px 16px',
