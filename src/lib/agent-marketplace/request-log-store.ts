@@ -1,5 +1,6 @@
 import Redis from 'ioredis';
 import type { AgentMarketplaceServiceKey } from '@/types/agent-marketplace';
+import { operatorKey } from '@/lib/agent-marketplace/operator-key';
 
 export type AgentMarketplaceVerificationResult =
   | 'verified'
@@ -13,9 +14,14 @@ export interface AgentMarketplaceRequestLogRecord {
   latencyMs: number;
   verificationResult: AgentMarketplaceVerificationResult;
   success: boolean;
+  operatorAddress?: string;
 }
 
-const REQUEST_LOGS_KEY = 'sentinai:agent-marketplace:request-logs';
+const BASE_REQUEST_LOGS_KEY = 'sentinai:agent-marketplace:request-logs';
+
+function getRequestLogsKey(operatorAddress?: string): string {
+  return `${BASE_REQUEST_LOGS_KEY}${operatorKey(operatorAddress)}`;
+}
 
 const globalForAgentMarketplaceRequestLog = globalThis as unknown as {
   __sentinai_agent_marketplace_request_log_redis?: Redis;
@@ -45,13 +51,13 @@ function getRedisClient(): Redis | null {
   return client;
 }
 
-async function listRequestLogs(): Promise<AgentMarketplaceRequestLogRecord[]> {
+async function listRequestLogs(operatorAddress?: string): Promise<AgentMarketplaceRequestLogRecord[]> {
   const client = getRedisClient();
   if (!client) {
     return [];
   }
 
-  const records = await client.lrange(REQUEST_LOGS_KEY, 0, -1);
+  const records = await client.lrange(getRequestLogsKey(operatorAddress), 0, -1);
   return records.map((record) => JSON.parse(record) as AgentMarketplaceRequestLogRecord);
 }
 
@@ -63,20 +69,23 @@ export async function recordAgentMarketplaceRequest(
     return;
   }
 
-  await client.rpush(REQUEST_LOGS_KEY, JSON.stringify(record));
+  await client.rpush(getRequestLogsKey(record.operatorAddress), JSON.stringify(record));
 }
 
-export async function getAgentMarketplaceRequestLogs(): Promise<AgentMarketplaceRequestLogRecord[]> {
-  return listRequestLogs();
+export async function getAgentMarketplaceRequestLogs(
+  operatorAddress?: string
+): Promise<AgentMarketplaceRequestLogRecord[]> {
+  return listRequestLogs(operatorAddress);
 }
 
 export async function getAgentMarketplaceRequestLogsByWindow(input: {
   fromIso: string;
   toIso: string;
+  operatorAddress?: string;
 }): Promise<AgentMarketplaceRequestLogRecord[]> {
   const from = new Date(input.fromIso).getTime();
   const to = new Date(input.toIso).getTime();
-  const logs = await listRequestLogs();
+  const logs = await listRequestLogs(input.operatorAddress);
 
   return logs.filter((record) => {
     const timestamp = new Date(record.timestamp).getTime();
@@ -84,13 +93,13 @@ export async function getAgentMarketplaceRequestLogsByWindow(input: {
   });
 }
 
-export async function clearAgentMarketplaceRequestLogs(): Promise<void> {
+export async function clearAgentMarketplaceRequestLogs(operatorAddress?: string): Promise<void> {
   try {
     const client = getRedisClient();
     if (!client) {
       return;
     }
-    await client.del(REQUEST_LOGS_KEY);
+    await client.del(getRequestLogsKey(operatorAddress));
   } catch {
     // Ignore cleanup failures in test-only callers.
   }

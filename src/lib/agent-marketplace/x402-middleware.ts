@@ -53,7 +53,8 @@ function buildRateLimitResponse(service: AgentMarketplaceServiceDefinition, retr
 export async function withX402(
   request: Request,
   service: AgentMarketplaceServiceDefinition,
-  handler: (context: AuthorizedPaymentContext) => Promise<Response>
+  handler: (context: AuthorizedPaymentContext) => Promise<Response>,
+  operatorAddress?: string
 ): Promise<Response> {
   const startedAt = Date.now();
   const paymentHeader = request.headers.get('x-payment');
@@ -70,6 +71,7 @@ export async function withX402(
       latencyMs: Date.now() - startedAt,
       verificationResult: 'rejected',
       success: false,
+      operatorAddress,
     });
     return buildPaymentErrorResponse(parsed.error.code, parsed.error.message, service);
   }
@@ -87,6 +89,7 @@ export async function withX402(
       latencyMs: Date.now() - startedAt,
       verificationResult: 'rejected',
       success: false,
+      operatorAddress,
     });
     return buildPaymentErrorResponse(
       verification.error.code,
@@ -107,6 +110,7 @@ export async function withX402(
       latencyMs: Date.now() - startedAt,
       verificationResult: 'rate_limited',
       success: false,
+      operatorAddress,
     });
     return buildRateLimitResponse(service, rateLimitResult.retryAfterMs);
   }
@@ -124,6 +128,7 @@ export async function withX402(
     latencyMs: Date.now() - startedAt,
     verificationResult: 'verified',
     success: response.ok,
+    operatorAddress,
   });
   return response;
 }

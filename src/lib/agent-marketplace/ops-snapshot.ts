@@ -52,6 +52,7 @@ export interface OpsSnapshot {
   metrics: OpsMetricsSummary;
   scaling: OpsScalingSummary;
   anomalies: OpsAnomalySummary;
+  operatorAddress?: string;
 }
 
 /* ------------------------------------------------------------------ */
@@ -109,7 +110,7 @@ function buildChainInfo(): OpsChainInfo {
   };
 }
 
-export async function buildOpsSnapshot(): Promise<OpsSnapshot> {
+export async function buildOpsSnapshot(operatorAddress?: string): Promise<OpsSnapshot> {
   const [recentMetrics, stats, scalingState, anomalyResult] = await Promise.all([
     getRecentMetrics(60),
     getMetricsStats(),
@@ -132,6 +133,7 @@ export async function buildOpsSnapshot(): Promise<OpsSnapshot> {
       activeCount: anomalyResult.activeCount,
       totalRecent: anomalyResult.total,
     },
+    ...(operatorAddress ? { operatorAddress } : {}),
   };
 }
 
