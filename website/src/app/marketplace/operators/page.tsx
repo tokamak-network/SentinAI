@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { OperatorSnapshot } from '@/lib/operator-aggregator';
+import { getAllOperators } from '@/lib/agent-marketplace';
 import { useIsMobile } from '@/lib/useMediaQuery';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
@@ -218,7 +219,7 @@ export default function OperatorsPage() {
         const data = await res.json();
         let ops = (data.operators ?? []) as OperatorSnapshot[];
         
-        // If no operators from discovery, get from catalog
+        // If no operators from discovery, get from mock catalog
         if (!ops || ops.length === 0) {
           try {
             const catRes = await fetch('/api/agent-marketplace/catalog');
