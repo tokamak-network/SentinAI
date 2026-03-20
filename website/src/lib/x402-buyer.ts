@@ -197,15 +197,18 @@ export async function signPaymentAuthorization(params: {
   const now = Math.floor(Date.now() / 1000);
   const nonce = randomNonce();
 
+  // Convert string amounts to BigInt for EIP-712 types
+  const amountBigInt = BigInt(paymentRequirements.amount);
+  
   const authorization = {
     buyer: account,
     merchant: paymentRequirements.merchant,
     asset: paymentRequirements.asset,
-    amount: paymentRequirements.amount,
+    amount: amountBigInt.toString(), // Ensure it's a decimal string, not hex
     resource: paymentRequirements.resource,
-    nonce,
-    validAfter: String(now - 30),
-    validBefore: String(now + 300),
+    nonce: nonce.replace(/^0x/, ''), // Remove 0x prefix for BigInt compatibility
+    validAfter: (now - 30).toString(),
+    validBefore: (now + 300).toString(),
   };
 
   const typedData = {
