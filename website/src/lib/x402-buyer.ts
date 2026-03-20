@@ -134,9 +134,19 @@ export async function getTokenInfo(params: {
     params: [{ to: tokenAddress, data: allowanceData }, 'latest'],
   })) as string;
 
+  // Safe BigInt conversion: ensure valid hex format
+  const safeHexToBigInt = (hex: string): bigint => {
+    if (!hex || hex === '0x' || hex === '') return BigInt(0);
+    try {
+      return BigInt(hex);
+    } catch {
+      return BigInt(0);
+    }
+  };
+
   return {
-    balance: BigInt(balanceHex || '0x0'),
-    allowance: BigInt(allowanceHex || '0x0'),
+    balance: safeHexToBigInt(balanceHex),
+    allowance: safeHexToBigInt(allowanceHex),
   };
 }
 
