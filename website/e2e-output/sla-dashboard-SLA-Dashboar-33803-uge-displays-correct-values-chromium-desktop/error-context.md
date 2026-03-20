@@ -1,0 +1,85 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - link "SENTINAI" [ref=e3] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e4]: SENTINAI
+    - navigation [ref=e5]:
+      - link "DOCS" [ref=e6] [cursor=pointer]:
+        - /url: /docs
+      - link "MARKETPLACE" [ref=e7] [cursor=pointer]:
+        - /url: /marketplace
+      - link "GITHUB" [ref=e8] [cursor=pointer]:
+        - /url: https://github.com/tokamak-network/SentinAI
+        - img [ref=e9]
+        - text: GITHUB
+    - link "CONNECT NODE →" [ref=e12] [cursor=pointer]:
+      - /url: /connect
+  - generic [ref=e13]:
+    - link "← BACK TO OPERATORS" [ref=e15] [cursor=pointer]:
+      - /url: /marketplace/operators
+    - generic [ref=e16]: Operator Detail
+    - generic [ref=e17]:
+      - generic [ref=e18]: "0xd7d57ba9f40629d48c4009a87654cdda8a5433e9"
+      - generic [ref=e19]: SENTINAI-OPERATOR
+    - generic [ref=e20]:
+      - generic [ref=e21]: System Health
+      - generic [ref=e22]:
+        - generic [ref=e23]:
+          - generic [ref=e24]: 0.0%
+          - generic [ref=e25]: CPU Usage
+        - generic [ref=e26]:
+          - generic [ref=e27]: 2 GiB
+          - generic [ref=e28]: Memory
+        - generic [ref=e29]:
+          - generic [ref=e30]: "0"
+          - generic [ref=e31]: Anomalies
+      - generic [ref=e32]: "Chain: Thanos L2 Rollup"
+    - generic [ref=e33]:
+      - generic [ref=e34]: Service Catalog
+      - generic [ref=e35]:
+        - generic [ref=e36]:
+          - generic [ref=e37]: SEQUENCER HEALTH
+          - generic [ref=e38]: Decision-ready execution health snapshot for agent gating
+          - generic [ref=e39]: 0.10 TON / CALL
+        - button "BUY DATA" [ref=e40] [cursor=pointer]
+      - generic [ref=e41]:
+        - generic [ref=e42]:
+          - generic [ref=e43]: INCIDENT SUMMARY
+          - generic [ref=e44]: Current incident state and recent reliability summary
+          - generic [ref=e45]: 0.15 TON / CALL
+        - button "BUY DATA" [ref=e46] [cursor=pointer]
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - generic [ref=e49]: BATCH SUBMISSION STATUS
+          - generic [ref=e50]: Recent batch posting health, lag, and settlement risk
+          - generic [ref=e51]: 0.15 TON / CALL
+        - button "BUY DATA" [ref=e52] [cursor=pointer]
+      - generic [ref=e53]:
+        - generic [ref=e54]:
+          - generic [ref=e55]: DERIVATION LAG
+          - generic [ref=e56]: L2-to-L1 derivation pipeline health with block-level lag tracking
+          - generic [ref=e57]: 0.10 TON / CALL
+        - button "BUY DATA" [ref=e58] [cursor=pointer]
+      - generic [ref=e59]:
+        - generic [ref=e60]:
+          - generic [ref=e61]: ANOMALY FEED
+          - generic [ref=e62]: Real-time anomaly detection events with severity and status tracking
+          - generic [ref=e63]: 0.10 TON / CALL
+        - button "BUY DATA" [ref=e64] [cursor=pointer]
+      - generic [ref=e65]:
+        - generic [ref=e66]:
+          - generic [ref=e67]: HEALTH DIAGNOSTICS
+          - generic [ref=e68]: Comprehensive system health check across metrics, anomalies, L1 RPC, and components
+          - generic [ref=e69]: 0.15 TON / CALL
+        - button "BUY DATA" [ref=e70] [cursor=pointer]
+      - generic [ref=e71]:
+        - generic [ref=e72]:
+          - generic [ref=e73]: RCA REPORT
+          - generic [ref=e74]: Root cause analysis history with causal chains and remediation recommendations
+          - generic [ref=e75]: 0.25 TON / CALL
+        - button "BUY DATA" [ref=e76] [cursor=pointer]
+  - alert [ref=e77]
+```

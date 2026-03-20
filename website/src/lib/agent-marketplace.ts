@@ -12,12 +12,20 @@ export interface AgentMarketplacePaymentRequirement {
   amount: string; // wei string
 }
 
+export interface ServiceSLA {
+  availabilityPercent: number;
+  responseTimeMs: number;
+  supportLevel: 'Basic' | 'Standard' | '24/7 Premium';
+  refundPolicy: string;
+}
+
 export interface AgentMarketplaceServiceDefinition {
   key: string;
   state: 'active' | 'planned';
   displayName: string;
   description: string;
   payment: AgentMarketplacePaymentRequirement;
+  sla?: ServiceSLA;
 }
 
 export interface MarketplaceAgentMetadata {
@@ -58,6 +66,12 @@ const SERVICE_CATALOG_BASE = {
         token: 'TON',
         amount: '100000000000000000',
       },
+      sla: {
+        availabilityPercent: 99.9,
+        responseTimeMs: 150,
+        supportLevel: '24/7 Premium',
+        refundPolicy: '5% credit if SLA missed'
+      }
     },
     {
       key: 'incident_summary',
@@ -70,6 +84,12 @@ const SERVICE_CATALOG_BASE = {
         token: 'TON',
         amount: '150000000000000000',
       },
+      sla: {
+        availabilityPercent: 99.5,
+        responseTimeMs: 250,
+        supportLevel: 'Standard',
+        refundPolicy: '2% credit if SLA missed'
+      }
     },
     {
       key: 'batch_submission_status',
@@ -82,6 +102,12 @@ const SERVICE_CATALOG_BASE = {
         token: 'TON',
         amount: '150000000000000000',
       },
+      sla: {
+        availabilityPercent: 99.0,
+        responseTimeMs: 350,
+        supportLevel: 'Standard',
+        refundPolicy: '2% credit if SLA missed'
+      }
     },
     {
       key: 'derivation_lag',
@@ -94,6 +120,12 @@ const SERVICE_CATALOG_BASE = {
         token: 'TON',
         amount: '100000000000000000',
       },
+      sla: {
+        availabilityPercent: 99.9,
+        responseTimeMs: 200,
+        supportLevel: '24/7 Premium',
+        refundPolicy: '5% credit if SLA missed'
+      }
     },
     {
       key: 'anomaly_feed',
@@ -106,6 +138,12 @@ const SERVICE_CATALOG_BASE = {
         token: 'TON',
         amount: '100000000000000000',
       },
+      sla: {
+        availabilityPercent: 99.95,
+        responseTimeMs: 100,
+        supportLevel: '24/7 Premium',
+        refundPolicy: '10% credit if SLA missed'
+      }
     },
     {
       key: 'health_diagnostics',
@@ -118,6 +156,12 @@ const SERVICE_CATALOG_BASE = {
         token: 'TON',
         amount: '150000000000000000',
       },
+      sla: {
+        availabilityPercent: 98.5,
+        responseTimeMs: 500,
+        supportLevel: 'Basic',
+        refundPolicy: 'None'
+      }
     },
     {
       key: 'rca_report',
@@ -130,6 +174,12 @@ const SERVICE_CATALOG_BASE = {
         token: 'TON',
         amount: '250000000000000000',
       },
+      sla: {
+        availabilityPercent: 98.0,
+        responseTimeMs: 1000,
+        supportLevel: 'Basic',
+        refundPolicy: 'None'
+      }
     },
   ],
   updatedAt: '2026-03-12T00:00:00.000Z',

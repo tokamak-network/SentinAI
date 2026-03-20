@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import { formatTONPrice } from '@/lib/agent-marketplace';
 import PurchaseModal from '@/components/PurchaseModal';
+import { SLADashboard } from '@/components/SLADashboard';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
@@ -46,6 +47,7 @@ interface CatalogData {
     displayName: string;
     description: string;
     payment: { scheme: string; network: string; token: string; amount: string };
+    sla?: import('@/lib/agent-marketplace').ServiceSLA;
   }>;
 }
 
@@ -251,6 +253,8 @@ export default function OperatorDetailPage() {
                       <div style={{ fontFamily: FONT, fontSize: 9, color: '#007A00', fontWeight: 700, marginTop: 3 }}>
                         {formatTONPrice(service.payment.amount)} / CALL
                       </div>
+                      {/* SLA Dashboard rendered if available */}
+                      {service.sla && <SLADashboard sla={service.sla} />}
                     </div>
                     <button
                       disabled={!isActive}
