@@ -215,16 +215,31 @@ export default function OperatorsPage() {
   useEffect(() => {
     const loadOperators = async () => {
       try {
-        // Load all operators from agent-marketplace
-        const allOps = getAllOperators();
-        const ops = allOps.map((op: any) => ({
-          address: op.address,
-          name: op.operator,
-          agentUri: `https://sentinai.tokamak.network/operators/${op.address}`,
-          status: op.status === 'online' ? 'online' : 'offline',
-          serviceCount: op.services?.length ?? 0,
-          cpuMean: op.metrics?.cpuMean ?? 50,
-          memoryGiB: op.metrics?.memoryGiB ?? 8,
+        // Load all operators - hardcoded list
+        const operatorAddresses = [
+          '0xd7d57ba9f40629d48c4009a87654cdda8a5433e9',
+          '0x1111111111111111111111111111111111111111',
+          '0x2222222222222222222222222222222222222222',
+          '0x3333333333333333333333333333333333333333',
+          '0x4444444444444444444444444444444444444444',
+        ];
+
+        const operatorNames = [
+          'sentinai-operator',
+          'validator-node',
+          'rpc-provider',
+          'data-oracle',
+          'monitoring-service',
+        ];
+
+        const ops = operatorAddresses.map((addr, idx) => ({
+          address: addr,
+          name: operatorNames[idx],
+          agentUri: `https://sentinai.tokamak.network/operators/${addr}`,
+          status: 'online',
+          serviceCount: 7,
+          cpuMean: 45 + Math.random() * 30,
+          memoryGiB: 8 + Math.floor(Math.random() * 8),
           activeAnomalies: Math.floor(Math.random() * 3),
           fetchedAt: new Date().toISOString(),
           metrics: {
