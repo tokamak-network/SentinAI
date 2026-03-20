@@ -28,6 +28,19 @@ export interface AgentMarketplaceServiceDefinition {
   sla?: ServiceSLA;
 }
 
+
+export interface DailyMetric {
+  date: string;
+  responseTimeMs: number;
+  uptimePercent: number;
+  requestCount: number;
+}
+
+export interface PerformanceHistory {
+  metrics: DailyMetric[];
+  lastUpdated: string;
+}
+
 export interface MarketplaceAgentMetadata {
   id: string;
   status: 'active' | 'inactive';
@@ -44,6 +57,21 @@ export interface AgentMarketplaceCatalog {
   acceptableUsePolicyVersion: string;
 }
 
+export const generateMockPerformance = (days: number = 30): DailyMetric[] => {
+  const metrics: DailyMetric[] = [];
+  for (let i = 0; i < days; i++) {
+    const date = new Date();
+    date.setDate(date.getDate() - (days - i));
+    metrics.push({
+      date: date.toISOString().split('T')[0],
+      responseTimeMs: 150 + Math.random() * 200,
+      uptimePercent: 98.5 + Math.random() * 1.4,
+      requestCount: Math.floor(800 + Math.random() * 1200),
+    });
+  }
+  return metrics;
+};
+
 // ─── Static Catalog (mirrors src/lib/agent-marketplace/catalog.ts) ─────────────
 
 // baseUrl is injected dynamically by getServiceCatalog() — not hardcoded here
@@ -53,6 +81,10 @@ const SERVICE_CATALOG_BASE = {
     status: 'active' as const,
     version: '2026-03-12',
     operator: 'sentinai-operator',
+    performanceHistory: {
+      metrics: generateMockPerformance(30),
+      lastUpdated: new Date().toISOString(),
+    },
   },
   services: [
     {
@@ -185,6 +217,8 @@ const SERVICE_CATALOG_BASE = {
   updatedAt: '2026-03-12T00:00:00.000Z',
   acceptableUsePolicyVersion: '2026-03-11',
 };
+
+
 
 // ─── Helper Functions ─────────────────────────────────────────────────────────
 
