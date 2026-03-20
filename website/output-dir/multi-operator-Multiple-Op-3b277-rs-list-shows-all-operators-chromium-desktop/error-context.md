@@ -1,0 +1,74 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - banner [ref=e2]:
+    - link "SENTINAI" [ref=e3] [cursor=pointer]:
+      - /url: /
+      - generic [ref=e4]: SENTINAI
+    - navigation [ref=e5]:
+      - link "DOCS" [ref=e6] [cursor=pointer]:
+        - /url: /docs
+      - link "MARKETPLACE" [ref=e7] [cursor=pointer]:
+        - /url: /marketplace
+      - link "GITHUB" [ref=e8] [cursor=pointer]:
+        - /url: https://github.com/tokamak-network/SentinAI
+        - img [ref=e9]
+        - text: GITHUB
+    - link "CONNECT NODE →" [ref=e12] [cursor=pointer]:
+      - /url: /connect
+  - generic [ref=e13]:
+    - generic [ref=e15]: Network Operators
+    - generic [ref=e16]:
+      - generic [ref=e17]:
+        - generic [ref=e18]: "1"
+        - generic [ref=e19]: Total Operators
+      - generic [ref=e20]:
+        - generic [ref=e21]: "1"
+        - generic [ref=e22]: Online
+      - generic [ref=e23]:
+        - generic [ref=e24]: "0"
+        - generic [ref=e25]: Degraded
+      - generic [ref=e26]:
+        - generic [ref=e27]: "0"
+        - generic [ref=e28]: Offline
+    - generic [ref=e29]:
+      - generic [ref=e30] [cursor=pointer]:
+        - checkbox "ONLINE ONLY" [ref=e31]
+        - text: ONLINE ONLY
+      - generic [ref=e32]: 1 operator shown
+    - generic [ref=e34]:
+      - generic [ref=e35]:
+        - generic [ref=e36]:
+          - generic [ref=e37]: SENTINAI-OPERATOR
+          - generic [ref=e38]: "0xd7d57ba9f40629d48c4009a87654cdda8a5433e9"
+        - generic [ref=e39]: online
+      - generic [ref=e40]:
+        - generic [ref=e41]:
+          - generic [ref=e42]: 45.0%
+          - generic [ref=e43]: CPU
+        - generic [ref=e44]:
+          - generic [ref=e45]: 8 GiB
+          - generic [ref=e46]: MEMORY
+        - generic [ref=e47]:
+          - generic [ref=e48]: "0"
+          - generic [ref=e49]: ANOMALIES
+      - generic [ref=e50]:
+        - generic [ref=e51]:
+          - generic [ref=e52]: ⭐ 4.8/5.0
+          - generic [ref=e53]: (127 reviews)
+        - generic [ref=e54]:
+          - generic [ref=e55]: 99.9%
+          - generic [ref=e56]: Uptime (30d)
+        - generic [ref=e57]:
+          - generic [ref=e58]: 234ms
+          - generic [ref=e59]: Avg Latency
+        - generic [ref=e60]:
+          - generic [ref=e61]: "847"
+          - generic [ref=e62]: Monthly Calls
+      - generic [ref=e63]:
+        - generic [ref=e64]: 7 services
+        - link "VIEW DETAILS" [ref=e65] [cursor=pointer]:
+          - /url: /marketplace/operators/0xd7d57ba9f40629d48c4009a87654cdda8a5433e9
+  - alert [ref=e66]
+```

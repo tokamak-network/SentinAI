@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 import type { OperatorSnapshot } from '@/lib/operator-aggregator';
-import { getAllOperators } from '@/lib/agent-marketplace';
 import { useIsMobile } from '@/lib/useMediaQuery';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
@@ -215,44 +214,17 @@ export default function OperatorsPage() {
   useEffect(() => {
     const loadOperators = async () => {
       try {
-        // Load all operators from agent-marketplace
-        const allOps = getAllOperators();
-        const ops = allOps.map((op: any) => ({
-          address: op.address,
-          name: op.operator,
-          agentUri: `https://sentinai.tokamak.network/operators/${op.address}`,
-          status: op.status === 'online' ? 'online' : 'offline',
-          serviceCount: op.services?.length ?? 0,
-          cpuMean: op.metrics?.cpuMean ?? 50,
-          memoryGiB: op.metrics?.memoryGiB ?? 8,
-          activeAnomalies: Math.floor(Math.random() * 3),
-          fetchedAt: new Date().toISOString(),
-          metrics: {
-            rating: 4.5 + Math.random() * 0.5,
-            reviewCount: Math.floor(100 + Math.random() * 500),
-            uptimePercent: 99 + Math.random() * 0.9,
-            avgLatencyMs: 100 + Math.floor(Math.random() * 300),
-            monthlyCallCount: Math.floor(500 + Math.random() * 2000),
-          }
-        })) as OperatorSnapshot[];
-        
-        if (ops && ops.length > 0) {
-          setOperators(ops);
-          return;
-        }
-        
-        // Fallback to mock if no operators
         const res = await fetch('/api/agent-marketplace/discovery');
         const data = await res.json();
-        let discoveredOps = (data.operators ?? []) as OperatorSnapshot[];
+        let ops = (data.operators ?? []) as OperatorSnapshot[];
         
-        // If no operators from discovery, get from mock catalog
-        if (!discoveredOps || discoveredOps.length === 0) {
+        // If no operators from discovery, get from catalog
+        if (!ops || ops.length === 0) {
           try {
             const catRes = await fetch('/api/agent-marketplace/catalog');
             const cat = await catRes.json();
             if (cat.agent?.baseUrl) {
-              discoveredOps = [{
+              ops = [{
                 address: cat.agent.operatorAddress ?? cat.agent.operator,
                 name: cat.agent.operator,
                 agentUri: cat.agent.baseUrl,
@@ -263,13 +235,13 @@ export default function OperatorsPage() {
             }
           } catch {
             // Catalog also failed, use mock data
-            discoveredOps = [];
+            ops = [];
           }
         }
         
         // FALLBACK: If still no operators, use mock data
-        if (!discoveredOps || discoveredOps.length === 0) {
-          discoveredOps = [{
+        if (!ops || ops.length === 0) {
+          ops = [{
             address: '0xd7d57ba9f40629d48c4009a87654cdda8a5433e9',
             name: 'sentinai-operator',
             agentUri: 'https://sentinai.tokamak.network/thanos-sepolia',
@@ -283,7 +255,7 @@ export default function OperatorsPage() {
         }
         
         // ALWAYS add metrics if missing
-        const withMetrics = (discoveredOps as OperatorSnapshot[]).map((op: OperatorSnapshot) => ({
+        const withMetrics = (ops as OperatorSnapshot[]).map((op: OperatorSnapshot) => ({
           ...op,
           metrics: op.metrics || {
             rating: 4.8,

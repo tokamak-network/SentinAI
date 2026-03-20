@@ -1,0 +1,387 @@
+{
+  "config": {
+    "configFile": "/home/theo/.openclaw/workspace/SentinAI/website/playwright.config.ts",
+    "rootDir": "/home/theo/.openclaw/workspace/SentinAI/website/e2e",
+    "forbidOnly": false,
+    "fullyParallel": true,
+    "globalSetup": null,
+    "globalTeardown": null,
+    "globalTimeout": 0,
+    "grep": {},
+    "grepInvert": null,
+    "maxFailures": 0,
+    "metadata": {
+      "actualWorkers": 1
+    },
+    "preserveOutput": "always",
+    "projects": [
+      {
+        "outputDir": "/home/theo/.openclaw/workspace/SentinAI/website/output-dir",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-desktop",
+        "name": "chromium-desktop",
+        "testDir": "/home/theo/.openclaw/workspace/SentinAI/website/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      },
+      {
+        "outputDir": "/home/theo/.openclaw/workspace/SentinAI/website/output-dir",
+        "repeatEach": 1,
+        "retries": 0,
+        "metadata": {
+          "actualWorkers": 1
+        },
+        "id": "chromium-mobile",
+        "name": "chromium-mobile",
+        "testDir": "/home/theo/.openclaw/workspace/SentinAI/website/e2e",
+        "testIgnore": [],
+        "testMatch": [
+          "**/*.@(spec|test).?(c|m)[jt]s?(x)"
+        ],
+        "timeout": 30000
+      }
+    ],
+    "quiet": false,
+    "reporter": [
+      [
+        "json"
+      ]
+    ],
+    "reportSlowTests": {
+      "max": 5,
+      "threshold": 300000
+    },
+    "runAgents": "none",
+    "shard": null,
+    "tags": [],
+    "updateSnapshots": "missing",
+    "updateSourceMethod": "patch",
+    "version": "1.58.2",
+    "workers": 1,
+    "webServer": {
+      "command": "npm run dev -- -p 3003",
+      "port": 3003,
+      "timeout": 60000,
+      "reuseExistingServer": true
+    }
+  },
+  "suites": [
+    {
+      "title": "multi-operator.spec.ts",
+      "file": "multi-operator.spec.ts",
+      "column": 0,
+      "line": 0,
+      "specs": [],
+      "suites": [
+        {
+          "title": "Multiple Operators Support",
+          "file": "multi-operator.spec.ts",
+          "line": 5,
+          "column": 6,
+          "specs": [
+            {
+              "title": "Operators list shows all operators",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-desktop",
+                  "projectName": "chromium-desktop",
+                  "results": [
+                    {
+                      "workerIndex": 0,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 11076,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('text=VIEW DETAILS').nth(4)\nExpected: visible\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=VIEW DETAILS').nth(4)\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('text=VIEW DETAILS').nth(4)\nExpected: visible\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=VIEW DETAILS').nth(4)\u001b[22m\n\n    at /home/theo/.openclaw/workspace/SentinAI/website/e2e/multi-operator.spec.ts:13:60",
+                        "location": {
+                          "file": "/home/theo/.openclaw/workspace/SentinAI/website/e2e/multi-operator.spec.ts",
+                          "column": 60,
+                          "line": 13
+                        },
+                        "snippet": "  11 |\n  12 |     // Check multiple operator cards (should be at least 5)\n> 13 |     await expect(page.locator('text=VIEW DETAILS').nth(4)).toBeVisible({ timeout: 10000 });\n     |                                                            ^\n  14 |     const viewDetailsButtons = await page.locator('text=VIEW DETAILS').count();\n  15 |     expect(viewDetailsButtons).toBeGreaterThanOrEqual(5);\n  16 |   });"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/home/theo/.openclaw/workspace/SentinAI/website/e2e/multi-operator.spec.ts",
+                            "column": 60,
+                            "line": 13
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('text=VIEW DETAILS').nth(4)\nExpected: visible\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=VIEW DETAILS').nth(4)\u001b[22m\n\n\n  11 |\n  12 |     // Check multiple operator cards (should be at least 5)\n> 13 |     await expect(page.locator('text=VIEW DETAILS').nth(4)).toBeVisible({ timeout: 10000 });\n     |                                                            ^\n  14 |     const viewDetailsButtons = await page.locator('text=VIEW DETAILS').count();\n  15 |     expect(viewDetailsButtons).toBeGreaterThanOrEqual(5);\n  16 |   });\n    at /home/theo/.openclaw/workspace/SentinAI/website/e2e/multi-operator.spec.ts:13:60"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-20T03:40:35.620Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/home/theo/.openclaw/workspace/SentinAI/website/output-dir/multi-operator-Multiple-Op-3b277-rs-list-shows-all-operators-chromium-desktop/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/theo/.openclaw/workspace/SentinAI/website/output-dir/multi-operator-Multiple-Op-3b277-rs-list-shows-all-operators-chromium-desktop/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/home/theo/.openclaw/workspace/SentinAI/website/output-dir/multi-operator-Multiple-Op-3b277-rs-list-shows-all-operators-chromium-desktop/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/home/theo/.openclaw/workspace/SentinAI/website/e2e/multi-operator.spec.ts",
+                        "column": 60,
+                        "line": 13
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "a65f87d5c2e5004b6e24-edc06ecf50dc7484af88",
+              "file": "multi-operator.spec.ts",
+              "line": 6,
+              "column": 7
+            },
+            {
+              "title": "Can navigate to different operator detail pages",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-desktop",
+                  "projectName": "chromium-desktop",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 542,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-20T03:40:47.853Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "a65f87d5c2e5004b6e24-79cd66c6743508943a0e",
+              "file": "multi-operator.spec.ts",
+              "line": 18,
+              "column": 7
+            },
+            {
+              "title": "Different operators have different services",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-desktop",
+                  "projectName": "chromium-desktop",
+                  "results": [
+                    {
+                      "workerIndex": 1,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 509,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-20T03:40:48.485Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "a65f87d5c2e5004b6e24-9f04204e2fc32c3aba18",
+              "file": "multi-operator.spec.ts",
+              "line": 28,
+              "column": 7
+            },
+            {
+              "title": "Operators list shows all operators",
+              "ok": false,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-mobile",
+                  "projectName": "chromium-mobile",
+                  "results": [
+                    {
+                      "workerIndex": 2,
+                      "parallelIndex": 0,
+                      "status": "failed",
+                      "duration": 10733,
+                      "error": {
+                        "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('text=VIEW DETAILS').nth(4)\nExpected: visible\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=VIEW DETAILS').nth(4)\u001b[22m\n",
+                        "stack": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('text=VIEW DETAILS').nth(4)\nExpected: visible\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=VIEW DETAILS').nth(4)\u001b[22m\n\n    at /home/theo/.openclaw/workspace/SentinAI/website/e2e/multi-operator.spec.ts:13:60",
+                        "location": {
+                          "file": "/home/theo/.openclaw/workspace/SentinAI/website/e2e/multi-operator.spec.ts",
+                          "column": 60,
+                          "line": 13
+                        },
+                        "snippet": "  11 |\n  12 |     // Check multiple operator cards (should be at least 5)\n> 13 |     await expect(page.locator('text=VIEW DETAILS').nth(4)).toBeVisible({ timeout: 10000 });\n     |                                                            ^\n  14 |     const viewDetailsButtons = await page.locator('text=VIEW DETAILS').count();\n  15 |     expect(viewDetailsButtons).toBeGreaterThanOrEqual(5);\n  16 |   });"
+                      },
+                      "errors": [
+                        {
+                          "location": {
+                            "file": "/home/theo/.openclaw/workspace/SentinAI/website/e2e/multi-operator.spec.ts",
+                            "column": 60,
+                            "line": 13
+                          },
+                          "message": "Error: \u001b[2mexpect(\u001b[22m\u001b[31mlocator\u001b[39m\u001b[2m).\u001b[22mtoBeVisible\u001b[2m(\u001b[22m\u001b[2m)\u001b[22m failed\n\nLocator: locator('text=VIEW DETAILS').nth(4)\nExpected: visible\nTimeout: 10000ms\nError: element(s) not found\n\nCall log:\n\u001b[2m  - Expect \"toBeVisible\" with timeout 10000ms\u001b[22m\n\u001b[2m  - waiting for locator('text=VIEW DETAILS').nth(4)\u001b[22m\n\n\n  11 |\n  12 |     // Check multiple operator cards (should be at least 5)\n> 13 |     await expect(page.locator('text=VIEW DETAILS').nth(4)).toBeVisible({ timeout: 10000 });\n     |                                                            ^\n  14 |     const viewDetailsButtons = await page.locator('text=VIEW DETAILS').count();\n  15 |     expect(viewDetailsButtons).toBeGreaterThanOrEqual(5);\n  16 |   });\n    at /home/theo/.openclaw/workspace/SentinAI/website/e2e/multi-operator.spec.ts:13:60"
+                        }
+                      ],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-20T03:40:50.101Z",
+                      "annotations": [],
+                      "attachments": [
+                        {
+                          "name": "screenshot",
+                          "contentType": "image/png",
+                          "path": "/home/theo/.openclaw/workspace/SentinAI/website/output-dir/multi-operator-Multiple-Op-3b277-rs-list-shows-all-operators-chromium-mobile/test-failed-1.png"
+                        },
+                        {
+                          "name": "video",
+                          "contentType": "video/webm",
+                          "path": "/home/theo/.openclaw/workspace/SentinAI/website/output-dir/multi-operator-Multiple-Op-3b277-rs-list-shows-all-operators-chromium-mobile/video.webm"
+                        },
+                        {
+                          "name": "error-context",
+                          "contentType": "text/markdown",
+                          "path": "/home/theo/.openclaw/workspace/SentinAI/website/output-dir/multi-operator-Multiple-Op-3b277-rs-list-shows-all-operators-chromium-mobile/error-context.md"
+                        }
+                      ],
+                      "errorLocation": {
+                        "file": "/home/theo/.openclaw/workspace/SentinAI/website/e2e/multi-operator.spec.ts",
+                        "column": 60,
+                        "line": 13
+                      }
+                    }
+                  ],
+                  "status": "unexpected"
+                }
+              ],
+              "id": "a65f87d5c2e5004b6e24-8771d755c5e42562c55a",
+              "file": "multi-operator.spec.ts",
+              "line": 6,
+              "column": 7
+            },
+            {
+              "title": "Can navigate to different operator detail pages",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-mobile",
+                  "projectName": "chromium-mobile",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 410,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-20T03:41:01.899Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "a65f87d5c2e5004b6e24-f35e6f0e0635a7659ca2",
+              "file": "multi-operator.spec.ts",
+              "line": 18,
+              "column": 7
+            },
+            {
+              "title": "Different operators have different services",
+              "ok": true,
+              "tags": [],
+              "tests": [
+                {
+                  "timeout": 30000,
+                  "annotations": [],
+                  "expectedStatus": "passed",
+                  "projectId": "chromium-mobile",
+                  "projectName": "chromium-mobile",
+                  "results": [
+                    {
+                      "workerIndex": 3,
+                      "parallelIndex": 0,
+                      "status": "passed",
+                      "duration": 359,
+                      "errors": [],
+                      "stdout": [],
+                      "stderr": [],
+                      "retry": 0,
+                      "startTime": "2026-03-20T03:41:02.394Z",
+                      "annotations": [],
+                      "attachments": []
+                    }
+                  ],
+                  "status": "expected"
+                }
+              ],
+              "id": "a65f87d5c2e5004b6e24-566411f81665d02b2716",
+              "file": "multi-operator.spec.ts",
+              "line": 28,
+              "column": 7
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "stats": {
+    "startTime": "2026-03-20T03:40:33.557Z",
+    "duration": 29264.588,
+    "expected": 4,
+    "skipped": 0,
+    "unexpected": 2,
+    "flaky": 0
+  }
+}
