@@ -16,6 +16,7 @@ const FONT = "'IBM Plex Mono', monospace";
 const SEPOLIA_CHAIN_ID = 11155111;
 
 export interface PurchaseModalProps {
+  operatorAddress?: string;
   agentId: string;
   agentName: string;
   endpoint: string; // e.g. '/api/marketplace/sequencer-health'

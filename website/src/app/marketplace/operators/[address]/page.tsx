@@ -353,6 +353,7 @@ export default function OperatorDetailPage() {
       {purchaseTarget && (
         <PurchaseModal
           agentId={address}
+          operatorAddress={address}
           agentName={catalog?.agent.operator ?? 'Unknown Operator'}
           endpoint={purchaseTarget.endpoint}
           onClose={() => setPurchaseTarget(null)}

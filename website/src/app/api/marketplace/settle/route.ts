@@ -10,8 +10,9 @@ export async function POST(request: Request) {
       );
     }
 
+    const txHash = "0x" + Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join("");
     const settlementResult = {
-      transactionHash: \`0x\${Array(64).fill(0).map(() => Math.floor(Math.random() * 16).toString(16)).join('')}\`,
+      transactionHash: txHash,
       timestamp: new Date().toISOString(),
       status: 'success',
       amount: requirements?.amount || '0',
