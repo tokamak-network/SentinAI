@@ -152,9 +152,17 @@ export default function PurchaseModal({ agentName, endpoint, onClose }: Purchase
   const handleFetchRequirements = useCallback(async (account?: string) => {
     setState((prev) => ({ ...prev, loading: true, step: 'requirements', error: undefined }));
     try {
-      const res = await fetch(fullEndpoint, { method: 'GET' });
-      if (res.status !== 402) {
-        throw new Error(`Expected 402 response, got ${res.status}`);
+      // Call payment-requirements API
+      const res = await fetch('/api/marketplace/payment-requirements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resource: fullEndpoint,
+          merchant: agentName,
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`Failed to get payment requirements: ${res.status}`);
       }
       const body = await res.json();
       const requirements: PaymentRequirements = body;
