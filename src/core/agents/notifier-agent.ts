@@ -34,6 +34,7 @@ const COOLDOWN_MS: Record<string, number> = {
   'scaling-recommendation': 60 * 60 * 1000, // 1 hour
   'verification-complete': 10 * 60 * 1000,  // 10 min
   'remediation-complete': 10 * 60 * 1000,   // 10 min
+  'reliability-issue': 5 * 60 * 1000,       // 5 min
 };
 
 // ============================================================
@@ -92,6 +93,7 @@ export class NotifierAgent implements RoleAgent {
   private readonly scalingRecommendationHandler: AgentEventHandler;
   private readonly verificationHandler: AgentEventHandler;
   private readonly remediationHandler: AgentEventHandler;
+  private readonly reliabilityHandler: AgentEventHandler;
 
   constructor(config: { instanceId: string }) {
     this.instanceId = config.instanceId;
@@ -110,6 +112,11 @@ export class NotifierAgent implements RoleAgent {
       if (event.instanceId !== this.instanceId) return;
       void this.handleRemediationComplete(event);
     };
+
+    this.reliabilityHandler = (event: AgentEvent) => {
+      if (event.instanceId !== this.instanceId) return;
+      void this.handleReliabilityIssue(event);
+    };
   }
 
   start(): void {
@@ -123,7 +130,8 @@ export class NotifierAgent implements RoleAgent {
     bus.on('scaling-recommendation', this.scalingRecommendationHandler);
     bus.on('verification-complete', this.verificationHandler);
     bus.on('remediation-complete', this.remediationHandler);
-    logger.info(`[NotifierAgent:${this.instanceId}] Subscribed to scaling-recommendation, verification-complete, remediation-complete`);
+    bus.on('reliability-issue', this.reliabilityHandler);
+    logger.info(`[NotifierAgent:${this.instanceId}] Subscribed to scaling-recommendation, verification-complete, remediation-complete, reliability-issue`);
   }
 
   stop(): void {
@@ -133,6 +141,7 @@ export class NotifierAgent implements RoleAgent {
     bus.off('scaling-recommendation', this.scalingRecommendationHandler);
     bus.off('verification-complete', this.verificationHandler);
     bus.off('remediation-complete', this.remediationHandler);
+    bus.off('reliability-issue', this.reliabilityHandler);
     logger.info(`[NotifierAgent:${this.instanceId}] Unsubscribed`);
   }
 
@@ -274,6 +283,48 @@ export class NotifierAgent implements RoleAgent {
       divider(),
       section(failedResults.map(r => `:x: \`${r.action}\` ${r.detail}`).join('\n')),
       context('Automatic remediation was attempted but failed. Manual intervention required.'),
+    ];
+
+    await this.sendSlackBlocks(blocks);
+  }
+
+  /**
+   * Reliability issues: always notify — L1 RPC failover and proxyd backend
+   * replacements are operator-visible infrastructure changes.
+   */
+  private async handleReliabilityIssue(event: AgentEvent): Promise<void> {
+    const issues = event.payload['issues'] as Array<{
+      type: string;
+      detail: string;
+    }> | undefined;
+
+    if (!issues || issues.length === 0) return;
+    if (this.isInCooldown('reliability-issue')) return;
+
+    const issueLines = issues.map(i => {
+      switch (i.type) {
+        case 'proxyd-backend-replaced':
+          return `:arrows_counterclockwise: ${i.detail}`;
+        case 'l1-rpc-unhealthy':
+          return `:red_circle: ${i.detail}`;
+        case 'l1-consecutive-failures':
+          return `:warning: ${i.detail}`;
+        default:
+          return `:exclamation: ${i.detail}`;
+      }
+    });
+
+    const hasProxydReplacement = issues.some(i => i.type === 'proxyd-backend-replaced');
+    const title = hasProxydReplacement
+      ? 'SentinAI L1 Proxyd Backend Replaced'
+      : 'SentinAI L1 RPC Reliability Issue';
+
+    const blocks = [
+      header(':rotating_light:', title),
+      fields(['Time', event.timestamp]),
+      divider(),
+      section(issueLines.join('\n')),
+      context('SentinAI Reliability Agent • L1 infrastructure change detected — verify upstream RPC health'),
     ];
 
     await this.sendSlackBlocks(blocks);
