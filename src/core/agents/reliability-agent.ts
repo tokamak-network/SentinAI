@@ -109,7 +109,7 @@ export class ReliabilityAgent extends DomainAgent {
       i => i.type !== 'l1-rpc-unhealthy' && i.type !== 'l1-consecutive-failures'
     );
 
-    let emittableIssues = [...nonFailoverIssues];
+    const emittableIssues = [...nonFailoverIssues];
     if (failoverIssues.length > 0) {
       const backupAvailable = await hasHealthyBackup();
       if (backupAvailable) {

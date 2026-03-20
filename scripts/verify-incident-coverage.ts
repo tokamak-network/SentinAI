@@ -510,7 +510,7 @@ function generateMarkdown(): string {
   md += '## Category Statistics\n\n';
   md += `| Category | Total | COVERED | PARTIAL | DETECT-ONLY | OUT-OF-SCOPE |\n`;
   md += `|----------|-------|---------|---------|-------------|---------------|\n`;
-  let totals = { total: 0, covered: 0, partial: 0, detectOnly: 0, outOfScope: 0 };
+  const totals = { total: 0, covered: 0, partial: 0, detectOnly: 0, outOfScope: 0 };
   for (const [cat, s] of Object.entries(stats)) {
     md += `| ${cat} | ${s.total} | ${s.covered} | ${s.partial} | ${s.detectOnly} | ${s.outOfScope} |\n`;
     totals.total += s.total;
