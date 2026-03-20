@@ -7,6 +7,7 @@ import { formatTONPrice } from '@/lib/agent-marketplace';
 import PurchaseModal from '@/components/PurchaseModal';
 import { SLADashboard } from '@/components/SLADashboard';
 import { PerformanceGraphs } from '@/components/PerformanceGraphs';
+import { TrialButton } from '@/components/TrialButton';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
@@ -276,7 +277,12 @@ export default function OperatorDetailPage() {
                       {/* SLA Dashboard rendered if available */}
                       {service.sla && <SLADashboard sla={service.sla} />}
                     </div>
-                    <button
+                                        {/* Service Card Buttons */}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 8, flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'flex-end' }}>
+                      <div style={{ flex: 1 }}>
+                        <TrialButton serviceKey={service.key} displayName={service.displayName} />
+                      </div>
+                      <button
                       disabled={!isActive}
                       onClick={() => {
                         if (isActive && catalog) {
@@ -303,6 +309,7 @@ export default function OperatorDetailPage() {
                     >
                       BUY DATA
                     </button>
+                    </div>
                   </div>
                 );
               })}
