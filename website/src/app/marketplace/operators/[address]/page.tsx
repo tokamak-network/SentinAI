@@ -6,6 +6,7 @@ import { useIsMobile } from '@/lib/useMediaQuery';
 import { formatTONPrice } from '@/lib/agent-marketplace';
 import PurchaseModal from '@/components/PurchaseModal';
 import { SLADashboard } from '@/components/SLADashboard';
+import { PerformanceGraphs } from '@/components/PerformanceGraphs';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
@@ -37,9 +38,10 @@ interface CatalogData {
     id: string;
     status: string;
     version: string;
-    operator: string;
+        operator: string;
     operatorAddress?: string;
     baseUrl: string;
+    performanceHistory?: import('@/lib/agent-marketplace').PerformanceHistory;
   };
   services: Array<{
     key: string;
@@ -222,6 +224,24 @@ export default function OperatorDetailPage() {
                 </div>
               )}
             </div>
+          )}
+
+                    {/* Performance Tab */}
+          {catalog?.agent && snapshot?.operatorAddress && (
+            <>
+              <div style={{ 
+                fontSize: 12, 
+                fontWeight: 700, 
+                marginTop: 24, 
+                marginBottom: 12,
+                color: '#0A0A0A' 
+              }}>
+                PERFORMANCE
+              </div>
+              {catalog.agent.performanceHistory && (
+                <PerformanceGraphs history={catalog.agent.performanceHistory} />
+              )}
+            </>
           )}
 
           {/* Service Catalog */}
