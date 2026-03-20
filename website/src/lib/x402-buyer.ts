@@ -201,14 +201,11 @@ export async function signPaymentAuthorization(params: {
   const amountBigInt = BigInt(paymentRequirements.amount);
   
   const authorization = {
-    buyer: account,
-    merchant: paymentRequirements.merchant,
-    asset: paymentRequirements.asset,
-    amount: amountBigInt.toString(), // Ensure it's a decimal string, not hex
     resource: paymentRequirements.resource,
-    nonce: nonce.replace(/^0x/, ''), // Remove 0x prefix for BigInt compatibility
-    validAfter: (now - 30).toString(),
-    validBefore: (now + 300).toString(),
+    merchant: paymentRequirements.merchant,
+    amount: amountBigInt.toString(), // Ensure it's a decimal string, not hex
+    nonce: nonce, // Keep 0x prefix for bytes32
+    deadline: (now + 300).toString(), // Use deadline instead of validBefore
   };
 
   const typedData = {
