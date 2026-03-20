@@ -15,10 +15,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // Mock payment requirements for TON token on Sepolia
+    // Mock payment requirements for USDC token on Sepolia
+    // Using real Sepolia USDC: https://sepolia.etherscan.io/token/0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238
     const requirements = {
       network: 'eip155:11155111',
-      asset: '0x3c3d0C5f2F6Db7aFcED1b68e7c92b57bDF54ba0a', // Mock TON address on Sepolia
+      asset: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238', // Real USDC on Sepolia
       amount: '100000000000000000', // 0.1 TON (18 decimals)
       resource,
       merchant,
