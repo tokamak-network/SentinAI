@@ -8,9 +8,13 @@
  *
  * Suppressed (handled silently by agents):
  *   - Cost insights (agent auto-applies schedule)
- *   - Successful remediation (refill worked, failover worked)
+ *   - Successful remediation (refill worked)
+ *   - L1 RPC health-check failures (auto-failover handles these)
  *   - Scaling schedule creation without execution
  *   - Verification success
+ *
+ * Always notified (even on success):
+ *   - L1 RPC failover result (success or failure)
  *
  * Cooldown per event type prevents duplicate alerts.
  */
@@ -254,7 +258,8 @@ export class NotifierAgent implements RoleAgent {
   }
 
   /**
-   * Remediation: only notify on FAILURE — success means agent resolved it.
+   * Remediation: notify on failure for all types, and also on success
+   * for L1 failover (so operator sees the endpoint switch result).
    */
   private async handleRemediationComplete(event: AgentEvent): Promise<void> {
     const trigger = event.payload['trigger'] as string ?? 'unknown';
@@ -267,8 +272,43 @@ export class NotifierAgent implements RoleAgent {
     if (!results || results.length === 0) return;
 
     const failureCount = (event.payload['failureCount'] as number) ?? 0;
+    const successCount = (event.payload['successCount'] as number) ?? 0;
 
-    // Only notify when there are failures — success is silent
+    // L1 failover: always notify (success or failure) so operator sees the result
+    const hasL1Failover = results.some(r => r.action === 'l1-failover');
+
+    if (hasL1Failover) {
+      if (this.isInCooldown('remediation-complete')) return;
+
+      const failoverResult = results.find(r => r.action === 'l1-failover')!;
+
+      if (failoverResult.success) {
+        const blocks = [
+          header(':white_check_mark:', 'SentinAI L1 RPC Failover Complete'),
+          fields(
+            ['Time', event.timestamp],
+          ),
+          divider(),
+          section(`:arrows_counterclockwise: ${failoverResult.detail}`),
+          context('SentinAI Reliability Agent • L1 RPC endpoint switched automatically — no action required'),
+        ];
+        await this.sendSlackBlocks(blocks);
+      } else {
+        const blocks = [
+          header(':rotating_light:', 'SentinAI Action Required — L1 RPC Failover Failed'),
+          fields(
+            ['Time', event.timestamp],
+          ),
+          divider(),
+          section(`:x: ${failoverResult.detail}`),
+          context('Automatic L1 RPC failover was attempted but failed. Manual intervention required.'),
+        ];
+        await this.sendSlackBlocks(blocks);
+      }
+      return;
+    }
+
+    // Other remediation: only notify on failure — success is silent
     if (failureCount === 0) return;
     if (this.isInCooldown('remediation-complete')) return;
 
@@ -289,8 +329,10 @@ export class NotifierAgent implements RoleAgent {
   }
 
   /**
-   * Reliability issues: always notify — L1 RPC failover and proxyd backend
-   * replacements are operator-visible infrastructure changes.
+   * Reliability issues: only notify for proxyd backend replacements.
+   * L1 RPC health-check failures (l1-rpc-unhealthy, l1-consecutive-failures)
+   * are suppressed here — they trigger automatic failover via RemediationAgent,
+   * and the operator is notified of the failover result instead.
    */
   private async handleReliabilityIssue(event: AgentEvent): Promise<void> {
     const issues = event.payload['issues'] as Array<{
@@ -299,32 +341,20 @@ export class NotifierAgent implements RoleAgent {
     }> | undefined;
 
     if (!issues || issues.length === 0) return;
+
+    // Only notify for proxyd backend replacements; L1 RPC issues are handled by auto-failover
+    const proxydIssues = issues.filter(i => i.type === 'proxyd-backend-replaced');
+    if (proxydIssues.length === 0) return;
     if (this.isInCooldown('reliability-issue')) return;
 
-    const issueLines = issues.map(i => {
-      switch (i.type) {
-        case 'proxyd-backend-replaced':
-          return `:arrows_counterclockwise: ${i.detail}`;
-        case 'l1-rpc-unhealthy':
-          return `:red_circle: ${i.detail}`;
-        case 'l1-consecutive-failures':
-          return `:warning: ${i.detail}`;
-        default:
-          return `:exclamation: ${i.detail}`;
-      }
-    });
-
-    const hasProxydReplacement = issues.some(i => i.type === 'proxyd-backend-replaced');
-    const title = hasProxydReplacement
-      ? 'SentinAI L1 Proxyd Backend Replaced'
-      : 'SentinAI L1 RPC Reliability Issue';
+    const issueLines = proxydIssues.map(i => `:arrows_counterclockwise: ${i.detail}`);
 
     const blocks = [
-      header(':rotating_light:', title),
+      header(':arrows_counterclockwise:', 'SentinAI L1 Proxyd Backend Replaced'),
       fields(['Time', event.timestamp]),
       divider(),
       section(issueLines.join('\n')),
-      context('SentinAI Reliability Agent • L1 infrastructure change detected — verify upstream RPC health'),
+      context('SentinAI Reliability Agent • Proxyd backend replaced automatically'),
     ];
 
     await this.sendSlackBlocks(blocks);

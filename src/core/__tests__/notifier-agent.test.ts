@@ -212,6 +212,59 @@ describe('NotifierAgent', () => {
   });
 
   // ----------------------------------------------------------
+  // L1 RPC failover — notify on both success and failure
+  // ----------------------------------------------------------
+
+  it('should notify on L1 failover success', async () => {
+    agent.start();
+    emit('remediation-complete', {
+      trigger: 'reliability-issue',
+      results: [
+        { action: 'l1-failover', success: true, detail: 'L1 RPC failover: switched to https://rpc2.example.com' },
+      ],
+      successCount: 1,
+      failureCount: 0,
+    });
+
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    expect(parseFetchBody().text).toContain('Failover Complete');
+    expect(blocksText()).toContain('switched to');
+  });
+
+  it('should notify on L1 failover failure', async () => {
+    agent.start();
+    emit('remediation-complete', {
+      trigger: 'reliability-issue',
+      results: [
+        { action: 'l1-failover', success: false, detail: 'No failover target available' },
+      ],
+      successCount: 0,
+      failureCount: 1,
+    });
+
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    expect(parseFetchBody().text).toContain('Failover Failed');
+    expect(blocksText()).toContain('No failover target');
+  });
+
+  // ----------------------------------------------------------
+  // L1 RPC health-check failures — suppressed (auto-failover handles)
+  // ----------------------------------------------------------
+
+  it('should NOT notify on L1 RPC health-check failures (handled by auto-failover)', async () => {
+    agent.start();
+    emit('reliability-issue', {
+      issues: [
+        { type: 'l1-rpc-unhealthy', detail: 'Active L1 RPC endpoint failed health check 2 consecutive times' },
+      ],
+      issueCount: 1,
+    });
+
+    await new Promise(r => setTimeout(r, 50));
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  // ----------------------------------------------------------
   // Cooldown
   // ----------------------------------------------------------
 
