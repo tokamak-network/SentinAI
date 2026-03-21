@@ -33,8 +33,19 @@ export async function register() {
     return;
   }
 
-  const { validateRedisConnection } = await import('./lib/redis-store');
-  await validateRedisConnection();
+  // Skip instrumentation in Vercel build environment
+  if (process.env.VERCEL === 'true') {
+    return;
+  }
+
+  try {
+    const { validateRedisConnection } = await import('./lib/redis-store');
+    await validateRedisConnection();
+  } catch (err) {
+    // Log but don't fail if Redis is unavailable
+    console.warn('[instrumentation] Redis validation failed:', err);
+    return;
+  }
 
   const { initializeScheduler } = await import('./lib/scheduler');
   await initializeScheduler();
