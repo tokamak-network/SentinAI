@@ -24,6 +24,11 @@ async function startDefaultInstanceFallback() {
 }
 
 export async function register() {
+  // Only run in Node.js runtime (not Edge/Middleware)
+  if (typeof process === 'undefined' || process.env.NEXT_RUNTIME === 'edge') {
+    return;
+  }
+  
   if (process.env.NEXT_RUNTIME !== 'nodejs') {
     return;
   }
