@@ -163,8 +163,9 @@ export class RemediationAgent implements RoleAgent {
       const check = await canRefill(l1RpcUrl, targetAddr as `0x${string}`);
 
       if (!check.allowed) {
-        logger.info(`[RemediationAgent:${this.instanceId}] EOA refill denied for ${role}: ${check.reason}`);
-        return { action: 'eoa-refill', success: false, detail: `${role} refill denied: ${check.reason}` };
+        const extra = check.detail ? ` (${check.detail})` : '';
+        logger.info(`[RemediationAgent:${this.instanceId}] EOA refill denied for ${role}: ${check.reason}${extra}`);
+        return { action: 'eoa-refill', success: false, detail: `${role} refill denied: ${check.reason}${extra}` };
       }
 
       const result = await refillEOA(l1RpcUrl, targetAddr as `0x${string}`, role);

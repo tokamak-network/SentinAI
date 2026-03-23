@@ -20,6 +20,7 @@ export type RefillDeniedReason =
   | 'cooldown'
   | 'daily-limit'
   | 'treasury-low'
+  | 'treasury-check-failed'
   | 'gas-high'
   | 'tx-reverted'
   | 'tx-timeout'

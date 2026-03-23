@@ -8,12 +8,12 @@
  *
  * Suppressed (handled silently by agents):
  *   - Cost insights (agent auto-applies schedule)
- *   - Successful remediation (refill worked)
  *   - L1 RPC health-check failures (auto-failover handles these)
  *   - Scaling schedule creation without execution
  *   - Verification success
  *
  * Always notified (even on success):
+ *   - EOA refill result (success or failure)
  *   - L1 RPC failover result (success or failure)
  *
  * Cooldown per event type prevents duplicate alerts.
@@ -22,6 +22,7 @@
 import { createLogger } from '@/lib/logger';
 import { getAgentEventBus } from '@/core/agent-event-bus';
 import { getStore } from '@/lib/redis-store';
+import { getChainPlugin } from '@/chains';
 import type { AgentEvent, AgentEventHandler } from '@/core/agent-event-bus';
 import type { RoleAgent } from '@/core/agent-orchestrator';
 
@@ -33,6 +34,21 @@ const logger = createLogger('NotifierAgent');
 
 const WEBHOOK_TIMEOUT_MS = 5_000;
 
+/** Human-readable guidance for remediation failure reasons */
+const REMEDIATION_GUIDANCE: Record<string, string> = {
+  // EOA refill reasons
+  'treasury-low': 'Treasury wallet ETH balance is below the minimum (EOA_TREASURY_MIN_ETH). Top up the treasury wallet.',
+  'treasury-check-failed': 'Failed to query treasury balance via RPC. Check L1 RPC connectivity and endpoint configuration.',
+  'no-signer': 'TREASURY_PRIVATE_KEY env var is not set. Configure the signing key.',
+  'cooldown': 'Refill is in cooldown period (EOA_REFILL_COOLDOWN_MIN). Will auto-retry after cooldown expires.',
+  'daily-limit': 'Daily refill limit (EOA_REFILL_MAX_DAILY_ETH) reached. Resets tomorrow or adjust the limit.',
+  'gas-high': 'L1 gas price exceeds the guard threshold (EOA_GAS_GUARD_GWEI). Will auto-retry when gas drops.',
+  'tx-reverted': 'Refill transaction reverted. Check treasury balance and target EOA address.',
+  'tx-timeout': 'Refill transaction timed out. Check L1 network status.',
+  // L1 failover reasons
+  'no-failover-target': 'No backup L1 RPC endpoint available. Configure L1_RPC_BACKUP_URLS env var.',
+};
+
 /** Per-event-type cooldown in milliseconds */
 const COOLDOWN_MS: Record<string, number> = {
   'scaling-recommendation': 60 * 60 * 1000, // 1 hour
@@ -40,6 +56,31 @@ const COOLDOWN_MS: Record<string, number> = {
   'remediation-complete': 10 * 60 * 1000,   // 10 min
   'reliability-issue': 5 * 60 * 1000,       // 5 min
 };
+
+// ============================================================
+// L1 Explorer Helper
+// ============================================================
+
+function getL1ExplorerTxUrl(txHash: string): string | null {
+  try {
+    const plugin = getChainPlugin();
+    const explorerUrl = plugin.l1Chain.blockExplorers?.default?.url;
+    if (!explorerUrl) return null;
+    return `${explorerUrl.replace(/\/$/, '')}/tx/${txHash}`;
+  } catch {
+    return null;
+  }
+}
+
+/** Append explorer link to a detail line if it contains a tx hash */
+function appendTxLink(detail: string): string {
+  const txMatch = detail.match(/\(tx:\s*(0x[0-9a-fA-F]+)\)/);
+  if (!txMatch) return detail;
+  const txHash = txMatch[1];
+  const url = getL1ExplorerTxUrl(txHash);
+  if (!url) return detail;
+  return `${detail}\n:mag: <${url}|View on Explorer>`;
+}
 
 // ============================================================
 // Slack Block Kit Helpers
@@ -274,6 +315,61 @@ export class NotifierAgent implements RoleAgent {
     const failureCount = (event.payload['failureCount'] as number) ?? 0;
     const successCount = (event.payload['successCount'] as number) ?? 0;
 
+    // EOA refill: always notify (success or failure) so operator sees the result
+    const hasEOARefill = results.some(r => r.action === 'eoa-refill');
+
+    if (hasEOARefill) {
+      if (this.isInCooldown('remediation-complete')) return;
+
+      const refillResults = results.filter(r => r.action === 'eoa-refill');
+      const allSuccess = refillResults.every(r => r.success);
+      const allFailed = refillResults.every(r => !r.success);
+
+      if (allSuccess) {
+        const detailLines = refillResults.map(r => `:white_check_mark: ${appendTxLink(r.detail)}`).join('\n');
+        const blocks = [
+          header(':fuelpump:', 'SentinAI EOA Refill Complete'),
+          fields(['Time', event.timestamp]),
+          divider(),
+          section(detailLines),
+          context('SentinAI Remediation Agent • EOA balance refilled automatically — no action required'),
+        ];
+        await this.sendSlackBlocks(blocks);
+      } else if (allFailed) {
+        const failureLines = refillResults.map(r => {
+          const reasonMatch = r.detail.match(/(?:denied|failed|error):\s*(\S+)/);
+          const reasonKey = reasonMatch?.[1];
+          const guidance = reasonKey ? REMEDIATION_GUIDANCE[reasonKey] : undefined;
+          const line = `:x: ${r.detail}`;
+          return guidance ? `${line}\n> :bulb: ${guidance}` : line;
+        }).join('\n');
+        const blocks = [
+          header(':rotating_light:', 'SentinAI Action Required — EOA Refill Failed'),
+          fields(['Trigger', trigger], ['Time', event.timestamp]),
+          divider(),
+          section(failureLines),
+          context('Automatic EOA refill was attempted but failed. Manual intervention required.'),
+        ];
+        await this.sendSlackBlocks(blocks);
+      } else {
+        // Mixed: some succeeded, some failed
+        const lines = refillResults.map(r => {
+          const icon = r.success ? ':white_check_mark:' : ':x:';
+          const text = r.success ? appendTxLink(r.detail) : r.detail;
+          return `${icon} ${text}`;
+        }).join('\n');
+        const blocks = [
+          header(':warning:', 'SentinAI EOA Refill — Partial Failure'),
+          fields(['Trigger', trigger], ['Time', event.timestamp]),
+          divider(),
+          section(lines),
+          context('Some EOA refills succeeded but others failed. Review failed items.'),
+        ];
+        await this.sendSlackBlocks(blocks);
+      }
+      return;
+    }
+
     // L1 failover: always notify (success or failure) so operator sees the result
     const hasL1Failover = results.some(r => r.action === 'l1-failover');
 
@@ -314,6 +410,14 @@ export class NotifierAgent implements RoleAgent {
 
     const failedResults = results.filter(r => !r.success);
 
+    const failureLines = failedResults.map(r => {
+      const reasonMatch = r.detail.match(/(?:denied|failed|error):\s*(\S+)/);
+      const reasonKey = reasonMatch?.[1];
+      const guidance = reasonKey ? REMEDIATION_GUIDANCE[reasonKey] : undefined;
+      const line = `:x: \`${r.action}\` ${r.detail}`;
+      return guidance ? `${line}\n> :bulb: ${guidance}` : line;
+    }).join('\n');
+
     const blocks = [
       header(':rotating_light:', 'SentinAI Action Required — Remediation Failed'),
       fields(
@@ -321,7 +425,7 @@ export class NotifierAgent implements RoleAgent {
         ['Time', event.timestamp],
       ),
       divider(),
-      section(failedResults.map(r => `:x: \`${r.action}\` ${r.detail}`).join('\n')),
+      section(failureLines),
       context('Automatic remediation was attempted but failed. Manual intervention required.'),
     ];
 

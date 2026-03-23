@@ -113,7 +113,7 @@ export function AgentRosterPanel({ agentFleet, experience }: AgentRosterPanelPro
 
       {/* KPI strip */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', borderBottom: '1px solid #D0D0D0', flexShrink: 0 }}>
-        <KpiCell label="Total Ops" value={`${(experience?.total ?? 0).toLocaleString()}`} color="#0055AA" note="lifetime" />
+        <KpiCell label="Total Ops" value={`${(experience?.total ?? 0).toLocaleString()}`} color="#0055AA" note="lifetime · all categories" />
         <KpiCell label="Tier" value={experience?.tier ? experience.tier.charAt(0).toUpperCase() + experience.tier.slice(1) : '—'} color={tierColor(experience?.tier ?? '')} note="experience level" isLast />
       </div>
 

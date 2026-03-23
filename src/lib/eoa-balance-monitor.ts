@@ -273,7 +273,7 @@ export async function canRefill(
   l1RpcUrl: string,
   targetAddress: `0x${string}`,
   configOverrides?: Partial<EOABalanceConfig>
-): Promise<{ allowed: boolean; reason?: string }> {
+): Promise<{ allowed: boolean; reason?: string; detail?: string }> {
   const config = getConfig(configOverrides);
   const state = getState();
 
@@ -299,13 +299,19 @@ export async function canRefill(
   const client = createL1Client(l1RpcUrl);
 
   try {
-    const treasuryBalance = await client.getBalance({ address: account.address });
+    let treasuryBalance = await client.getBalance({ address: account.address });
+    // Guard: RPC nodes may return 0 on sync issues — retry once
+    if (treasuryBalance === BigInt(0)) {
+      logger.warn(`[EOA Monitor] Treasury balance returned 0, retrying (addr: ${account.address})`);
+      treasuryBalance = await client.getBalance({ address: account.address });
+    }
     const treasuryEth = parseFloat(formatEther(treasuryBalance));
     if (treasuryEth < config.minTreasuryBalanceEth) {
-      return { allowed: false, reason: 'treasury-low' };
+      logger.warn(`[EOA Monitor] Treasury low: ${treasuryEth.toFixed(6)} ETH < min ${config.minTreasuryBalanceEth} ETH (addr: ${account.address})`);
+      return { allowed: false, reason: 'treasury-low', detail: `treasury ${treasuryEth.toFixed(4)} ETH < min ${config.minTreasuryBalanceEth} ETH` };
     }
   } catch {
-    return { allowed: false, reason: 'treasury-low' };
+    return { allowed: false, reason: 'treasury-check-failed' };
   }
 
   // 6. Gas price
@@ -358,12 +364,18 @@ export async function refillEOA(
   let treasuryBalance: bigint;
   try {
     treasuryBalance = await client.getBalance({ address: account.address });
+    // Guard: RPC nodes may return 0 on sync issues — retry once
+    if (treasuryBalance === BigInt(0)) {
+      logger.warn(`[EOA Monitor] Treasury balance returned 0, retrying (addr: ${account.address})`);
+      treasuryBalance = await client.getBalance({ address: account.address });
+    }
     const treasuryEth = parseFloat(formatEther(treasuryBalance));
     if (treasuryEth < config.minTreasuryBalanceEth) {
+      logger.warn(`[EOA Monitor] Treasury low: ${treasuryEth.toFixed(6)} ETH < min ${config.minTreasuryBalanceEth} ETH (addr: ${account.address})`);
       return { success: false, reason: 'treasury-low' };
     }
   } catch {
-    return { success: false, reason: 'treasury-low' };
+    return { success: false, reason: 'treasury-check-failed' };
   }
 
   // 6. Gas price guard

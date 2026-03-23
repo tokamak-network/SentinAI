@@ -27,6 +27,16 @@ vi.mock('@/lib/logger', () => ({
   }),
 }));
 
+vi.mock('@/chains', () => ({
+  getChainPlugin: () => ({
+    l1Chain: {
+      blockExplorers: {
+        default: { name: 'Etherscan', url: 'https://sepolia.etherscan.io' },
+      },
+    },
+  }),
+}));
+
 vi.mock('@/lib/redis-store', () => ({
   getStore: () => ({
     getAlertConfig: vi.fn().mockResolvedValue({
@@ -87,12 +97,13 @@ describe('NotifierAgent', () => {
   // Subscription management
   // ----------------------------------------------------------
 
-  it('should subscribe to 3 event types on start (no cost-insight)', () => {
+  it('should subscribe to 4 event types on start (no cost-insight)', () => {
     agent.start();
     expect(handlers['cost-insight']).toBeUndefined();
     expect(handlers['scaling-recommendation']?.length).toBe(1);
     expect(handlers['verification-complete']?.length).toBe(1);
     expect(handlers['remediation-complete']?.length).toBe(1);
+    expect(handlers['reliability-issue']?.length).toBe(1);
   });
 
   it('should unsubscribe on stop', () => {
@@ -101,6 +112,7 @@ describe('NotifierAgent', () => {
     expect(handlers['scaling-recommendation']?.length).toBe(0);
     expect(handlers['verification-complete']?.length).toBe(0);
     expect(handlers['remediation-complete']?.length).toBe(0);
+    expect(handlers['reliability-issue']?.length).toBe(0);
   });
 
   // ----------------------------------------------------------
@@ -176,32 +188,50 @@ describe('NotifierAgent', () => {
   });
 
   // ----------------------------------------------------------
-  // Remediation — only notify on FAILURE
+  // Remediation — EOA refill always notifies, others only on failure
   // ----------------------------------------------------------
 
-  it('should notify on remediation failure', async () => {
+  it('should notify on EOA refill success with explorer link', async () => {
     agent.start();
     emit('remediation-complete', {
       trigger: 'security-alert',
       results: [
-        { action: 'eoa-refill', success: false, detail: 'insufficient treasury balance' },
+        { action: 'eoa-refill', success: true, detail: 'batcher refilled: 0.05 → 0.55 ETH (tx: 0xabc123)' },
+      ],
+      successCount: 1,
+      failureCount: 0,
+    });
+
+    await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
+    expect(parseFetchBody().text).toContain('EOA Refill Complete');
+    expect(blocksText()).toContain('batcher refilled');
+    expect(blocksText()).toContain('https://sepolia.etherscan.io/tx/0xabc123');
+    expect(blocksText()).toContain('View on Explorer');
+  });
+
+  it('should notify on EOA refill failure with guidance', async () => {
+    agent.start();
+    emit('remediation-complete', {
+      trigger: 'security-alert',
+      results: [
+        { action: 'eoa-refill', success: false, detail: 'batcher refill denied: treasury-low' },
       ],
       successCount: 0,
       failureCount: 1,
     });
 
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
-    expect(parseFetchBody().text).toContain('Action Required');
-    expect(blocksText()).toContain('eoa-refill');
-    expect(blocksText()).toContain('insufficient treasury');
+    expect(parseFetchBody().text).toContain('EOA Refill Failed');
+    expect(blocksText()).toContain('treasury-low');
+    expect(blocksText()).toContain('Treasury wallet ETH balance');
   });
 
-  it('should NOT notify on remediation success', async () => {
+  it('should NOT notify on non-EOA non-failover remediation success', async () => {
     agent.start();
     emit('remediation-complete', {
-      trigger: 'security-alert',
+      trigger: 'rca-result',
       results: [
-        { action: 'eoa-refill', success: true, detail: 'batcher refilled: 0.05 → 0.55 ETH' },
+        { action: 'rca-remediation-logged', success: true, detail: 'RCA logged' },
       ],
       successCount: 1,
       failureCount: 0,

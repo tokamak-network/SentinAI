@@ -258,6 +258,17 @@ describe('eoa-balance-monitor', () => {
       expect(result.allowed).toBe(false);
       expect(result.reason).toBe('treasury-low');
     });
+
+    it('should return treasury-check-failed when RPC call fails', async () => {
+      process.env.TREASURY_PRIVATE_KEY = TREASURY_KEY;
+      process.env.SCALING_SIMULATION_MODE = 'false';
+      mockGetBalance.mockRejectedValue(new Error('RPC timeout'));
+
+      const result = await canRefill('https://rpc.test', BATCHER_ADDR, TEST_CONFIG);
+
+      expect(result.allowed).toBe(false);
+      expect(result.reason).toBe('treasury-check-failed');
+    });
   });
 
   // ============================
