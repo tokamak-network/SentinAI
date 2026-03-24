@@ -296,16 +296,21 @@ export default function OperatorDetailPage() {
                     }}
                   >
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: '#0A0A0A', letterSpacing: '0.05em' }}>
-                        {service.displayName.toUpperCase()}
+                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
+                        <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: '#0A0A0A', letterSpacing: '0.05em' }}>
+                          {service.displayName.toUpperCase()}
+                        </div>
+                        <div style={{
+                          fontFamily: FONT, fontSize: 13, color: '#D40000', fontWeight: 700,
+                          background: '#FFF0F0', padding: '2px 8px', border: '1px solid #FFD0D0',
+                        }}>
+                          {formatTONPrice(service.payment.amount)} / CALL
+                        </div>
                       </div>
-                      <div style={{ fontFamily: FONT, fontSize: 9, color: '#707070', marginTop: 3 }}>
+                      <div style={{ fontFamily: FONT, fontSize: 9, color: '#707070', marginTop: 4 }}>
                         {service.description}
                       </div>
-                      <div style={{ fontFamily: FONT, fontSize: 9, color: '#007A00', fontWeight: 700, marginTop: 3 }}>
-                        {formatTONPrice(service.payment.amount)} / CALL
-                      </div>
-                      {/* SLA Dashboard rendered if available */}
+                      {/* SLA compact inline */}
                       {service.sla && <SLADashboard sla={service.sla} />}
                     </div>
                                         {/* Service Card Buttons */}
