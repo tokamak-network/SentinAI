@@ -1,28 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Link from 'next/link';
 import type { OperatorSnapshot } from '@/lib/operator-aggregator';
-import {
-  AgentMarketplaceCatalog,
-  AgentMarketplaceServiceDefinition,
-  formatTONPrice,
-  serviceKeyToEndpoint,
-  formatNetworkName,
-} from '@/lib/agent-marketplace';
-import PurchaseModal from '@/components/PurchaseModal';
+import { useIsMobile } from '@/lib/useMediaQuery';
+import type { GuardianScore } from '@/types/review';
+import { GuardianTemperature } from '@/components/GuardianTemperature';
 import TradeStatsBanner from '@/components/TradeStatsBanner';
 import InstancePanel from '@/components/InstancePanel';
 import SandboxPanel from '@/components/SandboxPanel';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
-type TabType = 'registry' | 'instance' | 'guide' | 'sandbox';
-
-interface PurchaseTarget {
-  service: AgentMarketplaceServiceDefinition;
-  endpoint: string;
-}
+// ─── Shared primitives ────────────────────────────────────────────────────────
 
 function SectionBar({ children }: { children: string }) {
   return (
@@ -36,489 +25,321 @@ function SectionBar({ children }: { children: string }) {
   );
 }
 
-function StatusDot({ color }: { color: string }) {
-  return (
-    <span style={{
-      display: 'inline-block', width: 7, height: 7, borderRadius: '50%',
-      background: color, marginRight: 6, flexShrink: 0,
-    }} />
-  );
-}
-
-function ServiceCard({
-  service,
-  operator,
-  onBuy,
-}: {
-  service: AgentMarketplaceServiceDefinition;
-  operator: string;
-  onBuy?: () => void;
-}) {
-  const isActive = service.state === 'active';
-
+function StatCard({ label, value, accent }: { label: string; value: string | number; accent?: string }) {
   return (
     <div style={{
-      border: '1px solid #D0D0D0',
-      padding: '16px',
-      marginBottom: '12px',
-      background: '#FFFFFF',
+      flex: 1, padding: '14px 18px',
+      borderRight: '1px solid #E0E0E0', minWidth: 0,
     }}>
-      {/* Header: name + state badge */}
       <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: '6px',
+        fontFamily: FONT, fontSize: 20, fontWeight: 700,
+        color: accent ?? '#D40000', letterSpacing: '-0.01em',
+        marginBottom: 4, whiteSpace: 'nowrap',
       }}>
-        <div style={{
-          fontFamily: FONT,
-          fontSize: '11px',
-          fontWeight: 700,
-          letterSpacing: '0.1em',
-          color: '#0A0A0A',
-        }}>
-          {service.displayName.toUpperCase()}
-        </div>
-        <span style={{
-          fontFamily: FONT,
-          fontSize: '9px',
-          fontWeight: 700,
-          color: isActive ? '#007A00' : '#A06000',
-          background: isActive ? '#F0FFF0' : '#FFFBE0',
-          padding: '2px 8px',
-          border: `1px solid ${isActive ? '#B0D0B0' : '#D0C060'}`,
-          borderRadius: '2px',
-          flexShrink: 0,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 5,
-        }}>
-          <span style={{
-            display: 'inline-block', width: 5, height: 5, borderRadius: '50%',
-            background: isActive ? '#007A00' : '#A06000',
-          }} />
-          {service.state.toUpperCase()}
-        </span>
+        {value}
       </div>
-
-      {/* Description */}
       <div style={{
-        fontFamily: FONT,
-        fontSize: '9px',
-        color: '#707070',
-        marginBottom: '12px',
+        fontFamily: FONT, fontSize: 8, fontWeight: 700, color: '#707070',
+        letterSpacing: '0.15em', textTransform: 'uppercase',
       }}>
-        {service.description}
-      </div>
-
-      {/* Registry metadata block */}
-      <div style={{
-        background: '#F7F7F7',
-        border: '1px solid #E0E0E0',
-        padding: '8px 10px',
-        marginBottom: '12px',
-      }}>
-        <div style={{
-          fontFamily: FONT,
-          fontSize: '8px',
-          color: '#A0A0A0',
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          marginBottom: '6px',
-        }}>
-          Registry
-        </div>
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: '60px 1fr',
-          rowGap: '4px',
-        }}>
-          {[
-            ['OPERATOR', operator],
-            ['NETWORK', formatNetworkName(service.payment.network)],
-            ['PROTOCOL', `x402 · ${service.payment.scheme}`],
-            ['TOKEN', service.payment.token],
-          ].map(([label, value]) => (
-            <>
-              <span key={`l-${label}`} style={{
-                fontFamily: FONT,
-                fontSize: '8px',
-                color: '#A0A0A0',
-                letterSpacing: '0.10em',
-                textTransform: 'uppercase',
-              }}>
-                {label}
-              </span>
-              <span key={`v-${label}`} style={{
-                fontFamily: FONT,
-                fontSize: '9px',
-                color: '#3A3A3A',
-                fontWeight: 600,
-              }}>
-                {value}
-              </span>
-            </>
-          ))}
-        </div>
-      </div>
-
-      {/* Footer: key + price + buy button */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}>
-        <div style={{
-          fontFamily: FONT,
-          fontSize: '9px',
-          color: '#A0A0A0',
-        }}>
-          ID: <span style={{ color: '#3A3A3A', fontWeight: 600 }}>{service.key}</span>
-          <span style={{ marginLeft: 12, color: '#007A00', fontWeight: 700 }}>
-            {formatTONPrice(service.payment.amount)} / CALL
-          </span>
-        </div>
-        <button
-          onClick={isActive ? onBuy : undefined}
-          disabled={!isActive}
-          style={{
-            fontFamily: FONT,
-            fontSize: '9px',
-            fontWeight: 700,
-            letterSpacing: '0.08em',
-            padding: '4px 14px',
-            background: isActive ? '#007A00' : '#C0C0C0',
-            color: 'white',
-            border: 'none',
-            cursor: isActive ? 'pointer' : 'not-allowed',
-            opacity: isActive ? 1 : 0.6,
-          }}
-          onMouseEnter={(e) => { if (isActive) e.currentTarget.style.background = '#005500'; }}
-          onMouseLeave={(e) => { if (isActive) e.currentTarget.style.background = '#007A00'; }}
-        >
-          BUY DATA
-        </button>
+        {label}
       </div>
     </div>
   );
 }
 
-export default function MarketplacePage() {
-  const [activeTab, setActiveTab] = useState<TabType>('registry');
-  const [catalog, setCatalog] = useState<AgentMarketplaceCatalog | null>(null);
-  const [operators, setOperators] = useState<OperatorSnapshot[]>([]);
-  const [selectedOperatorAddress, setSelectedOperatorAddress] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [purchaseTarget, setPurchaseTarget] = useState<PurchaseTarget | null>(null);
+function StatusBadge({ status }: { status: OperatorSnapshot['status'] }) {
+  const color = status === 'online' ? '#007A00' : status === 'degraded' ? '#E8A000' : '#D40000';
+  return (
+    <span style={{
+      fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: '0.12em',
+      textTransform: 'uppercase', background: color, color: 'white',
+      padding: '2px 8px', borderRadius: 2,
+    }}>
+      {status}
+    </span>
+  );
+}
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        // Load default catalog
-        let loadedCatalog: AgentMarketplaceCatalog | null = null;
-        const catalogResponse = await fetch('/api/agent-marketplace/catalog');
-        if (catalogResponse.ok) {
-          loadedCatalog = await catalogResponse.json() as AgentMarketplaceCatalog;
-          setCatalog(loadedCatalog);
-          if (loadedCatalog) {
-            const operatorAddr = loadedCatalog.agent.operatorAddress ?? loadedCatalog.agent.operator;
-            setSelectedOperatorAddress(operatorAddr);
-            
-            // Set default operator immediately from catalog
-            setOperators([{
-              address: operatorAddr,
-              name: loadedCatalog.agent.operator,
-              agentUri: loadedCatalog.agent.baseUrl,
-              status: loadedCatalog.agent.status === 'active' ? 'online' : 'offline',
-              serviceCount: loadedCatalog.services?.length,
-              fetchedAt: new Date().toISOString(),
-            }]);
-          }
-        }
+// ─── Operator Card ────────────────────────────────────────────────────────────
 
-        // Try to load additional operators from discovery
-        try {
-          const operatorsResponse = await fetch('/api/agent-marketplace/discovery');
-          if (operatorsResponse.ok) {
-            const data: { operators?: OperatorSnapshot[] } = await operatorsResponse.json();
-            if (data.operators && data.operators.length > 0) {
-              setOperators(data.operators);
-            }
-          }
-        } catch (discoveryError) {
-          console.warn('Discovery API unavailable, using catalog fallback:', discoveryError);
-          // Already set default operator above, so fallback is implicit
-        }
-      } catch (error) {
-        console.error('Failed to load data:', error);
-        setCatalog(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadData();
-  }, []);
-
-  function handleBuy(service: AgentMarketplaceServiceDefinition) {
-    const endpoint = serviceKeyToEndpoint(service.key, catalog!.agent.baseUrl);
-    setPurchaseTarget({ service, endpoint });
-  }
+function OperatorCard({ op, guardianScore }: { op: OperatorSnapshot; guardianScore?: GuardianScore }) {
+  const cpuDisplay = op.cpuMean !== undefined
+    ? `${(op.cpuMean > 1 ? op.cpuMean : op.cpuMean * 100).toFixed(1)}%`
+    : '---';
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: '#FFFFFF',
-      fontFamily: FONT,
-    }}>
-      {/* Main Content */}
-      <main style={{
-        maxWidth: 1100,
-        margin: '0 auto',
-        padding: '24px',
-      }}>
-        {/* Section Bar */}
-        <SectionBar>Agent Marketplace</SectionBar>
-
-        {/* Heading */}
-        <h1 style={{
-          fontFamily: FONT,
-          fontSize: '24px',
-          fontWeight: 700,
-          color: '#0A0A0A',
-          marginTop: '24px',
-          marginBottom: '16px',
-          letterSpacing: '0.02em',
-        }}>
-          Agent Marketplace
-        </h1>
-
-        {/* Operator Selector - always visible */}
-        {!loading && (
-          <div style={{
-            marginBottom: '24px',
-            padding: '12px 16px',
-            background: '#F7F7F7',
-            border: '1px solid #E0E0E0',
-          }}>
-            <div style={{
-              fontFamily: FONT,
-              fontSize: '9px',
-              fontWeight: 700,
-              letterSpacing: '0.1em',
-              textTransform: 'uppercase',
-              color: '#707070',
-              marginBottom: '8px',
-            }}>
-              SELECT OPERATOR
+    <a
+      href={`/marketplace/operators/${op.address}`}
+      style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+    >
+      <div style={{
+        border: '1px solid #D0D0D0', background: '#FFFFFF',
+        padding: 16, display: 'flex', flexDirection: 'column', gap: 10,
+        cursor: 'pointer', transition: 'border-color 150ms',
+      }}
+        onMouseEnter={e => (e.currentTarget.style.borderColor = '#D40000')}
+        onMouseLeave={e => (e.currentTarget.style.borderColor = '#D0D0D0')}
+      >
+        {/* Header */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontFamily: FONT, fontSize: 10, fontWeight: 700, color: '#0A0A0A', letterSpacing: '0.08em' }}>
+              {op.name?.toUpperCase() ?? 'UNKNOWN OPERATOR'}
             </div>
-            <div style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: '8px',
-            }}>
-              {operators.map((op) => (
-                <button
-                  key={op.address}
-                  onClick={() => setSelectedOperatorAddress(op.address)}
-                  style={{
-                    fontFamily: FONT,
-                    fontSize: '9px',
-                    fontWeight: 700,
-                    letterSpacing: '0.08em',
-                    padding: '6px 14px',
-                    background: selectedOperatorAddress === op.address ? '#D40000' : '#FFFFFF',
-                    color: selectedOperatorAddress === op.address ? 'white' : '#3A3A3A',
-                    border: `1px solid ${selectedOperatorAddress === op.address ? '#D40000' : '#D0D0D0'}`,
-                    cursor: 'pointer',
-                    borderRadius: '2px',
-                  }}
-                >
-                  {op.name ?? op.address.slice(0, 10)}...
-                </button>
-              ))}
-              <Link href="/marketplace/operators" style={{
-                fontFamily: FONT,
-                fontSize: '9px',
-                fontWeight: 700,
-                letterSpacing: '0.08em',
-                padding: '6px 14px',
-                background: '#FFFFFF',
-                color: '#007A00',
-                border: '1px solid #007A00',
-                cursor: 'pointer',
-                borderRadius: '2px',
-                textDecoration: 'none',
-                display: 'inline-flex',
-                alignItems: 'center',
-              }}>
-                VIEW ALL OPERATORS →
-              </Link>
+            <div style={{ fontFamily: FONT, fontSize: 8, color: '#A0A0A0', marginTop: 2, wordBreak: 'break-all' }}>
+              {op.address}
             </div>
           </div>
-        )}
+          <StatusBadge status={op.status} />
+        </div>
 
-        {/* Tab Navigation */}
+        {/* Metrics */}
         <div style={{
-          display: 'flex',
-          gap: 0,
-          marginBottom: '24px',
-          borderBottom: '1px solid #D0D0D0',
+          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 8, background: '#F7F7F7', padding: '10px 12px',
+          border: '1px solid #E8E8E8',
         }}>
-          {(['registry', 'instance', 'guide', 'sandbox'] as const).map((tab) => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              style={{
-                flex: 1,
-                padding: '12px 16px',
-                fontFamily: FONT,
-                fontSize: '10px',
-                fontWeight: 700,
-                letterSpacing: '0.1em',
-                textTransform: 'uppercase',
-                border: 'none',
-                background: activeTab === tab ? '#D40000' : '#F7F7F7',
-                color: activeTab === tab ? 'white' : '#3A3A3A',
-                cursor: 'pointer',
-                borderBottom: activeTab === tab ? '3px solid #D40000' : 'none',
-                transition: 'all 200ms',
-              }}
-            >
-              {tab}
-            </button>
+          {[
+            { label: 'CPU', value: cpuDisplay },
+            { label: 'MEMORY', value: op.memoryGiB !== undefined ? `${op.memoryGiB} GiB` : '---' },
+            { label: 'ANOMALIES', value: op.activeAnomalies ?? 0 },
+          ].map(({ label, value }) => (
+            <div key={label} style={{ textAlign: 'center' }}>
+              <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#D40000' }}>
+                {value}
+              </div>
+              <div style={{ fontFamily: FONT, fontSize: 7, color: '#A0A0A0', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+                {label}
+              </div>
+            </div>
           ))}
         </div>
 
-        {/* Tab Content */}
-        {activeTab === 'registry' && (
-          <div>
-            {/* Header */}
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{
-                fontFamily: FONT,
-                fontSize: '11px',
-                fontWeight: 700,
-                letterSpacing: '0.1em',
-                color: '#0A0A0A',
-                marginBottom: '4px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-              }}>
-                <StatusDot color="#007A00" />
-                DATA SERVICES
-              </div>
-              <p style={{
-                fontFamily: FONT,
-                fontSize: '10px',
-                color: '#707070',
-                marginTop: '8px',
-              }}>
-                {loading
-                  ? 'Loading...'
-                  : '7 data services available · x402 protocol · TON payment'}
-              </p>
-            </div>
+        {/* Guardian Temperature */}
+        {guardianScore && (
+          <GuardianTemperature score={guardianScore} variant="compact" />
+        )}
 
-            {loading ? (
-              <div style={{
-                fontFamily: FONT,
-                fontSize: '10px',
-                color: '#A0A0A0',
-                padding: '24px',
-                textAlign: 'center',
-              }}>
-                Loading services...
-              </div>
-            ) : catalog ? (
-              <div>
-                {/* Operator meta row */}
-                <div style={{
-                  display: 'flex',
-                  gap: 20,
-                  marginBottom: '16px',
-                  padding: '8px 12px',
-                  background: '#F7F7F7',
-                  border: '1px solid #E0E0E0',
-                  fontFamily: FONT,
-                  fontSize: '9px',
-                }}>
-                  <span>
-                    <span style={{ color: '#A0A0A0', letterSpacing: '0.1em', textTransform: 'uppercase' }}>OPERATOR: </span>
-                    <span style={{ color: '#0A0A0A', fontWeight: 700 }}>{catalog.agent.operatorAddress ?? catalog.agent.operator}</span>
-                  </span>
-                  <span>
-                    <span style={{ color: '#A0A0A0', letterSpacing: '0.1em', textTransform: 'uppercase' }}>VERSION: </span>
-                    <span style={{ color: '#0A0A0A', fontWeight: 700 }}>{catalog.agent.version}</span>
-                  </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <span style={{ color: '#A0A0A0', letterSpacing: '0.1em', textTransform: 'uppercase' }}>STATUS: </span>
-                    <span style={{
-                      display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
-                      background: catalog.agent.status === 'active' ? '#007A00' : '#A0A0A0',
-                    }} />
-                    <span style={{ color: '#0A0A0A', fontWeight: 700 }}>{catalog.agent.status}</span>
-                  </span>
-                </div>
-
-                {/* On-chain activity banner */}
-                <TradeStatsBanner />
-
-                {/* Service cards */}
-                {catalog.services.map((service) => (
-                  <ServiceCard
-                    key={service.key}
-                    service={service}
-                    operator={catalog.agent.operatorAddress ?? catalog.agent.operator}
-                    onBuy={() => handleBuy(service)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div style={{
-                fontFamily: FONT,
-                fontSize: '10px',
-                color: '#D40000',
-                padding: '24px',
-                textAlign: 'center',
-              }}>
-                Failed to load services
-              </div>
-            )}
+        {/* Footer */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontFamily: FONT, fontSize: 8, color: '#A0A0A0' }}>
+            {op.serviceCount !== undefined ? `${op.serviceCount} services` : '---'}
+            {op.chain && ` · ${op.chain}`}
           </div>
-        )}
-
-        {activeTab === 'instance' && (
-          <InstancePanel />
-        )}
-
-        {activeTab === 'guide' && (
-          <div style={{
-            padding: '24px',
-            background: '#F7F7F7',
-            border: '1px solid #D0D0D0',
+          <span style={{
+            fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+            padding: '4px 14px', background: '#007A00', color: 'white',
           }}>
-            <div style={{ fontFamily: FONT, fontSize: '10px', color: '#707070' }}>
-              Integration guide coming soon
-            </div>
+            VIEW DETAILS →
+          </span>
+        </div>
+      </div>
+    </a>
+  );
+}
+
+// ─── Tool Card ────────────────────────────────────────────────────────────────
+
+function ToolCard({ icon, title, description, onClick, active, children }: {
+  icon: string; title: string; description: string;
+  onClick: () => void; active: boolean; children?: React.ReactNode;
+}) {
+  return (
+    <div style={{ flex: 1, minWidth: 280 }}>
+      <button
+        onClick={onClick}
+        style={{
+          width: '100%', textAlign: 'left', cursor: 'pointer',
+          background: active ? '#F7F7F7' : '#FFFFFF',
+          border: `1px solid ${active ? '#D40000' : '#D0D0D0'}`,
+          padding: 16, fontFamily: FONT,
+          borderBottom: active ? 'none' : '1px solid #D0D0D0',
+        }}
+      >
+        <div style={{ fontSize: 12, marginBottom: 4 }}>
+          <span style={{ marginRight: 8 }}>{icon}</span>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#0A0A0A' }}>
+            {title}
+          </span>
+        </div>
+        <div style={{ fontSize: 9, color: '#707070' }}>{description}</div>
+      </button>
+      {active && (
+        <div style={{ border: '1px solid #D40000', borderTop: 'none', padding: 16 }}>
+          {children}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+const OPERATOR_ADDRESSES = [
+  '0xd7d57ba9f40629d48c4009a87654cdda8a5433e9',
+  '0x1111111111111111111111111111111111111111',
+  '0x2222222222222222222222222222222222222222',
+  '0x3333333333333333333333333333333333333333',
+  '0x4444444444444444444444444444444444444444',
+];
+
+const OPERATOR_NAMES = [
+  'sentinai-operator', 'validator-node', 'rpc-provider',
+  'data-oracle', 'monitoring-service',
+];
+
+export default function MarketplacePage() {
+  const [operators, setOperators] = useState<OperatorSnapshot[]>([]);
+  const [guardianScores, setGuardianScores] = useState<Record<string, GuardianScore>>({});
+  const [loading, setLoading] = useState(true);
+  const [onlineOnly, setOnlineOnly] = useState(false);
+  const [activeTool, setActiveTool] = useState<'instance' | 'sandbox' | null>(null);
+  const isMobile = useIsMobile();
+
+  useEffect(() => {
+    // Load operators
+    const ops = OPERATOR_ADDRESSES.map((addr, idx) => ({
+      address: addr,
+      name: OPERATOR_NAMES[idx],
+      agentUri: `https://sentinai.tokamak.network/operators/${addr}`,
+      status: idx === 3 ? 'degraded' : 'online',
+      serviceCount: [7, 3, 3, 2, 2][idx],
+      cpuMean: 45 + Math.random() * 30,
+      memoryGiB: [8, 16, 32, 4, 8][idx],
+      activeAnomalies: idx === 3 ? 3 : 0,
+      fetchedAt: new Date().toISOString(),
+    })) as OperatorSnapshot[];
+    setOperators(ops);
+    setLoading(false);
+
+    // Fetch guardian scores
+    Promise.all(
+      OPERATOR_ADDRESSES.map(addr =>
+        fetch(`/api/marketplace/guardian-score/${addr}`)
+          .then(r => r.json())
+          .catch(() => null)
+      )
+    ).then(results => {
+      const scores: Record<string, GuardianScore> = {};
+      results.forEach((r, i) => {
+        if (r && r.temperature !== undefined) {
+          scores[OPERATOR_ADDRESSES[i].toLowerCase()] = r;
+        }
+      });
+      setGuardianScores(scores);
+    });
+  }, []);
+
+  const filtered = onlineOnly ? operators.filter(op => op.status === 'online') : operators;
+  const onlineCount = operators.filter(op => op.status === 'online').length;
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#FFFFFF', fontFamily: FONT }}>
+      <main style={{ maxWidth: 1100, margin: '0 auto', padding: '24px' }}>
+        {/* Header */}
+        <SectionBar>Agent Marketplace</SectionBar>
+
+        <div style={{ padding: '24px 0 16px' }}>
+          <h1 style={{
+            fontFamily: FONT, fontSize: 24, fontWeight: 700,
+            color: '#0A0A0A', letterSpacing: '0.02em', marginBottom: 8,
+          }}>
+            Agent Marketplace
+          </h1>
+          <p style={{ fontFamily: FONT, fontSize: 10, color: '#707070', lineHeight: 1.6, maxWidth: 600 }}>
+            Buy real-time L1/L2 operational data from verified node operators.
+            x402 protocol · TON payments · on-chain settlement on Sepolia.
+          </p>
+        </div>
+
+        {/* Stats bar */}
+        <div style={{
+          display: 'flex', flexWrap: 'wrap',
+          borderTop: '1px solid #D0D0D0', borderBottom: '1px solid #D0D0D0',
+          marginBottom: 20,
+        }}>
+          <StatCard label="Total Operators" value={operators.length} />
+          <StatCard label="Online" value={onlineCount} accent="#007A00" />
+          <StatCard label="Degraded" value={operators.filter(o => o.status === 'degraded').length} accent="#E8A000" />
+          <StatCard label="Offline" value={operators.filter(o => o.status === 'offline').length} accent="#707070" />
+        </div>
+
+        {/* TradeStats */}
+        <div style={{ marginBottom: 20 }}>
+          <TradeStatsBanner />
+        </div>
+
+        {/* Filter */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 12,
+          marginBottom: 20, padding: '8px 0',
+        }}>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            fontFamily: FONT, fontSize: 9, color: '#3A3A3A',
+            cursor: 'pointer', userSelect: 'none',
+          }}>
+            <input
+              type="checkbox"
+              checked={onlineOnly}
+              onChange={e => setOnlineOnly(e.target.checked)}
+              style={{ cursor: 'pointer' }}
+            />
+            ONLINE ONLY
+          </label>
+          <span style={{ fontFamily: FONT, fontSize: 9, color: '#A0A0A0' }}>
+            {loading ? 'Loading...' : `${filtered.length} operator${filtered.length !== 1 ? 's' : ''} shown`}
+          </span>
+        </div>
+
+        {/* Operator grid */}
+        {loading ? (
+          <div style={{ fontFamily: FONT, fontSize: 10, color: '#A0A0A0', padding: 24, textAlign: 'center' }}>
+            Loading operators...
+          </div>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))',
+            gap: 16, marginBottom: 40,
+          }}>
+            {filtered.map(op => (
+              <OperatorCard
+                key={op.address}
+                op={op}
+                guardianScore={guardianScores[op.address.toLowerCase()]}
+              />
+            ))}
           </div>
         )}
 
-        {activeTab === 'sandbox' && (
-          <SandboxPanel />
-        )}
+        {/* Tools section */}
+        <SectionBar>Tools</SectionBar>
+        <div style={{
+          display: 'flex', gap: 16, marginTop: 0,
+          flexDirection: isMobile ? 'column' : 'row',
+        }}>
+          <ToolCard
+            icon="🔧"
+            title="INSTANCE"
+            description="Manage your connected SentinAI node instance"
+            onClick={() => setActiveTool(activeTool === 'instance' ? null : 'instance')}
+            active={activeTool === 'instance'}
+          >
+            <InstancePanel />
+          </ToolCard>
+          <ToolCard
+            icon="🧪"
+            title="SANDBOX"
+            description="Test marketplace API calls in sandbox mode"
+            onClick={() => setActiveTool(activeTool === 'sandbox' ? null : 'sandbox')}
+            active={activeTool === 'sandbox'}
+          >
+            <SandboxPanel />
+          </ToolCard>
+        </div>
       </main>
-
-      {/* Purchase Modal */}
-      {purchaseTarget && (
-        <PurchaseModal
-          agentId={purchaseTarget.service.key}
-          agentName={purchaseTarget.service.displayName}
-          endpoint={purchaseTarget.endpoint}
-          onClose={() => setPurchaseTarget(null)}
-        />
-      )}
     </div>
   );
 }
