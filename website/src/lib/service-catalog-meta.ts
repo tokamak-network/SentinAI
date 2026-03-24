@@ -11,7 +11,7 @@ export interface ServiceMeta {
 
 export const SERVICE_META: Record<string, ServiceMeta> = {
   sequencer_health: {
-    useCase: 'Detect sequencer failures within 1 second and automatically reroute traffic to a healthy node',
+    useCase: 'Know instantly if the sequencer is down before submitting transactions — avoid failed txs and wasted gas',
     personas: ['DeFi Ops', 'Bridge Operators', 'MEV Bots'],
     responsePreview: {
       status: 'healthy',
@@ -22,7 +22,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   incident_summary: {
-    useCase: 'Check recent incident history to decide whether it\'s safe to deploy funds on this chain',
+    useCase: 'Check if this chain had recent outages before depositing funds — see incident count, resolution time, and patterns',
     personas: ['Fund Managers', 'Risk Teams', 'DeFi Protocols'],
     responsePreview: {
       activeIncidents: 0,
@@ -32,7 +32,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   batch_submission_status: {
-    useCase: 'Detect batch submission delays early so you can act before your L2 transactions get stuck',
+    useCase: 'Spot batch posting delays that signal withdrawal slowdowns — critical for bridges and fund managers moving assets off L2',
     personas: ['L2 App Devs', 'MEV Bots', 'Sequencer Ops'],
     responsePreview: {
       pendingBatches: 3,
@@ -42,7 +42,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   derivation_lag: {
-    useCase: 'Monitor L1↔L2 sync lag in real-time to verify bridge safety before cross-chain transfers',
+    useCase: 'Verify L1↔L2 sync is healthy before bridging assets — a lag spike means your bridge tx could be delayed or stuck',
     personas: ['Bridge Operators', 'Cross-chain Protocols'],
     responsePreview: {
       l2BlockNumber: 18234567,
@@ -53,7 +53,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   anomaly_feed: {
-    useCase: 'Stream real-time anomaly events directly into your bots, dashboards, or alert pipelines',
+    useCase: 'Get early warnings when something goes wrong on-chain — so you can pause deposits, hedge positions, or alert users before impact',
     personas: ['Monitoring Teams', 'Alert Systems', 'Trading Bots'],
     responsePreview: {
       anomalies: [
@@ -64,7 +64,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   health_diagnostics: {
-    useCase: 'Run a full system health check in one call — ideal for ops reports and SLA compliance',
+    useCase: 'Confirm the chain infrastructure is healthy before relying on it — one API call covers CPU, sync, anomalies, and components',
     personas: ['Node Operators', 'DevOps', 'SRE Teams'],
     responsePreview: {
       overall: 'healthy',
@@ -74,7 +74,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   rca_report: {
-    useCase: 'Get root cause analysis reports for post-mortems, compliance, and incident documentation',
+    useCase: 'Understand why an outage happened and whether it could affect you again — detailed causal chain with remediation steps',
     personas: ['SRE Teams', 'Compliance', 'Incident Managers'],
     responsePreview: {
       incidentId: 'INC-2026-0324-001',
@@ -86,7 +86,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
   },
   // Validator services
   validator_status: {
-    useCase: 'Track validator status and rewards in real-time to manage slashing risk proactively',
+    useCase: 'Check if your validator is at risk of slashing — see uptime, missed blocks, and pending rewards before they\'re lost',
     personas: ['Staking Providers', 'Validators', 'DAO Treasuries'],
     responsePreview: {
       status: 'active',
@@ -96,7 +96,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   stake_info: {
-    useCase: 'Check staking pool status and yield estimates to optimize your staking strategy',
+    useCase: 'Compare staking yields and pool sizes to find the best place for your stake — updated in real-time',
     personas: ['DeFi Protocols', 'Yield Aggregators'],
     responsePreview: {
       totalStaked: '32,000 ETH',
@@ -106,7 +106,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   consensus_health: {
-    useCase: 'Track consensus participation rate and missed blocks to assess network stability',
+    useCase: 'See if the network is reaching consensus reliably — missed slots signal instability that could affect finality of your txs',
     personas: ['Network Monitors', 'Governance Teams'],
     responsePreview: {
       participationRate: '99.8%',
@@ -117,7 +117,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
   },
   // RPC services
   request_count: {
-    useCase: 'Track RPC request volume by hour for capacity planning and cost optimization',
+    useCase: 'See how loaded this RPC endpoint is before routing your traffic to it — avoid congested nodes that slow your app',
     personas: ['RPC Providers', 'Infrastructure Teams'],
     responsePreview: {
       lastHour: 45230,
@@ -127,7 +127,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   latency_stats: {
-    useCase: 'Monitor P99/P95 latency in real-time to ensure SLA compliance',
+    useCase: 'Know exactly how fast this RPC responds at P95/P99 — pick the fastest provider for your latency-sensitive operations',
     personas: ['Performance Engineers', 'SLA Managers'],
     responsePreview: {
       p50: '12ms',
@@ -137,7 +137,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   error_rate: {
-    useCase: 'Analyze failure rates by error code to quickly identify the source of outages',
+    useCase: 'Check if this RPC is dropping requests before you commit to it — see error breakdown by code (429, 500, 503)',
     personas: ['Backend Devs', 'Reliability Engineers'],
     responsePreview: {
       totalErrors: 23,
@@ -147,7 +147,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
   },
   // Oracle services
   price_feed: {
-    useCase: 'Get accurate real-time token prices aggregated from multiple DEXs for reliable price feeds',
+    useCase: 'Get multi-DEX aggregated token prices for your lending protocol, trading bot, or liquidation engine — higher accuracy than single-source feeds',
     personas: ['DeFi Protocols', 'Trading Bots', 'Lending Platforms'],
     responsePreview: {
       pair: 'ETH/USDT',
@@ -158,7 +158,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   freshness_monitor: {
-    useCase: 'Detect on-chain price update delays to prevent stale data risk in your protocols',
+    useCase: 'Know if oracle prices are stale before your protocol uses them — stale data causes bad liquidations and arbitrage losses',
     personas: ['Oracle Operators', 'Risk Monitors'],
     responsePreview: {
       pairs: { 'ETH/USDT': '2s ago', 'TON/USDT': '5s ago' },
@@ -168,7 +168,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
   },
   // Monitoring services
   alert_status: {
-    useCase: 'Aggregate all active alerts in one view to get instant ecosystem health awareness',
+    useCase: 'See all active infrastructure alerts in one call — know immediately if something is wrong before your users notice',
     personas: ['On-call Engineers', 'NOC Teams'],
     responsePreview: {
       activeAlerts: 1,
@@ -177,7 +177,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   sla_metrics: {
-    useCase: 'Aggregate SLA compliance across all operators for network reliability reporting',
+    useCase: 'Get a reliability scorecard across all operators — useful for choosing which infrastructure providers to trust with your funds',
     personas: ['Platform Ops', 'Business Teams'],
     responsePreview: {
       avgUptime: '99.7%',
