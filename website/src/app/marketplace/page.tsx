@@ -5,7 +5,7 @@ import type { OperatorSnapshot } from '@/lib/operator-aggregator';
 import { useIsMobile } from '@/lib/useMediaQuery';
 import type { GuardianScore } from '@/types/review';
 import { GuardianTemperature } from '@/components/GuardianTemperature';
-import TradeStatsBanner from '@/components/TradeStatsBanner';
+import { MarketplaceRevenue } from '@/components/MarketplaceRevenue';
 import InstancePanel from '@/components/InstancePanel';
 import SandboxPanel from '@/components/SandboxPanel';
 
@@ -265,10 +265,8 @@ export default function MarketplacePage() {
           <StatCard label="Offline" value={operators.filter(o => o.status === 'offline').length} accent="#707070" />
         </div>
 
-        {/* TradeStats */}
-        <div style={{ marginBottom: 20 }}>
-          <TradeStatsBanner />
-        </div>
+        {/* Revenue Dashboard */}
+        <MarketplaceRevenue />
 
         {/* Filter */}
         <div style={{
