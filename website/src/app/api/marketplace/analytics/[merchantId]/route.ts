@@ -1,4 +1,4 @@
-export async function GET(request: Request, { params }: { params: { merchantId: string } }) {
+export async function GET(request: Request, { params }: { params: Promise<{ merchantId: string }> }) {
     return new Response(JSON.stringify({ 
         availabilityPercent: 99.9,
         responseTimeMs: 150,
