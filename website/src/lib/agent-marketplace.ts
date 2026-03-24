@@ -77,7 +77,7 @@ export interface AgentMarketplaceCatalog {
   acceptableUsePolicyVersion: string;
 }
 
-export const generateMockPerformance = (days: number = 30): any => {
+export const generateMockPerformance = (days: number = 90): any => {
   const metrics: DailyMetric[] = [];
   for (let i = 0; i < days; i++) {
     const date = new Date();

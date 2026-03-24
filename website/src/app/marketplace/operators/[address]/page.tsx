@@ -259,28 +259,7 @@ export default function OperatorDetailPage() {
         </div>
       ) : (
         <>
-          {/* System Health */}
-          {snapshot && (
-            <div style={{ marginBottom: 24, border: '1px solid #D0D0D0' }}>
-              <SectionBar>System Health</SectionBar>
-              <div style={{ display: 'flex', borderBottom: '1px solid #E0E0E0' }}>
-                <MetricCell label="CPU Usage" value={cpu !== undefined ? formatCpu(cpu) : '---'} />
-                <MetricCell label="Memory" value={mem !== undefined ? `${mem} GiB` : '---'} />
-                <MetricCell
-                  label="Anomalies"
-                  value={String(anomalies)}
-                  last
-                />
-              </div>
-              {snapshot.chain && (
-                <div style={{ padding: '8px 14px', fontFamily: FONT, fontSize: 9, color: '#707070' }}>
-                  Chain: <span style={{ color: '#0A0A0A' }}>{snapshot.chain.displayName}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-                    {/* Performance Tab */}
+          {/* Performance Tab */}
           {catalog?.agent && snapshot?.operatorAddress && (
             <>
               <div style={{ 
