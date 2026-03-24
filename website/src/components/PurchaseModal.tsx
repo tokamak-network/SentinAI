@@ -20,7 +20,10 @@ export interface PurchaseModalProps {
   agentId: string;
   agentName: string;
   endpoint: string; // e.g. '/api/marketplace/sequencer-health'
+  serviceKey?: string;
+  serviceName?: string;
   onClose: () => void;
+  onPurchaseComplete?: (txHash: string, buyerAddress: string) => void;
 }
 
 type Step = 'connect' | 'requirements' | 'balance' | 'sign' | 'result';
@@ -121,7 +124,7 @@ function StatusBadge({ label, color }: { label: string; color: string }) {
   );
 }
 
-export default function PurchaseModal({ agentName, endpoint, onClose }: PurchaseModalProps) {
+export default function PurchaseModal({ agentName, endpoint, onClose, onPurchaseComplete }: PurchaseModalProps) {
   const [state, setState] = useState<StepState>({ step: 'connect' });
 
   const fullEndpoint = endpoint; // already a full URL from serviceKeyToEndpoint(key, baseUrl)
@@ -231,6 +234,9 @@ export default function PurchaseModal({ agentName, endpoint, onClose }: Purchase
       });
       const result = await executePayment({ endpoint: fullEndpoint, paymentHeader });
       setState((prev) => ({ ...prev, step: 'result', result, loading: false }));
+      if (result.success && result.txHash && state.account) {
+        onPurchaseComplete?.(result.txHash, state.account);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Payment failed');
       setState((prev) => ({ ...prev, step: 'balance' }));

@@ -9,6 +9,7 @@ import { SLADashboard } from '@/components/SLADashboard';
 import { PerformanceGraphs } from '@/components/PerformanceGraphs';
 import { TrialButton } from '@/components/TrialButton';
 import { GuardianTemperature } from '@/components/GuardianTemperature';
+import { ReviewModal } from '@/components/ReviewModal';
 import type { GuardianScore, OperatorReview } from '@/types/review';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
@@ -115,6 +116,9 @@ export default function OperatorDetailPage() {
   const [purchaseTarget, setPurchaseTarget] = useState<PurchaseTarget | null>(null);
   const [guardianScore, setGuardianScore] = useState<GuardianScore | null>(null);
   const [reviews, setReviews] = useState<OperatorReview[]>([]);
+  const [reviewTarget, setReviewTarget] = useState<{
+    serviceKey: string; displayName: string; txHash: string; reviewerAddress: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!address) return;
@@ -438,7 +442,40 @@ export default function OperatorDetailPage() {
           operatorAddress={address}
           agentName={catalog?.agent.operator ?? 'Unknown Operator'}
           endpoint={purchaseTarget.endpoint}
+          serviceKey={purchaseTarget.serviceKey}
+          serviceName={purchaseTarget.displayName}
           onClose={() => setPurchaseTarget(null)}
+          onPurchaseComplete={(txHash, buyerAddress) => {
+            setReviewTarget({
+              serviceKey: purchaseTarget.serviceKey,
+              displayName: purchaseTarget.displayName,
+              txHash,
+              reviewerAddress: buyerAddress,
+            });
+          }}
+        />
+      )}
+
+      {/* Review Modal — appears after successful purchase */}
+      {reviewTarget && (
+        <ReviewModal
+          operatorAddress={address}
+          serviceKey={reviewTarget.serviceKey}
+          serviceName={reviewTarget.displayName}
+          txHash={reviewTarget.txHash}
+          reviewerAddress={reviewTarget.reviewerAddress}
+          onClose={() => setReviewTarget(null)}
+          onSubmitted={() => {
+            // Refresh guardian score + reviews
+            fetch(`/api/marketplace/guardian-score/${address}`)
+              .then(r => r.json())
+              .then(data => { if (data.temperature !== undefined) setGuardianScore(data); })
+              .catch(() => {});
+            fetch(`/api/marketplace/reviews?operator=${address}`)
+              .then(r => r.json())
+              .then(data => { if (Array.isArray(data)) setReviews(data); })
+              .catch(() => {});
+          }}
         />
       )}
     </div>
