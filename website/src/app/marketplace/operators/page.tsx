@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import type { OperatorSnapshot } from '@/lib/operator-aggregator';
 import { getAllOperators } from '@/lib/agent-marketplace';
 import { useIsMobile } from '@/lib/useMediaQuery';
+import type { GuardianScore } from '@/types/review';
+import { GuardianTemperature } from '@/components/GuardianTemperature';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
@@ -60,7 +62,7 @@ function StatusBadge({ status }: { status: OperatorSnapshot['status'] }) {
   );
 }
 
-function OperatorCard({ op }: { op: OperatorSnapshot }) {
+function OperatorCard({ op, guardianScore }: { op: OperatorSnapshot; guardianScore?: GuardianScore }) {
   const cpuDisplay =
     op.cpuMean !== undefined
       ? `${(op.cpuMean > 1 ? op.cpuMean : op.cpuMean * 100).toFixed(1)}%`
@@ -110,54 +112,9 @@ function OperatorCard({ op }: { op: OperatorSnapshot }) {
         ))}
       </div>
 
-      {/* Trust Metrics */}
-      {op.metrics && (op.metrics.rating || op.metrics.uptimePercent || op.metrics.avgLatencyMs || op.metrics.monthlyCallCount) && (
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)',
-          gap: 8, background: '#F0F9F0', padding: '10px 12px',
-          border: '1px solid #C0E8C0',
-        }}>
-          {op.metrics.rating !== undefined && (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#007A00' }}>
-                ⭐ {op.metrics.rating.toFixed(1)}/5.0
-              </div>
-              <div style={{ fontFamily: FONT, fontSize: 7, color: '#707070', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                {op.metrics.reviewCount ? `(${op.metrics.reviewCount} reviews)` : 'Rating'}
-              </div>
-            </div>
-          )}
-          {op.metrics.uptimePercent !== undefined && (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#007A00' }}>
-                {op.metrics.uptimePercent.toFixed(1)}%
-              </div>
-              <div style={{ fontFamily: FONT, fontSize: 7, color: '#707070', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                Uptime (30d)
-              </div>
-            </div>
-          )}
-          {op.metrics.avgLatencyMs !== undefined && (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#007A00' }}>
-                {op.metrics.avgLatencyMs}ms
-              </div>
-              <div style={{ fontFamily: FONT, fontSize: 7, color: '#707070', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                Avg Latency
-              </div>
-            </div>
-          )}
-          {op.metrics.monthlyCallCount !== undefined && (
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#007A00' }}>
-                {op.metrics.monthlyCallCount}
-              </div>
-              <div style={{ fontFamily: FONT, fontSize: 7, color: '#707070', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                Monthly Calls
-              </div>
-            </div>
-          )}
-        </div>
+      {/* Guardian Temperature */}
+      {guardianScore && (
+        <GuardianTemperature score={guardianScore} variant="compact" />
       )}
 
       {/* Footer */}
@@ -210,6 +167,7 @@ export default function OperatorsPage() {
   const [operators, setOperators] = useState<OperatorSnapshot[]>([MOCK_OPERATOR]);
   const [loading, setLoading] = useState(false);
   const [onlineOnly, setOnlineOnly] = useState(false);
+  const [guardianScores, setGuardianScores] = useState<Record<string, GuardianScore>>({});
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -336,6 +294,30 @@ export default function OperatorsPage() {
     };
     
     loadOperators();
+
+    // Fetch guardian scores for all operators
+    const addresses = [
+      '0xd7d57ba9f40629d48c4009a87654cdda8a5433e9',
+      '0x1111111111111111111111111111111111111111',
+      '0x2222222222222222222222222222222222222222',
+      '0x3333333333333333333333333333333333333333',
+      '0x4444444444444444444444444444444444444444',
+    ];
+    Promise.all(
+      addresses.map(addr =>
+        fetch(`/api/marketplace/guardian-score/${addr}`)
+          .then(r => r.json())
+          .catch(() => null)
+      )
+    ).then(results => {
+      const scores: Record<string, GuardianScore> = {};
+      results.forEach((r, i) => {
+        if (r && r.temperature !== undefined) {
+          scores[addresses[i].toLowerCase()] = r;
+        }
+      });
+      setGuardianScores(scores);
+    });
   }, []);
 
   const filtered = onlineOnly ? operators.filter((op) => op.status === 'online') : operators;
@@ -413,7 +395,7 @@ export default function OperatorsPage() {
           gap: 16,
         }}>
           {filtered.map((op) => (
-            <OperatorCard key={op.address} op={op} />
+            <OperatorCard key={op.address} op={op} guardianScore={guardianScores[op.address.toLowerCase()]} />
           ))}
         </div>
       )}

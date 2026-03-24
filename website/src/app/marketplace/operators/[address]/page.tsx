@@ -8,6 +8,8 @@ import PurchaseModal from '@/components/PurchaseModal';
 import { SLADashboard } from '@/components/SLADashboard';
 import { PerformanceGraphs } from '@/components/PerformanceGraphs';
 import { TrialButton } from '@/components/TrialButton';
+import { GuardianTemperature } from '@/components/GuardianTemperature';
+import type { GuardianScore, OperatorReview } from '@/types/review';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
@@ -111,6 +113,8 @@ export default function OperatorDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [purchaseTarget, setPurchaseTarget] = useState<PurchaseTarget | null>(null);
+  const [guardianScore, setGuardianScore] = useState<GuardianScore | null>(null);
+  const [reviews, setReviews] = useState<OperatorReview[]>([]);
 
   useEffect(() => {
     if (!address) return;
@@ -189,6 +193,19 @@ export default function OperatorDetailPage() {
     };
 
     load();
+  }, [address]);
+
+  // Fetch Guardian Score + Reviews
+  useEffect(() => {
+    if (!address) return;
+    fetch(`/api/marketplace/guardian-score/${address}`)
+      .then(r => r.json())
+      .then(data => { if (data.temperature !== undefined) setGuardianScore(data); })
+      .catch(() => {});
+    fetch(`/api/marketplace/reviews?operator=${address}`)
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setReviews(data); })
+      .catch(() => {});
   }, [address]);
 
   const cpu = snapshot?.metrics?.cpu?.mean;
@@ -276,18 +293,66 @@ export default function OperatorDetailPage() {
             </>
           )}
 
-          {/* Operator-level SLA (shown once) */}
-          {catalog && (() => {
-            const firstSla = catalog.services.find(s => s.sla)?.sla;
-            return firstSla ? (
-              <div style={{ border: '1px solid #D0D0D0', marginBottom: 24 }}>
-                <SectionBar>SLA Guarantees</SectionBar>
-                <div style={{ padding: '10px 16px' }}>
-                  <SLADashboard sla={firstSla} />
+          {/* Guardian Score + SLA */}
+          <div style={{ display: 'flex', gap: 16, marginBottom: 24, flexWrap: 'wrap' }}>
+            {guardianScore && (
+              <div style={{ flex: 1, minWidth: 250, border: '1px solid #D0D0D0' }}>
+                <SectionBar>Guardian Score</SectionBar>
+                <div style={{ padding: 14 }}>
+                  <GuardianTemperature score={guardianScore} variant="full" />
                 </div>
               </div>
-            ) : null;
-          })()}
+            )}
+            {catalog && (() => {
+              const firstSla = catalog.services.find(s => s.sla)?.sla;
+              return firstSla ? (
+                <div style={{ flex: 1, minWidth: 250, border: '1px solid #D0D0D0' }}>
+                  <SectionBar>SLA Guarantees</SectionBar>
+                  <div style={{ padding: '10px 16px' }}>
+                    <SLADashboard sla={firstSla} />
+                  </div>
+                </div>
+              ) : null;
+            })()}
+          </div>
+
+          {/* Recent Reviews */}
+          {reviews.length > 0 && (
+            <div style={{ border: '1px solid #D0D0D0', marginBottom: 24 }}>
+              <SectionBar>Recent Reviews</SectionBar>
+              {reviews.slice(0, 5).map((review, i) => (
+                <div key={review.id} style={{
+                  padding: '10px 16px',
+                  borderBottom: i < Math.min(reviews.length, 5) - 1 ? '1px solid #F0F0F0' : 'none',
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                }}>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontFamily: FONT, fontSize: 9, color: '#A0A0A0', marginBottom: 3 }}>
+                      {review.reviewerAddress.slice(0, 8)}...{review.reviewerAddress.slice(-4)}
+                      <span style={{ marginLeft: 8 }}>
+                        {new Date(review.createdAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {review.comment && (
+                      <div style={{ fontFamily: FONT, fontSize: 10, color: '#3A3A3A', lineHeight: 1.5 }}>
+                        {review.comment}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ fontFamily: FONT, fontSize: 11, color: '#FFB800', flexShrink: 0, marginLeft: 12 }}>
+                    {'★'.repeat(Math.round(
+                      (review.ratings.dataAccuracy + review.ratings.responseSpeed +
+                       review.ratings.uptime + review.ratings.valueForMoney) / 4
+                    ))}
+                    {'☆'.repeat(5 - Math.round(
+                      (review.ratings.dataAccuracy + review.ratings.responseSpeed +
+                       review.ratings.uptime + review.ratings.valueForMoney) / 4
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {/* Service Catalog */}
           {catalog && (
