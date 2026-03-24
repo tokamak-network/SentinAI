@@ -6,8 +6,7 @@ import { useIsMobile } from '@/lib/useMediaQuery';
 import type { GuardianScore } from '@/types/review';
 import { GuardianTemperature } from '@/components/GuardianTemperature';
 import { MarketplaceRevenue } from '@/components/MarketplaceRevenue';
-import InstancePanel from '@/components/InstancePanel';
-import SandboxPanel from '@/components/SandboxPanel';
+
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
@@ -139,41 +138,6 @@ function OperatorCard({ op, guardianScore }: { op: OperatorSnapshot; guardianSco
   );
 }
 
-// ─── Tool Card ────────────────────────────────────────────────────────────────
-
-function ToolCard({ icon, title, description, onClick, active, children }: {
-  icon: string; title: string; description: string;
-  onClick: () => void; active: boolean; children?: React.ReactNode;
-}) {
-  return (
-    <div style={{ flex: 1, minWidth: 280 }}>
-      <button
-        onClick={onClick}
-        style={{
-          width: '100%', textAlign: 'left', cursor: 'pointer',
-          background: active ? '#F7F7F7' : '#FFFFFF',
-          border: `1px solid ${active ? '#D40000' : '#D0D0D0'}`,
-          padding: 16, fontFamily: FONT,
-          borderBottom: active ? 'none' : '1px solid #D0D0D0',
-        }}
-      >
-        <div style={{ fontSize: 12, marginBottom: 4 }}>
-          <span style={{ marginRight: 8 }}>{icon}</span>
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: '#0A0A0A' }}>
-            {title}
-          </span>
-        </div>
-        <div style={{ fontSize: 9, color: '#707070' }}>{description}</div>
-      </button>
-      {active && (
-        <div style={{ border: '1px solid #D40000', borderTop: 'none', padding: 16 }}>
-          {children}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const OPERATOR_ADDRESSES = [
@@ -194,7 +158,6 @@ export default function MarketplacePage() {
   const [guardianScores, setGuardianScores] = useState<Record<string, GuardianScore>>({});
   const [loading, setLoading] = useState(true);
   const [onlineOnly, setOnlineOnly] = useState(false);
-  const [activeTool, setActiveTool] = useState<'instance' | 'sandbox' | null>(null);
   const isMobile = useIsMobile();
 
   useEffect(() => {
@@ -312,31 +275,7 @@ export default function MarketplacePage() {
           </div>
         )}
 
-        {/* Tools section */}
-        <SectionBar>Tools</SectionBar>
-        <div style={{
-          display: 'flex', gap: 16, marginTop: 0,
-          flexDirection: isMobile ? 'column' : 'row',
-        }}>
-          <ToolCard
-            icon="🔧"
-            title="INSTANCE"
-            description="Manage your connected SentinAI node instance"
-            onClick={() => setActiveTool(activeTool === 'instance' ? null : 'instance')}
-            active={activeTool === 'instance'}
-          >
-            <InstancePanel />
-          </ToolCard>
-          <ToolCard
-            icon="🧪"
-            title="SANDBOX"
-            description="Test marketplace API calls in sandbox mode"
-            onClick={() => setActiveTool(activeTool === 'sandbox' ? null : 'sandbox')}
-            active={activeTool === 'sandbox'}
-          >
-            <SandboxPanel />
-          </ToolCard>
-        </div>
+
       </main>
     </div>
   );
