@@ -32,6 +32,51 @@ function StatusDot({ color }: { color: string }) {
 }
 
 
+// ─── Open Source Banner ───────────────────────────────────────────────────────
+
+function OpenSourceBanner() {
+  return (
+    <div style={{
+      background: '#FFFBEB', borderBottom: '1px solid #F0D060',
+      padding: '8px 24px',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+    }}>
+      <span style={{
+        fontFamily: FONT, fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
+        color: '#0A0A0A',
+      }}>
+        🎉 100% FREE &amp; OPEN SOURCE
+      </span>
+      <span style={{
+        fontFamily: FONT, fontSize: 10, color: '#555',
+      }}>
+        —
+      </span>
+      <span style={{
+        fontFamily: FONT, fontSize: 10, color: '#555',
+      }}>
+        Support the project with a
+      </span>
+      <a
+        href={GITHUB_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 6,
+          background: '#0A0A0A', color: '#FFFFFF',
+          padding: '4px 12px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
+          letterSpacing: '0.06em', textDecoration: 'none', borderRadius: 4,
+        }}
+        onMouseEnter={e => (e.currentTarget.style.background = '#333')}
+        onMouseLeave={e => (e.currentTarget.style.background = '#0A0A0A')}
+      >
+        <Github size={13} />
+        ⭐ Star on GitHub
+      </a>
+    </div>
+  );
+}
+
 // ─── Hero ─────────────────────────────────────────────────────────────────────
 
 function Hero() {
@@ -595,6 +640,7 @@ export default function LandingPage() {
   return (
     <div style={{ minHeight: '100vh', background: '#FFFFFF', fontFamily: FONT }}>
       <main>
+        <OpenSourceBanner />
         <Hero />
         <SupportedClients />
         <WhatItDoes />
