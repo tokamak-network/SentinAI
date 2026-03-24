@@ -7,7 +7,7 @@ import { formatTONPrice, getOperatorByAddress } from '@/lib/agent-marketplace';
 import PurchaseModal from '@/components/PurchaseModal';
 import { SLADashboard } from '@/components/SLADashboard';
 import { PerformanceGraphs } from '@/components/PerformanceGraphs';
-import { TrialButton } from '@/components/TrialButton';
+
 import { GuardianTemperature } from '@/components/GuardianTemperature';
 import { ReviewModal } from '@/components/ReviewModal';
 import type { GuardianScore, OperatorReview } from '@/types/review';
@@ -396,9 +396,6 @@ export default function OperatorDetailPage() {
                     </div>
                                         {/* Service Card Buttons */}
                     <div style={{ display: 'flex', gap: 8, marginTop: 8, flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'flex-end' }}>
-                      <div style={{ flex: 1 }}>
-                        <TrialButton serviceKey={service.key} displayName={service.displayName} />
-                      </div>
                       <button
                       disabled={!isActive}
                       onClick={() => {
