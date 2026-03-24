@@ -6,6 +6,11 @@ export const agentMarketplaceServiceKeys = [
   'anomaly_feed',
   'health_diagnostics',
   'rca_report',
+  'request_count',
+  'latency_stats',
+  'error_rate',
+  'alert_status',
+  'sla_metrics',
 ] as const;
 
 export type AgentMarketplaceServiceKey =
