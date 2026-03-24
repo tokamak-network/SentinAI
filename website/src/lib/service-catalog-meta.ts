@@ -11,7 +11,7 @@ export interface ServiceMeta {
 
 export const SERVICE_META: Record<string, ServiceMeta> = {
   sequencer_health: {
-    useCase: '시퀀서 장애를 1초 안에 감지하고, 이상 시 자동으로 트래픽을 다른 노드로 전환',
+    useCase: 'Detect sequencer failures within 1 second and automatically reroute traffic to a healthy node',
     personas: ['DeFi Ops', 'Bridge Operators', 'MEV Bots'],
     responsePreview: {
       status: 'healthy',
@@ -22,7 +22,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   incident_summary: {
-    useCase: '최근 장애 이력을 확인해서 이 체인에 자금을 넣어도 안전한지 판단',
+    useCase: 'Check recent incident history to decide whether it\'s safe to deploy funds on this chain',
     personas: ['Fund Managers', 'Risk Teams', 'DeFi Protocols'],
     responsePreview: {
       activeIncidents: 0,
@@ -32,7 +32,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   batch_submission_status: {
-    useCase: '배치 제출 지연을 감지해서 내 L2 트랜잭션 지연에 미리 대응',
+    useCase: 'Detect batch submission delays early so you can act before your L2 transactions get stuck',
     personas: ['L2 App Devs', 'MEV Bots', 'Sequencer Ops'],
     responsePreview: {
       pendingBatches: 3,
@@ -42,7 +42,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   derivation_lag: {
-    useCase: 'L1↔L2 동기화 지연을 모니터링해서 브릿지 안전성을 실시간 확인',
+    useCase: 'Monitor L1↔L2 sync lag in real-time to verify bridge safety before cross-chain transfers',
     personas: ['Bridge Operators', 'Cross-chain Protocols'],
     responsePreview: {
       l2BlockNumber: 18234567,
@@ -53,7 +53,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   anomaly_feed: {
-    useCase: '이상 징후를 실시간으로 받아서 내 봇이나 대시보드에 바로 연동',
+    useCase: 'Stream real-time anomaly events directly into your bots, dashboards, or alert pipelines',
     personas: ['Monitoring Teams', 'Alert Systems', 'Trading Bots'],
     responsePreview: {
       anomalies: [
@@ -64,7 +64,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   health_diagnostics: {
-    useCase: '전체 시스템 헬스체크를 한 번에 — 운영 리포트나 SLA 보고에 활용',
+    useCase: 'Run a full system health check in one call — ideal for ops reports and SLA compliance',
     personas: ['Node Operators', 'DevOps', 'SRE Teams'],
     responsePreview: {
       overall: 'healthy',
@@ -74,7 +74,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   rca_report: {
-    useCase: '장애 원인 분석 보고서 — 포스트모템이나 컴플라이언스 보고에 활용',
+    useCase: 'Get root cause analysis reports for post-mortems, compliance, and incident documentation',
     personas: ['SRE Teams', 'Compliance', 'Incident Managers'],
     responsePreview: {
       incidentId: 'INC-2026-0324-001',
@@ -86,7 +86,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
   },
   // Validator services
   validator_status: {
-    useCase: '밸리데이터 상태와 리워드를 실시간으로 추적해서 슬래싱 리스크 관리',
+    useCase: 'Track validator status and rewards in real-time to manage slashing risk proactively',
     personas: ['Staking Providers', 'Validators', 'DAO Treasuries'],
     responsePreview: {
       status: 'active',
@@ -96,7 +96,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   stake_info: {
-    useCase: '스테이킹 풀 현황과 수익률을 확인해서 최적 스테이킹 전략 수립',
+    useCase: 'Check staking pool status and yield estimates to optimize your staking strategy',
     personas: ['DeFi Protocols', 'Yield Aggregators'],
     responsePreview: {
       totalStaked: '32,000 ETH',
@@ -106,7 +106,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   consensus_health: {
-    useCase: '컨센서스 참여율과 미스된 블록을 추적해서 네트워크 안정성 확인',
+    useCase: 'Track consensus participation rate and missed blocks to assess network stability',
     personas: ['Network Monitors', 'Governance Teams'],
     responsePreview: {
       participationRate: '99.8%',
@@ -117,7 +117,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
   },
   // RPC services
   request_count: {
-    useCase: 'RPC 요청량을 시간별로 추적해서 용량 계획과 비용 최적화',
+    useCase: 'Track RPC request volume by hour for capacity planning and cost optimization',
     personas: ['RPC Providers', 'Infrastructure Teams'],
     responsePreview: {
       lastHour: 45230,
@@ -127,7 +127,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   latency_stats: {
-    useCase: 'P99/P95 레이턴시를 모니터링해서 SLA 준수 여부 실시간 확인',
+    useCase: 'Monitor P99/P95 latency in real-time to ensure SLA compliance',
     personas: ['Performance Engineers', 'SLA Managers'],
     responsePreview: {
       p50: '12ms',
@@ -137,7 +137,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   error_rate: {
-    useCase: '에러 코드별 실패율을 분석해서 장애 원인을 빠르게 파악',
+    useCase: 'Analyze failure rates by error code to quickly identify the source of outages',
     personas: ['Backend Devs', 'Reliability Engineers'],
     responsePreview: {
       totalErrors: 23,
@@ -147,7 +147,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
   },
   // Oracle services
   price_feed: {
-    useCase: '다중 DEX에서 수집한 실시간 토큰 가격으로 정확한 가격 피드 확보',
+    useCase: 'Get accurate real-time token prices aggregated from multiple DEXs for reliable price feeds',
     personas: ['DeFi Protocols', 'Trading Bots', 'Lending Platforms'],
     responsePreview: {
       pair: 'ETH/USDT',
@@ -158,7 +158,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   freshness_monitor: {
-    useCase: '온체인 가격 업데이트 지연을 감지해서 스테일 데이터 리스크 방지',
+    useCase: 'Detect on-chain price update delays to prevent stale data risk in your protocols',
     personas: ['Oracle Operators', 'Risk Monitors'],
     responsePreview: {
       pairs: { 'ETH/USDT': '2s ago', 'TON/USDT': '5s ago' },
@@ -168,7 +168,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
   },
   // Monitoring services
   alert_status: {
-    useCase: '현재 활성 알림을 모아서 보고, 전체 에코시스템 상태를 한눈에 파악',
+    useCase: 'Aggregate all active alerts in one view to get instant ecosystem health awareness',
     personas: ['On-call Engineers', 'NOC Teams'],
     responsePreview: {
       activeAlerts: 1,
@@ -177,7 +177,7 @@ export const SERVICE_META: Record<string, ServiceMeta> = {
     },
   },
   sla_metrics: {
-    useCase: '전체 운영자 SLA 준수율을 집계해서 네트워크 신뢰도 리포트에 활용',
+    useCase: 'Aggregate SLA compliance across all operators for network reliability reporting',
     personas: ['Platform Ops', 'Business Teams'],
     responsePreview: {
       avgUptime: '99.7%',
