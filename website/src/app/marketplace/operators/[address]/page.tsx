@@ -10,6 +10,7 @@ import { PerformanceGraphs } from '@/components/PerformanceGraphs';
 
 import { GuardianTemperature } from '@/components/GuardianTemperature';
 import { ReviewModal } from '@/components/ReviewModal';
+import { getServiceMeta } from '@/lib/service-catalog-meta';
 import type { GuardianScore, OperatorReview } from '@/types/review';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
@@ -364,65 +365,102 @@ export default function OperatorDetailPage() {
               <SectionBar>Service Catalog</SectionBar>
               {catalog.services.map((service, i) => {
                 const isActive = service.state === 'active';
+                const meta = getServiceMeta(service.key);
                 return (
                   <div
                     key={service.key}
                     style={{
-                      display: 'flex',
-                      flexDirection: isMobile ? 'column' : 'row',
-                      alignItems: isMobile ? 'flex-start' : 'center',
-                      justifyContent: 'space-between',
-                      padding: '12px 16px',
-                      borderBottom: i < catalog.services.length - 1 ? '1px solid #F0F0F0' : 'none',
-                      gap: isMobile ? 10 : 0,
+                      padding: '16px',
+                      borderBottom: i < catalog.services.length - 1 ? '1px solid #E0E0E0' : 'none',
                     }}
                   >
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap' }}>
-                        <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: '#0A0A0A', letterSpacing: '0.05em' }}>
-                          {service.displayName.toUpperCase()}
-                        </div>
-                        <div style={{
-                          fontFamily: FONT, fontSize: 13, color: '#D40000', fontWeight: 700,
-                          background: '#FFF0F0', padding: '2px 8px', border: '1px solid #FFD0D0',
-                        }}>
-                          {formatTONPrice(service.payment.amount)} / CALL
-                        </div>
+                    {/* Header: name + price */}
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 12, flexWrap: 'wrap', marginBottom: 10 }}>
+                      <div style={{ fontFamily: FONT, fontSize: 11, fontWeight: 700, color: '#0A0A0A', letterSpacing: '0.05em' }}>
+                        {service.displayName.toUpperCase()}
                       </div>
-                      <div style={{ fontFamily: FONT, fontSize: 9, color: '#707070', marginTop: 4 }}>
-                        {service.description}
+                      <div style={{
+                        fontFamily: FONT, fontSize: 13, color: '#D40000', fontWeight: 700,
+                        background: '#FFF0F0', padding: '2px 8px', border: '1px solid #FFD0D0',
+                      }}>
+                        {formatTONPrice(service.payment.amount)} / CALL
                       </div>
-                      {/* SLA shown once at operator level, not per service */}
                     </div>
-                                        {/* Service Card Buttons */}
-                    <div style={{ display: 'flex', gap: 8, marginTop: 8, flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'flex-end' }}>
+
+                    {/* Use Case */}
+                    {meta && (
+                      <div style={{
+                        fontFamily: FONT, fontSize: 10, color: '#3A3A3A',
+                        lineHeight: 1.6, marginBottom: 10,
+                        borderLeft: '3px solid #D40000', paddingLeft: 10,
+                      }}>
+                        {meta.useCase}
+                      </div>
+                    )}
+
+                    {/* Persona badges */}
+                    {meta && (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                        {meta.personas.map(p => (
+                          <span key={p} style={{
+                            fontFamily: FONT, fontSize: 8, fontWeight: 600,
+                            color: '#0055AA', background: '#F0F4FF',
+                            padding: '2px 6px', border: '1px solid #D0DFFF',
+                          }}>
+                            {p}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Response Preview */}
+                    {meta && (
+                      <div style={{
+                        background: '#0A0A0A', padding: '10px 12px',
+                        marginBottom: 12, overflow: 'auto',
+                      }}>
+                        <div style={{
+                          fontFamily: FONT, fontSize: 7, color: '#555',
+                          letterSpacing: '0.1em', marginBottom: 6,
+                        }}>
+                          RESPONSE PREVIEW
+                        </div>
+                        <pre style={{
+                          fontFamily: FONT, fontSize: 9, color: '#00FF88',
+                          margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.5,
+                        }}>
+                          {JSON.stringify(meta.responsePreview, null, 2)}
+                        </pre>
+                      </div>
+                    )}
+
+                    {/* Buy button */}
+                    <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                       <button
-                      disabled={!isActive}
-                      onClick={() => {
-                        if (isActive && catalog) {
-                          setPurchaseTarget({
-                            serviceKey: service.key,
-                            displayName: service.displayName,
-                            endpoint: `/api/marketplace/services/${service.key}`,
-                            amount: service.payment.amount,
-                          });
-                        }
-                      }}
-                      style={{
-                        fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
-                        padding: '4px 14px',
-                        width: isMobile ? '100%' : 'auto',
-                        background: isActive ? '#007A00' : '#C0C0C0',
-                        color: 'white', border: 'none',
-                        cursor: isActive ? 'pointer' : 'not-allowed',
-                        opacity: isActive ? 1 : 0.6,
-                        flexShrink: 0,
-                      }}
-                      onMouseEnter={(e) => { if (isActive) e.currentTarget.style.background = '#005500'; }}
-                      onMouseLeave={(e) => { if (isActive) e.currentTarget.style.background = '#007A00'; }}
-                    >
-                      BUY DATA
-                    </button>
+                        disabled={!isActive}
+                        onClick={() => {
+                          if (isActive && catalog) {
+                            setPurchaseTarget({
+                              serviceKey: service.key,
+                              displayName: service.displayName,
+                              endpoint: `/api/marketplace/services/${service.key}`,
+                              amount: service.payment.amount,
+                            });
+                          }
+                        }}
+                        style={{
+                          fontFamily: FONT, fontSize: 9, fontWeight: 700, letterSpacing: '0.08em',
+                          padding: '6px 20px',
+                          background: isActive ? '#007A00' : '#C0C0C0',
+                          color: 'white', border: 'none',
+                          cursor: isActive ? 'pointer' : 'not-allowed',
+                          opacity: isActive ? 1 : 0.6,
+                        }}
+                        onMouseEnter={(e) => { if (isActive) e.currentTarget.style.background = '#005500'; }}
+                        onMouseLeave={(e) => { if (isActive) e.currentTarget.style.background = '#007A00'; }}
+                      >
+                        BUY DATA
+                      </button>
                     </div>
                   </div>
                 );
