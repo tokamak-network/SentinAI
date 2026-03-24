@@ -57,10 +57,8 @@ export function PerformanceGraphs({ history }: PerformanceGraphsProps) {
         </div>
       </div>
 
-      {/* 3 Graphs */}
+      {/* Request Volume only */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-        <ResponseTimeGraph metrics={filteredMetrics} />
-        <UptimeGraph metrics={filteredMetrics} />
         <RequestVolumeGraph metrics={filteredMetrics} />
       </div>
     </div>
