@@ -276,6 +276,19 @@ export default function OperatorDetailPage() {
             </>
           )}
 
+          {/* Operator-level SLA (shown once) */}
+          {catalog && (() => {
+            const firstSla = catalog.services.find(s => s.sla)?.sla;
+            return firstSla ? (
+              <div style={{ border: '1px solid #D0D0D0', marginBottom: 24 }}>
+                <SectionBar>SLA Guarantees</SectionBar>
+                <div style={{ padding: '10px 16px' }}>
+                  <SLADashboard sla={firstSla} />
+                </div>
+              </div>
+            ) : null;
+          })()}
+
           {/* Service Catalog */}
           {catalog && (
             <div style={{ border: '1px solid #D0D0D0' }}>
@@ -310,8 +323,7 @@ export default function OperatorDetailPage() {
                       <div style={{ fontFamily: FONT, fontSize: 9, color: '#707070', marginTop: 4 }}>
                         {service.description}
                       </div>
-                      {/* SLA compact inline */}
-                      {service.sla && <SLADashboard sla={service.sla} />}
+                      {/* SLA shown once at operator level, not per service */}
                     </div>
                                         {/* Service Card Buttons */}
                     <div style={{ display: 'flex', gap: 8, marginTop: 8, flexDirection: isMobile ? 'column' : 'row', alignItems: isMobile ? 'stretch' : 'flex-end' }}>
