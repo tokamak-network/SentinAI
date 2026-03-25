@@ -33,14 +33,26 @@ export async function GET(): Promise<Response> {
       transport: http(rpcUrl, { timeout: 15_000 }),
     });
 
-    const logs = await client.getLogs({
-      address: REGISTRY_ADDRESS,
-      event: parseAbiItem(
-        'event AgentRegistered(uint256 indexed agentId, address indexed agent, string agentURI)'
-      ),
-      fromBlock: REGISTRY_DEPLOY_BLOCK,
-      toBlock: 'latest',
-    });
+    // Public RPCs limit block range (typically 50k blocks).
+    // Scan in chunks from deploy block to latest.
+    const latestBlock = await client.getBlockNumber();
+    const MAX_RANGE = BigInt(49000);
+    const allLogs: Awaited<ReturnType<typeof client.getLogs>>= [];
+
+    for (let from = REGISTRY_DEPLOY_BLOCK; from <= latestBlock; from += MAX_RANGE) {
+      const to = from + MAX_RANGE - BigInt(1) > latestBlock ? latestBlock : from + MAX_RANGE - BigInt(1);
+      const chunk = await client.getLogs({
+        address: REGISTRY_ADDRESS,
+        event: parseAbiItem(
+          'event AgentRegistered(uint256 indexed agentId, address indexed agent, string agentURI)'
+        ),
+        fromBlock: from,
+        toBlock: to,
+      });
+      allLogs.push(...chunk);
+    }
+
+    const logs = allLogs;
 
     // Deduplicate by address (keep latest registration)
     const byAddress = new Map<string, DiscoveredOperator>();
