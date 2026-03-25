@@ -5,7 +5,7 @@ vi.mock('@/core/instance-registry', () => ({
   getInstance: vi.fn(async () => ({ instanceId: 'inst-a' })),
 }));
 
-vi.mock('@/core/playbook-system/store', () => ({
+vi.mock('@/playbooks/learning/store', () => ({
   listOperationLedger: vi.fn(async () => ({
     total: 2,
     records: [

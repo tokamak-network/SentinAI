@@ -9,7 +9,7 @@ const { upsertPlaybook } = vi.hoisted(() => ({
   upsertPlaybook: vi.fn(async () => undefined),
 }));
 
-vi.mock('@/core/playbook-system/store', () => ({
+vi.mock('@/playbooks/learning/store', () => ({
   listOperationLedger: vi.fn(async () => ({
     records: [
       {

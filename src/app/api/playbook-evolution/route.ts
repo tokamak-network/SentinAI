@@ -4,7 +4,7 @@ import {
   listPlaybooks,
   getPlaybook,
   upsertPlaybook,
-} from '@/core/playbook-system/store';
+} from '@/playbooks/learning/store';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,11 +65,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     if (action === 'mine') {
       const { listOperationLedger: listLedger, upsertPlaybook: upsert, listPlaybooks: list } =
-        await import('@/core/playbook-system/store');
-      const { analyzeIncidentPatterns } = await import('@/core/playbook-system/incident-analyzer');
+        await import('@/playbooks/learning/store');
+      const { analyzeIncidentPatterns } = await import('@/playbooks/learning/incident-analyzer');
       const { generatePlaybookFromPattern, mergePatternIntoPlaybook } =
-        await import('@/core/playbook-system/playbook-generator');
-      const { validatePlaybookShape } = await import('@/core/playbook-system/playbook-validation');
+        await import('@/playbooks/learning/playbook-generator');
+      const { validatePlaybookShape } = await import('@/playbooks/learning/playbook-validation');
 
       const { records } = await listLedger(INSTANCE_ID, { limit: 200 });
       const patterns = analyzeIncidentPatterns(records, { minOccurrences: 3, windowDays: 30 });
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       let llmEvolved = null;
       if (patterns.length > 0) {
         try {
-          const { PlaybookEvolver } = await import('@/lib/playbook-evolution/playbook-evolver');
+          const { PlaybookEvolver } = await import('@/playbooks/evolution/playbook-evolver');
           const evolver = new PlaybookEvolver();
           const chainName = process.env.SENTINAI_CHAIN_NAME ?? process.env.SENTINAI_DEFAULT_PROTOCOL_ID ?? 'L2';
 
@@ -128,14 +128,12 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       if (!playbook) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
       const nextStatus =
-        action === 'approve' ? 'approved' as const :
-        action === 'promote' ? 'trusted' as const :
+        action === 'approve' || action === 'promote' ? 'approved' as const :
         action === 'reactivate' ? 'pending' as const :
         'suspended' as const;
 
       const reasonText =
-        action === 'approve' ? 'Approved' :
-        action === 'promote' ? 'Promoted to trusted' :
+        action === 'approve' || action === 'promote' ? 'Approved' :
         action === 'reactivate' ? 'Reactivated' :
         'Suspended';
 

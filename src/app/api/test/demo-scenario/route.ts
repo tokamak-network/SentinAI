@@ -11,8 +11,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { appendOperationRecord, listOperationLedger, listPlaybooks, upsertPlaybook } from '@/core/playbook-system/store';
-import type { OperationRecord } from '@/core/playbook-system/types';
+import { appendOperationRecord, listOperationLedger, listPlaybooks, upsertPlaybook } from '@/playbooks/learning/store';
+import type { OperationRecord } from '@/playbooks/learning/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -74,9 +74,9 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     }
 
     // Step 3: Run pattern mining inline
-    const { analyzeIncidentPatterns } = await import('@/core/playbook-system/incident-analyzer');
-    const { generatePlaybookFromPattern, mergePatternIntoPlaybook } = await import('@/core/playbook-system/playbook-generator');
-    const { validatePlaybookShape } = await import('@/core/playbook-system/playbook-validation');
+    const { analyzeIncidentPatterns } = await import('@/playbooks/learning/incident-analyzer');
+    const { generatePlaybookFromPattern, mergePatternIntoPlaybook } = await import('@/playbooks/learning/playbook-generator');
+    const { validatePlaybookShape } = await import('@/playbooks/learning/playbook-validation');
 
     const { records } = await listOperationLedger(INSTANCE_ID, { limit: 500 });
     const patterns = analyzeIncidentPatterns(records, { minOccurrences: 3, windowDays: 30 });

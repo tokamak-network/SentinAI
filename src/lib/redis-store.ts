@@ -48,7 +48,7 @@ import type {
   ABTestSession,
   PlaybookVersion,
   PlaybookVersionHistory,
-} from '@/lib/types/playbook-evolution';
+} from '@/playbooks/evolution/types';
 import logger from '@/lib/logger';
 
 // ============================================================

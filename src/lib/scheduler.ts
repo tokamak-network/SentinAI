@@ -124,9 +124,9 @@ export async function initializeScheduler(): Promise<void> {
     patternMinerTaskRunning = true;
     try {
       const instanceId = process.env.SENTINAI_INSTANCE_ID ?? 'default';
-      const { listOperationLedger, listPlaybooks, upsertPlaybook } = await import('@/core/playbook-system/store');
-      const { analyzeIncidentPatterns } = await import('@/core/playbook-system/incident-analyzer');
-      const { generatePlaybookFromPattern, mergePatternIntoPlaybook } = await import('@/core/playbook-system/playbook-generator');
+      const { listOperationLedger, listPlaybooks, upsertPlaybook } = await import('@/playbooks/learning/store');
+      const { analyzeIncidentPatterns } = await import('@/playbooks/learning/incident-analyzer');
+      const { generatePlaybookFromPattern, mergePatternIntoPlaybook } = await import('@/playbooks/learning/playbook-generator');
 
       const { records } = await listOperationLedger(instanceId, { limit: 200 });
       const patterns = analyzeIncidentPatterns(records, { minOccurrences: 3, windowDays: 30 });

@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET, POST } from './route';
-import type { EvolvedPlaybook, PlaybookVersion } from '@/lib/types/playbook-evolution';
+import type { EvolvedPlaybook, PlaybookVersion } from '@/playbooks/evolution/types';
 
 const SENTINAI_API_KEY = 'test-api-key-12345';
 
@@ -29,7 +29,7 @@ vi.mock('@/lib/redis-store', () => {
 });
 
 // Mock RollbackManager
-vi.mock('@/lib/playbook-evolution/rollback-manager', () => {
+vi.mock('@/playbooks/evolution/rollback-manager', () => {
   return {
     RollbackManager: class {
       async getVersionHistory() {
@@ -57,7 +57,7 @@ vi.mock('@/lib/playbook-evolution/rollback-manager', () => {
 });
 
 // Mock PatternMiner
-vi.mock('@/lib/playbook-evolution/pattern-miner', () => {
+vi.mock('@/playbooks/evolution/pattern-miner', () => {
   return {
     PatternMiner: class {
       async analyzeAndEvolve() {
@@ -68,7 +68,7 @@ vi.mock('@/lib/playbook-evolution/pattern-miner', () => {
 });
 
 // Mock PlaybookEvolver (LLM-enhanced generation)
-vi.mock('@/lib/playbook-evolution/playbook-evolver', () => {
+vi.mock('@/playbooks/evolution/playbook-evolver', () => {
   return {
     PlaybookEvolver: class {
       async generate(patterns: any[], parentVersionId: string) {

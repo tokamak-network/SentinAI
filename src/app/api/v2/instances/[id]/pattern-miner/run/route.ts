@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getInstance } from '@/core/instance-registry';
-import { analyzeIncidentPatterns } from '@/core/playbook-system/incident-analyzer';
-import { generatePlaybookFromPattern, mergePatternIntoPlaybook } from '@/core/playbook-system/playbook-generator';
-import { selectTemplateForPattern } from '@/core/playbook-system/template-system';
-import { validatePlaybookShape } from '@/core/playbook-system/playbook-validation';
-import { listOperationLedger, listPlaybooks, upsertPlaybook } from '@/core/playbook-system/store';
+import { analyzeIncidentPatterns } from '@/playbooks/learning/incident-analyzer';
+import { generatePlaybookFromPattern, mergePatternIntoPlaybook } from '@/playbooks/learning/playbook-generator';
+import { selectTemplateForPattern } from '@/playbooks/learning/template-system';
+import { validatePlaybookShape } from '@/playbooks/learning/playbook-validation';
+import { listOperationLedger, listPlaybooks, upsertPlaybook } from '@/playbooks/learning/store';
 
 export const dynamic = 'force-dynamic';
 type RouteContext = { params: Promise<{ id: string }> };

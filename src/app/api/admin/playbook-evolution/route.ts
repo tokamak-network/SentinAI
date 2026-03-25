@@ -8,8 +8,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { RollbackManager } from '@/lib/playbook-evolution/rollback-manager';
-import { PatternMiner } from '@/lib/playbook-evolution/pattern-miner';
+import { RollbackManager } from '@/playbooks/evolution/rollback-manager';
+import { PatternMiner } from '@/playbooks/evolution/pattern-miner';
 import { getCoreRedis } from '@/core/redis';
 import { getStore } from '@/lib/redis-store';
 import logger from '@/lib/logger';
@@ -156,8 +156,8 @@ async function handleTriggerEvolution(
     }
 
     // LLM-enhanced playbook generation
-    const { PlaybookEvolver } = await import('@/lib/playbook-evolution/playbook-evolver');
-    const { RollbackManager } = await import('@/lib/playbook-evolution/rollback-manager');
+    const { PlaybookEvolver } = await import('@/playbooks/evolution/playbook-evolver');
+    const { RollbackManager } = await import('@/playbooks/evolution/rollback-manager');
     const evolver = new PlaybookEvolver();
     const manager = new RollbackManager(store, redis);
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getInstance } from '@/core/instance-registry';
-import { listPlaybooks } from '@/core/playbook-system/store';
+import { listPlaybooks } from '@/playbooks/learning/store';
 
 export const dynamic = 'force-dynamic';
 

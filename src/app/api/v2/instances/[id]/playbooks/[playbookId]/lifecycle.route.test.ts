@@ -29,7 +29,7 @@ const { getPlaybook, upsertPlaybook } = vi.hoisted(() => ({
   upsertPlaybook: vi.fn(async () => undefined),
 }));
 
-vi.mock('@/core/playbook-system/store', () => ({
+vi.mock('@/playbooks/learning/store', () => ({
   getPlaybook,
   upsertPlaybook,
 }));

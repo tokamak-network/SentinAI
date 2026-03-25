@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getInstance } from '@/core/instance-registry';
-import { listOperationLedger } from '@/core/playbook-system/store';
+import { listOperationLedger } from '@/playbooks/learning/store';
 
 export const dynamic = 'force-dynamic';
 type RouteContext = { params: Promise<{ id: string }> };

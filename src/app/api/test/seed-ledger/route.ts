@@ -16,8 +16,8 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { appendOperationRecord, listOperationLedger } from '@/core/playbook-system/store';
-import type { LedgerOutcome, OperationRecord } from '@/core/playbook-system/types';
+import { appendOperationRecord, listOperationLedger } from '@/playbooks/learning/store';
+import type { LedgerOutcome, OperationRecord } from '@/playbooks/learning/types';
 
 export const dynamic = 'force-dynamic';
 

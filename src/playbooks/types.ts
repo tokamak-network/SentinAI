@@ -167,11 +167,10 @@ export interface AbstractPlaybook {
    * - 'draft': initial generation, basic safety checks only
    * - 'pending': awaiting operator review
    * - 'approved': operator approved, can be executed
-   * - 'trusted': high confidence, full autonomy enabled
    * - 'archived': deprecated or superseded
    * - 'suspended': temporary hold for investigation
    */
-  reviewStatus?: 'draft' | 'pending' | 'approved' | 'trusted' | 'archived' | 'suspended'
+  reviewStatus?: 'draft' | 'pending' | 'approved' | 'archived' | 'suspended'
 
   /**
    * Execution performance metrics

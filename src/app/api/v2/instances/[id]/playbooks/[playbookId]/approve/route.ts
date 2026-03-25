@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getInstance } from '@/core/instance-registry';
-import { getPlaybook, upsertPlaybook } from '@/core/playbook-system/store';
+import { getPlaybook, upsertPlaybook } from '@/playbooks/learning/store';
 
 export const dynamic = 'force-dynamic';
 type RouteContext = { params: Promise<{ id: string; playbookId: string }> };
@@ -34,6 +34,9 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
     return NextResponse.json({ error: '플레이북을 찾을 수 없습니다.', code: 'NOT_FOUND' }, { status: 404 });
   }
 
+  const body = await request.json().catch(() => ({}));
+  const changedBy: 'operator' | 'agent' | 'system' = body.changedBy === 'agent' ? 'agent' : body.changedBy === 'system' ? 'system' : 'operator';
+
   const updated = {
     ...playbook,
     reviewStatus: 'approved' as const,
@@ -44,9 +47,9 @@ export async function POST(request: NextRequest, context: RouteContext): Promise
         {
           version: playbook.evolution.version + 1,
           timestamp: new Date().toISOString(),
-          reason: 'Approved by operator',
+          reason: `Approved by ${changedBy}`,
           confidenceDelta: 0,
-          changedBy: 'operator' as const,
+          changedBy,
         },
       ],
     },

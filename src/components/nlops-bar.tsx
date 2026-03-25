@@ -20,8 +20,6 @@ interface PendingConfirmation {
 
 interface NLOpsBarProps {
   onSend: (message: string) => void;
-  onRunRca: () => void;
-  onRemediate: () => void;
   onInjectScenario?: (scenario: string) => void;
   isLoading?: boolean;
   chatMessages?: ChatMessage[];
@@ -41,7 +39,7 @@ function intentColor(intent: NLOpsIntent | undefined): string {
 }
 
 export function NLOpsBar({
-  onSend, onRunRca, onRemediate, onInjectScenario, isLoading,
+  onSend, onInjectScenario, isLoading,
   chatMessages = [], chatMessagesEndRef, pendingConfirmation, onConfirm, onDismiss,
 }: NLOpsBarProps) {
   const [input, setInput] = useState('');
@@ -244,8 +242,6 @@ export function NLOpsBar({
         )}
 
         <span style={{ fontFamily: FONT, fontSize: 10, color: '#A0A0A0', flexShrink: 0 }}>⌘K</span>
-        <QuickBtn label="RCA" onClick={onRunRca} color="#D40000" />
-        <QuickBtn label="REM" onClick={onRemediate} color="#CC6600" />
         {onInjectScenario && (
           <QuickBtn label="SIM" onClick={() => setShowScenarios(v => !v)} color="#0055AA" active={showScenarios} />
         )}

@@ -778,46 +778,6 @@ export default function Dashboard() {
   const effectiveAgentPhase = replayPhase ?? graphAgentPhase;
 
   // --- Handler stubs for new layout ---
-  const handleRunRca = useCallback(async () => {
-    try {
-      const res = await fetch(`${BASE_PATH}/api/rca`, {
-        method: 'POST',
-        headers: writeHeaders(),
-        body: JSON.stringify({}),
-      });
-      const data = await res.json();
-      if (!data.success) {
-        toast.info('RCA skipped', { description: data.message });
-        return;
-      }
-      toast.info('Running RCA...', { description: 'Root cause analysis started.' });
-    } catch {
-      toast.error('RCA request failed');
-    }
-  }, []);
-
-  const handleRemediate = useCallback(async () => {
-    try {
-      const res = await fetch(`${BASE_PATH}/api/remediation`, {
-        method: 'POST',
-        headers: writeHeaders(),
-        body: JSON.stringify({ trigger: 'auto' }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        toast.error('Remediation failed', { description: data.error });
-        return;
-      }
-      if (data.success) {
-        toast.success('Remediation complete', { description: `Playbook: ${data.execution?.playbookName}` });
-      } else {
-        toast.info('Remediation skipped', { description: data.execution?.playbookName === 'none' ? 'No matching playbook for current anomaly.' : data.message ?? 'Blocked by safety gate.' });
-      }
-    } catch {
-      toast.error('Remediation request failed');
-    }
-  }, []);
-
   const handleNLOpsSend = useCallback((message: string) => {
     sendChatMessage(message);
   }, [sendChatMessage]);
@@ -992,8 +952,7 @@ export default function Dashboard() {
       {/* ── NLOps Bar ── */}
       <NLOpsBar
         onSend={handleNLOpsSend}
-        onRunRca={handleRunRca}
-        onRemediate={handleRemediate}
+
         onInjectScenario={handleInjectScenario}
         isLoading={isSending}
         chatMessages={chatMessages}

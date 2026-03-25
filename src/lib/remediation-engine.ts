@@ -17,9 +17,10 @@ import { executeAction } from '@/lib/action-executor';
 import * as store from '@/lib/remediation-store';
 import { DEFAULT_SCALING_CONFIG } from '@/types/scaling';
 import logger from '@/lib/logger';
-import { appendOperationRecord } from '@/core/playbook-system/store';
-import type { LedgerOutcome } from '@/core/playbook-system/types';
-import { PatternMiner } from '@/lib/playbook-evolution/pattern-miner';
+import { appendOperationRecord, getPlaybook, upsertPlaybook } from '@/playbooks/learning/store';
+import { applyOutcomeFeedback } from '@/playbooks/learning/learning-feedback-loop';
+import type { LedgerOutcome } from '@/playbooks/learning/types';
+import { PatternMiner } from '@/playbooks/evolution/pattern-miner';
 import { getCoreRedis } from '@/core/redis';
 import type { IStateStore } from '@/types/redis';
 
@@ -95,6 +96,42 @@ async function writeToOperationLedger(
     logger.debug(`[Remediation] Ledger written: op=${execution.id} outcome=${outcome}`);
   } catch (err) {
     logger.warn('[Remediation] Failed to write operation ledger (non-critical)', { error: err });
+  }
+}
+
+/**
+ * Apply execution outcome to the EvolvedPlaybook's confidence & status.
+ * Closes the autonomous feedback loop: execute → learn → promote/demote.
+ * Failures are swallowed — learning is best-effort.
+ */
+async function applyPlaybookFeedback(
+  execution: RemediationExecution,
+  playbook: Playbook | any
+): Promise<void> {
+  const outcome = toLedgerOutcome(execution.status);
+  if (!outcome) return;
+
+  const playbookId = (playbook as any).name || (playbook as any).id;
+  if (!playbookId) return;
+
+  const evolved = await getPlaybook(INSTANCE_ID, playbookId);
+  if (!evolved) return;
+
+  const startMs = new Date(execution.startedAt).getTime();
+  const endMs = execution.completedAt ? new Date(execution.completedAt).getTime() : Date.now();
+
+  const evaluation = applyOutcomeFeedback({
+    playbook: evolved,
+    outcome,
+    resolutionMs: Math.max(0, endMs - startMs),
+  });
+
+  await upsertPlaybook(INSTANCE_ID, evaluation.playbook);
+
+  if (evaluation.statusChanged) {
+    logger.info(
+      `[Remediation] Playbook ${playbookId} auto-transitioned: ${evolved.reviewStatus} → ${evaluation.playbook.reviewStatus} (confidence=${evaluation.playbook.confidence.toFixed(2)})`
+    );
   }
 }
 
@@ -373,6 +410,13 @@ export async function executeRemediation(
   }
 
   void writeToOperationLedger(execution, event, playbook);
+
+  // Non-blocking: Auto-evolve playbook confidence & status via feedback loop
+  void applyPlaybookFeedback(execution, playbook).catch((err) => {
+    logger.warn('[Remediation] Playbook feedback failed (non-blocking)', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  });
 
   // Non-blocking: Trigger pattern mining asynchronously
   // Don't await - let it run in background
