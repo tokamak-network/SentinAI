@@ -1,7 +1,15 @@
 /**
  * Payment Requirements Endpoint
- * Returns X-402 payment requirements for a service
+ * Returns X-402 payment requirements for a service.
+ * EIP-712 types match the deployed SentinAIFacilitator contract exactly.
  */
+
+const TON_TOKEN = '0xa30fe40285B8f5c0457DbC3B7C8A280373c40044';
+const SEPOLIA_CHAIN_ID = 11155111;
+
+function getFacilitatorAddress(): string {
+  return process.env.FACILITATOR_ADDRESS?.trim() || '0x0000000000000000000000000000000000000000';
+}
 
 export async function POST(request: Request) {
   try {
@@ -15,26 +23,25 @@ export async function POST(request: Request) {
       );
     }
 
-    // Payment requirements for TON token on Sepolia
-    // Using real Sepolia TON: 0xa30fe40285B8f5c0457DbC3B7C8A280373c40044
+    const facilitatorAddress = getFacilitatorAddress();
+
     const requirements = {
-      network: 'eip155:11155111',
-      asset: '0xa30fe40285B8f5c0457DbC3B7C8A280373c40044', // Real TON on Sepolia
-      amount: '100000000000000000', // 0.1 TON (18 decimals)
+      network: `eip155:${SEPOLIA_CHAIN_ID}`,
+      asset: TON_TOKEN,
+      amount: '100000000000000000', // 0.1 TON
       resource,
       merchant,
       facilitator: {
-        spender: '0x1234567890123456789012345678901234567890',
-        settleUrl: 'https://sentinai.tokamak.network/api/settle',
-        receiptUrl: 'https://sentinai.tokamak.network/api/receipt',
+        address: facilitatorAddress,
+        spender: facilitatorAddress, // buyer approves TON to Facilitator
       },
       authorization: {
         type: 'eip712',
         domain: {
-          name: 'SentinAI Data Service',
+          name: 'SentinAI x402 TON Facilitator',
           version: '1',
-          chainId: 11155111,
-          verifyingContract: '0x1234567890123456789012345678901234567890',
+          chainId: SEPOLIA_CHAIN_ID,
+          verifyingContract: facilitatorAddress,
         },
         primaryType: 'PaymentAuthorization',
         types: {
@@ -45,11 +52,14 @@ export async function POST(request: Request) {
             { name: 'verifyingContract', type: 'address' },
           ],
           PaymentAuthorization: [
-            { name: 'resource', type: 'string' },
+            { name: 'buyer', type: 'address' },
             { name: 'merchant', type: 'address' },
+            { name: 'asset', type: 'address' },
             { name: 'amount', type: 'uint256' },
+            { name: 'resource', type: 'string' },
             { name: 'nonce', type: 'bytes32' },
-            { name: 'deadline', type: 'uint256' },
+            { name: 'validAfter', type: 'uint256' },
+            { name: 'validBefore', type: 'uint256' },
           ],
         },
       },

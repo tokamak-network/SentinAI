@@ -207,15 +207,16 @@ export async function signPaymentAuthorization(params: {
   const now = Math.floor(Date.now() / 1000);
   const nonce = randomNonce();
 
-  // Convert string amounts to BigInt for EIP-712 types
-  const amountBigInt = BigInt(paymentRequirements.amount);
-  
+  // Match SentinAIFacilitator.sol PaymentAuthorization struct exactly
   const authorization = {
-    resource: paymentRequirements.resource,
+    buyer: account,
     merchant: paymentRequirements.merchant,
-    amount: amountBigInt.toString(), // Ensure it's a decimal string, not hex
-    nonce: nonce, // Keep 0x prefix for bytes32
-    deadline: (now + 300).toString(), // Use deadline instead of validBefore
+    asset: paymentRequirements.asset,
+    amount: paymentRequirements.amount,
+    resource: paymentRequirements.resource,
+    nonce: nonce,
+    validAfter: String(now - 60),     // valid from 1 min ago
+    validBefore: String(now + 300),   // valid for 5 min
   };
 
   const typedData = {
@@ -235,7 +236,7 @@ export async function signPaymentAuthorization(params: {
     scheme: 'exact',
     network: paymentRequirements.network,
     payload: {
-      authorization,
+      ...authorization,
       signature,
     },
   };
