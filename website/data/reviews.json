@@ -1,0 +1,191 @@
+[
+  {
+    "id": "r001",
+    "operatorAddress": "0xd7d57ba9f40629d48c4009a87654cdda8a5433e9",
+    "reviewerAddress": "0xaaaa000000000000000000000000000000000001",
+    "serviceKey": "sequencer_health",
+    "txHash": "0xabc001",
+    "ratings": {
+      "dataAccuracy": 5,
+      "responseSpeed": 5,
+      "uptime": 5,
+      "valueForMoney": 4
+    },
+    "comment": "Very reliable sequencer health data. Fast response.",
+    "createdAt": "2026-03-20T10:00:00Z"
+  },
+  {
+    "id": "r002",
+    "operatorAddress": "0xd7d57ba9f40629d48c4009a87654cdda8a5433e9",
+    "reviewerAddress": "0xaaaa000000000000000000000000000000000002",
+    "serviceKey": "incident_summary",
+    "txHash": "0xabc002",
+    "ratings": {
+      "dataAccuracy": 4,
+      "responseSpeed": 4,
+      "uptime": 5,
+      "valueForMoney": 4
+    },
+    "createdAt": "2026-03-18T14:30:00Z"
+  },
+  {
+    "id": "r003",
+    "operatorAddress": "0xd7d57ba9f40629d48c4009a87654cdda8a5433e9",
+    "reviewerAddress": "0xaaaa000000000000000000000000000000000003",
+    "serviceKey": "anomaly_feed",
+    "txHash": "0xabc003",
+    "ratings": {
+      "dataAccuracy": 5,
+      "responseSpeed": 5,
+      "uptime": 5,
+      "valueForMoney": 5
+    },
+    "comment": "Anomaly detection is spot on. Worth every TON.",
+    "createdAt": "2026-03-15T08:00:00Z"
+  },
+  {
+    "id": "r004",
+    "operatorAddress": "0x1111111111111111111111111111111111111111",
+    "reviewerAddress": "0xaaaa000000000000000000000000000000000004",
+    "serviceKey": "validator_status",
+    "txHash": "0xabc004",
+    "ratings": {
+      "dataAccuracy": 5,
+      "responseSpeed": 4,
+      "uptime": 5,
+      "valueForMoney": 4
+    },
+    "createdAt": "2026-03-21T12:00:00Z"
+  },
+  {
+    "id": "r005",
+    "operatorAddress": "0x1111111111111111111111111111111111111111",
+    "reviewerAddress": "0xaaaa000000000000000000000000000000000005",
+    "serviceKey": "consensus_health",
+    "txHash": "0xabc005",
+    "ratings": {
+      "dataAccuracy": 4,
+      "responseSpeed": 5,
+      "uptime": 4,
+      "valueForMoney": 5
+    },
+    "comment": "Consensus data is very useful for our monitoring stack.",
+    "createdAt": "2026-03-19T09:00:00Z"
+  },
+  {
+    "id": "r006",
+    "operatorAddress": "0x2222222222222222222222222222222222222222",
+    "reviewerAddress": "0xaaaa000000000000000000000000000000000006",
+    "serviceKey": "request_count",
+    "txHash": "0xabc006",
+    "ratings": {
+      "dataAccuracy": 5,
+      "responseSpeed": 5,
+      "uptime": 5,
+      "valueForMoney": 5
+    },
+    "comment": "Best RPC provider. Sub-50ms latency consistently.",
+    "createdAt": "2026-03-22T16:00:00Z"
+  },
+  {
+    "id": "r007",
+    "operatorAddress": "0x2222222222222222222222222222222222222222",
+    "reviewerAddress": "0xaaaa000000000000000000000000000000000007",
+    "serviceKey": "latency_stats",
+    "txHash": "0xabc007",
+    "ratings": {
+      "dataAccuracy": 5,
+      "responseSpeed": 5,
+      "uptime": 5,
+      "valueForMoney": 4
+    },
+    "createdAt": "2026-03-20T11:00:00Z"
+  },
+  {
+    "id": "r008",
+    "operatorAddress": "0x2222222222222222222222222222222222222222",
+    "reviewerAddress": "0xaaaa000000000000000000000000000000000008",
+    "serviceKey": "request_count",
+    "txHash": "0xabc008",
+    "ratings": {
+      "dataAccuracy": 5,
+      "responseSpeed": 5,
+      "uptime": 5,
+      "valueForMoney": 5
+    },
+    "createdAt": "2026-03-17T07:30:00Z"
+  },
+  {
+    "id": "r009",
+    "operatorAddress": "0x3333333333333333333333333333333333333333",
+    "reviewerAddress": "0xaaaa000000000000000000000000000000000009",
+    "serviceKey": "price_feed",
+    "txHash": "0xabc009",
+    "ratings": {
+      "dataAccuracy": 3,
+      "responseSpeed": 2,
+      "uptime": 3,
+      "valueForMoney": 3
+    },
+    "comment": "Data sometimes stale. Needs improvement.",
+    "createdAt": "2026-03-16T13:00:00Z"
+  },
+  {
+    "id": "r010",
+    "operatorAddress": "0x3333333333333333333333333333333333333333",
+    "reviewerAddress": "0xaaaa000000000000000000000000000000000010",
+    "serviceKey": "freshness_monitor",
+    "txHash": "0xabc010",
+    "ratings": {
+      "dataAccuracy": 3,
+      "responseSpeed": 3,
+      "uptime": 2,
+      "valueForMoney": 2
+    },
+    "createdAt": "2026-03-14T10:00:00Z"
+  },
+  {
+    "id": "r011",
+    "operatorAddress": "0x4444444444444444444444444444444444444444",
+    "reviewerAddress": "0xaaaa000000000000000000000000000000000011",
+    "serviceKey": "alert_status",
+    "txHash": "0xabc011",
+    "ratings": {
+      "dataAccuracy": 5,
+      "responseSpeed": 4,
+      "uptime": 5,
+      "valueForMoney": 4
+    },
+    "comment": "Alerting is reliable and timely.",
+    "createdAt": "2026-03-23T08:00:00Z"
+  },
+  {
+    "id": "r012",
+    "operatorAddress": "0x4444444444444444444444444444444444444444",
+    "reviewerAddress": "0xaaaa000000000000000000000000000000000012",
+    "serviceKey": "sla_metrics",
+    "txHash": "0xabc012",
+    "ratings": {
+      "dataAccuracy": 4,
+      "responseSpeed": 4,
+      "uptime": 5,
+      "valueForMoney": 4
+    },
+    "createdAt": "2026-03-21T15:00:00Z"
+  },
+  {
+    "id": "r013",
+    "operatorAddress": "0xd7d57ba9f40629d48c4009a87654cdda8a5433e9",
+    "reviewerAddress": "0xf33827175e9414dfa1e4f0827f106359f6b52ab7",
+    "serviceKey": "sequencer_health",
+    "txHash": "0x6b6545a9e8907087105c6c3b798c4532ba1d8d038566ae4387e3230aabfd3c9b",
+    "ratings": {
+      "dataAccuracy": 5,
+      "responseSpeed": 5,
+      "uptime": 5,
+      "valueForMoney": 5
+    },
+    "comment": "On-chain settlement verified. Real TON payment via approveAndCall.",
+    "createdAt": "2026-03-25T19:09:00Z"
+  }
+]
