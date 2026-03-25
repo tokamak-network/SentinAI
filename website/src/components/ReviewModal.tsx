@@ -10,6 +10,7 @@ interface ReviewModalProps {
   serviceKey: string;
   serviceName: string;
   txHash: string;
+  settlementNonce?: string;
   reviewerAddress: string;
   onClose: () => void;
   onSubmitted?: () => void;
@@ -63,6 +64,7 @@ export function ReviewModal({
   serviceKey,
   serviceName,
   txHash,
+  settlementNonce,
   reviewerAddress,
   onClose,
   onSubmitted,
@@ -81,12 +83,10 @@ export function ReviewModal({
 
     try {
       // Submit review on-chain via MetaMask
-      // txHash here is the settlement nonce (approveAndCall tx hash)
-      // We need the settlement nonce from the Facilitator — for now use txHash as identifier
       const { txHash: reviewTxHash } = await submitReviewOnChain({
         account: reviewerAddress,
         operator: operatorAddress,
-        settlementNonce: txHash, // The settlement tx nonce
+        settlementNonce: settlementNonce ?? txHash, // EIP-712 nonce used in Facilitator
         dataAccuracy: ratings.dataAccuracy,
         responseSpeed: ratings.responseSpeed,
         uptime: ratings.uptime,

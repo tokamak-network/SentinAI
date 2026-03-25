@@ -25,7 +25,7 @@ export interface PurchaseModalProps {
   serviceKey?: string;
   serviceName?: string;
   onClose: () => void;
-  onPurchaseComplete?: (txHash: string, buyerAddress: string) => void;
+  onPurchaseComplete?: (txHash: string, buyerAddress: string, settlementNonce?: string) => void;
 }
 
 type Step = 'connect' | 'requirements' | 'balance' | 'sign' | 'result';
@@ -253,7 +253,7 @@ export default function PurchaseModal({ agentName, endpoint, amount: serviceAmou
 
       setState((prev) => ({ ...prev, step: 'result', result: enrichedResult, loading: false }));
       if (result.success && state.account) {
-        onPurchaseComplete?.(txHash, state.account);
+        onPurchaseComplete?.(txHash, state.account, payload.nonce);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Payment failed');

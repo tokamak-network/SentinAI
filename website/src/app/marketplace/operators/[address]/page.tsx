@@ -118,7 +118,7 @@ export default function OperatorDetailPage() {
   const [guardianScore, setGuardianScore] = useState<GuardianScore | null>(null);
   const [reviews, setReviews] = useState<OperatorReview[]>([]);
   const [reviewTarget, setReviewTarget] = useState<{
-    serviceKey: string; displayName: string; txHash: string; reviewerAddress: string;
+    serviceKey: string; displayName: string; txHash: string; settlementNonce: string; reviewerAddress: string;
   } | null>(null);
 
   useEffect(() => {
@@ -466,11 +466,12 @@ export default function OperatorDetailPage() {
             setPurchaseTarget(null);
             // ReviewModal will show if reviewTarget was set by onPurchaseComplete
           }}
-          onPurchaseComplete={(txHash, buyerAddress) => {
+          onPurchaseComplete={(txHash, buyerAddress, settlementNonce) => {
             setReviewTarget({
               serviceKey: purchaseTarget.serviceKey,
               displayName: purchaseTarget.displayName,
               txHash,
+              settlementNonce: settlementNonce ?? txHash,
               reviewerAddress: buyerAddress,
             });
           }}
@@ -484,6 +485,7 @@ export default function OperatorDetailPage() {
           serviceKey={reviewTarget.serviceKey}
           serviceName={reviewTarget.displayName}
           txHash={reviewTarget.txHash}
+          settlementNonce={reviewTarget.settlementNonce}
           reviewerAddress={reviewTarget.reviewerAddress}
           onClose={() => setReviewTarget(null)}
           onSubmitted={() => {
