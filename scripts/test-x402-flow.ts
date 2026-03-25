@@ -166,7 +166,7 @@ async function main() {
     console.log(`Step 6: Settlement readiness`);
     console.log(`  relayer address: ${relayerAccount.address}`);
     console.log(`  relayer ETH:     ${Number(relayerBalance) / 1e18} ETH`);
-    console.log(`  ready to settle: ${relayerBalance > 0n}\n`);
+    console.log(`  ready to settle: ${relayerBalance > BigInt(0)}\n`);
   } else {
     console.log(`Step 6: Settlement readiness`);
     console.log(`  RELAYER_PRIVATE_KEY not set — settlement will be skipped\n`);

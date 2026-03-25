@@ -464,9 +464,34 @@ export default function PurchaseModal({ agentName, endpoint, amount: serviceAmou
                     </div>
                   </div>
 
-                  {state.result.txHash && (
-                    <Row label="Settlement Tx" value={shortAddr(state.result.txHash)} />
-                  )}
+                  {/* Settlement info */}
+                  <div style={{ marginBottom: '8px' }}>
+                    <Row
+                      label="Settlement"
+                      value={
+                        state.result.settlementStatus === 'settled'
+                          ? <StatusBadge label="settled on-chain" color={GREEN} />
+                          : state.result.settlementStatus === 'pending'
+                          ? <StatusBadge label="pending" color="#E8A000" />
+                          : <StatusBadge label="off-chain only" color="#707070" />
+                      }
+                    />
+                    {state.result.txHash && (
+                      <Row
+                        label="Tx Hash"
+                        value={
+                          <a
+                            href={`https://sepolia.etherscan.io/tx/${state.result.txHash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ color: BLUE, textDecoration: 'none' }}
+                          >
+                            {shortAddr(state.result.txHash)} ↗
+                          </a>
+                        }
+                      />
+                    )}
+                  </div>
                 </>
               ) : (
                 <>

@@ -42,8 +42,10 @@ export interface SettlementResult {
   success: boolean;
   settlementId?: string;
   txHash?: string;
+  settlementStatus?: string;
   status?: string;
   error?: string;
+  [key: string]: unknown;  // allow extra data fields from API response
 }
 
 declare global {
@@ -262,7 +264,14 @@ export async function executePayment(params: {
 
   if (res.ok) {
     const body = await res.json().catch(() => ({}));
-    return { success: true, ...body };
+    const settlementStatus = res.headers.get('X-Settlement-Status') ?? 'unknown';
+    const settlementTxHash = res.headers.get('X-Settlement-TxHash') ?? undefined;
+    return {
+      success: true,
+      settlementStatus,
+      txHash: settlementTxHash,
+      ...body,
+    };
   }
 
   if (res.status === 402) {

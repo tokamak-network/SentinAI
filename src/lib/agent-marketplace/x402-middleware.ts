@@ -118,15 +118,18 @@ export async function withX402(
   }
 
   // On-chain settlement (facilitated mode only, skip for open/stub)
+  let settlementTxHash: string | undefined;
+  let settlementStatus: 'settled' | 'pending' | 'skipped' = 'skipped';
+
   if (verification.mode === 'facilitated' && process.env.RELAYER_PRIVATE_KEY) {
+    settlementStatus = 'pending';
     const settlement = await settleOnChain(parsed.envelope);
     if (!settlement.success) {
       logger.warn(`[x402] Settlement failed for ${service.key}: ${settlement.error}`);
-      // In MVP, still serve data even if settlement fails (log for reconciliation)
-      // For strict mode, uncomment below:
-      // return buildPaymentErrorResponse('payment_verification_failed', `Settlement failed: ${settlement.error}`, service);
     } else {
       logger.info(`[x402] Settlement successful for ${service.key}: ${settlement.txHash}`);
+      settlementTxHash = settlement.txHash;
+      settlementStatus = 'settled';
     }
   }
 
@@ -136,14 +139,28 @@ export async function withX402(
       mode: verification.mode,
     },
   });
+
+  // Inject settlement info into response headers
+  const enrichedHeaders = new Headers(response.headers);
+  enrichedHeaders.set('X-Settlement-Status', settlementStatus);
+  if (settlementTxHash) {
+    enrichedHeaders.set('X-Settlement-TxHash', settlementTxHash);
+  }
+  enrichedHeaders.set('Access-Control-Expose-Headers', 'X-Settlement-Status, X-Settlement-TxHash');
+
+  const enrichedResponse = new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: enrichedHeaders,
+  });
   await recordAgentMarketplaceRequest({
     agentId: verification.agentId,
     serviceKey: service.key,
     timestamp: new Date().toISOString(),
     latencyMs: Date.now() - startedAt,
     verificationResult: 'verified',
-    success: response.ok,
+    success: enrichedResponse.ok,
     operatorAddress,
   });
-  return response;
+  return enrichedResponse;
 }
