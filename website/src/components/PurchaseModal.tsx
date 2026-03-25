@@ -4,7 +4,8 @@ import { useState, useCallback } from 'react';
 import {
   connectWallet,
   getTokenInfo,
-  approveToken,
+  approveAndCallSettle,
+  encodeSettleData,
   waitForTx,
   signPaymentAuthorization,
   executePayment,
@@ -205,39 +206,54 @@ export default function PurchaseModal({ agentName, endpoint, amount: serviceAmou
     }
   }, []);
 
-  // Step 3b: Approve
-  const handleApprove = useCallback(async () => {
-    if (!state.account || !state.requirements) return;
-    setLoading(true);
-    try {
-      const txHash = await approveToken({
-        account: state.account,
-        tokenAddress: state.requirements.asset,
-        spenderAddress: state.requirements.facilitator.spender,
-        amount: BigInt(state.requirements.amount),
-      });
-      setState((prev) => ({ ...prev, loading: true, error: undefined }));
-      await waitForTx(txHash);
-      // Re-check balance
-      await handleCheckBalance(state.account, state.requirements);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Approval failed');
-    }
-  }, [state.account, state.requirements, handleCheckBalance]);
-
-  // Step 4: Sign & Pay
+  // Step 4: Sign & Pay via approveAndCall (1 tx)
   const handleSignAndPay = useCallback(async () => {
     if (!state.account || !state.requirements) return;
     setState((prev) => ({ ...prev, loading: true, step: 'sign', error: undefined }));
     try {
+      // 1. Sign EIP-712 authorization
       const paymentHeader = await signPaymentAuthorization({
         account: state.account,
         paymentRequirements: state.requirements,
       });
+
+      // 2. Decode the signed payload to get signature + params
+      const decoded = JSON.parse(atob(paymentHeader));
+      const payload = decoded.payload;
+
+      // 3. Encode settlement data for FacilitatorV2.onApprove
+      const settleData = encodeSettleData({
+        merchant: payload.merchant,
+        resource: payload.resource,
+        nonce: payload.nonce,
+        validAfter: payload.validAfter,
+        validBefore: payload.validBefore,
+        signature: payload.signature,
+      });
+
+      // 4. Call TON.approveAndCall(facilitator, amount, settleData) — atomic 1-tx
+      const txHash = await approveAndCallSettle({
+        account: state.account,
+        tokenAddress: state.requirements.asset,
+        facilitatorAddress: state.requirements.facilitator.address || state.requirements.facilitator.spender,
+        amount: BigInt(state.requirements.amount),
+        settleData,
+      });
+
+      setState((prev) => ({ ...prev, loading: true, error: undefined }));
+      await waitForTx(txHash);
+
+      // 5. Fetch the data using signed payment header (server verifies signature)
       const result = await executePayment({ endpoint: fullEndpoint, paymentHeader });
-      setState((prev) => ({ ...prev, step: 'result', result, loading: false }));
-      if (result.success && result.txHash && state.account) {
-        onPurchaseComplete?.(result.txHash, state.account);
+      const enrichedResult: SettlementResult = {
+        ...result,
+        txHash,
+        settlementStatus: 'settled',
+      };
+
+      setState((prev) => ({ ...prev, step: 'result', result: enrichedResult, loading: false }));
+      if (result.success && state.account) {
+        onPurchaseComplete?.(txHash, state.account);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Payment failed');
@@ -403,11 +419,7 @@ export default function PurchaseModal({ agentName, endpoint, amount: serviceAmou
                   </div>
 
                   <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                    {state.needsApprove ? (
-                      <Btn onClick={handleApprove}>APPROVE TON</Btn>
-                    ) : (
-                      <Btn onClick={handleSignAndPay}>SIGN &amp; PAY</Btn>
-                    )}
+                    <Btn onClick={handleSignAndPay}>SIGN &amp; PAY</Btn>
                     <Btn variant="secondary" onClick={onClose}>CANCEL</Btn>
                   </div>
                 </>

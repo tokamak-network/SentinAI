@@ -11,9 +11,10 @@ export interface PaymentRequirements {
   resource: string;
   merchant: string;
   facilitator: {
+    address?: string;
     spender: string;
-    settleUrl: string;
-    receiptUrl: string;
+    settleUrl?: string;
+    receiptUrl?: string;
   };
   authorization: {
     type: string;
@@ -174,6 +175,99 @@ export async function approveToken(params: {
   })) as string;
 
   return txHash;
+}
+
+/**
+ * Calls TON.approveAndCall(facilitator, amount, settleData) in a single tx.
+ * This atomically: approves → calls Facilitator.onApprove → two-hop transfer.
+ * Returns the transaction hash.
+ */
+export async function approveAndCallSettle(params: {
+  account: string;
+  tokenAddress: string;
+  facilitatorAddress: string;
+  amount: bigint;
+  settleData: string; // hex-encoded ABI data for onApprove
+}): Promise<string> {
+  const eth = requireEthereum();
+  const { account, tokenAddress, facilitatorAddress, amount, settleData } = params;
+
+  // approveAndCall(address spender, uint256 amount, bytes data) → selector 0xcae9ca51
+  // ABI encode: address(32) + uint256(32) + offset(32) + length(32) + data
+  const spenderEncoded = encodeAddress(facilitatorAddress);
+  const amountEncoded = encodeUint256(amount);
+
+  // Strip 0x from settleData
+  const dataHex = settleData.startsWith('0x') ? settleData.slice(2) : settleData;
+  const dataLengthBytes = dataHex.length / 2;
+
+  // Dynamic bytes encoding: offset = 96 (3 × 32), then length + padded data
+  const offset = encodeUint256(BigInt(96)); // offset to bytes data
+  const dataLength = encodeUint256(BigInt(dataLengthBytes));
+  const paddedData = dataHex + '0'.repeat((64 - (dataHex.length % 64)) % 64);
+
+  const calldata = '0xcae9ca51' + spenderEncoded + amountEncoded + offset + dataLength + paddedData;
+
+  const txHash = (await eth.request({
+    method: 'eth_sendTransaction',
+    params: [{ from: account, to: tokenAddress, data: calldata }],
+  })) as string;
+
+  return txHash;
+}
+
+/**
+ * ABI-encodes settlement parameters for FacilitatorV2.onApprove.
+ * encode(merchant, resource, nonce, validAfter, validBefore, signature)
+ */
+export function encodeSettleData(params: {
+  merchant: string;
+  resource: string;
+  nonce: string;
+  validAfter: string;
+  validBefore: string;
+  signature: string;
+}): string {
+  const { merchant, resource, nonce, validAfter, validBefore, signature } = params;
+
+  // Manual ABI encoding for (address, string, bytes32, uint256, uint256, bytes)
+  // This is complex — use a simplified approach with hex concatenation
+
+  const merchantEnc = encodeAddress(merchant);
+  const nonceEnc = nonce.startsWith('0x') ? nonce.slice(2).padStart(64, '0') : nonce.padStart(64, '0');
+  const validAfterEnc = encodeUint256(BigInt(validAfter));
+  const validBeforeEnc = encodeUint256(BigInt(validBefore));
+
+  // Dynamic types need offset pointers
+  // Layout: merchant(0) + resourceOffset(1) + nonce(2) + validAfter(3) + validBefore(4) + signatureOffset(5) + resourceData + signatureData
+
+  // Resource string encoding
+  const resourceHex = Array.from(new TextEncoder().encode(resource))
+    .map(b => b.toString(16).padStart(2, '0')).join('');
+  const resourceLength = encodeUint256(BigInt(resourceHex.length / 2));
+  const resourcePadded = resourceHex + '0'.repeat((64 - (resourceHex.length % 64)) % 64);
+
+  // Signature bytes encoding
+  const sigHex = signature.startsWith('0x') ? signature.slice(2) : signature;
+  const sigLength = encodeUint256(BigInt(sigHex.length / 2));
+  const sigPadded = sigHex + '0'.repeat((64 - (sigHex.length % 64)) % 64);
+
+  // Offsets (each slot = 32 bytes = 64 hex chars)
+  // 6 head slots × 32 = 192 bytes → resource starts at 192
+  const resourceOffset = encodeUint256(BigInt(192));
+  // signature starts at 192 + 32(length) + padded resource data
+  const resourceTotalHex = resourceLength + resourcePadded;
+  const sigOffset = encodeUint256(BigInt(192 + resourceTotalHex.length / 2));
+
+  return '0x' +
+    merchantEnc +       // slot 0: address merchant
+    resourceOffset +    // slot 1: offset to string resource
+    nonceEnc +          // slot 2: bytes32 nonce
+    validAfterEnc +     // slot 3: uint256 validAfter
+    validBeforeEnc +    // slot 4: uint256 validBefore
+    sigOffset +         // slot 5: offset to bytes signature
+    resourceLength + resourcePadded +  // string resource (length + data)
+    sigLength + sigPadded;             // bytes signature (length + data)
 }
 
 /**
