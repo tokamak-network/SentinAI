@@ -140,19 +140,6 @@ function OperatorCard({ op, guardianScore }: { op: OperatorSnapshot; guardianSco
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
-const OPERATOR_ADDRESSES = [
-  '0xd7d57ba9f40629d48c4009a87654cdda8a5433e9',
-  '0x1111111111111111111111111111111111111111',
-  '0x2222222222222222222222222222222222222222',
-  '0x3333333333333333333333333333333333333333',
-  '0x4444444444444444444444444444444444444444',
-];
-
-const OPERATOR_NAMES = [
-  'sentinai-operator', 'validator-node', 'rpc-provider',
-  'data-oracle', 'monitoring-service',
-];
-
 export default function MarketplacePage() {
   const [operators, setOperators] = useState<OperatorSnapshot[]>([]);
   const [guardianScores, setGuardianScores] = useState<Record<string, GuardianScore>>({});
@@ -161,37 +148,68 @@ export default function MarketplacePage() {
   const isMobile = useIsMobile();
 
   useEffect(() => {
-    // Load operators
-    const ops = OPERATOR_ADDRESSES.map((addr, idx) => ({
-      address: addr,
-      name: OPERATOR_NAMES[idx],
-      agentUri: `https://sentinai.tokamak.network/operators/${addr}`,
-      status: idx === 3 ? 'degraded' : 'online',
-      serviceCount: [7, 3, 3, 2, 2][idx],
-      cpuMean: 45 + Math.random() * 30,
-      memoryGiB: [8, 16, 32, 4, 8][idx],
-      activeAnomalies: idx === 3 ? 3 : 0,
-      fetchedAt: new Date().toISOString(),
-    })) as OperatorSnapshot[];
-    setOperators(ops);
-    setLoading(false);
+    // Load operators from on-chain registry
+    const loadOperators = async () => {
+      try {
+        const res = await fetch('/api/marketplace/operators');
+        const data = await res.json();
+        const discovered = (data.operators ?? []) as Array<{
+          agentId: number; address: string; agentURI: string;
+        }>;
 
-    // Fetch guardian scores
-    Promise.all(
-      OPERATOR_ADDRESSES.map(addr =>
-        fetch(`/api/marketplace/guardian-score/${addr}`)
-          .then(r => r.json())
-          .catch(() => null)
-      )
-    ).then(results => {
-      const scores: Record<string, GuardianScore> = {};
-      results.forEach((r, i) => {
-        if (r && r.temperature !== undefined) {
-          scores[OPERATOR_ADDRESSES[i].toLowerCase()] = r;
-        }
-      });
-      setGuardianScores(scores);
-    });
+        // For each discovered operator, try to fetch their catalog for metadata
+        const ops: OperatorSnapshot[] = await Promise.all(
+          discovered.map(async (op) => {
+            let name = op.address.slice(0, 10) + '...';
+            let serviceCount = 0;
+            let status: 'online' | 'offline' | 'degraded' = 'online';
+
+            try {
+              const catUrl = `${op.agentURI.replace(/\/$/, '')}/api/agent-marketplace/catalog`;
+              const catRes = await fetch(catUrl, { signal: AbortSignal.timeout(5000) });
+              if (catRes.ok) {
+                const cat = await catRes.json();
+                name = cat.agent?.operator ?? name;
+                serviceCount = cat.services?.length ?? 0;
+                status = cat.agent?.status === 'active' ? 'online' : 'offline';
+              }
+            } catch { /* catalog unavailable */ }
+
+            return {
+              address: op.address,
+              name,
+              agentUri: op.agentURI,
+              status,
+              serviceCount,
+              fetchedAt: new Date().toISOString(),
+            } as OperatorSnapshot;
+          })
+        );
+
+        setOperators(ops.length > 0 ? ops : []);
+
+        // Fetch guardian scores for discovered operators
+        const scores: Record<string, GuardianScore> = {};
+        await Promise.all(
+          discovered.map(async (op) => {
+            try {
+              const r = await fetch(`/api/marketplace/guardian-score/${op.address}`);
+              const s = await r.json();
+              if (s && s.temperature !== undefined) {
+                scores[op.address.toLowerCase()] = s;
+              }
+            } catch { /* skip */ }
+          })
+        );
+        setGuardianScores(scores);
+      } catch (err) {
+        console.error('Failed to load operators:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadOperators();
   }, []);
 
   const filtered = onlineOnly ? operators.filter(op => op.status === 'online') : operators;
