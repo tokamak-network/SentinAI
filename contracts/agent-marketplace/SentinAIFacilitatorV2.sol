@@ -17,7 +17,17 @@ interface IERC20 {
 ///        2. TON calls Facilitator.onApprove(buyer, Facilitator, amount, settleData)
 ///        3. Facilitator: transferFrom(buyer → Facilitator) ✅ (Facilitator = recipient)
 ///        4. Facilitator: transfer(Facilitator → merchant)  ✅ (Facilitator = sender)
-contract SentinAIFacilitatorV2 {
+interface IERC165 {
+    function supportsInterface(bytes4 interfaceId) external view returns (bool);
+}
+
+contract SentinAIFacilitatorV2 is IERC165 {
+    /// @notice ERC165: declare support for IERC20OnApprove interface
+    /// @dev onApprove(address,address,uint256,bytes) selector = 0x4273ca16
+    function supportsInterface(bytes4 interfaceId) external pure override returns (bool) {
+        return interfaceId == 0x4273ca16  // IERC20OnApprove
+            || interfaceId == 0x01ffc9a7; // ERC165
+    }
     bytes32 public immutable DOMAIN_SEPARATOR;
     bytes32 public constant PAYMENT_AUTHORIZATION_TYPEHASH = keccak256(
         "PaymentAuthorization(address buyer,address merchant,address asset,"
