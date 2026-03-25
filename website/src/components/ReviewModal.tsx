@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { submitReviewOnChain, waitForReviewTx } from '@/lib/review-onchain';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
@@ -79,22 +80,24 @@ export function ReviewModal({
     setError(null);
 
     try {
-      const res = await fetch('/api/marketplace/reviews', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          operatorAddress,
-          reviewerAddress,
-          serviceKey,
-          txHash,
-          ratings,
-          comment: comment.trim() || undefined,
-        }),
+      // Submit review on-chain via MetaMask
+      // txHash here is the settlement nonce (approveAndCall tx hash)
+      // We need the settlement nonce from the Facilitator — for now use txHash as identifier
+      const { txHash: reviewTxHash } = await submitReviewOnChain({
+        account: reviewerAddress,
+        operator: operatorAddress,
+        settlementNonce: txHash, // The settlement tx nonce
+        dataAccuracy: ratings.dataAccuracy,
+        responseSpeed: ratings.responseSpeed,
+        uptime: ratings.uptime,
+        valueForMoney: ratings.valueForMoney,
+        comment: comment.trim(),
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to submit review');
+      // Wait for confirmation
+      const success = await waitForReviewTx(reviewTxHash);
+      if (!success) {
+        throw new Error('Review transaction reverted');
       }
 
       onSubmitted?.();
