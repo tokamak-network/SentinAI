@@ -184,7 +184,12 @@ export default function OperatorDetailPage() {
           setSnapshot(await snapRes.value.json());
         }
         if (catRes.status === 'fulfilled' && catRes.value.ok) {
-          setCatalog(await catRes.value.json());
+          const catData = await catRes.value.json();
+          // Inject baseUrl from resolved agentUri (catalog may not include it)
+          if (catData.agent) {
+            catData.agent.baseUrl = catData.agent.baseUrl || baseUrl;
+          }
+          setCatalog(catData);
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Failed to load operator data');
