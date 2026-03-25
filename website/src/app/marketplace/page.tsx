@@ -63,10 +63,6 @@ function StatusBadge({ status }: { status: OperatorSnapshot['status'] }) {
 // ─── Operator Card ────────────────────────────────────────────────────────────
 
 function OperatorCard({ op, guardianScore }: { op: OperatorSnapshot; guardianScore?: GuardianScore }) {
-  const cpuDisplay = op.cpuMean !== undefined
-    ? `${(op.cpuMean > 1 ? op.cpuMean : op.cpuMean * 100).toFixed(1)}%`
-    : '---';
-
   return (
     <a
       href={`/marketplace/operators/${op.address}`}
@@ -91,28 +87,6 @@ function OperatorCard({ op, guardianScore }: { op: OperatorSnapshot; guardianSco
             </div>
           </div>
           <StatusBadge status={op.status} />
-        </div>
-
-        {/* Metrics */}
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: 8, background: '#F7F7F7', padding: '10px 12px',
-          border: '1px solid #E8E8E8',
-        }}>
-          {[
-            { label: 'CPU', value: cpuDisplay },
-            { label: 'MEMORY', value: op.memoryGiB !== undefined ? `${op.memoryGiB} GiB` : '---' },
-            { label: 'ANOMALIES', value: op.activeAnomalies ?? 0 },
-          ].map(({ label, value }) => (
-            <div key={label} style={{ textAlign: 'center' }}>
-              <div style={{ fontFamily: FONT, fontSize: 12, fontWeight: 700, color: '#D40000' }}>
-                {value}
-              </div>
-              <div style={{ fontFamily: FONT, fontSize: 7, color: '#A0A0A0', letterSpacing: '0.12em', textTransform: 'uppercase' }}>
-                {label}
-              </div>
-            </div>
-          ))}
         </div>
 
         {/* Guardian Temperature */}
