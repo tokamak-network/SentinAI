@@ -419,10 +419,12 @@ export default function OperatorDetailPage() {
                         disabled={!isActive}
                         onClick={() => {
                           if (isActive && catalog) {
+                            const slug = service.key.replace(/_/g, '-');
+                            const baseUrl = (catalog.agent.baseUrl ?? 'https://sentinai.tokamak.network/thanos-sepolia').replace(/\/$/, '');
                             setPurchaseTarget({
                               serviceKey: service.key,
                               displayName: service.displayName,
-                              endpoint: `/api/marketplace/services/${service.key}`,
+                              endpoint: `${baseUrl}/api/agent-marketplace/${slug}`,
                               amount: service.payment.amount,
                             });
                           }
