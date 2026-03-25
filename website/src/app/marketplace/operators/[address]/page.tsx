@@ -459,6 +459,7 @@ export default function OperatorDetailPage() {
           operatorAddress={address}
           agentName={catalog?.agent.operator ?? 'Unknown Operator'}
           endpoint={purchaseTarget.endpoint}
+          amount={purchaseTarget.amount}
           serviceKey={purchaseTarget.serviceKey}
           serviceName={purchaseTarget.displayName}
           onClose={() => setPurchaseTarget(null)}

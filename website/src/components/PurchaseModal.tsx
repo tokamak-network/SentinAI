@@ -19,7 +19,8 @@ export interface PurchaseModalProps {
   operatorAddress?: string;
   agentId: string;
   agentName: string;
-  endpoint: string; // e.g. '/api/marketplace/sequencer-health'
+  endpoint: string;
+  amount?: string;  // service price in wei
   serviceKey?: string;
   serviceName?: string;
   onClose: () => void;
@@ -124,7 +125,7 @@ function StatusBadge({ label, color }: { label: string; color: string }) {
   );
 }
 
-export default function PurchaseModal({ agentName, endpoint, onClose, onPurchaseComplete, operatorAddress }: PurchaseModalProps) {
+export default function PurchaseModal({ agentName, endpoint, amount: serviceAmount, onClose, onPurchaseComplete, operatorAddress }: PurchaseModalProps) {
   const [state, setState] = useState<StepState>({ step: 'connect' });
 
   const fullEndpoint = endpoint; // already a full URL from serviceKeyToEndpoint(key, baseUrl)
@@ -162,6 +163,7 @@ export default function PurchaseModal({ agentName, endpoint, onClose, onPurchase
         body: JSON.stringify({
           resource: fullEndpoint,
           merchant: operatorAddress ?? agentName,
+          amount: serviceAmount,
         }),
       });
       if (!res.ok) {

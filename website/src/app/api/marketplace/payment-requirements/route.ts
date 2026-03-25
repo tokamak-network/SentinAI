@@ -14,7 +14,7 @@ function getFacilitatorAddress(): string {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { resource, merchant } = body;
+    const { resource, merchant, amount } = body;
 
     if (!resource || !merchant) {
       return new Response(
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     const requirements = {
       network: `eip155:${SEPOLIA_CHAIN_ID}`,
       asset: TON_TOKEN,
-      amount: '100000000000000000', // 0.1 TON
+      amount: amount || '100000000000000000', // service-specific or default 0.1 TON
       resource,
       merchant,
       facilitator: {
