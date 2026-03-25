@@ -124,59 +124,55 @@ export default function OperatorDetailPage() {
   useEffect(() => {
     if (!address) return;
 
-    // Try to resolve the operator's agentUri from the discovery endpoint or catalog
+    // Resolve the operator's base URL from on-chain registry
     const resolveAgentUri = async (): Promise<string> => {
       try {
-        const res = await fetch(`/api/agent-marketplace/discovery/${address}`);
+        // Use the operators discovery API to get agentURI from on-chain
+        const res = await fetch('/api/marketplace/operators');
         if (res.ok) {
           const data = await res.json();
-          if (data.agentUri) return data.agentUri as string;
+          const ops = (data.operators ?? []) as Array<{ address: string; agentURI: string }>;
+          const match = ops.find(o => o.address.toLowerCase() === address.toLowerCase());
+          if (match?.agentURI) {
+            // agentURI might be the full agent.json URL — extract base
+            return match.agentURI
+              .replace(/\/api\/agent-marketplace\/agent\.json$/, '')
+              .replace(/\/$/, '');
+          }
         }
       } catch { /* fall through */ }
 
-
-      // Fallback: use the local catalog base URL (single-operator mode)
+      // Fallback: use mock data for known operators
       const mockOp = getOperatorByAddress(address);
       if (mockOp) {
-        setCatalog({
-          agent: {
-            id: mockOp.address,
-            status: mockOp.status === 'offline' ? 'inactive' : 'active',
-            version: '1.0.0',
-            operator: mockOp.operator,
-            operatorAddress: mockOp.address,
-            baseUrl: `https://sentinai.tokamak.network/operators/${mockOp.address}`,
-            performanceHistory: mockOp.performanceHistory,
-          },
-          services: mockOp.services,
-        } as any);
-        setSnapshot({
-          version: '1.0.0',
-          generatedAt: new Date().toISOString(),
-          metrics: {
-            cpu: { mean: mockOp.metrics.cpuMean, max: mockOp.metrics.cpuMean, trend: 'stable' },
-          },
-          scaling: {
-            currentVcpu: 1,
-            currentMemoryGiB: mockOp.metrics.memoryGiB,
-            autoScalingEnabled: true,
-            cooldownRemaining: 0,
-            lastDecisionScore: null,
-            lastDecisionReason: null,
-          },
-          anomalies: { activeCount: mockOp.metrics.activeAnomalies, totalRecent: mockOp.metrics.activeAnomalies },
-          operatorAddress: mockOp.address,
-        });
         return '';
       }
-      return 'http://localhost:3002';
-
+      return '';
     };
 
     const load = async () => {
       try {
         const agentUri = await resolveAgentUri();
-        if (!agentUri) { setLoading(false); return; }
+        if (!agentUri) {
+          // Use mock data but with correct baseUrl for BUY DATA endpoint
+          const mockOp = getOperatorByAddress(address);
+          if (mockOp) {
+            setCatalog({
+              agent: {
+                id: mockOp.address,
+                status: mockOp.status === 'offline' ? 'inactive' : 'active',
+                version: '1.0.0',
+                operator: mockOp.operator,
+                operatorAddress: mockOp.address,
+                baseUrl: 'https://sentinai.tokamak.network/thanos-sepolia',
+                performanceHistory: mockOp.performanceHistory,
+              },
+              services: mockOp.services,
+            } as any);
+          }
+          setLoading(false);
+          return;
+        }
         const baseUrl = agentUri.replace(/\/$/, '');
 
         const [snapRes, catRes] = await Promise.allSettled([
