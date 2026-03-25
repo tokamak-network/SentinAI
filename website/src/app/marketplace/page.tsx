@@ -139,15 +139,24 @@ export default function MarketplacePage() {
             let status: 'online' | 'offline' | 'degraded' = 'online';
 
             try {
-              const catUrl = `${op.agentURI.replace(/\/$/, '')}/api/agent-marketplace/catalog`;
-              const catRes = await fetch(catUrl, { signal: AbortSignal.timeout(5000) });
-              if (catRes.ok) {
-                const cat = await catRes.json();
-                name = cat.agent?.operator ?? name;
-                serviceCount = cat.services?.length ?? 0;
-                status = cat.agent?.status === 'active' ? 'online' : 'offline';
+              // Try agent.json first (has operator.name), fall back to catalog
+              const baseUri = op.agentURI.replace(/\/api\/agent-marketplace\/agent\.json$/, '').replace(/\/$/, '');
+              const manifestRes = await fetch(`${baseUri}/api/agent-marketplace/agent.json`, { signal: AbortSignal.timeout(5000) });
+              if (manifestRes.ok) {
+                const manifest = await manifestRes.json();
+                name = manifest.operator?.name ?? manifest.operator?.id ?? name;
+                serviceCount = manifest.capabilities?.length ?? manifest.dataCatalog?.length ?? 0;
+                status = manifest.operator?.status === 'active' ? 'online' : 'offline';
+              } else {
+                const catRes = await fetch(`${baseUri}/api/agent-marketplace/catalog`, { signal: AbortSignal.timeout(5000) });
+                if (catRes.ok) {
+                  const cat = await catRes.json();
+                  name = cat.agent?.operator ?? name;
+                  serviceCount = cat.services?.length ?? 0;
+                  status = cat.agent?.status === 'active' ? 'online' : 'offline';
+                }
               }
-            } catch { /* catalog unavailable */ }
+            } catch { /* unavailable */ }
 
             return {
               address: op.address,

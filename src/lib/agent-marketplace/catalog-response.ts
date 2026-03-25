@@ -47,6 +47,8 @@ export interface AgentMarketplaceAgentManifest {
   }>;
   operator: {
     id: string;
+    name: string;
+    description: string;
     status: string;
   };
 }
@@ -87,6 +89,8 @@ export function toAgentMarketplaceAgentManifest(
     })),
     operator: {
       id: catalog.agent.operator,
+      name: process.env.OPERATOR_DISPLAY_NAME ?? catalog.agent.operator,
+      description: process.env.OPERATOR_DESCRIPTION ?? 'SentinAI Node Operator',
       status: catalog.agent.status,
     },
   };
