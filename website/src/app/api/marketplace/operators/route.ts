@@ -35,34 +35,32 @@ export async function GET(): Promise<Response> {
 
     // Public RPCs limit block range (typically 50k blocks).
     // Scan in chunks from deploy block to latest.
+    const EVENT = parseAbiItem(
+      'event AgentRegistered(uint256 indexed agentId, address indexed agent, string agentURI)'
+    );
+
     const latestBlock = await client.getBlockNumber();
     const MAX_RANGE = BigInt(49000);
-    const allLogs: Awaited<ReturnType<typeof client.getLogs>>= [];
+    const byAddress = new Map<string, DiscoveredOperator>();
 
     for (let from = REGISTRY_DEPLOY_BLOCK; from <= latestBlock; from += MAX_RANGE) {
       const to = from + MAX_RANGE - BigInt(1) > latestBlock ? latestBlock : from + MAX_RANGE - BigInt(1);
       const chunk = await client.getLogs({
         address: REGISTRY_ADDRESS,
-        event: parseAbiItem(
-          'event AgentRegistered(uint256 indexed agentId, address indexed agent, string agentURI)'
-        ),
+        event: EVENT,
         fromBlock: from,
         toBlock: to,
       });
-      allLogs.push(...chunk);
-    }
-
-    const logs = allLogs;
-
-    // Deduplicate by address (keep latest registration)
-    const byAddress = new Map<string, DiscoveredOperator>();
-    for (const log of logs) {
-      const addr = (log.args.agent as string).toLowerCase();
-      byAddress.set(addr, {
-        agentId: Number(log.args.agentId),
-        address: addr,
-        agentURI: log.args.agentURI as string,
-      });
+      for (const log of chunk) {
+        const args = log.args as { agentId?: bigint; agent?: string; agentURI?: string };
+        if (!args.agent) continue;
+        const addr = args.agent.toLowerCase();
+        byAddress.set(addr, {
+          agentId: Number(args.agentId ?? 0),
+          address: addr,
+          agentURI: args.agentURI ?? '',
+        });
+      }
     }
 
     const operators = Array.from(byAddress.values());
