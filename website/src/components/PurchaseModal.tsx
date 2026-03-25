@@ -431,16 +431,39 @@ export default function PurchaseModal({ agentName, endpoint, onClose, onPurchase
               {state.result.success ? (
                 <>
                   <div style={{ marginBottom: '12px' }}>
-                    <StatusBadge label="payment successful" color={GREEN} />
+                    <StatusBadge label="data purchased successfully" color={GREEN} />
                   </div>
-                  {state.result.settlementId && (
-                    <Row label="Settlement ID" value={state.result.settlementId} />
-                  )}
+
+                  {/* Show purchased data */}
+                  <div style={{
+                    marginBottom: '14px',
+                  }}>
+                    <div style={{ fontSize: '9px', color: '#707070', fontWeight: 700, letterSpacing: '0.1em', marginBottom: '8px' }}>
+                      PURCHASED DATA
+                    </div>
+                    <div style={{
+                      background: '#0A0A0A', padding: '12px 14px',
+                      maxHeight: '300px', overflow: 'auto',
+                    }}>
+                      <pre style={{
+                        fontFamily: FONT, fontSize: '9px', color: '#00FF88',
+                        margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.5,
+                      }}>
+                        {JSON.stringify(
+                          // Filter out internal fields, show only the data
+                          Object.fromEntries(
+                            Object.entries(state.result).filter(
+                              ([k]) => !['success', 'txHash', 'settlementId', 'error'].includes(k)
+                            )
+                          ),
+                          null, 2
+                        )}
+                      </pre>
+                    </div>
+                  </div>
+
                   {state.result.txHash && (
-                    <Row label="Tx Hash" value={shortAddr(state.result.txHash)} />
-                  )}
-                  {state.result.status && (
-                    <Row label="Status" value={<StatusBadge label={state.result.status} color={GREEN} />} />
+                    <Row label="Settlement Tx" value={shortAddr(state.result.txHash)} />
                   )}
                 </>
               ) : (
