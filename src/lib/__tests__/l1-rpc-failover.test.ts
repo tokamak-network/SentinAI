@@ -367,17 +367,15 @@ describe('l1-rpc-failover', () => {
       expect(event).toBeNull();
     });
 
-    it('should wrap around to check all endpoints', async () => {
-      // 3 endpoints: rpc1(0), rpc2(1), rpc3(2)
+    it('should skip failing spares and fromUrl, pick the first healthy one', async () => {
+      // 3 spare URLs: rpc1, rpc2, rpc3 — active is rpc2
       process.env.L1_RPC_URLS = 'https://rpc1.io,https://rpc2.io,https://rpc3.io';
       process.env.SCALING_SIMULATION_MODE = 'true';
       const state = getL1FailoverState();
 
-      // Start from rpc2 (index 1), so check order: rpc3(2) → rpc1(0)
-      state.activeIndex = 1;
       state.activeUrl = 'https://rpc2.io';
 
-      // rpc3 fails, rpc1 succeeds
+      // rpc1 fails health check, rpc2 skipped (same as fromUrl), rpc3 succeeds
       let callCount = 0;
       mockGetBlockNumber.mockImplementation(() => {
         callCount++;
@@ -388,7 +386,7 @@ describe('l1-rpc-failover', () => {
       const event = await executeFailover('test');
 
       expect(event).not.toBeNull();
-      expect(event!.toUrl).toContain('rpc1.io');
+      expect(event!.toUrl).toContain('rpc3.io');
     });
 
     it('should record failover event in state', async () => {
@@ -419,10 +417,11 @@ rpc_url = "https://rpc1.io"
 backends = ["backend1"]
 `;
       // L1_PROXYD_CONFIGMAP_NAME set → resolveProxydConfigMapName returns from env (no kubectl)
-      // Calls: getConfigMapToml (find backend) + getConfigMapToml (apply) + patch + restart
+      // Calls: resolveProxydActiveUrl + getConfigMapToml (find backend) + getConfigMapToml (apply) + patch + restart
       mockRunK8sCommand
-        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (find backend)
-        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (applyBackendReplacement)
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // resolveProxydActiveUrl → getConfigMapToml
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // updateProxydBackendForFailover → getConfigMapToml (find backend)
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // applyBackendReplacement → getConfigMapToml
         .mockResolvedValueOnce({ stdout: '', stderr: '' }) // patch configmap
         .mockResolvedValueOnce({ stdout: '', stderr: '' }); // rollout restart
 
@@ -461,8 +460,9 @@ rpc_url = "https://rpc1.io"
 backends = ["backend1"]
 `;
       mockRunK8sCommand
-        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (find backend)
-        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (applyBackendReplacement)
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // resolveProxydActiveUrl → getConfigMapToml
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // updateProxydBackendForFailover → getConfigMapToml (find backend)
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // applyBackendReplacement → getConfigMapToml
         .mockResolvedValueOnce({ stdout: '', stderr: '' }) // patch configmap
         .mockResolvedValueOnce({ stdout: '', stderr: '' }); // rollout restart
 
@@ -491,8 +491,9 @@ rpc_url = "https://rpc1.io"
 backends = ["backend1"]
 `;
       mockRunK8sCommand
-        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (find backend)
-        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // getConfigMapToml (applyBackendReplacement)
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // resolveProxydActiveUrl → getConfigMapToml
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // updateProxydBackendForFailover → getConfigMapToml (find backend)
+        .mockResolvedValueOnce({ stdout: MOCK_TOML, stderr: '' }) // applyBackendReplacement → getConfigMapToml
         .mockResolvedValueOnce({ stdout: '', stderr: '' }) // patch configmap
         .mockRejectedValueOnce(new Error('not found')) // rollout restart fails
         .mockResolvedValueOnce({ stdout: 'No resources found', stderr: '' }); // delete pod (no match)

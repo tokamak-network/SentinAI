@@ -411,6 +411,110 @@ export function getActiveL1RpcUrl(): string {
   return getState().activeUrl;
 }
 
+// ============================================================
+// Cluster Active URL Resolution
+// ============================================================
+
+let clusterUrlResolved = false;
+
+/**
+ * Resolve the active L1 RPC URL from the actual cluster state.
+ *
+ * - **Proxyd mode** (`L1_PROXYD_ENABLED=true`): reads the proxyd ConfigMap's
+ *   target group (e.g. "main") first backend `rpc_url`.
+ * - **Non-proxyd mode**: reads the first L1 RPC component's env var from the
+ *   K8s StatefulSet (e.g. `OP_NODE_L1_ETH_RPC`).
+ *
+ * In both cases `L1_RPC_URLS` serves only as the spare pool for failover.
+ *
+ * Must be called (at least once) before getActiveL1RpcUrl() to ensure the
+ * returned URL matches the cluster state.
+ */
+export async function resolveClusterActiveUrl(): Promise<void> {
+  if (clusterUrlResolved) return;
+
+  const isProxydMode = process.env.L1_PROXYD_ENABLED === 'true';
+
+  if (isProxydMode) {
+    await resolveFromProxydConfigMap();
+  } else {
+    await resolveFromK8sStatefulSet();
+  }
+}
+
+/** Proxyd path: read active backend URL from ConfigMap TOML */
+async function resolveFromProxydConfigMap(): Promise<void> {
+  try {
+    const configMapName = await resolveProxydConfigMapName();
+    const dataKey = process.env.L1_PROXYD_DATA_KEY || 'proxyd-config.toml';
+    const targetGroup = process.env.L1_PROXYD_UPSTREAM_GROUP || 'main';
+    const namespace = getNamespace();
+
+    const tomlContent = await getConfigMapToml(configMapName, dataKey, namespace);
+    const parsed = TOML.parse(tomlContent) as Record<string, unknown>;
+    const backends = parsed.backends as Record<string, Record<string, unknown>> | undefined;
+    const backendGroups = parsed.backend_groups as Record<string, Record<string, unknown>> | undefined;
+    const group = backendGroups?.[targetGroup] as { backends?: string[] } | undefined;
+    const firstBackendName = group?.backends?.[0];
+
+    if (firstBackendName && backends?.[firstBackendName]?.rpc_url) {
+      const state = getState();
+      const resolvedUrl = backends[firstBackendName].rpc_url as string;
+      state.activeUrl = resolvedUrl;
+      state.activeIndex = -1;
+      state.proxydActiveBackendName = firstBackendName;
+      clusterUrlResolved = true;
+      logger.info(
+        `Proxyd active URL resolved from backend "${firstBackendName}": ${maskUrl(resolvedUrl)}`
+      );
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown';
+    logger.warn(`Failed to resolve Proxyd active URL: ${msg} (falling back to L1_RPC_URLS[0])`);
+  }
+}
+
+/** Non-proxyd path: read L1 RPC env var from the first K8s StatefulSet component */
+async function resolveFromK8sStatefulSet(): Promise<void> {
+  if (!hasK8sCluster()) return;
+
+  try {
+    const namespace = getNamespace();
+    const components = getL1Components();
+    if (components.length === 0) return;
+
+    const comp = components[0];
+    if (!comp.statefulSetName || !comp.envVarName) return;
+
+    const cmd = `get statefulset ${comp.statefulSetName} -n ${namespace} -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="${comp.envVarName}")].value}'`;
+    const { stdout } = await runK8sCommand(cmd, { timeout: 10000 });
+    const rawUrl = stdout.replace(/^'|'$/g, '').trim();
+
+    if (!rawUrl) return;
+
+    // If the component points at proxyd (local service), skip — proxyd path should be used
+    if (rawUrl.includes('proxyd') || rawUrl.includes('localhost') || rawUrl.includes('svc.cluster')) {
+      return;
+    }
+
+    const state = getState();
+    state.activeUrl = rawUrl;
+    state.activeIndex = -1;
+    clusterUrlResolved = true;
+    logger.info(
+      `K8s active URL resolved from ${comp.statefulSetName}/${comp.envVarName}: ${maskUrl(rawUrl)}`
+    );
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : 'Unknown';
+    logger.warn(`Failed to resolve K8s active URL: ${msg} (falling back to L1_RPC_URLS[0])`);
+  }
+}
+
+/**
+ * @deprecated Use resolveClusterActiveUrl() instead
+ */
+export const resolveProxydActiveUrl = resolveClusterActiveUrl;
+
 /**
  * Get SentinAI internal L1 RPC URL used for app-level reads/monitoring.
  * This is intentionally separated from L2 node failover pool (L1_RPC_URLS).
@@ -535,61 +639,44 @@ export async function executeFailover(
   }
 
   const fromUrl = state.activeUrl;
-  const startIndex = state.activeIndex;
+  const isProxydMode = process.env.L1_PROXYD_ENABLED === 'true';
 
-  // Try each endpoint after the current one (wrap around)
-  for (let i = 1; i < state.endpoints.length; i++) {
-    const candidateIndex =
-      (startIndex + i) % state.endpoints.length;
-    const candidate = state.endpoints[candidateIndex];
+  // ── Proxyd mode: pick a healthy spare URL and replace the ConfigMap backend ──
+  if (isProxydMode) {
+    // Ensure proxyd active URL is resolved (lazy init)
+    if (!state.proxydActiveBackendName) {
+      await resolveClusterActiveUrl();
+    }
+    // Try each spare URL until a healthy one is found (skip fromUrl)
+    const selectedSpare = await pickHealthySpare(state, fromUrl);
 
-    logger.info(
-      `Checking candidate: ${maskUrl(candidate.url)}`
-    );
-
-    const isHealthy = await healthCheckEndpoint(candidate.url);
-    if (!isHealthy) {
-      candidate.healthy = false;
-      candidate.lastFailure = Date.now();
-      continue;
+    if (!selectedSpare) {
+      logger.error('No healthy spare URLs available for proxyd failover (L1_RPC_URLS)');
+      return null;
     }
 
-    // Found a healthy endpoint — switch
-    candidate.healthy = true;
-    candidate.lastSuccess = Date.now();
-    candidate.consecutiveFailures = 0;
+    const k8sResult = await updateProxydBackendForFailover(fromUrl, selectedSpare);
 
-    state.activeUrl = candidate.url;
-    state.activeIndex = candidateIndex;
+    state.activeUrl = selectedSpare;
+    state.activeIndex = -1;
     state.lastFailoverTime = Date.now();
 
     logger.info(
-      `Switched: ${maskUrl(fromUrl)} → ${maskUrl(candidate.url)} (reason: ${reason})`
+      `Proxyd failover: ${maskUrl(fromUrl)} → ${maskUrl(selectedSpare)} (backend: ${state.proxydActiveBackendName}, reason: ${reason})`
     );
-
-    // Update K8s components
-    const isProxydMode = process.env.L1_PROXYD_ENABLED === 'true';
-    let k8sResult: K8sUpdateResult;
-    if (isProxydMode) {
-      // In Proxyd mode, update the ConfigMap backend URL and restart the pod
-      k8sResult = await updateProxydBackendForFailover(fromUrl, candidate.url);
-    } else {
-      k8sResult = await updateK8sL1Rpc(candidate.url);
-    }
 
     const event: FailoverEvent = {
       timestamp: new Date().toISOString(),
       fromUrl: maskUrl(fromUrl),
-      toUrl: maskUrl(candidate.url),
+      toUrl: maskUrl(selectedSpare),
       rawFromUrl: fromUrl,
-      rawToUrl: candidate.url,
+      rawToUrl: selectedSpare,
       reason,
       k8sUpdated: k8sResult.updated.length > 0,
       k8sComponents: k8sResult.updated,
       simulated: false,
     };
 
-    // Push to ring buffer
     state.events.push(event);
     if (state.events.length > MAX_FAILOVER_EVENTS) {
       state.events.shift();
@@ -598,10 +685,42 @@ export async function executeFailover(
     return event;
   }
 
-  logger.error(
-    'All endpoints unhealthy, cannot failover'
+  // ── Non-proxyd mode: pick healthy spare from L1_RPC_URLS and update K8s StatefulSets ──
+  const selectedSpare = await pickHealthySpare(state, fromUrl);
+
+  if (!selectedSpare) {
+    logger.error('No healthy spare URLs available for failover (L1_RPC_URLS)');
+    return null;
+  }
+
+  const k8sResult = await updateK8sL1Rpc(selectedSpare);
+
+  state.activeUrl = selectedSpare;
+  state.activeIndex = -1;
+  state.lastFailoverTime = Date.now();
+
+  logger.info(
+    `K8s failover: ${maskUrl(fromUrl)} → ${maskUrl(selectedSpare)} (reason: ${reason})`
   );
-  return null;
+
+  const event: FailoverEvent = {
+    timestamp: new Date().toISOString(),
+    fromUrl: maskUrl(fromUrl),
+    toUrl: maskUrl(selectedSpare),
+    rawFromUrl: fromUrl,
+    rawToUrl: selectedSpare,
+    reason,
+    k8sUpdated: k8sResult.updated.length > 0,
+    k8sComponents: k8sResult.updated,
+    simulated: false,
+  };
+
+  state.events.push(event);
+  if (state.events.length > MAX_FAILOVER_EVENTS) {
+    state.events.shift();
+  }
+
+  return event;
 }
 
 /**
@@ -973,6 +1092,8 @@ function aggregateLogErrors(
 export async function checkProxydBackends(): Promise<BackendReplacementEvent | null> {
   if (process.env.L1_PROXYD_ENABLED !== 'true') return null;
 
+  await resolveClusterActiveUrl();
+
   const state = getState();
   const replacementThreshold = parsePositiveInt(
     process.env.L1_PROXYD_REPLACEMENT_THRESHOLD,
@@ -1269,6 +1390,7 @@ export function resetL1FailoverState(): void {
   globalForFailover.__sentinai_l1_failover = undefined;
   warnedDeprecatedSentinaiL1Rpc = false;
   warnedMissingL2FailoverPool = false;
+  clusterUrlResolved = false;
 }
 
 // ============================================================
@@ -1280,6 +1402,37 @@ export function resetL1FailoverState(): void {
 
 function hasK8sCluster(): boolean {
   return !!(process.env.AWS_CLUSTER_NAME || process.env.K8S_API_URL);
+}
+
+/**
+ * Pick the first healthy spare URL from state.spareUrls, skipping fromUrl.
+ * Unhealthy candidates are pushed to the back for future retries.
+ */
+async function pickHealthySpare(
+  state: L1FailoverState,
+  fromUrl: string
+): Promise<string | null> {
+  const triedSpares: string[] = [];
+  let selected: string | null = null;
+
+  while (state.spareUrls.length > 0) {
+    const candidate = state.spareUrls.shift()!;
+    if (candidate === fromUrl) {
+      triedSpares.push(candidate);
+      continue;
+    }
+    logger.info(`Checking spare candidate: ${maskUrl(candidate)}`);
+    const isHealthy = await healthCheckEndpoint(candidate);
+    if (isHealthy) {
+      selected = candidate;
+      break;
+    }
+    triedSpares.push(candidate);
+    logger.warn(`Spare candidate unhealthy: ${maskUrl(candidate)}`);
+  }
+  // Put back skipped/unhealthy spares at the end for future retries
+  state.spareUrls.push(...triedSpares);
+  return selected;
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {

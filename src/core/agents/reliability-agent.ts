@@ -17,6 +17,7 @@ import {
   checkProxydBackends,
   getL1FailoverState,
   hasHealthyBackup,
+  resolveClusterActiveUrl,
 } from '@/lib/l1-rpc-failover';
 import { DomainAgent } from '@/core/agents/domain-agent';
 import type { DomainAgentType } from '@/core/agents/domain-agent';
@@ -43,8 +44,10 @@ export class ReliabilityAgent extends DomainAgent {
     const issues: Array<{ type: string; detail: string }> = [];
 
     // 1. L1 RPC health check — require consecutive failures before emitting
+    //    In proxyd mode, resolve activeUrl from ConfigMap first
     let l1HealthPassed = false;
     try {
+      await resolveClusterActiveUrl();
       const activeUrl = getActiveL1RpcUrl();
       if (activeUrl) {
         const healthy = await healthCheckEndpoint(activeUrl);

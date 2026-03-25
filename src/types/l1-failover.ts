@@ -75,6 +75,8 @@ export interface L1FailoverState {
   backendReplacements: BackendReplacementEvent[];
   /** Spare RPC URLs for backend replacement */
   spareUrls: string[];
+  /** In proxyd mode, the name of the active backend (e.g. "infura_theo1") */
+  proxydActiveBackendName?: string;
 }
 
 /** Proxyd ConfigMap configuration */

@@ -10,6 +10,7 @@ vi.mock('@/lib/l1-rpc-failover', () => ({
   healthCheckEndpoint: vi.fn().mockResolvedValue(true),
   checkProxydBackends: vi.fn().mockResolvedValue(null),
   hasHealthyBackup: vi.fn().mockResolvedValue(true),
+  resolveClusterActiveUrl: vi.fn().mockResolvedValue(undefined),
   getL1FailoverState: vi.fn().mockReturnValue({
     activeUrl: 'https://eth.example.com',
     activeIndex: 0,
