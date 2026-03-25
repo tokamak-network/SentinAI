@@ -10,6 +10,8 @@ import { sepolia } from 'viem/chains';
 export const dynamic = 'force-dynamic';
 
 const REGISTRY_ADDRESS = '0x64c8f8cB66657349190c7AF783f8E0254dCF1467' as const;
+// Registry deployment block on Sepolia — start scanning from here
+const REGISTRY_DEPLOY_BLOCK = BigInt('0x9f4671');
 
 interface DiscoveredOperator {
   agentId: number;
@@ -36,7 +38,7 @@ export async function GET(): Promise<Response> {
       event: parseAbiItem(
         'event AgentRegistered(uint256 indexed agentId, address indexed agent, string agentURI)'
       ),
-      fromBlock: BigInt(0),
+      fromBlock: REGISTRY_DEPLOY_BLOCK,
       toBlock: 'latest',
     });
 
