@@ -462,7 +462,10 @@ export default function OperatorDetailPage() {
           amount={purchaseTarget.amount}
           serviceKey={purchaseTarget.serviceKey}
           serviceName={purchaseTarget.displayName}
-          onClose={() => setPurchaseTarget(null)}
+          onClose={() => {
+            setPurchaseTarget(null);
+            // ReviewModal will show if reviewTarget was set by onPurchaseComplete
+          }}
           onPurchaseComplete={(txHash, buyerAddress) => {
             setReviewTarget({
               serviceKey: purchaseTarget.serviceKey,
