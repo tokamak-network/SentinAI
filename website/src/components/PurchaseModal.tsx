@@ -124,7 +124,7 @@ function StatusBadge({ label, color }: { label: string; color: string }) {
   );
 }
 
-export default function PurchaseModal({ agentName, endpoint, onClose, onPurchaseComplete }: PurchaseModalProps) {
+export default function PurchaseModal({ agentName, endpoint, onClose, onPurchaseComplete, operatorAddress }: PurchaseModalProps) {
   const [state, setState] = useState<StepState>({ step: 'connect' });
 
   const fullEndpoint = endpoint; // already a full URL from serviceKeyToEndpoint(key, baseUrl)
@@ -161,7 +161,7 @@ export default function PurchaseModal({ agentName, endpoint, onClose, onPurchase
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           resource: fullEndpoint,
-          merchant: agentName,
+          merchant: operatorAddress ?? agentName,
         }),
       });
       if (!res.ok) {
