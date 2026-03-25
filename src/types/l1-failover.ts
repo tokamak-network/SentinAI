@@ -17,6 +17,9 @@ export interface FailoverEvent {
   timestamp: string;
   fromUrl: string;
   toUrl: string;
+  /** Unmasked full URLs for operator notifications */
+  rawFromUrl?: string;
+  rawToUrl?: string;
   reason: string;
   /** Whether K8s components were also updated */
   k8sUpdated: boolean;

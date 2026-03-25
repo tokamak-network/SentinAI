@@ -27,6 +27,9 @@ interface RemediationResult {
   action: string;
   success: boolean;
   detail: string;
+  /** Unmasked URLs for L1 failover notifications */
+  rawFromUrl?: string;
+  rawToUrl?: string;
 }
 
 // ============================================================
@@ -243,6 +246,8 @@ export class RemediationAgent implements RoleAgent {
           action: 'l1-failover',
           success: true,
           detail: `L1 RPC failover: switched to ${event.toUrl}`,
+          rawFromUrl: event.rawFromUrl,
+          rawToUrl: event.rawToUrl,
         };
       }
 

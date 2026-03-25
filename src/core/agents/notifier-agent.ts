@@ -34,6 +34,38 @@ const logger = createLogger('NotifierAgent');
 
 const WEBHOOK_TIMEOUT_MS = 5_000;
 
+// ============================================================
+// Formatting Helpers
+// ============================================================
+
+/** Format ISO timestamp → KST human-readable (e.g. "Mar 25, 14:30 KST") */
+function formatTimestamp(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleString('en-US', {
+      timeZone: 'Asia/Seoul',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }) + ' KST';
+  } catch {
+    return iso;
+  }
+}
+
+/** Get chain display name from plugin (e.g. "Thanos Sepolia") */
+function getChainName(): string {
+  try {
+    const plugin = getChainPlugin();
+    return plugin.l2Chain?.name ?? 'Unknown Chain';
+  } catch {
+    return 'Unknown Chain';
+  }
+}
+
 /** Human-readable guidance for remediation failure reasons */
 const REMEDIATION_GUIDANCE: Record<string, string> = {
   // EOA refill reasons
@@ -251,18 +283,24 @@ export class NotifierAgent implements RoleAgent {
       coveragePct: number;
     } | undefined;
 
+    const chain = getChainName();
     const blocks = [
-      header(':chart_with_upwards_trend:', 'SentinAI Scaling Applied'),
-      fields(['Time', event.timestamp]),
-      divider(),
+      header(':chart_with_upwards_trend:', 'Scaling Applied'),
       fields(
-        ['Change', `${execution.previousVcpu} → ${execution.targetVcpu} vCPU`],
-        ['Trigger', 'Cost-based schedule'],
-        ...(profile ? [
-          ['Est. Savings', `$${profile.estimatedMonthlySavings.toFixed(2)}/mo`] as [string, string],
-        ] : []),
+        ['Chain', chain],
+        ['Time', formatTimestamp(event.timestamp)],
       ),
-      context('SentinAI Agent V2 • Auto-applied by Cost Agent'),
+      divider(),
+      section(`:arrow_right:  \`${execution.previousVcpu} vCPU\`  →  \`${execution.targetVcpu} vCPU\``),
+      ...(profile ? [
+        fields(
+          ['Est. Savings', `*$${profile.estimatedMonthlySavings.toFixed(2)}* /mo`],
+          ['Trigger', 'Cost-based schedule'],
+        ),
+      ] : [
+        fields(['Trigger', 'Cost-based schedule']),
+      ]),
+      context(`SentinAI • ${chain} • Cost Agent`),
     ];
 
     await this.sendSlackBlocks(blocks);
@@ -283,16 +321,17 @@ export class NotifierAgent implements RoleAgent {
     if (!record || !record.executed || record.passed) return;
     if (this.isInCooldown('verification-complete')) return;
 
+    const chain = getChainName();
     const blocks = [
-      header(':warning:', 'SentinAI Action Required — Verification Failed'),
-      fields(['Time', event.timestamp]),
-      divider(),
+      header(':warning:', 'Action Required — Verification Failed'),
       fields(
-        ['Expected', `${record.expectedVcpu} vCPU`],
-        ['Observed', `${record.observedVcpu} vCPU`],
+        ['Chain', chain],
+        ['Time', formatTimestamp(event.timestamp)],
       ),
-      section(`*Detail:* ${record.detail}`),
-      context('Automatic scaling was attempted but the result does not match. Manual review recommended.'),
+      divider(),
+      section(`:x:  Expected \`${record.expectedVcpu} vCPU\`  but observed \`${record.observedVcpu} vCPU\``),
+      section(`> ${record.detail}`),
+      context(`SentinAI • ${chain} • Manual review recommended`),
     ];
 
     await this.sendSlackBlocks(blocks);
@@ -325,14 +364,17 @@ export class NotifierAgent implements RoleAgent {
       const allSuccess = refillResults.every(r => r.success);
       const allFailed = refillResults.every(r => !r.success);
 
+      const chain = getChainName();
+      const ts = formatTimestamp(event.timestamp);
+
       if (allSuccess) {
         const detailLines = refillResults.map(r => `:white_check_mark: ${appendTxLink(r.detail)}`).join('\n');
         const blocks = [
-          header(':fuelpump:', 'SentinAI EOA Refill Complete'),
-          fields(['Time', event.timestamp]),
+          header(':fuelpump:', 'EOA Refill Complete'),
+          fields(['Chain', chain], ['Time', ts]),
           divider(),
           section(detailLines),
-          context('SentinAI Remediation Agent • EOA balance refilled automatically — no action required'),
+          context(`SentinAI • ${chain} • No action required`),
         ];
         await this.sendSlackBlocks(blocks);
       } else if (allFailed) {
@@ -341,29 +383,30 @@ export class NotifierAgent implements RoleAgent {
           const reasonKey = reasonMatch?.[1];
           const guidance = reasonKey ? REMEDIATION_GUIDANCE[reasonKey] : undefined;
           const line = `:x: ${r.detail}`;
-          return guidance ? `${line}\n> :bulb: ${guidance}` : line;
-        }).join('\n');
+          return guidance ? `${line}\n> :bulb: _${guidance}_` : line;
+        }).join('\n\n');
         const blocks = [
-          header(':rotating_light:', 'SentinAI Action Required — EOA Refill Failed'),
-          fields(['Trigger', trigger], ['Time', event.timestamp]),
+          header(':rotating_light:', 'Action Required — EOA Refill Failed'),
+          fields(['Chain', chain], ['Trigger', trigger]),
+          fields(['Time', ts]),
           divider(),
           section(failureLines),
-          context('Automatic EOA refill was attempted but failed. Manual intervention required.'),
+          context(`SentinAI • ${chain} • Manual intervention required`),
         ];
         await this.sendSlackBlocks(blocks);
       } else {
-        // Mixed: some succeeded, some failed
         const lines = refillResults.map(r => {
           const icon = r.success ? ':white_check_mark:' : ':x:';
           const text = r.success ? appendTxLink(r.detail) : r.detail;
           return `${icon} ${text}`;
-        }).join('\n');
+        }).join('\n\n');
         const blocks = [
-          header(':warning:', 'SentinAI EOA Refill — Partial Failure'),
-          fields(['Trigger', trigger], ['Time', event.timestamp]),
+          header(':warning:', 'EOA Refill — Partial Failure'),
+          fields(['Chain', chain], ['Trigger', trigger]),
+          fields(['Time', ts]),
           divider(),
           section(lines),
-          context('Some EOA refills succeeded but others failed. Review failed items.'),
+          context(`SentinAI • ${chain} • Review failed items`),
         ];
         await this.sendSlackBlocks(blocks);
       }
@@ -377,27 +420,33 @@ export class NotifierAgent implements RoleAgent {
       if (this.isInCooldown('remediation-complete')) return;
 
       const failoverResult = results.find(r => r.action === 'l1-failover')!;
+      const rawFrom = (failoverResult as Record<string, unknown>).rawFromUrl as string | undefined;
+      const rawTo = (failoverResult as Record<string, unknown>).rawToUrl as string | undefined;
+
+      const chain = getChainName();
+      const ts = formatTimestamp(event.timestamp);
 
       if (failoverResult.success) {
+        const urlBlocks = (rawFrom && rawTo)
+          ? [section(`:arrow_right:  \`${rawFrom}\`\n→  \`${rawTo}\``)]
+          : [section(`:arrows_counterclockwise: ${failoverResult.detail}`)];
+
         const blocks = [
-          header(':white_check_mark:', 'SentinAI L1 RPC Failover Complete'),
-          fields(
-            ['Time', event.timestamp],
-          ),
+          header(':white_check_mark:', 'L1 RPC Failover Complete'),
+          fields(['Chain', chain], ['Time', ts]),
           divider(),
-          section(`:arrows_counterclockwise: ${failoverResult.detail}`),
-          context('SentinAI Reliability Agent • L1 RPC endpoint switched automatically — no action required'),
+          ...urlBlocks,
+          context(`SentinAI • ${chain} • No action required`),
         ];
         await this.sendSlackBlocks(blocks);
       } else {
         const blocks = [
-          header(':rotating_light:', 'SentinAI Action Required — L1 RPC Failover Failed'),
-          fields(
-            ['Time', event.timestamp],
-          ),
+          header(':rotating_light:', 'Action Required — L1 RPC Failover Failed'),
+          fields(['Chain', chain], ['Time', ts]),
           divider(),
           section(`:x: ${failoverResult.detail}`),
-          context('Automatic L1 RPC failover was attempted but failed. Manual intervention required.'),
+          ...(rawFrom ? [section(`*Last active:*  \`${rawFrom}\``)] : []),
+          context(`SentinAI • ${chain} • Manual intervention required`),
         ];
         await this.sendSlackBlocks(blocks);
       }
@@ -408,25 +457,28 @@ export class NotifierAgent implements RoleAgent {
     if (failureCount === 0) return;
     if (this.isInCooldown('remediation-complete')) return;
 
+    const chain = getChainName();
     const failedResults = results.filter(r => !r.success);
 
     const failureLines = failedResults.map(r => {
       const reasonMatch = r.detail.match(/(?:denied|failed|error):\s*(\S+)/);
       const reasonKey = reasonMatch?.[1];
       const guidance = reasonKey ? REMEDIATION_GUIDANCE[reasonKey] : undefined;
-      const line = `:x: \`${r.action}\` ${r.detail}`;
-      return guidance ? `${line}\n> :bulb: ${guidance}` : line;
-    }).join('\n');
+      const line = `:x: \`${r.action}\`  ${r.detail}`;
+      return guidance ? `${line}\n> :bulb: _${guidance}_` : line;
+    }).join('\n\n');
 
     const blocks = [
-      header(':rotating_light:', 'SentinAI Action Required — Remediation Failed'),
+      header(':rotating_light:', 'Action Required — Remediation Failed'),
       fields(
+        ['Chain', chain],
         ['Trigger', trigger],
-        ['Time', event.timestamp],
       ),
+      fields(['Time', formatTimestamp(event.timestamp)]),
       divider(),
       section(failureLines),
-      context('Automatic remediation was attempted but failed. Manual intervention required.'),
+      fields(['Failed', `${failureCount} of ${failureCount + successCount}`]),
+      context(`SentinAI • ${chain} • Manual intervention required`),
     ];
 
     await this.sendSlackBlocks(blocks);
@@ -451,14 +503,15 @@ export class NotifierAgent implements RoleAgent {
     if (proxydIssues.length === 0) return;
     if (this.isInCooldown('reliability-issue')) return;
 
+    const chain = getChainName();
     const issueLines = proxydIssues.map(i => `:arrows_counterclockwise: ${i.detail}`);
 
     const blocks = [
-      header(':arrows_counterclockwise:', 'SentinAI L1 Proxyd Backend Replaced'),
-      fields(['Time', event.timestamp]),
+      header(':arrows_counterclockwise:', 'L1 Proxyd Backend Replaced'),
+      fields(['Chain', chain], ['Time', formatTimestamp(event.timestamp)]),
       divider(),
       section(issueLines.join('\n')),
-      context('SentinAI Reliability Agent • Proxyd backend replaced automatically'),
+      context(`SentinAI • ${chain} • Auto-replaced`),
     ];
 
     await this.sendSlackBlocks(blocks);

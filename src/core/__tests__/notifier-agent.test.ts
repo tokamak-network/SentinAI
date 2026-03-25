@@ -139,7 +139,8 @@ describe('NotifierAgent', () => {
     });
 
     await vi.waitFor(() => expect(mockFetch).toHaveBeenCalled());
-    expect(blocksText()).toContain('2 → 1 vCPU');
+    expect(blocksText()).toContain('`2 vCPU`');
+    expect(blocksText()).toContain('`1 vCPU`');
     expect(blocksText()).toContain('$10.29');
   });
 

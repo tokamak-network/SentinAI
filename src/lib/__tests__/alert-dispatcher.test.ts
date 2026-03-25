@@ -370,7 +370,7 @@ describe('alert-dispatcher', () => {
       );
 
       const messageString = JSON.stringify(message);
-      expect(messageString).toContain('None identified');
+      expect(messageString).not.toContain('Correlations');
     });
 
     it('should handle very long impact descriptions', () => {

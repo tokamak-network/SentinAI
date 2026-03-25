@@ -167,8 +167,18 @@ export function formatSlackMessage(
     liveness: ':heartbeat:',
   };
 
+  const now = new Date();
+  const timeStr = now.toLocaleString('en-US', {
+    timeZone: 'Asia/Seoul',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }) + ' KST';
+
   const anomalySummary = anomalies
-    .map(a => `• \`${a.metric}\`: ${a.description}`)
+    .map(a => `• \`${a.metric}\`  ${a.description}`)
     .join('\n');
 
   const actionsList = analysis.suggestedActions
@@ -181,7 +191,7 @@ export function formatSlackMessage(
         type: 'header',
         text: {
           type: 'plain_text',
-          text: `${severityEmoji[analysis.severity]} SentinAI Anomaly Alert`,
+          text: `${severityEmoji[analysis.severity]} Anomaly Alert — ${analysis.severity.toUpperCase()}`,
           emoji: true,
         },
       },
@@ -190,7 +200,7 @@ export function formatSlackMessage(
         fields: [
           {
             type: 'mrkdwn',
-            text: `*Severity:*\n${analysis.severity.toUpperCase()}`,
+            text: `*Severity:*\n${severityEmoji[analysis.severity]} ${analysis.severity.toUpperCase()}`,
           },
           {
             type: 'mrkdwn',
@@ -202,42 +212,38 @@ export function formatSlackMessage(
           },
           {
             type: 'mrkdwn',
-            text: `*Time:*\n${new Date().toISOString()}`,
+            text: `*Time:*\n${timeStr}`,
           },
         ],
       },
-      {
-        type: 'divider',
-      },
+      { type: 'divider' },
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*Detected Anomalies:*\n${anomalySummary}`,
+          text: `*Detected Anomalies*\n${anomalySummary}`,
         },
       },
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*Impact:*\n${analysis.predictedImpact}`,
+          text: `*Impact*\n${analysis.predictedImpact}`,
         },
       },
+      ...(analysis.correlations.length > 0 ? [{
+        type: 'section' as const,
+        text: {
+          type: 'mrkdwn' as const,
+          text: `*Correlations*\n${analysis.correlations.join(' · ')}`,
+        },
+      }] : []),
+      { type: 'divider' },
       {
         type: 'section',
         text: {
           type: 'mrkdwn',
-          text: `*Correlations:*\n${analysis.correlations.join(', ') || 'None identified'}`,
-        },
-      },
-      {
-        type: 'divider',
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `*Suggested Actions:*\n${actionsList || 'No specific actions recommended'}`,
+          text: `*Suggested Actions*\n${actionsList || '_No specific actions recommended_'}`,
         },
       },
       {
@@ -245,7 +251,7 @@ export function formatSlackMessage(
         elements: [
           {
             type: 'mrkdwn',
-            text: `Current Metrics: CPU ${metrics.cpuUsage.toFixed(1)}% | TxPool ${metrics.txPoolPending} | Block #${metrics.blockHeight}`,
+            text: `SentinAI • CPU \`${metrics.cpuUsage.toFixed(1)}%\` · TxPool \`${metrics.txPoolPending}\` · Block \`#${metrics.blockHeight}\``,
           },
         ],
       },
