@@ -5,6 +5,8 @@ import {
   parsePaymentHeader,
   verifyAgentMarketplacePayment,
 } from '@/lib/agent-marketplace/payment-verifier';
+import { settleOnChain } from '@/lib/agent-marketplace/settlement-relayer';
+import logger from '@/lib/logger';
 
 export interface AuthorizedPaymentContext {
   payment: {
@@ -113,6 +115,19 @@ export async function withX402(
       operatorAddress,
     });
     return buildRateLimitResponse(service, rateLimitResult.retryAfterMs);
+  }
+
+  // On-chain settlement (facilitated mode only, skip for open/stub)
+  if (verification.mode === 'facilitated' && process.env.RELAYER_PRIVATE_KEY) {
+    const settlement = await settleOnChain(parsed.envelope);
+    if (!settlement.success) {
+      logger.warn(`[x402] Settlement failed for ${service.key}: ${settlement.error}`);
+      // In MVP, still serve data even if settlement fails (log for reconciliation)
+      // For strict mode, uncomment below:
+      // return buildPaymentErrorResponse('payment_verification_failed', `Settlement failed: ${settlement.error}`, service);
+    } else {
+      logger.info(`[x402] Settlement successful for ${service.key}: ${settlement.txHash}`);
+    }
   }
 
   const response = await handler({
