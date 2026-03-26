@@ -3,8 +3,8 @@
  * Submits reviews via MetaMask and reads via event scanning
  */
 
-const REVIEW_REGISTRY = '0xe63FCdbDAb179F25220361eeAe5fCf60B9151340' as const;
-const FACILITATOR_V2 = '0x94B6149ffdb6F55C3CA86C615764f2d5f097dE26' as const;
+const REVIEW_REGISTRY = '0x3b5F5d476e53c970e8cb2b1b547B491dcBAa5b02' as const;
+const FACILITATOR_V2 = '0xdcb25d78fbaeafdef5672aca204603c2d202ceef' as const;
 const SEPOLIA_RPC = 'https://ethereum-sepolia-rpc.publicnode.com';
 
 // submitReview(address,bytes32,uint8,uint8,uint8,uint8,string) selector

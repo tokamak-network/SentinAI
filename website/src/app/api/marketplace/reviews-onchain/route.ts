@@ -10,7 +10,7 @@ import legacyReviews from '@/../data/reviews.json';
 
 export const dynamic = 'force-dynamic';
 
-const REVIEW_REGISTRY = '0xe63FCdbDAb179F25220361eeAe5fCf60B9151340' as const;
+const REVIEW_REGISTRY = '0x3b5F5d476e53c970e8cb2b1b547B491dcBAa5b02' as const;
 // ReviewRegistry deployed at this block (approximate)
 const DEPLOY_BLOCK = BigInt('0xa07800');
 
