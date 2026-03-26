@@ -143,6 +143,43 @@ contract SentinAIReviewRegistryTest is Test {
         assertEq(registry.totalReviews(), 2);
     }
 
+    // ─── recordTrade tests ───
+
+    function test_recordTrade_fromFacilitator() public {
+        bytes32 nonce = keccak256("trade-1");
+        facilitator.markNonceUsed(nonce);
+
+        // Simulate facilitator calling recordTrade
+        vm.prank(address(facilitator));
+        registry.recordTrade(buyer, operator, 100e18, "/api/sequencer-health", nonce);
+
+        assertEq(registry.tradeCount(operator), 1);
+        assertEq(registry.totalTrades(), 1);
+    }
+
+    function test_recordTrade_revertsIfNotFacilitator() public {
+        bytes32 nonce = keccak256("trade-unauthorized");
+
+        vm.prank(buyer);
+        vm.expectRevert(SentinAIReviewRegistry.OnlyFacilitator.selector);
+        registry.recordTrade(buyer, operator, 100e18, "/api/test", nonce);
+    }
+
+    function test_recordTrade_multipleTrades() public {
+        for (uint256 i = 0; i < 5; i++) {
+            bytes32 nonce = keccak256(abi.encodePacked("trade-multi-", i));
+            facilitator.markNonceUsed(nonce);
+
+            vm.prank(address(facilitator));
+            registry.recordTrade(buyer, operator, 100e18, "/api/test", nonce);
+        }
+
+        assertEq(registry.tradeCount(operator), 5);
+        assertEq(registry.totalTrades(), 5);
+    }
+
+    // ─── existing tests ───
+
     function test_emptyComment() public {
         bytes32 nonce = keccak256("nonce-empty");
         facilitator.markNonceUsed(nonce);

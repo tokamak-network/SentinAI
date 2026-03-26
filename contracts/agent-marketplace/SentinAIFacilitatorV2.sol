@@ -6,6 +6,10 @@ interface IERC20 {
     function transfer(address to, uint256 amount) external returns (bool);
 }
 
+interface IReviewRegistry {
+    function recordTrade(address buyer, address operator, uint256 amount, string calldata resource, bytes32 nonce) external;
+}
+
 /// @title SentinAIFacilitatorV2
 /// @notice Trustless x402 payment settlement for SeigToken (TON) using approveAndCall pattern.
 /// @dev SeigToken restricts transferFrom to msg.sender == from || msg.sender == to.
@@ -36,6 +40,7 @@ contract SentinAIFacilitatorV2 is IERC165 {
 
     IERC20 public immutable tonToken;
     address public immutable owner;
+    IReviewRegistry public reviewRegistry;
 
     mapping(bytes32 => bool) public usedNonces;
 
@@ -46,6 +51,12 @@ contract SentinAIFacilitatorV2 is IERC165 {
         uint256 amount,
         string resource
     );
+
+    /// @notice Set the ReviewRegistry address (owner only, one-time or updatable)
+    function setReviewRegistry(address _reviewRegistry) external {
+        require(msg.sender == owner, "only owner");
+        reviewRegistry = IReviewRegistry(_reviewRegistry);
+    }
 
     constructor(address _tonToken) {
         tonToken = IERC20(_tonToken);
@@ -121,11 +132,19 @@ contract SentinAIFacilitatorV2 is IERC165 {
         address signer = ecrecover(digest, v, r, s);
         require(signer != address(0) && signer == sender, "invalid signature");
 
+        // Self-trade prevention
+        require(sender != merchant, "self-trade not allowed");
+
         // Two-hop transfer (SeigToken compatible):
         // 1. buyer → Facilitator (msg.sender = Facilitator = recipient ✅)
         require(tonToken.transferFrom(sender, address(this), amount), "transfer from buyer failed");
         // 2. Facilitator → merchant (msg.sender = Facilitator = sender ✅)
         require(tonToken.transfer(merchant, amount), "transfer to merchant failed");
+
+        // Auto-record trade in ReviewRegistry (if set)
+        if (address(reviewRegistry) != address(0)) {
+            try reviewRegistry.recordTrade(sender, merchant, amount, resource, nonce) {} catch {}
+        }
 
         emit Settled(nonce, sender, merchant, amount, resource);
         return true;

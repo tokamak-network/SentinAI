@@ -40,6 +40,27 @@ contract SentinAIReviewRegistry {
     /// @dev operator → review indices in allReviews
     mapping(address => uint256[]) internal operatorReviewIndices;
 
+    /// @dev Trade record (auto-recorded by Facilitator on settlement)
+    struct TradeRecord {
+        address buyer;
+        address operator;
+        uint256 amount;
+        string resource;
+        uint256 timestamp;
+    }
+
+    TradeRecord[] public allTrades;
+    mapping(address => uint256) public tradeCount;
+    mapping(address => uint256[]) internal operatorTradeIndices;
+
+    event TradeRecorded(
+        address indexed buyer,
+        address indexed operator,
+        uint256 amount,
+        string resource,
+        bytes32 indexed nonce
+    );
+
     event ReviewSubmitted(
         address indexed reviewer,
         address indexed operator,
@@ -54,9 +75,45 @@ contract SentinAIReviewRegistry {
     error NotSettled(bytes32 nonce);
     error AlreadyReviewed(bytes32 nonce);
     error InvalidRating(uint8 value);
+    error OnlyFacilitator();
 
     constructor(address _facilitator) {
         facilitator = IFacilitator(_facilitator);
+    }
+
+    /// @notice Record a trade automatically (called by Facilitator during settlement)
+    /// @dev Only callable by the Facilitator contract. No extra tx for buyer.
+    function recordTrade(
+        address buyer,
+        address operator,
+        uint256 amount,
+        string calldata resource,
+        bytes32 nonce
+    ) external {
+        if (msg.sender != address(facilitator)) revert OnlyFacilitator();
+
+        uint256 idx = allTrades.length;
+        allTrades.push(TradeRecord({
+            buyer: buyer,
+            operator: operator,
+            amount: amount,
+            resource: resource,
+            timestamp: block.timestamp
+        }));
+        operatorTradeIndices[operator].push(idx);
+        tradeCount[operator]++;
+
+        emit TradeRecorded(buyer, operator, amount, resource, nonce);
+    }
+
+    /// @notice Get trade count for an operator
+    function getTradeCount(address operator) external view returns (uint256) {
+        return tradeCount[operator];
+    }
+
+    /// @notice Get total trades across all operators
+    function totalTrades() external view returns (uint256) {
+        return allTrades.length;
     }
 
     /// @notice Submit a review for a data purchase.

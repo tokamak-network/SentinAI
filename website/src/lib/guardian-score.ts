@@ -14,13 +14,19 @@ const BASE_TEMP = 36.5;
 const MIN_TEMP = 0;
 const MAX_TEMP = 99.0;
 const HALF_LIFE_DAYS = 90;
-const DELTA_PER_REVIEW = 0.25; // multiplier: (avg - 3.0) * 0.25 = ±0.5 max
+const DELTA_PER_REVIEW = 0.25; // multiplier: (avg - 3.0) * 0.25 = ±0.5 max per review
+const TRADE_TEMP_BONUS = 0.1;  // per trade (capped), much lower than review weight
 
 /**
- * Calculate Guardian Temperature from reviews
+ * Calculate Guardian Temperature from reviews + trade count
+ * Reviews (star ratings) have 5x more weight than trade count.
+ * This prevents wash trading from inflating temperature.
  */
-export function calculateGuardianScore(reviews: OperatorReview[]): GuardianScore {
-  if (reviews.length === 0) {
+export function calculateGuardianScore(
+  reviews: OperatorReview[],
+  tradeCount: number = 0
+): GuardianScore {
+  if (reviews.length === 0 && tradeCount === 0) {
     return { temperature: BASE_TEMP, level: 'new', reviewCount: 0, avgRating: 0 };
   }
 
@@ -60,8 +66,12 @@ export function calculateGuardianScore(reviews: OperatorReview[]): GuardianScore
     ? (weightedSum / totalWeight) * volumeFactor
     : 0;
 
+  // Trade count bonus: √tradeCount × 0.1°C, capped at +3°C
+  // Much weaker than review-based delta (prevents wash trading)
+  const tradeBonus = Math.min(3.0, Math.sqrt(tradeCount) * TRADE_TEMP_BONUS);
+
   const temperature = Math.round(
-    Math.max(MIN_TEMP, Math.min(MAX_TEMP, BASE_TEMP + normalizedDelta)) * 10
+    Math.max(MIN_TEMP, Math.min(MAX_TEMP, BASE_TEMP + normalizedDelta + tradeBonus)) * 10
   ) / 10;
 
   const level = getLevel(temperature);

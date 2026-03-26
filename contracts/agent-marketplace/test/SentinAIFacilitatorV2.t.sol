@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import "forge-std/Test.sol";
 import "../SentinAIFacilitatorV2.sol";
+import "../SentinAIReviewRegistry.sol";
 
 /// @dev Mock SeigToken that restricts transferFrom to sender or recipient
 contract MockSeigToken is Test {
@@ -214,6 +215,63 @@ contract SentinAIFacilitatorV2Test is Test {
         // Direct call to onApprove (not from TON) should revert
         vm.expectRevert("only TON");
         facilitator.onApprove(buyer, address(facilitator), amount, data);
+    }
+
+    function test_onApprove_revertsSelfTrade() public {
+        // buyer == merchant → should revert
+        bytes32 nonce = keccak256("nonce-self-trade");
+        uint256 validAfter = block.timestamp - 1;
+        uint256 validBefore = block.timestamp + 3600;
+        string memory resource = "/api/marketplace/data";
+
+        bytes32 digest = _buildDigest(buyer, buyer, amount, resource, nonce, validAfter, validBefore);
+        bytes memory sig = _sign(buyerKey, digest);
+        bytes memory data = _encodeSettleData(buyer, resource, nonce, validAfter, validBefore, sig);
+
+        vm.prank(buyer);
+        vm.expectRevert("onApprove call failed");
+        ton.approveAndCall(address(facilitator), amount, data);
+    }
+
+    function test_onApprove_autoRecordsTrade() public {
+        // Set up ReviewRegistry
+        SentinAIReviewRegistry registry = new SentinAIReviewRegistry(address(facilitator));
+        facilitator.setReviewRegistry(address(registry));
+
+        bytes32 nonce = keccak256("nonce-auto-trade");
+        uint256 validAfter = block.timestamp - 1;
+        uint256 validBefore = block.timestamp + 3600;
+        string memory resource = "/api/marketplace/sequencer-health";
+
+        bytes32 digest = _buildDigest(buyer, merchant, amount, resource, nonce, validAfter, validBefore);
+        bytes memory sig = _sign(buyerKey, digest);
+        bytes memory data = _encodeSettleData(merchant, resource, nonce, validAfter, validBefore, sig);
+
+        vm.prank(buyer);
+        ton.approveAndCall(address(facilitator), amount, data);
+
+        // Verify trade was auto-recorded
+        assertEq(registry.tradeCount(merchant), 1);
+        assertEq(registry.totalTrades(), 1);
+    }
+
+    function test_onApprove_worksWithoutRegistry() public {
+        // No registry set → should still settle successfully
+        bytes32 nonce = keccak256("nonce-no-registry");
+        uint256 validAfter = block.timestamp - 1;
+        uint256 validBefore = block.timestamp + 3600;
+        string memory resource = "/api/marketplace/data";
+
+        bytes32 digest = _buildDigest(buyer, merchant, amount, resource, nonce, validAfter, validBefore);
+        bytes memory sig = _sign(buyerKey, digest);
+        bytes memory data = _encodeSettleData(merchant, resource, nonce, validAfter, validBefore, sig);
+
+        uint256 merchantBefore = ton.balanceOf(merchant);
+
+        vm.prank(buyer);
+        ton.approveAndCall(address(facilitator), amount, data);
+
+        assertEq(ton.balanceOf(merchant), merchantBefore + amount);
     }
 
     function test_onApprove_facilitatorHoldsZeroAfterSettle() public {
