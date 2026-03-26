@@ -3,7 +3,11 @@ import { sepolia } from 'viem/chains';
 
 const REGISTRY_ADDRESS = '0x64c8f8cB66657349190c7AF783f8E0254dCF1467' as const;
 const TON_ADDRESS = '0xa30fe40285b8f5c0457dbc3b7c8a280373c40044' as const;
+const REVIEW_REGISTRY = '0x3b5F5d476e53c970e8cb2b1b547B491dcBAa5b02' as const;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+// ERC8004Registry deployment block — avoid scanning from genesis
+const REGISTRY_DEPLOY_BLOCK = BigInt('0x9f4671');
+const MAX_BLOCK_RANGE = BigInt(49000);
 
 export interface AgentTradeStats {
   transactions: number;
@@ -67,59 +71,71 @@ export async function getTradeStats(): Promise<TradeStatsResult> {
       transport: http(rpcUrl, { timeout: 20_000 }),
     });
 
-    // 1. Get registered agent addresses from ERC8004 Registry
-    const registryLogs = await client.getLogs({
-      address: REGISTRY_ADDRESS,
-      event: parseAbiItem(
-        'event AgentRegistered(uint256 indexed agentId, address indexed agent, string agentURI)'
-      ),
-      fromBlock: BigInt(0),
-      toBlock: 'latest',
-    });
+    const latestBlock = await client.getBlockNumber();
 
+    // 1. Get registered agent addresses from ERC8004 Registry (chunked scan)
+    const REGISTRY_EVENT = parseAbiItem(
+      'event AgentRegistered(uint256 indexed agentId, address indexed agent, string agentURI)'
+    );
     const merchantAddresses = new Set<string>();
-    for (const log of registryLogs) {
-      const agent = log.args.agent;
-      if (typeof agent === 'string') {
-        merchantAddresses.add(agent.toLowerCase());
+
+    for (let from = REGISTRY_DEPLOY_BLOCK; from <= latestBlock; from += MAX_BLOCK_RANGE) {
+      const to = from + MAX_BLOCK_RANGE - BigInt(1) > latestBlock ? latestBlock : from + MAX_BLOCK_RANGE - BigInt(1);
+      const logs = await client.getLogs({
+        address: REGISTRY_ADDRESS,
+        event: REGISTRY_EVENT,
+        fromBlock: from,
+        toBlock: to,
+      });
+      for (const log of logs) {
+        const agent = (log.args as { agent?: string }).agent;
+        if (agent) merchantAddresses.add(agent.toLowerCase());
       }
     }
 
-    // 2. Get TON ERC20 Transfer events
-    const transferLogs = await client.getLogs({
-      address: TON_ADDRESS,
-      event: parseAbiItem(
-        'event Transfer(address indexed from, address indexed to, uint256 value)'
-      ),
-      fromBlock: BigInt(0),
-      toBlock: 'latest',
-    });
+    // 2. Get trade data from ReviewRegistry TradeRecorded events (more accurate than TON Transfers)
+    const TRADE_EVENT = parseAbiItem(
+      'event TradeRecorded(address indexed buyer, address indexed operator, uint256 amount, string resource, bytes32 indexed nonce)'
+    );
 
-    // 3. Filter and aggregate
     let totalVolume = BigInt(0);
     const globalBuyers = new Set<string>();
     const perAgent: Record<string, { transactions: number; volume: bigint; buyers: Set<string> }> = {};
 
-    for (const log of transferLogs) {
-      const to = log.args.to?.toLowerCase();
-      const from = log.args.from?.toLowerCase();
-      const value = log.args.value ?? BigInt(0);
+    for (let from = REGISTRY_DEPLOY_BLOCK; from <= latestBlock; from += MAX_BLOCK_RANGE) {
+      const to = from + MAX_BLOCK_RANGE - BigInt(1) > latestBlock ? latestBlock : from + MAX_BLOCK_RANGE - BigInt(1);
+      const logs = await client.getLogs({
+        address: REVIEW_REGISTRY,
+        event: TRADE_EVENT,
+        fromBlock: from,
+        toBlock: to,
+      });
 
-      if (!to || !from || !merchantAddresses.has(to)) continue;
+      for (const log of logs) {
+        const args = log.args as { buyer?: string; operator?: string; amount?: bigint };
+        const buyer = args.buyer?.toLowerCase();
+        const operator = args.operator?.toLowerCase();
+        const value = args.amount ?? BigInt(0);
 
-      totalVolume += value;
-      globalBuyers.add(from);
+        if (!buyer || !operator) continue;
 
-      if (!perAgent[to]) {
-        perAgent[to] = { transactions: 0, volume: BigInt(0), buyers: new Set() };
+        totalVolume += value;
+        globalBuyers.add(buyer);
+
+        if (!perAgent[operator]) {
+          perAgent[operator] = { transactions: 0, volume: BigInt(0), buyers: new Set() };
+        }
+        perAgent[operator].transactions++;
+        perAgent[operator].volume += value;
+        perAgent[operator].buyers.add(buyer);
       }
-      perAgent[to].transactions++;
-      perAgent[to].volume += value;
-      perAgent[to].buyers.add(from);
     }
 
+    // Aggregate results
+    let totalTransactions = 0;
     const perAgentResult: Record<string, AgentTradeStats> = {};
     for (const [addr, stats] of Object.entries(perAgent)) {
+      totalTransactions += stats.transactions;
       perAgentResult[addr] = {
         transactions: stats.transactions,
         volumeTON: formatUnits(stats.volume, 18),
@@ -131,9 +147,7 @@ export async function getTradeStats(): Promise<TradeStatsResult> {
       ok: true,
       global: {
         registeredAgents: merchantAddresses.size,
-        totalTransactions: transferLogs.filter(
-          (log) => log.args.to && merchantAddresses.has(log.args.to.toLowerCase())
-        ).length,
+        totalTransactions,
         totalVolumeTON: formatUnits(totalVolume, 18),
         uniqueBuyers: globalBuyers.size,
       },

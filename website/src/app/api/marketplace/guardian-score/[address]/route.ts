@@ -44,10 +44,26 @@ export async function GET(
     } catch { /* empty */ }
   }
 
-  const score = calculateGuardianScore(reviews);
+  // Fetch trade count from trade-stats for this operator
+  let tradeCount = 0;
+  try {
+    const statsRes = await fetch(`${baseUrl}/api/trade-stats`, {
+      headers: { 'Cache-Control': 'no-cache' },
+    });
+    if (statsRes.ok) {
+      const stats = await statsRes.json();
+      const agentStats = stats.perAgent?.[address.toLowerCase()];
+      if (agentStats) {
+        tradeCount = agentStats.transactions ?? 0;
+      }
+    }
+  } catch { /* skip */ }
+
+  const score = calculateGuardianScore(reviews, tradeCount);
 
   return Response.json({
     operatorAddress: address.toLowerCase(),
     ...score,
+    tradeCount,
   });
 }
