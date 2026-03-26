@@ -5,8 +5,9 @@ const REGISTRY_ADDRESS = '0x64c8f8cB66657349190c7AF783f8E0254dCF1467' as const;
 const TON_ADDRESS = '0xa30fe40285b8f5c0457dbc3b7c8a280373c40044' as const;
 const REVIEW_REGISTRY = '0x3b5F5d476e53c970e8cb2b1b547B491dcBAa5b02' as const;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-// ERC8004Registry deployment block — avoid scanning from genesis
-const REGISTRY_DEPLOY_BLOCK = BigInt('0x9f4671');
+// Deployment blocks — avoid scanning from genesis
+const REGISTRY_DEPLOY_BLOCK = BigInt('0x9f4671');  // ERC8004Registry
+const REVIEW_REGISTRY_DEPLOY_BLOCK = BigInt('0xa08000');  // ReviewRegistry (approx)
 const MAX_BLOCK_RANGE = BigInt(49000);
 
 export interface AgentTradeStats {
@@ -102,7 +103,7 @@ export async function getTradeStats(): Promise<TradeStatsResult> {
     const globalBuyers = new Set<string>();
     const perAgent: Record<string, { transactions: number; volume: bigint; buyers: Set<string> }> = {};
 
-    for (let from = REGISTRY_DEPLOY_BLOCK; from <= latestBlock; from += MAX_BLOCK_RANGE) {
+    for (let from = REVIEW_REGISTRY_DEPLOY_BLOCK; from <= latestBlock; from += MAX_BLOCK_RANGE) {
       const to = from + MAX_BLOCK_RANGE - BigInt(1) > latestBlock ? latestBlock : from + MAX_BLOCK_RANGE - BigInt(1);
       const logs = await client.getLogs({
         address: REVIEW_REGISTRY,
