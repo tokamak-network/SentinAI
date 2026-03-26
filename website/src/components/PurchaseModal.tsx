@@ -256,7 +256,17 @@ export default function PurchaseModal({ agentName, endpoint, amount: serviceAmou
         onPurchaseComplete?.(txHash, state.account, payload.nonce);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Payment failed');
+      const msg = err instanceof Error ? err.message : 'Payment failed';
+      const userMessage = msg.includes('user rejected') || msg.includes('User denied')
+        ? 'Transaction cancelled. You can try again.'
+        : msg.includes('insufficient funds')
+        ? 'Insufficient Sepolia ETH for gas fee.'
+        : msg.includes('transfer failed') || msg.includes('transfer from buyer')
+        ? 'Insufficient TON balance for this purchase.'
+        : msg.includes('nonce')
+        ? 'Transaction conflict. Please wait a moment and try again.'
+        : msg;
+      setError(userMessage);
       setState((prev) => ({ ...prev, step: 'balance' }));
     }
   }, [state.account, state.requirements, fullEndpoint]);

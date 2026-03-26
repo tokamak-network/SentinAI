@@ -177,26 +177,53 @@ export function ReviewModal({
             />
           </div>
 
+          {/* Gas fee notice */}
+          <div style={{ fontSize: 8, color: '#A0A0A0', marginTop: 10, lineHeight: 1.5 }}>
+            ⛽ Review is stored on-chain. A small gas fee (Sepolia ETH) is required.
+          </div>
+
           {/* Error */}
           {error && (
-            <div style={{ fontSize: 9, color: '#D40000', marginTop: 8 }}>{error}</div>
+            <div style={{ fontSize: 9, color: '#D40000', marginTop: 8 }}>
+              {error.includes('user rejected')
+                ? 'Transaction cancelled by user.'
+                : error.includes('insufficient funds')
+                ? 'Insufficient Sepolia ETH for gas fee.'
+                : error.includes('reverted')
+                ? 'Review transaction failed. The settlement nonce may be invalid.'
+                : error}
+            </div>
           )}
 
-          {/* Submit */}
-          <button
-            onClick={handleSubmit}
-            disabled={!allRated || submitting}
-            style={{
-              marginTop: 14, width: '100%',
-              background: allRated ? '#007A00' : '#C0C0C0',
-              color: 'white', border: 'none',
-              padding: '8px 0', fontFamily: FONT,
-              fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
-              cursor: allRated && !submitting ? 'pointer' : 'not-allowed',
-            }}
-          >
-            {submitting ? 'SUBMITTING...' : 'SUBMIT REVIEW'}
-          </button>
+          {/* Buttons */}
+          <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+            <button
+              onClick={handleSubmit}
+              disabled={!allRated || submitting}
+              style={{
+                flex: 1,
+                background: allRated ? '#007A00' : '#C0C0C0',
+                color: 'white', border: 'none',
+                padding: '8px 0', fontFamily: FONT,
+                fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+                cursor: allRated && !submitting ? 'pointer' : 'not-allowed',
+              }}
+            >
+              {submitting ? 'SUBMITTING...' : 'SUBMIT REVIEW'}
+            </button>
+            <button
+              onClick={onClose}
+              disabled={submitting}
+              style={{
+                padding: '8px 16px', fontFamily: FONT,
+                fontSize: 10, fontWeight: 700, letterSpacing: '0.1em',
+                background: 'transparent', color: '#707070',
+                border: '1px solid #D0D0D0', cursor: 'pointer',
+              }}
+            >
+              SKIP
+            </button>
+          </div>
         </div>
       </div>
     </div>

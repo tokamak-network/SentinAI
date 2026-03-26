@@ -117,21 +117,11 @@ export async function withX402(
     return buildRateLimitResponse(service, rateLimitResult.retryAfterMs);
   }
 
-  // On-chain settlement (facilitated mode only, skip for open/stub)
-  let settlementTxHash: string | undefined;
-  let settlementStatus: 'settled' | 'pending' | 'skipped' = 'skipped';
-
-  if (verification.mode === 'facilitated' && process.env.RELAYER_PRIVATE_KEY) {
-    settlementStatus = 'pending';
-    const settlement = await settleOnChain(parsed.envelope);
-    if (!settlement.success) {
-      logger.warn(`[x402] Settlement failed for ${service.key}: ${settlement.error}`);
-    } else {
-      logger.info(`[x402] Settlement successful for ${service.key}: ${settlement.txHash}`);
-      settlementTxHash = settlement.txHash;
-      settlementStatus = 'settled';
-    }
-  }
+  // Settlement is handled by the buyer via approveAndCall (FacilitatorV2).
+  // Server only verifies the signature — no server-side settle needed.
+  // The buyer's approveAndCall tx atomically: approves + settles + records trade.
+  const settlementTxHash: string | undefined = undefined;
+  const settlementStatus: 'settled' | 'pending' | 'skipped' = 'skipped';
 
   const response = await handler({
     payment: {
