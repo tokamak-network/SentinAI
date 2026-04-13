@@ -4,6 +4,20 @@ import React, { useEffect, useMemo, useState } from 'react';
 
 type NodeType = 'ethereum-el' | 'opstack-l2' | 'arbitrum-nitro';
 
+type AIProviderStatus = {
+  provider: 'qwen' | 'anthropic' | 'openai' | 'gemini' | null;
+  hasGateway: boolean;
+  anthropicAuthType: 'apikey' | 'oauth' | null;
+  configured: boolean;
+};
+
+const PROVIDER_LABELS: Record<string, string> = {
+  qwen: 'Qwen',
+  anthropic: 'Claude (Anthropic)',
+  openai: 'OpenAI',
+  gemini: 'Gemini',
+};
+
 type OnboardingCompleteResponse = {
   data?: {
     instanceId: string;
@@ -32,6 +46,7 @@ export default function ConnectPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<OnboardingCompleteResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [aiStatus, setAiStatus] = useState<AIProviderStatus | null>(null);
 
   const current = useMemo(() => NODE_TYPES.find((n) => n.type === nodeType)!, [nodeType]);
 
@@ -41,6 +56,13 @@ export default function ConnectPage() {
     const t = window.setTimeout(() => window.location.assign(target), 800);
     return () => window.clearTimeout(t);
   }, [result?.data?.dashboardUrl]);
+
+  useEffect(() => {
+    fetch('/api/v2/config/ai-provider')
+      .then((r) => r.json())
+      .then((data: AIProviderStatus) => setAiStatus(data))
+      .catch(() => setAiStatus(null));
+  }, []);
 
   async function onTest() {
     setLoading(true);
@@ -80,7 +102,64 @@ export default function ConnectPage() {
         <h1 className="text-3xl font-bold">Connect</h1>
         <p className="mt-2 text-slate-400">Test connection, auto-detect client, then redirect to dashboard.</p>
 
-        <div className="mt-8 rounded-xl border border-slate-800 bg-slate-900/40 p-6">
+        {/* AI Provider Status */}
+        <div className="mt-6 rounded-xl border border-slate-800 bg-slate-900/40 p-5">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-slate-300">AI Provider</h2>
+            {aiStatus === null && (
+              <span className="text-xs text-slate-500">Loading...</span>
+            )}
+            {aiStatus !== null && (
+              aiStatus.configured ? (
+                <span className="rounded-full bg-emerald-900/50 px-2.5 py-0.5 text-xs text-emerald-300">
+                  Active
+                </span>
+              ) : (
+                <span className="rounded-full bg-rose-900/50 px-2.5 py-0.5 text-xs text-rose-300">
+                  Not configured
+                </span>
+              )
+            )}
+          </div>
+
+          {aiStatus?.configured && aiStatus.provider && (
+            <div className="mt-3 flex flex-wrap gap-3 text-sm">
+              <div className="flex items-center gap-1.5">
+                <span className="text-slate-400">Provider</span>
+                <span className="font-mono text-slate-200">{PROVIDER_LABELS[aiStatus.provider] ?? aiStatus.provider}</span>
+              </div>
+              {aiStatus.hasGateway && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400">via</span>
+                  <span className="font-mono text-slate-200">AI Gateway</span>
+                </div>
+              )}
+              {aiStatus.provider === 'anthropic' && aiStatus.anthropicAuthType && (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-slate-400">Auth</span>
+                  <span className={`rounded px-1.5 py-0.5 text-xs font-mono ${aiStatus.anthropicAuthType === 'oauth' ? 'bg-violet-900/50 text-violet-300' : 'bg-slate-700 text-slate-300'}`}>
+                    {aiStatus.anthropicAuthType === 'oauth' ? 'OAuth (subscription)' : 'API key'}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {aiStatus !== null && !aiStatus.configured && (
+            <div className="mt-3 space-y-1.5 text-xs text-slate-400">
+              <p>Set one of the following environment variables to enable AI:</p>
+              <div className="mt-2 space-y-1 rounded-lg bg-slate-800/60 p-3 font-mono">
+                <div><span className="text-amber-300">QWEN_API_KEY</span>=... <span className="text-slate-500"># Recommended — fastest, $30/mo</span></div>
+                <div><span className="text-amber-300">ANTHROPIC_API_KEY</span>=sk-ant-... <span className="text-slate-500"># Claude, pay-per-token</span></div>
+                <div><span className="text-amber-300">ANTHROPIC_OAUTH_TOKEN</span>=... <span className="text-slate-500"># Claude, subscription</span></div>
+                <div><span className="text-amber-300">OPENAI_API_KEY</span>=sk-... <span className="text-slate-500"># GPT</span></div>
+                <div><span className="text-amber-300">GEMINI_API_KEY</span>=AIza... <span className="text-slate-500"># Gemini</span></div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/40 p-6">
           <label htmlFor="node-type" className="block text-sm text-slate-300">Node type</label>
           <select
             id="node-type"
