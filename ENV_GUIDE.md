@@ -17,7 +17,7 @@ npm run setup
 | Variable | Description |
 |----------|-------------|
 | `L2_RPC_URL` | L2 Chain RPC endpoint |
-| AI API Key (one of) | `QWEN_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` |
+| AI API Key (one of) | `QWEN_API_KEY`, `ANTHROPIC_API_KEY`, `ANTHROPIC_OAUTH_TOKEN`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` |
 | `AWS_CLUSTER_NAME` | EKS cluster name (auto-detects K8S_API_URL & region) |
 
 ## AI Provider
@@ -28,7 +28,8 @@ Priority: Gateway > Qwen > Anthropic > OpenAI > Gemini. Set only the API key for
 |----------|---------|----------|------------|------------|
 | 0 | `AI_GATEWAY_URL` + Key | LiteLLM Gateway | (detected provider) | (detected provider) |
 | 1 | `QWEN_API_KEY` | Qwen (OpenAI compatible) | `qwen-turbo-latest` | `qwen-max-latest` |
-| 2 | `ANTHROPIC_API_KEY` | Anthropic Direct | `claude-haiku-4-5-20251001` | `claude-sonnet-4-5-20250929` |
+| 2 | `ANTHROPIC_API_KEY` | Anthropic Direct (pay-per-token) | `claude-haiku-4-5-20251001` | `claude-sonnet-4-5-20250929` |
+| 2 | `ANTHROPIC_OAUTH_TOKEN` | Anthropic Direct (subscription) | `claude-haiku-4-5-20251001` | `claude-sonnet-4-5-20250929` |
 | 3 | `OPENAI_API_KEY` | OpenAI Direct | `gpt-4.1-mini` | `gpt-4.1` |
 | 4 | `GEMINI_API_KEY` | Gemini Direct | `gemini-2.5-flash-lite` | `gemini-2.5-pro` |
 

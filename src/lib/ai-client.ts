@@ -5,11 +5,12 @@
  * Gateway support: Route through proxy when AI_GATEWAY_URL is set
  *
  * Environment variables:
- *   AI_GATEWAY_URL       (optional) - Route all requests through a gateway/proxy
- *   QWEN_API_KEY         - Qwen (DashScope) API key
- *   ANTHROPIC_API_KEY    - Anthropic (Claude) API key
- *   OPENAI_API_KEY       - OpenAI (GPT) API key
- *   GEMINI_API_KEY       - Google (Gemini) API key
+ *   AI_GATEWAY_URL         (optional) - Route all requests through a gateway/proxy
+ *   QWEN_API_KEY           - Qwen (DashScope) API key
+ *   ANTHROPIC_API_KEY      - Anthropic (Claude) API key (pay-per-token)
+ *   ANTHROPIC_OAUTH_TOKEN  - Anthropic OAuth token (Claude.ai subscription)
+ *   OPENAI_API_KEY         - OpenAI (GPT) API key
+ *   GEMINI_API_KEY         - Google (Gemini) API key
  */
 
 import { randomUUID } from 'crypto';
@@ -89,11 +90,12 @@ interface ProviderConfig {
   apiKey: string;
   model: string;
   baseUrl: string;
+  authType?: 'apikey' | 'oauth'; // anthropic only
 }
 
 function getApiKeyForProvider(provider: AIProvider): string | undefined {
   if (provider === 'qwen') return process.env.QWEN_API_KEY;
-  if (provider === 'anthropic') return process.env.ANTHROPIC_API_KEY;
+  if (provider === 'anthropic') return process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_OAUTH_TOKEN;
   if (provider === 'openai') return process.env.GPT_API_KEY || process.env.OPENAI_API_KEY;
   return process.env.GEMINI_API_KEY;
 }
@@ -112,11 +114,16 @@ function buildProviderConfig(provider: AIProvider, modelTier: ModelTier, modelNa
   }
 
   const gatewayUrl = process.env.AI_GATEWAY_URL;
+  const authType: ProviderConfig['authType'] =
+    provider === 'anthropic' && !process.env.ANTHROPIC_API_KEY && process.env.ANTHROPIC_OAUTH_TOKEN
+      ? 'oauth'
+      : 'apikey';
   return {
     provider,
     apiKey,
     model: modelName || MODEL_MAP[provider][modelTier],
     baseUrl: gatewayUrl || DEFAULT_BASE_URLS[provider],
+    authType,
   };
 }
 
@@ -160,7 +167,7 @@ function resolveProviderSequence(options: ChatCompletionOptions): {
   const configuredProviders = providerOrder.filter((provider) => Boolean(getApiKeyForProvider(provider)));
   if (configuredProviders.length === 0) {
     throw new Error(
-      'No AI API key configured. Set QWEN_API_KEY, ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY.'
+      'No AI API key configured. Set QWEN_API_KEY, ANTHROPIC_API_KEY, ANTHROPIC_OAUTH_TOKEN, OPENAI_API_KEY, or GEMINI_API_KEY.'
     );
   }
 
@@ -222,10 +229,15 @@ async function callAnthropic(
   config: ProviderConfig,
   options: ChatCompletionOptions
 ): Promise<ChatCompletionResult> {
+  const authHeaders: Record<string, string> =
+    config.authType === 'oauth'
+      ? { 'Authorization': `Bearer ${config.apiKey}` }
+      : { 'x-api-key': config.apiKey };
+
   const response = await fetch(`${config.baseUrl}/v1/messages`, {
     method: 'POST',
     headers: {
-      'x-api-key': config.apiKey,
+      ...authHeaders,
       'anthropic-version': '2023-06-01',
       'content-type': 'application/json',
     },
