@@ -47,12 +47,8 @@ export class PatternMiner {
       const getRecordCount = (this.store as any).getOperationRecordCount as
         | (() => Promise<number>)
         | undefined;
-      const getLastTime = (this.store as any).getLastEvolutionTime as
-        | (() => Promise<number>)
-        | undefined;
-
       const recordCount = (await getRecordCount?.()) ?? 0;
-      const lastEvolutionTime = (await getLastTime?.()) ?? 0;
+      const lastEvolutionTime = await this.store.getLastEvolutionTime();
       const timeSinceLastEvolution = Date.now() - lastEvolutionTime;
 
       return recordCount >= RECORD_THRESHOLD || timeSinceLastEvolution >= TIME_THRESHOLD;
@@ -151,10 +147,7 @@ export class PatternMiner {
       }
 
       // Update evolution timestamp
-      const setLastTime = (this.store as any).setLastEvolutionTime as
-        | ((time: number) => Promise<void>)
-        | undefined;
-      await setLastTime?.(Date.now());
+      await this.store.setLastEvolutionTime(Date.now());
 
       return patterns.length > 0 ? patterns : null;
     } catch (err) {

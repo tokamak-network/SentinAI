@@ -26,6 +26,7 @@ import { GoalLearningEpisode } from './goal-learning';
 import { RCAHistoryEntry } from './rca';
 import { ExperienceEntry, LifetimeStats } from './experience';
 import type { MarketplacePricingConfig, OutcomeBonusConfig, CatalogAgent, MarketplaceOrder } from './marketplace';
+import type { IncidentPattern, ABTestSession, PlaybookVersion, PlaybookVersionHistory } from '@/playbooks/evolution/types';
 
 // ============================================================
 // Store Interface
@@ -231,6 +232,20 @@ export interface IStateStore {
   // Orders list (transaction history)
   getMarketplaceOrders(defaultOrders: MarketplaceOrder[]): Promise<MarketplaceOrder[]>;
   setMarketplaceOrders(orders: MarketplaceOrder[]): Promise<void>;
+
+  // === Playbook Evolution ===
+  // Pattern mining, A/B testing, and versioned playbook management
+  savePattern(pattern: IncidentPattern): Promise<void>;
+  getPatterns(anomalyType: string): Promise<IncidentPattern[]>;
+  deletePattern(anomalyType: string, action: string): Promise<void>;
+  saveABTestSession(sessionId: string, session: ABTestSession): Promise<void>;
+  getABTestSession(sessionId: string): Promise<ABTestSession | null>;
+  getRunningABTests(): Promise<ABTestSession[]>;
+  savePlaybookVersion(version: PlaybookVersion): Promise<void>;
+  getPlaybookVersionHistory(): Promise<PlaybookVersionHistory>;
+  cleanupOldVersions(): Promise<void>;
+  getLastEvolutionTime(): Promise<number>;
+  setLastEvolutionTime(time: number): Promise<void>;
 }
 
 // ============================================================
