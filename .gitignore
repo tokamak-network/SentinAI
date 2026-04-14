@@ -26,6 +26,9 @@ examples/opstack/dispute-mon/
 examples/opstack/op-deployer
 examples/opstack/optimism/
 
+# Foundry deployment broadcast artifacts
+contracts/agent-marketplace/broadcast/
+
 # Local external references / large experiment artifacts
 external/
 foundryup-zksync
