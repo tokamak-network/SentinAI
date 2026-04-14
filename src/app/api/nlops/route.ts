@@ -6,8 +6,16 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { processCommand, isNLOpsEnabled } from '@/lib/nlops-engine';
+import { runNlopsAgent } from '@/lib/agents/nlops-agent';
 import type { NLOpsRequest, NLOpsResponse } from '@/types/nlops';
 import logger from '@/lib/logger';
+
+function isAgentSdkEnabled(): boolean {
+  return (
+    process.env.USE_AGENT_SDK === 'true' &&
+    Boolean(process.env.ANTHROPIC_API_KEY)
+  );
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -34,7 +42,18 @@ export async function POST(request: NextRequest): Promise<NextResponse<NLOpsResp
     }
 
     const baseUrl = getBaseUrl(request);
-    const response = await processCommand(message, baseUrl, confirmAction);
+
+    let response: NLOpsResponse;
+    if (isAgentSdkEnabled()) {
+      try {
+        response = await runNlopsAgent({ userInput: message, baseUrl, confirmAction });
+      } catch (agentError) {
+        logger.warn('[NLOps API] Agent SDK failed, falling back to legacy engine', { error: agentError });
+        response = await processCommand(message, baseUrl, confirmAction);
+      }
+    } else {
+      response = await processCommand(message, baseUrl, confirmAction);
+    }
 
     return NextResponse.json(response);
   } catch (error) {

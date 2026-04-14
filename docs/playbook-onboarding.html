@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SentinAI · Playbook System</title>
+<style>
+:root{
+  --bg:#0b0d14;--s1:#12151f;--s2:#1a1e2e;--s3:#222740;
+  --bd:#2a2f4a;--bd2:#353c5e;
+  --ind:#6366f1;--ind2:#818cf8;--ind3:#c7d2fe;
+  --grn:#22c55e;--grn2:#4ade80;
+  --yel:#eab308;--yel2:#facc15;
+  --red:#ef4444;--red2:#f87171;
+  --blu:#3b82f6;--blu2:#60a5fa;
+  --orn:#f97316;--orn2:#fb923c;
+  --tx:#e2e8f0;--tx2:#94a3b8;--tx3:#64748b;
+  --r:10px;--r2:6px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:14px;line-height:1.6}
+
+/* NAV */
+nav{
+  position:fixed;top:0;left:0;width:220px;height:100vh;
+  background:var(--s1);border-right:1px solid var(--bd);
+  padding:28px 16px;overflow-y:auto;z-index:100;
+}
+.nav-logo{font-size:16px;font-weight:700;color:var(--ind2);margin-bottom:2px}
+.nav-sub{font-size:11px;color:var(--tx3);margin-bottom:24px}
+nav a{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--r2);color:var(--tx3);text-decoration:none;font-size:12.5px;transition:.15s}
+nav a:hover{background:var(--s2);color:var(--tx)}
+nav a.on{background:rgba(99,102,241,.15);color:var(--ind2)}
+.nav-sec{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--tx3);margin:16px 0 4px 10px}
+
+/* LAYOUT */
+main{margin-left:220px;padding:48px 52px;max-width:1000px}
+
+/* SECTION */
+section{margin-bottom:72px;scroll-margin-top:24px}
+.section-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.section-num{width:26px;height:26px;border-radius:50%;background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--ind2);flex-shrink:0}
+h2{font-size:19px;font-weight:700;color:var(--tx)}
+.lead{color:var(--tx2);font-size:13.5px;max-width:640px;margin-bottom:24px}
+
+/* CALLOUT */
+.note{border-radius:var(--r2);padding:12px 16px;font-size:13px;border-left:3px solid;margin:16px 0}
+.note.i{background:rgba(59,130,246,.07);border-color:var(--blu);color:#93c5fd}
+.note.w{background:rgba(234,179,8,.07);border-color:var(--yel);color:#fde047}
+
+/* PAGE HERO */
+.hero{margin-bottom:60px;padding-bottom:40px;border-bottom:1px solid var(--bd)}
+.hero-badge{display:inline-block;background:rgba(99,102,241,.15);color:var(--ind2);font-size:11px;font-weight:600;padding:3px 12px;border-radius:20px;border:1px solid rgba(99,102,241,.3);margin-bottom:14px}
+.hero h1{font-size:28px;font-weight:700;margin-bottom:10px}
+.hero p{color:var(--tx2);font-size:15px;max-width:560px}
+
+/* ══════════════ DIAGRAMS ══════════════ */
+
+/* Pipeline (section 1) */
+.pipeline{display:flex;align-items:center;gap:0;margin:28px 0;overflow-x:auto;padding-bottom:8px}
+.pip-step{display:flex;flex-direction:column;align-items:center;flex-shrink:0}
+.pip-box{
+  width:110px;background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r);
+  padding:14px 10px;text-align:center;cursor:default;
+  transition:border-color .2s,background .2s;
+}
+.pip-box:hover{border-color:var(--ind);background:rgba(99,102,241,.08)}
+.pip-icon{font-size:26px;margin-bottom:6px}
+.pip-label{font-size:12px;font-weight:600;color:var(--tx)}
+.pip-sub{font-size:10.5px;color:var(--tx3);margin-top:2px}
+.pip-arrow{padding:0 6px;color:var(--tx3);font-size:20px;margin-top:4px;flex-shrink:0}
+.pip-box.hi{border-color:var(--ind);background:rgba(99,102,241,.1)}
+.pip-box.ok{border-color:var(--grn);background:rgba(34,197,94,.07)}
+
+/* 3-Layer stack */
+.layer-stack{margin:28px 0;display:flex;flex-direction:column;gap:0}
+.layer-row{display:flex;align-items:stretch;position:relative}
+.layer-badge{
+  width:38px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;border-radius:var(--r) 0 0 var(--r);
+  border:1px solid;border-right:none;
+}
+.layer-content{
+  flex:1;border:1px solid;border-radius:0 var(--r) var(--r) 0;
+  padding:14px 18px;
+}
+.layer-title{font-size:13.5px;font-weight:600;color:var(--tx);margin-bottom:3px}
+.layer-desc{font-size:12px;color:var(--tx2)}
+.layer-tag{font-size:10px;font-weight:600;padding:2px 7px;border-radius:3px;display:inline-block;margin-left:8px;vertical-align:middle}
+
+.layer-row.l1 .layer-badge{background:rgba(99,102,241,.15);color:var(--ind2);border-color:rgba(99,102,241,.4)}
+.layer-row.l1 .layer-content{background:rgba(99,102,241,.05);border-color:rgba(99,102,241,.3)}
+.layer-row.l2 .layer-badge{background:rgba(59,130,246,.15);color:var(--blu2);border-color:rgba(59,130,246,.4)}
+.layer-row.l2 .layer-content{background:rgba(59,130,246,.05);border-color:rgba(59,130,246,.3)}
+.layer-row.l3 .layer-badge{background:rgba(34,197,94,.15);color:var(--grn2);border-color:rgba(34,197,94,.4)}
+.layer-row.l3 .layer-content{background:rgba(34,197,94,.05);border-color:rgba(34,197,94,.3)}
+.layer-row.lx .layer-badge{background:rgba(239,68,68,.15);color:var(--red2);border-color:rgba(239,68,68,.4)}
+.layer-row.lx .layer-content{background:rgba(239,68,68,.04);border-color:rgba(239,68,68,.3)}
+
+.layer-connector{
+  height:24px;width:1px;background:var(--bd2);margin-left:19px;position:relative;
+  display:flex;align-items:center;justify-content:center;
+}
+.layer-connector::after{
+  content:'↓ no match';position:absolute;left:12px;
+  font-size:10px;color:var(--tx3);white-space:nowrap;
+}
+
+/* Matching steps */
+.match-steps{display:grid;grid-template-columns:1fr 36px 1fr 36px 1fr;align-items:center;gap:0;margin:24px 0}
+.match-box{background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r);padding:16px;text-align:center}
+.match-box .num{width:22px;height:22px;border-radius:50%;background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.4);color:var(--ind2);font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;margin-bottom:8px}
+.match-box .icon{font-size:24px;display:block;margin-bottom:6px}
+.match-box .t{font-size:12.5px;font-weight:600;color:var(--tx)}
+.match-box .d{font-size:11px;color:var(--tx3);margin-top:4px}
+.match-arrow{text-align:center;color:var(--tx3);font-size:22px}
+
+/* Condition chips */
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0}
+.chip{
+  background:var(--s2);border:1px solid var(--bd2);border-radius:20px;
+  padding:5px 12px;font-size:12px;color:var(--tx2);
+  display:flex;align-items:center;gap:6px;
+}
+.chip .icon{font-size:14px}
+.chip.met{border-color:rgba(99,102,241,.4);background:rgba(99,102,241,.07);color:var(--ind3)}
+.chip.log{border-color:rgba(234,179,8,.4);background:rgba(234,179,8,.07);color:var(--yel2)}
+
+/* Execution timeline */
+.timeline{margin:24px 0;display:flex;flex-direction:column;gap:0}
+.tl-item{display:flex;gap:16px}
+.tl-line{display:flex;flex-direction:column;align-items:center;flex-shrink:0}
+.tl-dot{
+  width:28px;height:28px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:11px;font-weight:700;flex-shrink:0;
+}
+.tl-seg{flex:1;width:1px;background:var(--bd2);margin:4px auto}
+.tl-body{background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r2);padding:10px 14px;margin-bottom:8px;flex:1}
+.tl-title{font-size:13px;font-weight:600;color:var(--tx)}
+.tl-sub{font-size:11.5px;color:var(--tx3);margin-top:2px}
+
+.tl-dot.ind{background:rgba(99,102,241,.2);border:1.5px solid var(--ind);color:var(--ind2)}
+.tl-dot.ok{background:rgba(34,197,94,.2);border:1.5px solid var(--grn);color:var(--grn2)}
+.tl-body.ok{background:rgba(34,197,94,.05);border-color:rgba(34,197,94,.3)}
+
+/* Safety gates */
+.gates{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:24px 0}
+.gate{
+  background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r);
+  padding:14px 12px;text-align:center;
+}
+.gate .gicon{font-size:24px;margin-bottom:8px}
+.gate .gt{font-size:12px;font-weight:600;color:var(--tx);margin-bottom:4px}
+.gate .gd{font-size:11px;color:var(--tx3);line-height:1.4}
+
+/* Action safety table */
+.safety-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0}
+.safety-card{border-radius:var(--r);padding:16px}
+.safety-card.s{background:rgba(34,197,94,.07);border:1px solid rgba(34,197,94,.3)}
+.safety-card.g{background:rgba(234,179,8,.07);border:1px solid rgba(234,179,8,.3)}
+.safety-card.m{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.3)}
+.safety-card .sh{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.safety-card .stag{font-size:11px;font-weight:700;padding:3px 8px;border-radius:4px}
+.safety-card.s .stag{background:rgba(34,197,94,.2);color:var(--grn2)}
+.safety-card.g .stag{background:rgba(234,179,8,.2);color:var(--yel2)}
+.safety-card.m .stag{background:rgba(239,68,68,.2);color:var(--red2)}
+.safety-card .desc{font-size:12px;color:var(--tx2);margin-bottom:10px}
+.safety-card .items{list-style:none;font-size:11.5px;color:var(--tx3)}
+.safety-card .items li{padding:2px 0}
+.safety-card .items li::before{content:'· '}
+
+/* Evolution cycle */
+.evo{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin:24px 0;align-items:center}
+.evo-box{background:var(--s2);border:1px solid var(--bd2);border-radius:var(--r);padding:16px}
+.evo-box h4{font-size:12.5px;font-weight:600;color:var(--tx);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.evo-box ul{list-style:none;font-size:12px;color:var(--tx2)}
+.evo-box ul li{padding:2px 0}
+.evo-box ul li::before{content:'› ';color:var(--tx3)}
+.evo-mid{display:flex;flex-direction:column;gap:10px}
+.evo-stage{
+  background:rgba(99,102,241,.08);border:1px solid rgba(99,102,241,.25);
+  border-radius:var(--r2);padding:10px 12px;text-align:center;
+}
+.evo-stage .label{font-size:11.5px;font-weight:600;color:var(--ind2)}
+.evo-stage .arrow{font-size:18px;color:var(--ind);margin:4px 0 0}
+.evo-connector{text-align:center;color:var(--tx3);font-size:20px}
+
+/* Status lifecycle */
+.statuses{display:flex;align-items:center;justify-content:center;gap:0;margin:28px 0;flex-wrap:wrap}
+.snode{display:flex;flex-direction:column;align-items:center;gap:6px}
+.sdot{
+  width:64px;height:64px;border-radius:50%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  border:2px solid;font-size:10px;font-weight:700;text-align:center;line-height:1.3;
+}
+.sdot.draft{border-color:#64748b;background:rgba(100,116,139,.12);color:#94a3b8}
+.sdot.pending{border-color:#eab308;background:rgba(234,179,8,.12);color:#fde047}
+.sdot.approved{border-color:#3b82f6;background:rgba(59,130,246,.12);color:#60a5fa}
+.sdot.trusted{border-color:#22c55e;background:rgba(34,197,94,.12);color:#4ade80}
+.sdot.archived{border-color:#475569;background:rgba(71,85,105,.12);color:#64748b}
+.slabel{font-size:10px;color:var(--tx3);text-align:center}
+.sarrow{color:var(--tx3);font-size:20px;margin-bottom:28px;flex-shrink:0}
+
+.conf-bar-wrap{margin:16px 0}
+.conf-row{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.conf-label{width:60px;font-size:11px;color:var(--tx2);flex-shrink:0}
+.conf-bar{height:12px;border-radius:6px;position:relative;flex:1;background:var(--s3)}
+.conf-fill{height:100%;border-radius:6px}
+.conf-fill.draft{background:linear-gradient(90deg,#475569,#64748b);width:40%}
+.conf-fill.pending{background:linear-gradient(90deg,#854d0e,#eab308);width:55%}
+.conf-fill.approved{background:linear-gradient(90deg,#1e40af,#3b82f6);width:75%}
+.conf-fill.trusted{background:linear-gradient(90deg,#14532d,#22c55e);width:95%}
+.conf-val{font-size:10px;color:var(--tx3);white-space:nowrap}
+
+/* Catalog mini table */
+table{width:100%;border-collapse:collapse;font-size:12.5px;margin:16px 0}
+th{text-align:left;padding:8px 12px;background:var(--s2);color:var(--tx2);font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--bd)}
+td{padding:8px 12px;border-bottom:1px solid rgba(42,47,74,.8);color:var(--tx2)}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:rgba(255,255,255,.02)}
+.tag{display:inline-block;padding:1px 7px;border-radius:3px;font-size:10.5px;font-weight:600}
+.tag.s{background:rgba(34,197,94,.15);color:#4ade80}
+.tag.g{background:rgba(234,179,8,.15);color:#facc15}
+.tag.m{background:rgba(239,68,68,.15);color:#f87171}
+
+hr{border:none;border-top:1px solid var(--bd);margin:48px 0}
+
+@media(max-width:860px){nav{display:none}main{margin-left:0;padding:28px 20px}}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-logo">🛡 SentinAI</div>
+  <div class="nav-sub">Playbook System Guide</div>
+  <div class="nav-sec">Overview</div>
+  <a href="#pipeline">Overall Pipeline</a>
+  <a href="#layers">3-Layer Resolution</a>
+  <div class="nav-sec">Matching & Execution</div>
+  <a href="#matching">Issue → Playbook</a>
+  <a href="#execution">Execution Flow</a>
+  <a href="#safety-gates">Safety Gates</a>
+  <div class="nav-sec">Catalog</div>
+  <a href="#actions">Action Types</a>
+  <a href="#catalog">Playbook Catalog</a>
+  <div class="nav-sec">Evolution</div>
+  <a href="#evolution">How Playbooks Learn</a>
+  <a href="#lifecycle">Review Lifecycle</a>
+</nav>
+
+<main>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="hero-badge">Onboarding Guide · Playbook System</div>
+  <h1>SentinAI Playbook System</h1>
+  <p>When the L2 network has a problem, SentinAI automatically finds the right fix using <strong>Playbooks</strong> — pre-written repair recipes that run without human intervention.</p>
+</div>
+
+
+<!-- ══ 1. PIPELINE ══ -->
+<section id="pipeline">
+  <div class="section-head">
+    <div class="section-num">1</div>
+    <h2>Overall Pipeline</h2>
+  </div>
+  <p class="lead">From anomaly detection to a recorded fix — every incident follows this path.</p>
+
+  <div class="pipeline">
+    <div class="pip-step">
+      <div class="pip-box">
+        <div class="pip-icon">📡</div>
+        <div class="pip-label">Anomaly</div>
+        <div class="pip-sub">metric spike / log alert</div>
+      </div>
+    </div>
+    <div class="pip-arrow">→</div>
+    <div class="pip-step">
+      <div class="pip-box hi">
+        <div class="pip-icon">🔎</div>
+        <div class="pip-label">Matcher</div>
+        <div class="pip-sub">find best playbook</div>
+      </div>
+    </div>
+    <div class="pip-arrow">→</div>
+    <div class="pip-step">
+      <div class="pip-box">
+        <div class="pip-icon">🛡</div>
+        <div class="pip-label">Safety Gates</div>
+        <div class="pip-sub">5 checks</div>
+      </div>
+    </div>
+    <div class="pip-arrow">→</div>
+    <div class="pip-step">
+      <div class="pip-box">
+        <div class="pip-icon">⚙️</div>
+        <div class="pip-label">Executor</div>
+        <div class="pip-sub">run actions</div>
+      </div>
+    </div>
+    <div class="pip-arrow">→</div>
+    <div class="pip-step">
+      <div class="pip-box">
+        <div class="pip-icon">🔁</div>
+        <div class="pip-label">Fallback</div>
+        <div class="pip-sub">if failed</div>
+      </div>
+    </div>
+    <div class="pip-arrow">→</div>
+    <div class="pip-step">
+      <div class="pip-box ok">
+        <div class="pip-icon">📝</div>
+        <div class="pip-label">Ledger</div>
+        <div class="pip-sub">record outcome</div>
+      </div>
+    </div>
+  </div>
+  <div class="note i">The ledger record at the end feeds back into the system — over time, patterns in the ledger become new, smarter playbooks.</div>
+</section>
+
+
+<!-- ══ 2. 3-LAYER RESOLUTION ══ -->
+<section id="layers">
+  <div class="section-head">
+    <div class="section-num">2</div>
+    <h2>3-Layer Playbook Resolution</h2>
+  </div>
+  <p class="lead">The matcher searches from most specific to most general, stopping at the first match.</p>
+
+  <div class="layer-stack">
+    <div class="layer-row l1">
+      <div class="layer-badge">①</div>
+      <div class="layer-content">
+        <div class="layer-title">🤖 AI-Generated Playbooks <span class="layer-tag" style="background:rgba(99,102,241,.2);color:var(--ind2)">EVOLVED</span></div>
+        <div class="layer-desc">Auto-created from past incident patterns. Instance-specific, confidence-scored, reviewed before active use.</div>
+      </div>
+    </div>
+    <div class="layer-connector"></div>
+
+    <div class="layer-row l2">
+      <div class="layer-badge">②</div>
+      <div class="layer-content">
+        <div class="layer-title">⛓ Chain-Specific Playbooks <span class="layer-tag" style="background:rgba(59,130,246,.2);color:var(--blu2)">HANDCRAFTED</span></div>
+        <div class="layer-desc">Tailored for each L2 stack — Arbitrum Nitro, Optimism, ZK Stack, Thanos. Know the exact component names and failure modes.</div>
+      </div>
+    </div>
+    <div class="layer-connector"></div>
+
+    <div class="layer-row l3">
+      <div class="layer-badge">③</div>
+      <div class="layer-content">
+        <div class="layer-title">🧩 Core Abstract Playbooks <span class="layer-tag" style="background:rgba(34,197,94,.2);color:var(--grn2)">UNIVERSAL</span></div>
+        <div class="layer-desc">Chain-agnostic. Uses semantic roles like "block-producer" or "tx-submitter" that map to the right component on any chain.</div>
+      </div>
+    </div>
+    <div class="layer-connector"></div>
+
+    <div class="layer-row lx">
+      <div class="layer-badge">✗</div>
+      <div class="layer-content">
+        <div class="layer-title" style="color:var(--red2)">No Match → Escalate to Operator</div>
+        <div class="layer-desc">Incident is flagged and the on-call operator is notified for manual review.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══ 3. MATCHING ══ -->
+<section id="matching">
+  <div class="section-head">
+    <div class="section-num">3</div>
+    <h2>Issue → Playbook Matching</h2>
+  </div>
+  <p class="lead">Three steps to find the right playbook for the current anomaly.</p>
+
+  <div class="match-steps">
+    <div class="match-box">
+      <span class="num">1</span>
+      <span class="icon">🎯</span>
+      <div class="t">Identify Component</div>
+      <div class="d">AI RCA result → metric mapping → fallback to "system"</div>
+    </div>
+    <div class="match-arrow">→</div>
+    <div class="match-box">
+      <span class="num">2</span>
+      <span class="icon">🗂</span>
+      <div class="t">Filter Candidates</div>
+      <div class="d">Only playbooks whose trigger.component matches are kept</div>
+    </div>
+    <div class="match-arrow">→</div>
+    <div class="match-box">
+      <span class="num">3</span>
+      <span class="icon">✅</span>
+      <div class="t">Match Indicator</div>
+      <div class="d">ANY single indicator match → playbook selected</div>
+    </div>
+  </div>
+
+  <p class="lead" style="margin-top:20px">Indicators come in two types:</p>
+  <div class="chips">
+    <div class="chip met"><span class="icon">📊</span> cpuUsage &gt; 90</div>
+    <div class="chip met"><span class="icon">📊</span> l2BlockHeight stagnant</div>
+    <div class="chip met"><span class="icon">📊</span> txPoolPending monotonic increase</div>
+    <div class="chip met"><span class="icon">📊</span> syncGap &gt; 300s</div>
+    <div class="chip log"><span class="icon">📄</span> "out of memory"</div>
+    <div class="chip log"><span class="icon">📄</span> "OOM killed"</div>
+    <div class="chip log"><span class="icon">📄</span> "connection refused"</div>
+  </div>
+  <div style="display:flex;gap:12px;font-size:12px">
+    <span style="background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.3);color:var(--ind3);padding:3px 10px;border-radius:4px">■ Metric — numeric or behavioral condition</span>
+    <span style="background:rgba(234,179,8,.1);border:1px solid rgba(234,179,8,.3);color:var(--yel2);padding:3px 10px;border-radius:4px">■ Log Pattern — text match in recent logs</span>
+  </div>
+</section>
+
+
+<!-- ══ 4. EXECUTION ══ -->
+<section id="execution">
+  <div class="section-head">
+    <div class="section-num">4</div>
+    <h2>Execution Flow</h2>
+  </div>
+  <p class="lead">Actions run one by one. If a step fails, fallback steps kick in automatically.</p>
+
+  <div class="timeline">
+    <div class="tl-item">
+      <div class="tl-line"><div class="tl-dot ind">①</div><div class="tl-seg" style="height:16px"></div></div>
+      <div class="tl-body"><div class="tl-title">Match Playbook</div><div class="tl-sub">3-layer resolution → playbook found or escalate</div></div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-line"><div class="tl-dot ind">②</div><div class="tl-seg" style="height:16px"></div></div>
+      <div class="tl-body"><div class="tl-title">Pass Safety Gates</div><div class="tl-sub">Kill switch · Circuit breaker · Cooldown · Rate limits</div></div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-line"><div class="tl-dot ind">③</div><div class="tl-seg" style="height:16px"></div></div>
+      <div class="tl-body"><div class="tl-title">Create Execution Record</div><div class="tl-sub">Unique ID assigned · status = running</div></div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-line"><div class="tl-dot ind">④</div><div class="tl-seg" style="height:16px"></div></div>
+      <div class="tl-body"><div class="tl-title">Run Primary Actions (sequential)</div><div class="tl-sub">Check safety level → execute → wait → capture result</div></div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-line"><div class="tl-dot ind">⑤</div><div class="tl-seg" style="height:16px"></div></div>
+      <div class="tl-body"><div class="tl-title">Fallback (if primary failed)</div><div class="tl-sub">Separate backup action sequence — usually more aggressive (e.g. pod restart)</div></div>
+    </div>
+    <div class="tl-item">
+      <div class="tl-line"><div class="tl-dot ok">⑥</div></div>
+      <div class="tl-body ok"><div class="tl-title">Write to Operation Ledger</div><div class="tl-sub">Updates circuit breaker · Outcome feeds pattern mining for playbook evolution</div></div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══ 5. SAFETY GATES ══ -->
+<section id="safety-gates">
+  <div class="section-head">
+    <div class="section-num">5</div>
+    <h2>Safety Gates</h2>
+  </div>
+  <p class="lead">Five checks run before any action. One failure = playbook blocked.</p>
+
+  <div class="gates">
+    <div class="gate">
+      <div class="gicon">🔴</div>
+      <div class="gt">Kill Switch</div>
+      <div class="gd">Global on/off. Disables all automation instantly.</div>
+    </div>
+    <div class="gate">
+      <div class="gicon">⚡</div>
+      <div class="gt">Circuit Breaker</div>
+      <div class="gd">3 consecutive failures → blocked for 24 hours.</div>
+    </div>
+    <div class="gate">
+      <div class="gicon">⏱</div>
+      <div class="gt">Cooldown</div>
+      <div class="gd">Must wait 10 min between runs of the same playbook.</div>
+    </div>
+    <div class="gate">
+      <div class="gicon">📊</div>
+      <div class="gt">Hourly Limit</div>
+      <div class="gd">Max 10 total executions per hour.</div>
+    </div>
+    <div class="gate">
+      <div class="gicon">📅</div>
+      <div class="gt">Daily Limit</div>
+      <div class="gd">Max 50 total executions per day.</div>
+    </div>
+  </div>
+</section>
+
+<hr/>
+
+<!-- ══ 6. ACTION TYPES ══ -->
+<section id="actions">
+  <div class="section-head">
+    <div class="section-num">6</div>
+    <h2>Action Types</h2>
+  </div>
+  <p class="lead">Every action has a safety level that controls whether it runs automatically.</p>
+
+  <div class="safety-grid">
+    <div class="safety-card s">
+      <div class="sh">
+        <div>🟢</div>
+        <div class="stag">SAFE</div>
+      </div>
+      <div class="desc">Always runs automatically. Read-only or non-disruptive.</div>
+      <ul class="items">
+        <li>health_check</li>
+        <li>collect_logs</li>
+        <li>describe_pod</li>
+        <li>check_l1_gas_price</li>
+        <li>escalate_operator</li>
+      </ul>
+    </div>
+    <div class="safety-card g">
+      <div class="sh">
+        <div>🟡</div>
+        <div class="stag">GUARDED</div>
+      </div>
+      <div class="desc">Runs automatically only when <code>allowGuardedActions</code> is ON. Changes infrastructure.</div>
+      <ul class="items">
+        <li>restart_pod</li>
+        <li>scale_up / scale_down</li>
+        <li>zero_downtime_swap</li>
+        <li>refill_eoa</li>
+        <li>switch_l1_rpc</li>
+      </ul>
+    </div>
+    <div class="safety-card m">
+      <div class="sh">
+        <div>🔴</div>
+        <div class="stag">MANUAL</div>
+      </div>
+      <div class="desc">Never runs automatically. Requires explicit operator action.</div>
+      <ul class="items">
+        <li>config_change</li>
+        <li>rollback_deployment</li>
+        <li>force_restart_all</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══ 7. CATALOG ══ -->
+<section id="catalog">
+  <div class="section-head">
+    <div class="section-num">7</div>
+    <h2>Playbook Catalog</h2>
+  </div>
+  <p class="lead">Key issue types and the playbooks that respond to them.</p>
+
+  <h3 style="font-size:13px;color:var(--tx2);font-weight:600;margin:20px 0 8px">⛓ Arbitrum Nitro</h3>
+  <table>
+    <thead><tr><th>Playbook</th><th>Triggers When</th><th>Primary Action</th></tr></thead>
+    <tbody>
+      <tr><td>nitro-resource-exhaustion</td><td>CPU &gt; 90%, memory &gt; 85%, or OOM log</td><td><span class="tag g">GUARDED</span> scale_up → health_check</td></tr>
+      <tr><td>nitro-sequencer-stall</td><td>l2BlockHeight stagnant, batchBacklog spike</td><td><span class="tag g">GUARDED</span> restart_pod</td></tr>
+      <tr><td>nitro-batcher-lag</td><td>batcherQueueDepth monotonic increase</td><td><span class="tag g">GUARDED</span> scale_up → verify</td></tr>
+      <tr><td>nitro-low-eoa-balance</td><td>eoaBalance &lt; 0.1 ETH</td><td><span class="tag g">GUARDED</span> refill_eoa</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="font-size:13px;color:var(--tx2);font-weight:600;margin:20px 0 8px">🔴 Optimism (OP Stack)</h3>
+  <table>
+    <thead><tr><th>Playbook</th><th>Triggers When</th><th>Primary Action</th></tr></thead>
+    <tbody>
+      <tr><td>op-geth-resource-exhaustion</td><td>CPU &gt; 90% or memory &gt; 85%</td><td><span class="tag g">GUARDED</span> scale_up → health_check</td></tr>
+      <tr><td>op-node-sync-stall</td><td>l2BlockHeight stagnant</td><td><span class="tag s">SAFE</span> check_l1 → restart_pod</td></tr>
+      <tr><td>op-batcher-submission-failure</td><td>batcherQueueDepth monotonic increase</td><td><span class="tag g">GUARDED</span> restart_pod</td></tr>
+      <tr><td>op-proposer-stall</td><td>l2OutputRootLag &gt; 3600s</td><td><span class="tag g">GUARDED</span> restart_pod</td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="font-size:13px;color:var(--tx2);font-weight:600;margin:20px 0 8px">🧩 Core Abstract (all chains)</h3>
+  <table>
+    <thead><tr><th>Playbook</th><th>Triggers When</th><th>Role Target</th></tr></thead>
+    <tbody>
+      <tr><td>core-resource-pressure</td><td>cpuUsage &gt; 90%</td><td>block-producer → scale_up</td></tr>
+      <tr><td>core-tx-pool-backlog</td><td>txPoolPending monotonic increase</td><td>block-producer → health_check</td></tr>
+      <tr><td>core-sync-stall</td><td>l2BlockHeight stagnant</td><td>block-producer → restart_pod</td></tr>
+      <tr><td>core-eoa-balance-low</td><td>eoaBalance low</td><td>tx-submitter → refill_eoa</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<hr/>
+
+<!-- ══ 8. EVOLUTION ══ -->
+<section id="evolution">
+  <div class="section-head">
+    <div class="section-num">8</div>
+    <h2>How Playbooks Learn</h2>
+  </div>
+  <p class="lead">Every execution feeds a learning loop that automatically generates new, better playbooks.</p>
+
+  <div class="evo">
+    <div class="evo-box">
+      <h4>📝 Operation Ledger</h4>
+      <ul>
+        <li>Anomaly type &amp; metric</li>
+        <li>Which playbook ran</li>
+        <li>Outcome (success/fail)</li>
+        <li>Resolution time (ms)</li>
+      </ul>
+    </div>
+
+    <div class="evo-mid">
+      <div class="evo-stage">
+        <div class="label">① Pattern Mining</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:4px">Group by trigger signature<br/>≥3 occurrences → candidate</div>
+        <div class="arrow">↓</div>
+      </div>
+      <div class="evo-stage">
+        <div class="label">② Playbook Generator</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:4px">Deterministic + AI-enhanced<br/>confidence scored</div>
+        <div class="arrow">↓</div>
+      </div>
+    </div>
+
+    <div class="evo-box">
+      <h4>🤖 New Evolved Playbook</h4>
+      <ul>
+        <li>Trigger signature</li>
+        <li>Best-fit action</li>
+        <li>Confidence score 0–1</li>
+        <li>Review status: draft</li>
+        <li>Version &amp; changelog</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note i"><strong>Trigger signature</strong> — a normalized anomaly fingerprint: <code>anomalyType | metricName | zScore bucket | value bucket</code>. Any pattern appearing ≥3 times with consistent outcomes becomes a playbook candidate.</div>
+</section>
+
+
+<!-- ══ 9. LIFECYCLE ══ -->
+<section id="lifecycle">
+  <div class="section-head">
+    <div class="section-num">9</div>
+    <h2>Review Status Lifecycle</h2>
+  </div>
+  <p class="lead">Auto-generated playbooks go through a confidence-gated review before being trusted in production.</p>
+
+  <div class="statuses">
+    <div class="snode">
+      <div class="sdot draft">DRAFT</div>
+      <div class="slabel">conf &lt; 0.40</div>
+    </div>
+    <div class="sarrow">→</div>
+    <div class="snode">
+      <div class="sdot pending">PEND</div>
+      <div class="slabel">0.40–0.70</div>
+    </div>
+    <div class="sarrow">→</div>
+    <div class="snode">
+      <div class="sdot approved">APPR</div>
+      <div class="slabel">0.70–0.90</div>
+    </div>
+    <div class="sarrow">→</div>
+    <div class="snode">
+      <div class="sdot trusted">TRUST</div>
+      <div class="slabel">≥ 0.90</div>
+    </div>
+    <div class="sarrow" style="color:var(--red2)">→</div>
+    <div class="snode">
+      <div class="sdot archived">ARCH</div>
+      <div class="slabel">terminal</div>
+    </div>
+  </div>
+
+  <p style="font-size:12.5px;color:var(--tx2);margin-bottom:12px">Confidence is calculated from three components:</p>
+  <div class="conf-bar-wrap">
+    <div class="conf-row">
+      <div class="conf-label">Base</div>
+      <div class="conf-bar"><div class="conf-fill draft"></div></div>
+      <div class="conf-val">0.40 — starting point</div>
+    </div>
+    <div class="conf-row">
+      <div class="conf-label">+ Success</div>
+      <div class="conf-bar"><div class="conf-fill pending"></div></div>
+      <div class="conf-val">up to +0.20 — from success rate</div>
+    </div>
+    <div class="conf-row">
+      <div class="conf-label">+ Frequency</div>
+      <div class="conf-bar"><div class="conf-fill approved"></div></div>
+      <div class="conf-val">up to +0.15 — from occurrence count</div>
+    </div>
+    <div class="conf-row">
+      <div class="conf-label">Trusted</div>
+      <div class="conf-bar"><div class="conf-fill trusted"></div></div>
+      <div class="conf-val">≥ 0.90 — used in Layer 1</div>
+    </div>
+  </div>
+
+  <div class="note w"><strong>Suspended:</strong> Any playbook can be temporarily suspended by an operator and later re-approved. <strong>Archived</strong> is the only terminal state — it cannot be reactivated.</div>
+</section>
+
+</main>
+
+<script>
+const headings = document.querySelectorAll('section[id]');
+const links = document.querySelectorAll('nav a');
+const io = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const id = e.target.id;
+      links.forEach(l => l.classList.toggle('on', l.getAttribute('href') === '#' + id));
+    }
+  });
+}, { rootMargin: '-15% 0% -75% 0%' });
+headings.forEach(h => io.observe(h));
+</script>
+</body>
+</html>

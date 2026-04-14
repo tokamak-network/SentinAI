@@ -1,0 +1,1585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SentinAI — Multi-Operator UX Wireframe</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'IBM Plex Mono', monospace;
+  background: #EBEBEB;
+  color: #0A0A0A;
+  padding: 28px 24px 64px;
+}
+
+/* ── Screen selector ── */
+.screen-nav {
+  display: flex; gap: 0; margin-bottom: 24px;
+  border: 1.5px solid #B0B0B0; width: fit-content; flex-wrap: wrap;
+}
+.snav-group {
+  display: flex; gap: 0; border-right: 1.5px solid #B0B0B0;
+}
+.snav-group:last-child { border-right: none; }
+.snav-label {
+  padding: 0 10px; background: #0A0A0A; color: #888;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.12em;
+  display: flex; align-items: center; border-right: 1px solid #222;
+}
+.s-btn {
+  padding: 7px 16px; font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.06em;
+  border: none; border-right: 1px solid #C8C8C8; cursor: pointer;
+  background: white; color: #555; transition: all 0.12s; white-space: nowrap;
+}
+.s-btn:last-child { border-right: none; }
+.s-btn:hover { background: #F0F0F0; color: #0A0A0A; }
+.s-btn.active { background: #D40000; color: white; }
+.s-btn.new-tag::after {
+  content: 'NEW'; font-size: 8px; margin-left: 6px;
+  background: #00AA44; color: white; padding: 1px 4px; font-weight: 700;
+}
+.s-btn.changed-tag::after {
+  content: 'CHANGED'; font-size: 8px; margin-left: 6px;
+  background: #0055AA; color: white; padding: 1px 4px; font-weight: 700;
+}
+
+.screen { display: none; }
+.screen.active { display: block; }
+
+/* ── Change annotation ── */
+.annotation-bar {
+  display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.ann-pill {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.1em; padding: 3px 10px;
+  text-transform: uppercase;
+}
+.ann-new     { background: #00AA44; color: white; }
+.ann-changed { background: #0055AA; color: white; }
+.ann-same    { background: #888;    color: white; }
+.ann-title   { font-size: 12px; font-weight: 700; color: #0A0A0A; }
+.ann-sub     { font-size: 10px; color: #666; }
+
+/* ── App frame ── */
+.app {
+  border: 1.5px solid #A0A0A0;
+  background: white;
+  box-shadow: 0 6px 32px rgba(0,0,0,0.14);
+  max-width: 1080px;
+  overflow: hidden;
+}
+.app.wide { max-width: 1280px; }
+
+/* ── Navbar (website) ── */
+.navbar {
+  background: white; border-bottom: 1.5px solid #D0D0D0;
+  height: 40px; display: flex; align-items: stretch;
+}
+.nb-brand {
+  background: #D40000; color: white; padding: 0 16px;
+  display: flex; align-items: center; font-weight: 700; font-size: 13px;
+  letter-spacing: 0.04em; border-right: 2px solid #8B0000; flex-shrink: 0;
+}
+.nb-link {
+  display: flex; align-items: center; padding: 0 14px;
+  font-size: 10px; font-weight: 600; letter-spacing: 0.08em;
+  color: #3A3A3A; border-right: 1px solid #EAEAEA;
+}
+.nb-link.active { color: #D40000; border-bottom: 2px solid #D40000; }
+.nb-link.highlight { color: #0055AA; }
+.nb-badge {
+  font-size: 8px; background: #00AA44; color: white;
+  padding: 1px 5px; margin-left: 6px; font-weight: 700;
+}
+.nb-right { margin-left: auto; display: flex; align-items: stretch; }
+.nb-cta {
+  background: #D40000; color: white; padding: 0 16px;
+  display: flex; align-items: center; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.08em; border-left: 2px solid #8B0000; cursor: pointer;
+}
+
+/* ── Topbar (dashboard) ── */
+.topbar {
+  background: #D40000; color: white; height: 28px;
+  display: flex; align-items: center;
+  border-bottom: 2px solid #8B0000; flex-shrink: 0;
+}
+.tb-brand {
+  background: #8B0000; padding: 0 14px; height: 100%;
+  display: flex; align-items: center; border-right: 2px solid #6B0000;
+  font-weight: 700; font-size: 13px; letter-spacing: 0.04em; flex-shrink: 0;
+}
+.tb-item {
+  padding: 0 13px; height: 100%; display: flex; align-items: center;
+  border-right: 1px solid rgba(255,255,255,0.15); cursor: pointer;
+  color: rgba(255,255,255,0.75); font-size: 10px; font-weight: 600;
+  letter-spacing: 0.06em;
+}
+.tb-item.active { border-bottom: 2px solid white; color: white; font-weight: 700; }
+.tb-dot { width: 6px; height: 6px; border-radius: 50%; background: #00FF88;
+  margin-right: 6px; display: inline-block; box-shadow: 0 0 4px #00FF88; }
+.tb-right { margin-left: auto; display: flex; align-items: center; gap: 16px; padding: 0 14px; }
+.tb-right span { font-size: 9px; color: rgba(255,255,255,0.6); }
+.tb-new-badge {
+  font-size: 8px; background: #00AA44; color: white;
+  padding: 1px 5px; margin-left: 5px; font-weight: 700;
+}
+
+/* ── Ticker bar ── */
+.ticker {
+  background: #0A0A0A; height: 22px; display: flex; align-items: center;
+  padding: 0 18px; gap: 24px; overflow: hidden;
+}
+.ticker-item {
+  font-size: 9px; white-space: nowrap; display: flex; align-items: center; gap: 6px;
+}
+
+/* ── Section bar ── */
+.secbar {
+  background: #0A0A0A; color: white; padding: 3px 14px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase;
+}
+.secbar.blue  { background: #0A2266; }
+.secbar.green { background: #0A4422; }
+
+/* ── Stat row ── */
+.stat-row {
+  display: flex; border-bottom: 1px solid #E0E0E0;
+}
+.stat-cell {
+  flex: 1; padding: 12px 16px;
+  border-right: 1px solid #E0E0E0;
+}
+.stat-cell:last-child { border-right: none; }
+.stat-val { font-size: 20px; font-weight: 700; color: #D40000; margin-bottom: 2px; }
+.stat-val.blue { color: #0055AA; }
+.stat-val.green { color: #007A00; }
+.stat-lbl { font-size: 9px; color: #888; font-weight: 600; letter-spacing: 0.06em; }
+
+/* ── Content area ── */
+.content { padding: 16px; background: #FAFAFA; }
+.content.white { background: white; }
+.content.dark  { background: #F2F2F2; }
+
+/* ── Tab bar ── */
+.tab-bar {
+  display: flex; border-bottom: 1.5px solid #D0D0D0;
+  background: white; padding: 0 16px;
+}
+.tab {
+  padding: 9px 14px; font-size: 10px; font-weight: 600; letter-spacing: 0.07em;
+  border-bottom: 2px solid transparent; margin-bottom: -1.5px; cursor: pointer;
+  color: #888; white-space: nowrap;
+}
+.tab.active { color: #D40000; border-bottom-color: #D40000; }
+.tab .new-dot { width: 5px; height: 5px; border-radius: 50%; background: #00AA44;
+  display: inline-block; margin-left: 5px; vertical-align: middle; }
+
+/* ── Grid layouts ── */
+.g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+.g4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 10px; }
+.sidebar-layout { display: grid; grid-template-columns: 220px 1fr; gap: 0; }
+.sidebar-layout-wide { display: grid; grid-template-columns: 260px 1fr; gap: 0; }
+
+/* ── Cards ── */
+.card {
+  border: 1px solid #D8D8D8; background: white; padding: 14px;
+}
+.card.dark { background: #F5F5F5; }
+.card-title {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; color: #0A0A0A;
+  margin-bottom: 8px; text-transform: uppercase;
+}
+.card-val { font-size: 18px; font-weight: 700; color: #D40000; }
+.card-val.blue { color: #0055AA; }
+.card-val.green { color: #007A00; }
+.card-sub { font-size: 9px; color: #888; margin-top: 2px; }
+
+/* ── Operator card ── */
+.op-card {
+  border: 1px solid #D0D0D0; background: white; padding: 0; overflow: hidden;
+}
+.op-card-head {
+  padding: 10px 12px; display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid #EBEBEB;
+}
+.op-avatar {
+  width: 28px; height: 28px; background: #D40000; color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; flex-shrink: 0;
+}
+.op-avatar.blue { background: #0055AA; }
+.op-avatar.dark { background: #333; }
+.op-name { font-size: 11px; font-weight: 700; color: #0A0A0A; }
+.op-addr { font-size: 9px; color: #888; margin-top: 1px; }
+.op-status {
+  margin-left: auto; font-size: 9px; font-weight: 700; letter-spacing: 0.07em;
+  padding: 2px 8px; display: flex; align-items: center; gap: 4px;
+}
+.op-status.online  { background: #E8F7ED; color: #007A00; border: 1px solid #B0DDB8; }
+.op-status.degraded{ background: #FFF8E1; color: #B07000; border: 1px solid #FFD770; }
+.op-status.offline { background: #F5F5F5; color: #888;    border: 1px solid #CCC; }
+.op-dot { width: 5px; height: 5px; border-radius: 50%; }
+.op-dot.online  { background: #00AA44; }
+.op-dot.degraded{ background: #FFB300; }
+.op-dot.offline { background: #AAA; }
+.op-stats { display: flex; }
+.op-stat { flex: 1; padding: 8px 10px; border-right: 1px solid #EBEBEB; }
+.op-stat:last-child { border-right: none; }
+.op-stat-val { font-size: 13px; font-weight: 700; color: #D40000; }
+.op-stat-val.blue { color: #0055AA; }
+.op-stat-lbl { font-size: 8px; color: #888; margin-top: 1px; font-weight: 600; }
+.op-footer {
+  padding: 8px 12px; background: #F9F9F9; border-top: 1px solid #EBEBEB;
+  display: flex; align-items: center; gap: 8px;
+}
+.btn-sm {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.08em; padding: 4px 10px;
+  border: none; cursor: pointer;
+}
+.btn-primary { background: #D40000; color: white; }
+.btn-outline { background: white; color: #333; border: 1px solid #CCC; }
+.btn-blue    { background: #0055AA; color: white; }
+.chain-tag {
+  font-size: 8px; padding: 2px 6px; background: #F0F0F0;
+  border: 1px solid #D8D8D8; color: #555; font-weight: 600;
+  letter-spacing: 0.05em;
+}
+
+/* ── Service row ── */
+.svc-row {
+  display: flex; align-items: center; padding: 9px 12px;
+  border-bottom: 1px solid #EBEBEB; background: white;
+}
+.svc-row:last-child { border-bottom: none; }
+.svc-name { font-size: 10px; font-weight: 700; color: #0A0A0A; flex: 1; }
+.svc-price { font-size: 10px; font-weight: 700; color: #D40000; margin-right: 12px; }
+.svc-badge {
+  font-size: 8px; font-weight: 700; letter-spacing: 0.05em; padding: 2px 7px;
+  margin-right: 8px;
+}
+.svc-badge.active  { background: #E8F7ED; color: #007A00; border: 1px solid #B0DDB8; }
+.svc-badge.planned { background: #F0F0F0; color: #888; border: 1px solid #CCC; }
+
+/* ── Annotation callout ── */
+.callout {
+  border: 1.5px dashed #D40000; background: rgba(212,0,0,0.04);
+  padding: 8px 12px; margin: 8px 0; font-size: 10px; color: #D40000; font-weight: 600;
+  display: flex; align-items: flex-start; gap: 8px;
+}
+.callout.blue  { border-color: #0055AA; background: rgba(0,85,170,0.04); color: #0055AA; }
+.callout.green { border-color: #007A00; background: rgba(0,122,0,0.04); color: #007A00; }
+.callout::before { content: '◀'; flex-shrink: 0; }
+.callout.right::before { content: ''; }
+.callout.right::after  { content: '▶'; margin-left: auto; flex-shrink: 0; }
+
+/* ── Map / registry view ── */
+.registry-row {
+  display: flex; align-items: center; padding: 8px 12px;
+  border-bottom: 1px solid #EBEBEB;
+}
+.registry-row:hover { background: #FAFAFA; }
+.rr-num { width: 20px; font-size: 9px; color: #AAA; flex-shrink: 0; }
+.rr-addr { font-size: 10px; color: #0055AA; font-weight: 600; flex: 1; }
+.rr-name { font-size: 10px; color: #0A0A0A; font-weight: 700; width: 140px; }
+.rr-chain { flex: 1; }
+.rr-status { width: 80px; text-align: right; }
+
+/* ── Sidebar ── */
+.sidebar {
+  border-right: 1px solid #D0D0D0; background: #F7F7F7;
+  min-height: 400px; padding: 12px 0;
+}
+.sb-item {
+  padding: 8px 16px; font-size: 10px; font-weight: 600; color: #555;
+  cursor: pointer; border-left: 2px solid transparent; display: flex; align-items: center; gap: 8px;
+}
+.sb-item:hover { background: #EFEFEF; color: #0A0A0A; }
+.sb-item.active { background: #FFF0F0; color: #D40000; border-left-color: #D40000; }
+.sb-sep { height: 1px; background: #E0E0E0; margin: 8px 12px; }
+.sb-label { padding: 8px 16px 4px; font-size: 8px; color: #AAA; font-weight: 700; letter-spacing: 0.1em; }
+
+/* ── Hero section ── */
+.hero-body { padding: 40px 28px; }
+.hero-h1 { font-size: 28px; font-weight: 700; line-height: 1.2; margin-bottom: 12px; }
+.hero-sub { font-size: 11px; color: #666; line-height: 1.7; margin-bottom: 24px; max-width: 480px; }
+.cta-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 28px; }
+.cta { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; padding: 8px 18px; cursor: pointer; }
+.cta-red    { background: #D40000; color: white; border: none; }
+.cta-blue   { background: transparent; color: #0055AA; border: 1.5px solid #0055AA; }
+.cta-gray   { background: transparent; color: #333; border: 1.5px solid #CCC; }
+.cta-green  { background: transparent; color: #007A00; border: 1.5px solid #007A00; }
+
+/* ── Network stats bar ── */
+.network-bar {
+  border-top: 1px solid #E0E0E0; display: flex; background: #F9F9F9;
+}
+.nb-stat { flex: 1; padding: 12px 16px; border-right: 1px solid #E0E0E0; }
+.nb-stat:last-child { border-right: none; }
+.nb-stat-val { font-size: 16px; font-weight: 700; color: #D40000; }
+.nb-stat-val.blue  { color: #0055AA; }
+.nb-stat-val.green { color: #007A00; }
+.nb-stat-lbl { font-size: 8px; color: #888; font-weight: 600; letter-spacing: 0.06em; margin-top: 2px; }
+
+/* ── Marketplace operator section on landing ── */
+.op-preview-row {
+  display: flex; gap: 0; border: 1px solid #D0D0D0; background: white; overflow: hidden;
+}
+.op-preview { flex: 1; padding: 12px 14px; border-right: 1px solid #E0E0E0; }
+.op-preview:last-child { border-right: none; }
+.op-preview-head { display: flex; align-items: center; gap: 7px; margin-bottom: 8px; }
+
+/* ── Filter bar ── */
+.filter-bar {
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px;
+  border-bottom: 1px solid #E0E0E0; background: white; flex-wrap: wrap;
+}
+.filter-tag {
+  font-size: 9px; font-weight: 600; padding: 3px 10px;
+  border: 1px solid #CCC; background: white; cursor: pointer; letter-spacing: 0.05em;
+}
+.filter-tag.active { background: #0A0A0A; color: white; border-color: #0A0A0A; }
+.filter-search {
+  flex: 1; min-width: 140px; max-width: 220px; height: 26px;
+  border: 1px solid #CCC; padding: 0 8px; font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px; background: #FAFAFA;
+}
+.filter-count { font-size: 9px; color: #888; margin-left: auto; }
+
+/* ── Admin / operator panel ── */
+.reg-step {
+  display: flex; gap: 12px; padding: 12px 0; border-bottom: 1px solid #EBEBEB;
+  align-items: flex-start;
+}
+.reg-step:last-child { border-bottom: none; }
+.step-num {
+  width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center;
+  justify-content: center; font-size: 10px; font-weight: 700; flex-shrink: 0;
+  background: #D40000; color: white; margin-top: 2px;
+}
+.step-num.done { background: #007A00; }
+.step-num.gray { background: #CCC; color: #666; }
+.step-title { font-size: 11px; font-weight: 700; color: #0A0A0A; margin-bottom: 3px; }
+.step-desc { font-size: 10px; color: #666; line-height: 1.5; }
+
+/* ── Divider ── */
+.div-label {
+  display: flex; align-items: center; gap: 8px; margin: 12px 0;
+  font-size: 9px; color: #AAA; font-weight: 700; letter-spacing: 0.1em;
+}
+.div-label::before, .div-label::after { content: ''; flex: 1; height: 1px; background: #E0E0E0; }
+
+/* ── Diff overlay ── */
+.diff-add { background: #E8F7ED; border-left: 3px solid #00AA44; }
+.diff-change { background: #FFF8E1; border-left: 3px solid #FFB300; }
+
+/* ── Bracket annotation ── */
+.bracket-note {
+  display: flex; gap: 10px; align-items: flex-start; margin: 6px 0;
+}
+.bracket-line { width: 3px; background: #D40000; flex-shrink: 0; border-radius: 1px; }
+.bracket-text { font-size: 9px; color: #D40000; font-weight: 600; line-height: 1.4; padding-top: 2px; }
+.bracket-line.blue { background: #0055AA; }
+.bracket-text.blue { color: #0055AA; }
+.bracket-line.green { background: #007A00; }
+.bracket-text.green { color: #007A00; }
+
+/* ── Tooltip chip ── */
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 8px; font-weight: 700; letter-spacing: 0.08em; padding: 2px 7px;
+  border: 1px solid; text-transform: uppercase;
+}
+.chip-new     { background: #E8F7ED; color: #007A00; border-color: #B0DDB8; }
+.chip-changed { background: #FFF8E1; color: #B07000; border-color: #FFD770; }
+.chip-same    { background: #F5F5F5; color: #888;    border-color: #D0D0D0; }
+
+hr { border: none; border-top: 1px solid #D8D8D8; margin: 16px 0; }
+.muted { color: #999; font-size: 9px; }
+
+/* ── Overview legend ── */
+.legend {
+  display: flex; gap: 20px; flex-wrap: wrap;
+  padding: 10px 16px; background: #F5F5F5; border-bottom: 1px solid #E0E0E0;
+  margin-bottom: 20px;
+}
+.legend-item { display: flex; align-items: center; gap: 6px; font-size: 10px; color: #555; }
+.legend-dot { width: 10px; height: 10px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<!-- ── SCREEN SELECTOR ── -->
+<div style="margin-bottom:20px;">
+  <div style="font-size:11px; font-weight:700; letter-spacing:0.1em; color:#555; margin-bottom:10px; text-transform:uppercase;">
+    Multi-Operator UX Wireframe — Dashboard &amp; Landing Page Changes
+  </div>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#00AA44;"></div>NEW — 신규 추가</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#0055AA;"></div>CHANGED — 기존 수정</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#888;"></div>SAME — 변경 없음</div>
+  </div>
+</div>
+
+<div class="screen-nav">
+  <div class="snav-group">
+    <div class="snav-label">LANDING</div>
+    <button class="s-btn active" onclick="show('landing-hero')">Hero</button>
+    <button class="s-btn changed-tag" onclick="show('landing-nav')">Navbar</button>
+    <button class="s-btn new-tag" onclick="show('landing-network')">Network Stats</button>
+    <button class="s-btn new-tag" onclick="show('landing-operators')">Operators Preview</button>
+  </div>
+  <div class="snav-group">
+    <div class="snav-label">MARKETPLACE</div>
+    <button class="s-btn changed-tag" onclick="show('mkt-main')">Main Page</button>
+    <button class="s-btn new-tag" onclick="show('mkt-operators')">Operators List</button>
+    <button class="s-btn new-tag" onclick="show('mkt-operator-detail')">Operator Detail</button>
+  </div>
+  <div class="snav-group">
+    <div class="snav-label">DASHBOARD</div>
+    <button class="s-btn changed-tag" onclick="show('dash-admin')">Admin Panel</button>
+    <button class="s-btn new-tag" onclick="show('dash-discovery')">Discovery Tab</button>
+    <button class="s-btn changed-tag" onclick="show('dash-mkt-tab')">Marketplace Tab</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     LANDING — HERO
+════════════════════════════════════════════════ -->
+<div id="screen-landing-hero" class="screen active">
+  <div class="annotation-bar">
+    <span class="chip chip-changed">CHANGED</span>
+    <span class="ann-title">Landing Page — Hero Section</span>
+    <span class="ann-sub">website/src/app/page.tsx · Hero()</span>
+  </div>
+
+  <div class="app">
+    <div class="navbar">
+      <div class="nb-brand">SENTINAI</div>
+      <div class="nb-link">PRODUCT</div>
+      <div class="nb-link">DOCS</div>
+      <div class="nb-link active">MARKETPLACE</div>
+      <div class="nb-link">GITHUB</div>
+      <div class="nb-right">
+        <div class="nb-cta">CONNECT NODE ▶</div>
+      </div>
+    </div>
+
+    <div class="ticker">
+      <div class="ticker-item">
+        <span style="color:#666; letter-spacing:.08em;">STATUS</span>
+        <span style="color:#00FF88; font-weight:700;">OPERATIONAL</span>
+      </div>
+      <div class="ticker-item">
+        <span style="color:#666;">OPERATORS</span>
+        <span style="color:#FFD700; font-weight:700;">12 ONLINE</span>
+      </div>
+      <div class="ticker-item">
+        <span style="color:#666;">SERVICES</span>
+        <span style="color:#80AAFF; font-weight:700;">84 ACTIVE</span>
+      </div>
+      <div class="ticker-item">
+        <span style="color:#666;">CHAINS</span>
+        <span style="color:#FFD700; font-weight:700;">OP STACK · ARB NITRO · ZK STACK · THANOS</span>
+      </div>
+    </div>
+
+    <div class="hero-body" style="display:flex; gap:40px; align-items:flex-start;">
+      <div style="flex: 0 0 500px;">
+        <div style="display:inline-flex;align-items:center;gap:7px;border:1px solid #D0D0D0;padding:3px 10px;margin-bottom:18px;">
+          <span style="width:7px;height:7px;border-radius:50%;background:#007A00;display:inline-block;"></span>
+          <span style="font-size:9px;font-weight:700;letter-spacing:.15em;color:#007A00;">AUTONOMOUS NODE GUARDIAN</span>
+        </div>
+        <div class="hero-h1">
+          L1 &amp; L2 Node Infrastructure<br>
+          <span style="color:#D40000;">Autonomous Operations</span>
+        </div>
+        <div class="hero-sub">
+          AI-powered autonomous infrastructure for L1 &amp; L2 nodes. Real-time anomaly detection, RCA,
+          predictive scaling, cost optimization, agent marketplace, and NLOps chat.
+        </div>
+        <div class="cta-row">
+          <button class="cta cta-red">▶ CONNECT YOUR NODE</button>
+          <button class="cta cta-blue">VIEW DASHBOARD ↗</button>
+          <button class="cta cta-gray">READ DOCS</button>
+          <button class="cta cta-green diff-add" style="padding:8px 18px;border:1.5px solid #007A00;">
+            🌐 EXPLORE OPERATORS ↗
+          </button>
+        </div>
+
+        <div class="bracket-note">
+          <div class="bracket-line green"></div>
+          <div class="bracket-text green">NEW CTA: 마켓플레이스 운영자 목록으로 직접 진입.<br>/marketplace/operators 링크</div>
+        </div>
+
+        <!-- Terminal block (unchanged) -->
+        <div style="border:1px solid #D0D0D0; max-width:420px; overflow:hidden; margin-top:20px;">
+          <div style="background:#F7F7F7;border-bottom:1px solid #D0D0D0;padding:5px 12px;display:flex;align-items:center;gap:8px;">
+            <span style="font-size:9px;color:#A0A0A0;letter-spacing:.1em;">TERMINAL</span>
+            <span style="margin-left:auto;background:#007A00;color:white;font-size:8px;padding:1px 6px;font-weight:700;">READY</span>
+          </div>
+          <div style="background:#0A0A0A;padding:12px 14px;">
+            <p style="font-size:10px;color:#555;margin-bottom:5px;"><span style="color:#888;">$</span> <span style="color:#D0D0D0;">docker compose up -d</span></p>
+            <p style="font-size:10px;color:#00FF88;margin-bottom:3px;">✓ sentinai started on port 3002</p>
+            <p style="font-size:10px;color:#00AAFF;">✓ agent loop active — observing L2 metrics</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: Network summary (NEW) -->
+      <div style="flex:1;min-width:0;">
+        <div style="border:1px solid #D0D0D0;overflow:hidden;">
+          <div class="secbar green">🌐 NETWORK OVERVIEW — LIVE</div>
+          <div class="g2" style="gap:0;border-bottom:1px solid #E0E0E0;">
+            <div class="stat-cell"><div class="stat-val green">12</div><div class="stat-lbl">ACTIVE OPERATORS</div></div>
+            <div class="stat-cell"><div class="stat-val blue">84</div><div class="stat-lbl">SERVICES ONLINE</div></div>
+          </div>
+          <div class="g2" style="gap:0;border-bottom:1px solid #E0E0E0;">
+            <div class="stat-cell"><div class="stat-val">1,240</div><div class="stat-lbl">REQUESTS TODAY</div></div>
+            <div class="stat-cell"><div class="stat-val blue">4</div><div class="stat-lbl">CHAINS SUPPORTED</div></div>
+          </div>
+          <!-- Operator mini-list -->
+          <div style="padding:0;">
+            <div class="registry-row" style="border-bottom:1px solid #EBEBEB;">
+              <span class="rr-addr">0xA1b2...3c4d</span>
+              <span class="rr-name">Tokamak Operator A</span>
+              <span><span class="chain-tag">OP</span></span>
+              <span class="rr-status"><span class="op-status online" style="margin-left:auto;"><span class="op-dot online"></span>ONLINE</span></span>
+            </div>
+            <div class="registry-row" style="border-bottom:1px solid #EBEBEB;">
+              <span class="rr-addr">0xB2c3...4d5e</span>
+              <span class="rr-name">NodeOps Labs</span>
+              <span><span class="chain-tag">ARB</span></span>
+              <span class="rr-status"><span class="op-status online" style="margin-left:auto;"><span class="op-dot online"></span>ONLINE</span></span>
+            </div>
+            <div class="registry-row">
+              <span class="rr-addr">0xC3d4...5e6f</span>
+              <span class="rr-name">StakeLayer</span>
+              <span><span class="chain-tag">ZK</span></span>
+              <span class="rr-status"><span class="op-status degraded" style="margin-left:auto;"><span class="op-dot degraded"></span>DEGRADED</span></span>
+            </div>
+          </div>
+          <div style="padding:8px 12px;background:#F9F9F9;border-top:1px solid #E0E0E0;display:flex;align-items:center;gap:8px;">
+            <button class="btn-sm btn-primary">VIEW ALL OPERATORS ↗</button>
+            <span style="font-size:9px;color:#888;">+9 more operators</span>
+          </div>
+        </div>
+        <div class="bracket-note" style="margin-top:8px;">
+          <div class="bracket-line green"></div>
+          <div class="bracket-text green">NEW: Hero 우측에 실시간 네트워크 현황 위젯.<br>operator-aggregator 데이터 사용. 기존 HeroMiniature 대체 or 병렬 배치.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     LANDING — NAVBAR
+════════════════════════════════════════════════ -->
+<div id="screen-landing-nav" class="screen">
+  <div class="annotation-bar">
+    <span class="chip chip-changed">CHANGED</span>
+    <span class="ann-title">Landing Page — Navbar</span>
+    <span class="ann-sub">website/src/components/navbar.tsx</span>
+  </div>
+
+  <div style="margin-bottom:16px;">
+    <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:8px;letter-spacing:.06em;">BEFORE</div>
+    <div class="app" style="box-shadow:none;border-color:#CCC;">
+      <div class="navbar">
+        <div class="nb-brand">SENTINAI</div>
+        <div class="nb-link">PRODUCT</div>
+        <div class="nb-link">DOCS</div>
+        <div class="nb-link active">MARKETPLACE</div>
+        <div class="nb-link">GITHUB</div>
+        <div class="nb-right"><div class="nb-cta">CONNECT NODE ▶</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="font-size:10px;font-weight:700;color:#007A00;margin-bottom:8px;letter-spacing:.06em;">AFTER</div>
+  <div class="app" style="box-shadow:none;">
+    <div class="navbar">
+      <div class="nb-brand">SENTINAI</div>
+      <div class="nb-link">PRODUCT</div>
+      <div class="nb-link">DOCS</div>
+      <div class="nb-link active" style="position:relative;">
+        MARKETPLACE
+        <!-- dropdown hint -->
+        <span style="font-size:8px;margin-left:4px;color:#888;">▾</span>
+      </div>
+      <div class="nb-link highlight">
+        OPERATORS <span class="nb-badge">12 LIVE</span>
+      </div>
+      <div class="nb-link">GITHUB</div>
+      <div class="nb-right"><div class="nb-cta">CONNECT NODE ▶</div></div>
+    </div>
+    <!-- Dropdown (expanded state shown) -->
+    <div style="border:1px solid #D0D0D0;border-top:none;background:white;display:flex;max-width:400px;box-shadow:0 4px 12px rgba(0,0,0,.1);position:relative;left:220px;">
+      <div style="flex:1;padding:14px;">
+        <div style="font-size:9px;color:#AAA;font-weight:700;letter-spacing:.1em;margin-bottom:8px;">MARKETPLACE</div>
+        <div style="padding:6px 0;border-bottom:1px solid #F0F0F0;font-size:10px;font-weight:700;color:#0A0A0A;cursor:pointer;">Service Catalog</div>
+        <div style="padding:6px 0;border-bottom:1px solid #F0F0F0;font-size:10px;font-weight:700;color:#0A0A0A;cursor:pointer;">Sandbox</div>
+        <div style="padding:6px 0;font-size:10px;font-weight:700;color:#0A0A0A;cursor:pointer;">Guide</div>
+      </div>
+      <div style="flex:1;padding:14px;border-left:1px solid #F0F0F0;">
+        <div style="font-size:9px;color:#00AA44;font-weight:700;letter-spacing:.1em;margin-bottom:8px;">NEW</div>
+        <div style="padding:6px 0;border-bottom:1px solid #F0F0F0;font-size:10px;font-weight:700;color:#007A00;cursor:pointer;">🌐 All Operators</div>
+        <div style="padding:6px 0;font-size:10px;color:#555;cursor:pointer;">Browse 12 operators across<br>OP Stack, Arbitrum, ZK Stack</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bracket-note" style="margin-top:12px;">
+    <div class="bracket-line blue"></div>
+    <div class="bracket-text blue">OPERATORS 링크 추가: /marketplace/operators로 직접 이동.<br>라이브 카운트 배지("12 LIVE") 표시. MARKETPLACE 항목은 드롭다운으로 확장.</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     LANDING — NETWORK STATS SECTION
+════════════════════════════════════════════════ -->
+<div id="screen-landing-network" class="screen">
+  <div class="annotation-bar">
+    <span class="chip chip-new">NEW</span>
+    <span class="ann-title">Landing Page — Multi-Operator Network Stats Section</span>
+    <span class="ann-sub">website/src/app/page.tsx · 신규 섹션 (AgentEconomy 섹션 아래)</span>
+  </div>
+
+  <div class="app">
+    <div class="navbar">
+      <div class="nb-brand">SENTINAI</div>
+      <div class="nb-link">PRODUCT</div>
+      <div class="nb-link active">MARKETPLACE</div>
+      <div class="nb-link">GITHUB</div>
+      <div class="nb-right"><div class="nb-cta">CONNECT NODE ▶</div></div>
+    </div>
+
+    <!-- Section -->
+    <div class="secbar">Operator Network</div>
+    <div class="network-bar">
+      <div class="nb-stat"><div class="nb-stat-val">12</div><div class="nb-stat-lbl">REGISTERED OPERATORS</div></div>
+      <div class="nb-stat"><div class="nb-stat-val green">10</div><div class="nb-stat-lbl">ONLINE NOW</div></div>
+      <div class="nb-stat"><div class="nb-stat-val blue">84</div><div class="nb-stat-lbl">ACTIVE SERVICES</div></div>
+      <div class="nb-stat"><div class="nb-stat-val">4</div><div class="nb-stat-lbl">CHAIN TYPES</div></div>
+      <div class="nb-stat"><div class="nb-stat-val">1,240</div><div class="nb-stat-lbl">REQUESTS TODAY</div></div>
+      <div class="nb-stat"><div class="nb-stat-val blue">98.7%</div><div class="nb-stat-lbl">NETWORK UPTIME</div></div>
+    </div>
+
+    <div style="padding:24px 24px; background:white;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+        <div>
+          <div style="font-size:14px;font-weight:700;color:#0A0A0A;">Featured Operators</div>
+          <div style="font-size:10px;color:#888;margin-top:2px;">ERC8004 레지스트리 등록 운영자 · 실시간 헬스 확인</div>
+        </div>
+        <button class="cta cta-blue" style="font-size:9px;padding:6px 14px;">VIEW ALL 12 OPERATORS →</button>
+      </div>
+
+      <!-- 3개 운영자 카드 -->
+      <div class="g3">
+        <div class="op-card">
+          <div class="op-card-head">
+            <div class="op-avatar">TA</div>
+            <div><div class="op-name">Tokamak Ops A</div><div class="op-addr">0xA1b2...3c4d</div></div>
+            <div class="op-status online"><span class="op-dot online"></span>ONLINE</div>
+          </div>
+          <div class="op-stats">
+            <div class="op-stat"><div class="op-stat-val">7</div><div class="op-stat-lbl">SERVICES</div></div>
+            <div class="op-stat"><div class="op-stat-val blue">OP</div><div class="op-stat-lbl">CHAIN</div></div>
+            <div class="op-stat"><div class="op-stat-val" style="font-size:11px;">99.2%</div><div class="op-stat-lbl">UPTIME</div></div>
+          </div>
+          <div class="op-footer">
+            <button class="btn-sm btn-primary">BUY DATA</button>
+            <button class="btn-sm btn-outline">DETAILS</button>
+            <span class="chain-tag" style="margin-left:auto;">ERC8004</span>
+          </div>
+        </div>
+
+        <div class="op-card">
+          <div class="op-card-head">
+            <div class="op-avatar blue">NL</div>
+            <div><div class="op-name">NodeOps Labs</div><div class="op-addr">0xB2c3...4d5e</div></div>
+            <div class="op-status online"><span class="op-dot online"></span>ONLINE</div>
+          </div>
+          <div class="op-stats">
+            <div class="op-stat"><div class="op-stat-val">5</div><div class="op-stat-lbl">SERVICES</div></div>
+            <div class="op-stat"><div class="op-stat-val blue">ARB</div><div class="op-stat-lbl">CHAIN</div></div>
+            <div class="op-stat"><div class="op-stat-val" style="font-size:11px;">97.8%</div><div class="op-stat-lbl">UPTIME</div></div>
+          </div>
+          <div class="op-footer">
+            <button class="btn-sm btn-primary">BUY DATA</button>
+            <button class="btn-sm btn-outline">DETAILS</button>
+            <span class="chain-tag" style="margin-left:auto;">ERC8004</span>
+          </div>
+        </div>
+
+        <div class="op-card">
+          <div class="op-card-head">
+            <div class="op-avatar dark">SL</div>
+            <div><div class="op-name">StakeLayer</div><div class="op-addr">0xC3d4...5e6f</div></div>
+            <div class="op-status degraded"><span class="op-dot degraded"></span>DEGRADED</div>
+          </div>
+          <div class="op-stats">
+            <div class="op-stat"><div class="op-stat-val">4</div><div class="op-stat-lbl">SERVICES</div></div>
+            <div class="op-stat"><div class="op-stat-val blue">ZK</div><div class="op-stat-lbl">CHAIN</div></div>
+            <div class="op-stat"><div class="op-stat-val" style="font-size:11px;color:#B07000;">89.1%</div><div class="op-stat-lbl">UPTIME</div></div>
+          </div>
+          <div class="op-footer">
+            <button class="btn-sm btn-outline" style="color:#AAA;cursor:not-allowed;">DEGRADED</button>
+            <button class="btn-sm btn-outline">DETAILS</button>
+            <span class="chain-tag" style="margin-left:auto;">ERC8004</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- How it works: Join as operator -->
+    <div class="secbar blue">Become an Operator</div>
+    <div style="padding:20px 24px;background:white;display:flex;gap:0;">
+      <div class="reg-step" style="flex:1;border-bottom:none;border-right:1px solid #EBEBEB;padding-right:20px;">
+        <div class="step-num">1</div>
+        <div>
+          <div class="step-title">Deploy SentinAI</div>
+          <div class="step-desc">Docker Compose 또는 K8s로<br>독립 인스턴스 배포</div>
+        </div>
+      </div>
+      <div class="reg-step" style="flex:1;border-bottom:none;border-right:1px solid #EBEBEB;padding:0 20px;">
+        <div class="step-num">2</div>
+        <div>
+          <div class="step-title">Register On-chain</div>
+          <div class="step-desc">ERC8004 레지스트리에<br>agentURI 등록</div>
+        </div>
+      </div>
+      <div class="reg-step" style="flex:1;border-bottom:none;padding-left:20px;">
+        <div class="step-num" style="background:#007A00;">3</div>
+        <div>
+          <div class="step-title">Start Earning</div>
+          <div class="step-desc">데이터 구매자에게<br>AI 서비스 제공 시작</div>
+        </div>
+      </div>
+    </div>
+    <div style="padding:10px 24px 16px;background:white;border-top:1px solid #F0F0F0;">
+      <button class="cta cta-red">▶ REGISTER AS OPERATOR</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     LANDING — OPERATORS PREVIEW (TradeStatsBanner)
+════════════════════════════════════════════════ -->
+<div id="screen-landing-operators" class="screen">
+  <div class="annotation-bar">
+    <span class="chip chip-changed">CHANGED</span>
+    <span class="ann-title">Landing Page — TradeStatsBanner (집계 통계 확장)</span>
+    <span class="ann-sub">website/src/components/TradeStatsBanner.tsx</span>
+  </div>
+
+  <div style="margin-bottom:16px;">
+    <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:8px;letter-spacing:.06em;">BEFORE — 단일 운영자 통계</div>
+    <div class="app" style="box-shadow:none;border-color:#CCC;">
+      <div style="display:flex;border-bottom:1px solid #E0E0E0;background:white;">
+        <div class="stat-cell"><div class="stat-val">247</div><div class="stat-lbl">TOTAL REQUESTS</div></div>
+        <div class="stat-cell"><div class="stat-val blue">3</div><div class="stat-lbl">ACTIVE BUYERS</div></div>
+        <div class="stat-cell"><div class="stat-val">7</div><div class="stat-lbl">SERVICES AVAILABLE</div></div>
+        <div class="stat-cell"><div class="stat-val green">99.1%</div><div class="stat-lbl">UPTIME</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div style="font-size:10px;font-weight:700;color:#007A00;margin-bottom:8px;letter-spacing:.06em;">AFTER — 네트워크 집계 통계</div>
+  <div class="app" style="box-shadow:none;">
+    <!-- 섹션 레이블 -->
+    <div style="display:flex;align-items:center;background:#F5F5F5;border-bottom:1px solid #E0E0E0;padding:4px 14px;gap:10px;">
+      <span style="font-size:9px;font-weight:700;letter-spacing:.1em;color:#AAA;">NETWORK STATS</span>
+      <span style="font-size:9px;color:#00AA44;font-weight:700;">● LIVE · updated 30s</span>
+      <span style="margin-left:auto;font-size:9px;color:#0055AA;font-weight:700;cursor:pointer;">VIEW OPERATORS ↗</span>
+    </div>
+    <div style="display:flex;border-bottom:1px solid #E0E0E0;background:white;" class="diff-add">
+      <div class="stat-cell"><div class="stat-val green">12</div><div class="stat-lbl">OPERATORS ONLINE</div></div>
+      <div class="stat-cell"><div class="stat-val">1,240</div><div class="stat-lbl">REQUESTS TODAY (ALL)</div></div>
+      <div class="stat-cell"><div class="stat-val blue">84</div><div class="stat-lbl">SERVICES ACTIVE</div></div>
+      <div class="stat-cell"><div class="stat-val">48</div><div class="stat-lbl">DISTINCT BUYERS</div></div>
+      <div class="stat-cell"><div class="stat-val green">98.7%</div><div class="stat-lbl">NETWORK UPTIME</div></div>
+    </div>
+  </div>
+
+  <div class="bracket-note" style="margin-top:8px;">
+    <div class="bracket-line blue"></div>
+    <div class="bracket-text blue">TradeStatsBanner: 단일 운영자 → 전체 네트워크 집계. operator-aggregator 데이터로 교체.<br>상단에 NETWORK STATS 레이블 + 실시간 갱신 표시 추가. "VIEW OPERATORS ↗" 링크 추가.</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     MARKETPLACE — MAIN PAGE
+════════════════════════════════════════════════ -->
+<div id="screen-mkt-main" class="screen">
+  <div class="annotation-bar">
+    <span class="chip chip-changed">CHANGED</span>
+    <span class="ann-title">Marketplace Main Page — 탭 구조 변경</span>
+    <span class="ann-sub">website/src/app/marketplace/page.tsx · type TabType 확장</span>
+  </div>
+
+  <div class="app">
+    <div class="navbar">
+      <div class="nb-brand">SENTINAI</div>
+      <div class="nb-link active">MARKETPLACE</div>
+      <div class="nb-link">DOCS</div>
+      <div class="nb-link">GITHUB</div>
+      <div class="nb-right"><div class="nb-cta">CONNECT NODE ▶</div></div>
+    </div>
+
+    <!-- TradeStatsBanner -->
+    <div style="display:flex;border-bottom:1px solid #E0E0E0;background:white;" class="diff-add">
+      <div class="stat-cell"><div class="stat-val green">12</div><div class="stat-lbl">OPERATORS ONLINE</div></div>
+      <div class="stat-cell"><div class="stat-val">1,240</div><div class="stat-lbl">REQUESTS TODAY</div></div>
+      <div class="stat-cell"><div class="stat-val blue">84</div><div class="stat-lbl">SERVICES</div></div>
+      <div class="stat-cell"><div class="stat-val">48</div><div class="stat-lbl">BUYERS</div></div>
+    </div>
+
+    <!-- Tab bar -->
+    <div class="tab-bar">
+      <div class="tab">REGISTRY BROWSE</div>
+      <div class="tab active">INSTANCE<span class="new-dot"></span></div>
+      <div class="tab" style="color:#007A00;font-weight:700;">
+        OPERATORS
+        <span style="font-size:8px;background:#00AA44;color:white;padding:1px 5px;margin-left:5px;font-weight:700;">NEW</span>
+      </div>
+      <div class="tab">GUIDE</div>
+      <div class="tab">SANDBOX</div>
+    </div>
+
+    <div class="callout" style="margin:0;border-radius:0;border:none;border-bottom:1px solid rgba(212,0,0,0.15);">
+      OPERATORS 탭 신규 추가: /marketplace/operators 뷰를 탭 내에 임베드 or 링크. 전체 등록 운영자 그리드 표시.
+    </div>
+
+    <!-- INSTANCE tab content (existing, minimal change) -->
+    <div style="padding:16px;background:#FAFAFA;">
+      <div class="g2" style="margin-bottom:12px;">
+        <div>
+          <!-- Operator info panel — SAME -->
+          <div style="border:1px solid #D0D0D0;background:white;overflow:hidden;margin-bottom:12px;">
+            <div class="secbar">My Operator Instance</div>
+            <div class="op-card-head" style="border-bottom:1px solid #EBEBEB;">
+              <div class="op-avatar">TA</div>
+              <div>
+                <div class="op-name">Tokamak Operator A</div>
+                <div class="op-addr">0xA1b2...3c4d · thanos-sepolia</div>
+              </div>
+              <div class="op-status online" style="margin-left:auto;"><span class="op-dot online"></span>REGISTERED</div>
+            </div>
+            <div class="op-stats">
+              <div class="op-stat"><div class="op-stat-val">247</div><div class="op-stat-lbl">REQUESTS</div></div>
+              <div class="op-stat"><div class="op-stat-val green">99.1%</div><div class="op-stat-lbl">UPTIME</div></div>
+              <div class="op-stat"><div class="op-stat-val blue">7</div><div class="op-stat-lbl">SERVICES</div></div>
+            </div>
+          </div>
+        </div>
+        <div>
+          <!-- Network position (NEW) -->
+          <div style="border:1px solid #00AA44;background:white;overflow:hidden;" class="diff-add">
+            <div class="secbar green">Network Position</div>
+            <div style="padding:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-size:10px;color:#555;">Rank in Network</span>
+                <span style="font-size:16px;font-weight:700;color:#D40000;">#2 / 12</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <span style="font-size:10px;color:#555;">Request Share</span>
+                <span style="font-size:13px;font-weight:700;color:#0055AA;">20.0%</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:10px;color:#555;">Top Service</span>
+                <span style="font-size:10px;font-weight:700;color:#0A0A0A;">Sequencer Health</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Service list (unchanged structure) -->
+      <div style="border:1px solid #D0D0D0;overflow:hidden;background:white;">
+        <div class="secbar">Service Catalog</div>
+        <div class="svc-row diff-change">
+          <span class="svc-name">SEQUENCER HEALTH</span>
+          <span class="svc-badge active">ACTIVE</span>
+          <span class="svc-price">1.99 TON</span>
+          <button class="btn-sm btn-primary">BUY DATA</button>
+        </div>
+        <div class="svc-row diff-change">
+          <span class="svc-name">INCIDENT SUMMARY</span>
+          <span class="svc-badge active">ACTIVE</span>
+          <span class="svc-price">4.99 TON</span>
+          <button class="btn-sm btn-primary">BUY DATA</button>
+        </div>
+        <div class="svc-row">
+          <span class="svc-name">RCA ANALYSIS</span>
+          <span class="svc-badge active">ACTIVE</span>
+          <span class="svc-price">7.99 TON</span>
+          <button class="btn-sm btn-primary">BUY DATA</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bracket-note" style="margin-top:8px;">
+    <div class="bracket-line blue"></div>
+    <div class="bracket-text blue">기존 탭: REGISTRY BROWSE / INSTANCE / GUIDE / SANDBOX (유지)<br>신규 탭: OPERATORS — 전체 운영자 그리드 (새 탭으로 추가)<br>INSTANCE 탭: Network Position 패널 추가 (자신의 네트워크 내 위치)</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     MARKETPLACE — OPERATORS LIST
+════════════════════════════════════════════════ -->
+<div id="screen-mkt-operators" class="screen">
+  <div class="annotation-bar">
+    <span class="chip chip-new">NEW</span>
+    <span class="ann-title">Marketplace — /marketplace/operators (Phase 1 완료)</span>
+    <span class="ann-sub">website/src/app/marketplace/operators/page.tsx</span>
+  </div>
+
+  <div class="app wide">
+    <div class="navbar">
+      <div class="nb-brand">SENTINAI</div>
+      <div class="nb-link">MARKETPLACE</div>
+      <div class="nb-link active">OPERATORS</div>
+      <div class="nb-right"><div class="nb-cta">CONNECT NODE ▶</div></div>
+    </div>
+
+    <!-- Stats row -->
+    <div style="display:flex;border-bottom:1px solid #E0E0E0;background:white;">
+      <div class="stat-cell"><div class="stat-val green">12</div><div class="stat-lbl">TOTAL OPERATORS</div></div>
+      <div class="stat-cell"><div class="stat-val">10</div><div class="stat-lbl">ONLINE</div></div>
+      <div class="stat-cell"><div class="stat-val" style="color:#B07000;">1</div><div class="stat-lbl">DEGRADED</div></div>
+      <div class="stat-cell"><div class="stat-val" style="color:#888;">1</div><div class="stat-lbl">OFFLINE</div></div>
+      <div class="stat-cell"><div class="stat-val blue">4</div><div class="stat-lbl">CHAIN TYPES</div></div>
+      <div class="stat-cell"><div class="stat-val">84</div><div class="stat-lbl">ACTIVE SERVICES</div></div>
+    </div>
+
+    <!-- Filter bar -->
+    <div class="filter-bar">
+      <input class="filter-search" placeholder="Search operator / address..." value="">
+      <div class="div-label" style="margin:0;">|</div>
+      <div class="filter-tag active">ALL</div>
+      <div class="filter-tag">ONLINE ONLY</div>
+      <div class="filter-tag">OP STACK</div>
+      <div class="filter-tag">ARBITRUM</div>
+      <div class="filter-tag">ZK STACK</div>
+      <div class="filter-tag">THANOS</div>
+      <span class="filter-count">12 operators</span>
+      <div style="margin-left:auto;display:flex;gap:6px;">
+        <div class="filter-tag" style="background:#0A0A0A;color:white;border-color:#0A0A0A;">⊞ GRID</div>
+        <div class="filter-tag">≡ LIST</div>
+      </div>
+    </div>
+
+    <!-- Operator grid -->
+    <div style="padding:16px;background:#F2F2F2;">
+      <div class="g3" style="gap:12px;">
+        <!-- Card 1 -->
+        <div class="op-card">
+          <div class="op-card-head">
+            <div class="op-avatar">TA</div>
+            <div><div class="op-name">Tokamak Operator A</div><div class="op-addr">0xA1b2...3c4d</div></div>
+            <div class="op-status online"><span class="op-dot online"></span>ONLINE</div>
+          </div>
+          <div class="op-stats">
+            <div class="op-stat"><div class="op-stat-val">7</div><div class="op-stat-lbl">SERVICES</div></div>
+            <div class="op-stat"><div class="op-stat-val blue" style="font-size:11px;">OP</div><div class="op-stat-lbl">CHAIN</div></div>
+            <div class="op-stat"><div class="op-stat-val" style="font-size:11px;">99.2%</div><div class="op-stat-lbl">UPTIME</div></div>
+          </div>
+          <div style="padding:6px 10px;font-size:9px;color:#666;border-bottom:1px solid #EBEBEB;">
+            <span style="margin-right:8px;">CPU <strong style="color:#0A0A0A;">28%</strong></span>
+            <span style="margin-right:8px;">MEM <strong style="color:#0A0A0A;">41%</strong></span>
+            <span>TPS <strong style="color:#D40000;">124</strong></span>
+          </div>
+          <div class="op-footer">
+            <button class="btn-sm btn-primary">BUY DATA</button>
+            <button class="btn-sm btn-outline">VIEW DETAILS ↗</button>
+            <span class="chain-tag" style="margin-left:auto;">thanos-sep</span>
+          </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="op-card">
+          <div class="op-card-head">
+            <div class="op-avatar blue">NL</div>
+            <div><div class="op-name">NodeOps Labs</div><div class="op-addr">0xB2c3...4d5e</div></div>
+            <div class="op-status online"><span class="op-dot online"></span>ONLINE</div>
+          </div>
+          <div class="op-stats">
+            <div class="op-stat"><div class="op-stat-val">5</div><div class="op-stat-lbl">SERVICES</div></div>
+            <div class="op-stat"><div class="op-stat-val blue" style="font-size:11px;">ARB</div><div class="op-stat-lbl">CHAIN</div></div>
+            <div class="op-stat"><div class="op-stat-val" style="font-size:11px;">97.8%</div><div class="op-stat-lbl">UPTIME</div></div>
+          </div>
+          <div style="padding:6px 10px;font-size:9px;color:#666;border-bottom:1px solid #EBEBEB;">
+            <span style="margin-right:8px;">CPU <strong style="color:#0A0A0A;">34%</strong></span>
+            <span style="margin-right:8px;">MEM <strong style="color:#0A0A0A;">55%</strong></span>
+            <span>TPS <strong style="color:#D40000;">89</strong></span>
+          </div>
+          <div class="op-footer">
+            <button class="btn-sm btn-primary">BUY DATA</button>
+            <button class="btn-sm btn-outline">VIEW DETAILS ↗</button>
+            <span class="chain-tag" style="margin-left:auto;">arb-orbit</span>
+          </div>
+        </div>
+
+        <!-- Card 3: degraded -->
+        <div class="op-card">
+          <div class="op-card-head">
+            <div class="op-avatar dark">SL</div>
+            <div><div class="op-name">StakeLayer</div><div class="op-addr">0xC3d4...5e6f</div></div>
+            <div class="op-status degraded"><span class="op-dot degraded"></span>DEGRADED</div>
+          </div>
+          <div class="op-stats">
+            <div class="op-stat"><div class="op-stat-val">4</div><div class="op-stat-lbl">SERVICES</div></div>
+            <div class="op-stat"><div class="op-stat-val blue" style="font-size:11px;">ZK</div><div class="op-stat-lbl">CHAIN</div></div>
+            <div class="op-stat"><div class="op-stat-val" style="font-size:11px;color:#B07000;">89.1%</div><div class="op-stat-lbl">UPTIME</div></div>
+          </div>
+          <div style="padding:6px 10px;font-size:9px;color:#666;border-bottom:1px solid #EBEBEB;">
+            <span style="margin-right:8px;">CPU <strong style="color:#D40000;">82%</strong></span>
+            <span style="margin-right:8px;">MEM <strong style="color:#B07000;">71%</strong></span>
+            <span>⚠ 2 anomalies</span>
+          </div>
+          <div class="op-footer">
+            <button class="btn-sm btn-outline" style="color:#AAA;">DEGRADED</button>
+            <button class="btn-sm btn-outline">VIEW DETAILS ↗</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     MARKETPLACE — OPERATOR DETAIL
+════════════════════════════════════════════════ -->
+<div id="screen-mkt-operator-detail" class="screen">
+  <div class="annotation-bar">
+    <span class="chip chip-new">NEW</span>
+    <span class="ann-title">Marketplace — /marketplace/operators/[address] (Phase 1 완료)</span>
+    <span class="ann-sub">website/src/app/marketplace/operators/[address]/page.tsx</span>
+  </div>
+
+  <div class="app wide">
+    <div class="navbar">
+      <div class="nb-brand">SENTINAI</div>
+      <div class="nb-link">MARKETPLACE</div>
+      <div class="nb-link active">OPERATORS</div>
+      <div class="nb-right"><div class="nb-cta">CONNECT NODE ▶</div></div>
+    </div>
+
+    <!-- Breadcrumb -->
+    <div style="padding:7px 16px;background:#F5F5F5;border-bottom:1px solid #E0E0E0;font-size:9px;color:#888;">
+      <span style="color:#0055AA;cursor:pointer;">Marketplace</span> → <span style="color:#0055AA;cursor:pointer;">Operators</span> → <strong style="color:#0A0A0A;">Tokamak Operator A</strong>
+    </div>
+
+    <!-- Operator header -->
+    <div style="padding:16px 20px;background:white;border-bottom:1.5px solid #D0D0D0;display:flex;align-items:center;gap:16px;">
+      <div class="op-avatar" style="width:40px;height:40px;font-size:16px;">TA</div>
+      <div>
+        <div style="font-size:16px;font-weight:700;color:#0A0A0A;margin-bottom:3px;">Tokamak Operator A</div>
+        <div style="font-size:10px;color:#0055AA;font-weight:600;">0xA1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0</div>
+      </div>
+      <div class="op-status online" style="font-size:10px;padding:4px 12px;"><span class="op-dot online"></span>ONLINE</div>
+      <div style="margin-left:auto;display:flex;gap:8px;align-items:center;">
+        <span class="chain-tag" style="font-size:9px;">thanos-sepolia</span>
+        <span class="chain-tag" style="font-size:9px;">ERC8004 ✓</span>
+        <button class="cta cta-blue" style="font-size:9px;padding:6px 14px;">REGISTER AS CLIENT</button>
+      </div>
+    </div>
+
+    <div class="sidebar-layout-wide" style="min-height:480px;">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="sb-label">OVERVIEW</div>
+        <div class="sb-item active">System Health</div>
+        <div class="sb-item">Service Catalog</div>
+        <div class="sb-item">Request Logs</div>
+        <div class="sb-sep"></div>
+        <div class="sb-label">ON-CHAIN</div>
+        <div class="sb-item">Registration Info</div>
+        <div class="sb-item">Payment History</div>
+        <div class="sb-sep"></div>
+        <div class="sb-label">METRICS</div>
+        <div class="sb-item">Performance</div>
+        <div class="sb-item">Anomalies</div>
+      </div>
+
+      <!-- Main -->
+      <div>
+        <!-- System Health -->
+        <div style="padding:14px 16px;background:#F9F9F9;border-bottom:1px solid #E0E0E0;">
+          <div style="font-size:10px;font-weight:700;color:#0A0A0A;margin-bottom:12px;letter-spacing:.06em;">SYSTEM HEALTH</div>
+          <div class="g4" style="gap:8px;margin-bottom:12px;">
+            <div class="card"><div class="card-title">CPU</div><div class="card-val">28%</div><div class="card-sub">normal</div></div>
+            <div class="card"><div class="card-title">MEMORY</div><div class="card-val blue">41%</div><div class="card-sub">normal</div></div>
+            <div class="card"><div class="card-title">ANOMALIES</div><div class="card-val green">0</div><div class="card-sub">active</div></div>
+            <div class="card"><div class="card-title">TPS</div><div class="card-val">124</div><div class="card-sub">last 5m avg</div></div>
+          </div>
+
+          <!-- Sequencer / Batcher status -->
+          <div style="border:1px solid #D0D0D0;background:white;">
+            <div class="registry-row" style="border-bottom:1px solid #EBEBEB;">
+              <span class="rr-name" style="width:120px;">SEQUENCER</span>
+              <span class="rr-addr" style="color:#0A0A0A;flex:1;">block #12,847,201 · 2s avg</span>
+              <span><div class="op-status online" style="width:70px;justify-content:center;"><span class="op-dot online"></span>OK</div></span>
+            </div>
+            <div class="registry-row" style="border-bottom:1px solid #EBEBEB;">
+              <span class="rr-name" style="width:120px;">BATCHER</span>
+              <span class="rr-addr" style="color:#0A0A0A;flex:1;">last batch 4min ago · 128 txs</span>
+              <span><div class="op-status online" style="width:70px;justify-content:center;"><span class="op-dot online"></span>OK</div></span>
+            </div>
+            <div class="registry-row">
+              <span class="rr-name" style="width:120px;">PROPOSER</span>
+              <span class="rr-addr" style="color:#0A0A0A;flex:1;">last proposal 12min ago</span>
+              <span><div class="op-status online" style="width:70px;justify-content:center;"><span class="op-dot online"></span>OK</div></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Service Catalog -->
+        <div style="padding:14px 16px;background:white;">
+          <div style="font-size:10px;font-weight:700;color:#0A0A0A;margin-bottom:10px;letter-spacing:.06em;">SERVICE CATALOG</div>
+          <div style="border:1px solid #D0D0D0;overflow:hidden;">
+            <div class="svc-row">
+              <span class="svc-name">SEQUENCER HEALTH</span>
+              <span class="svc-badge active">ACTIVE</span>
+              <span class="svc-price">1.99 TON</span>
+              <span style="font-size:9px;color:#888;margin-right:12px;">247 purchases</span>
+              <button class="btn-sm btn-primary">BUY DATA</button>
+            </div>
+            <div class="svc-row">
+              <span class="svc-name">INCIDENT SUMMARY</span>
+              <span class="svc-badge active">ACTIVE</span>
+              <span class="svc-price">4.99 TON</span>
+              <span style="font-size:9px;color:#888;margin-right:12px;">83 purchases</span>
+              <button class="btn-sm btn-primary">BUY DATA</button>
+            </div>
+            <div class="svc-row">
+              <span class="svc-name">RCA ANALYSIS</span>
+              <span class="svc-badge active">ACTIVE</span>
+              <span class="svc-price">7.99 TON</span>
+              <span style="font-size:9px;color:#888;margin-right:12px;">31 purchases</span>
+              <button class="btn-sm btn-primary">BUY DATA</button>
+            </div>
+            <div class="svc-row">
+              <span class="svc-name">PREDICTIVE SCALING</span>
+              <span class="svc-badge active">ACTIVE</span>
+              <span class="svc-price">7.99 TON</span>
+              <span style="font-size:9px;color:#888;margin-right:12px;">12 purchases</span>
+              <button class="btn-sm btn-primary">BUY DATA</button>
+            </div>
+            <div class="svc-row">
+              <span class="svc-name">BATCH SUBMISSION</span>
+              <span class="svc-badge planned">COMING SOON</span>
+              <span class="svc-price" style="color:#AAA;">1.99 TON</span>
+              <span style="font-size:9px;color:#AAA;margin-right:12px;">—</span>
+              <button class="btn-sm btn-outline" style="color:#AAA;cursor:not-allowed;">SOON</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     DASHBOARD — ADMIN PANEL
+════════════════════════════════════════════════ -->
+<div id="screen-dash-admin" class="screen">
+  <div class="annotation-bar">
+    <span class="chip chip-changed">CHANGED</span>
+    <span class="ann-title">Dashboard — Admin Panel (/admin)</span>
+    <span class="ann-sub">website/src/app/admin/page.tsx · 네트워크 위치 + 경쟁 현황 추가</span>
+  </div>
+
+  <div class="app wide">
+    <div class="topbar">
+      <div class="tb-brand">SENTINAI</div>
+      <div class="tb-item"><span class="tb-dot"></span>METRICS</div>
+      <div class="tb-item">AGENTS</div>
+      <div class="tb-item active">MARKETPLACE</div>
+      <div class="tb-item">NLOPS</div>
+      <div class="tb-right">
+        <span>thanos-sepolia</span>
+        <span>0xA1b2...3c4d</span>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <div class="tab active">REGISTRATION</div>
+      <div class="tab">SERVICES</div>
+      <div class="tab">REVENUE</div>
+      <div class="tab" style="color:#007A00;font-weight:700;">
+        NETWORK POSITION
+        <span style="font-size:8px;background:#00AA44;color:white;padding:1px 5px;margin-left:5px;font-weight:700;">NEW</span>
+      </div>
+      <div class="tab">SETTINGS</div>
+    </div>
+
+    <div style="padding:16px;background:#F5F5F5;">
+      <div class="g2" style="gap:12px;margin-bottom:12px;">
+        <!-- Registration status (SAME) -->
+        <div>
+          <div style="border:1px solid #D0D0D0;background:white;overflow:hidden;">
+            <div class="secbar">Registration Status</div>
+            <div style="padding:14px;">
+              <div class="reg-step">
+                <div class="step-num done">✓</div>
+                <div>
+                  <div class="step-title">Instance Deployed</div>
+                  <div class="step-desc">https://sentinai.tokamak.network/thanos-sepolia</div>
+                </div>
+              </div>
+              <div class="reg-step">
+                <div class="step-num done">✓</div>
+                <div>
+                  <div class="step-title">Wallet Connected</div>
+                  <div class="step-desc">0xA1b2c3d4...f8a9b0 · MetaMask</div>
+                </div>
+              </div>
+              <div class="reg-step" style="border-bottom:none;">
+                <div class="step-num done">✓</div>
+                <div>
+                  <div class="step-title">On-chain Registered</div>
+                  <div class="step-desc">ERC8004 · Agent ID #7 · Tx 0xabc...def</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Revenue (SAME) -->
+        <div>
+          <div style="border:1px solid #D0D0D0;background:white;overflow:hidden;">
+            <div class="secbar">Revenue (This Month)</div>
+            <div class="op-stats" style="border-bottom:1px solid #EBEBEB;">
+              <div class="op-stat"><div class="op-stat-val">247</div><div class="op-stat-lbl">REQUESTS</div></div>
+              <div class="op-stat"><div class="op-stat-val">840.3</div><div class="op-stat-lbl">TON EARNED</div></div>
+              <div class="op-stat"><div class="op-stat-val blue">3</div><div class="op-stat-lbl">CLIENTS</div></div>
+            </div>
+            <div style="padding:10px 14px;">
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:6px;">
+                <span style="color:#555;">Sequencer Health</span><span style="font-weight:700;">491.5 TON</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;margin-bottom:6px;">
+                <span style="color:#555;">Incident Summary</span><span style="font-weight:700;">414.2 TON</span>
+              </div>
+              <div style="display:flex;justify-content:space-between;font-size:10px;">
+                <span style="color:#555;">RCA Analysis</span><span style="font-weight:700;">247.7 TON</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Network Position (NEW) -->
+      <div style="border:1.5px solid #00AA44;background:white;overflow:hidden;" class="diff-add">
+        <div class="secbar green">🌐 Network Position — Multi-Operator Comparison</div>
+        <div style="display:flex;gap:0;border-bottom:1px solid #E0E0E0;">
+          <div class="stat-cell"><div class="stat-val green">#2</div><div class="stat-lbl">NETWORK RANK</div></div>
+          <div class="stat-cell"><div class="stat-val">20.0%</div><div class="stat-lbl">REQUEST SHARE</div></div>
+          <div class="stat-cell"><div class="stat-val green">99.2%</div><div class="stat-lbl">MY UPTIME</div></div>
+          <div class="stat-cell"><div class="stat-val blue">98.7%</div><div class="stat-lbl">NETWORK AVG</div></div>
+          <div class="stat-cell"><div class="stat-val">12</div><div class="stat-lbl">TOTAL OPERATORS</div></div>
+        </div>
+        <!-- Leaderboard -->
+        <div style="padding:0;">
+          <div style="padding:8px 14px;font-size:9px;font-weight:700;letter-spacing:.08em;color:#AAA;background:#F9F9F9;border-bottom:1px solid #EBEBEB;">OPERATOR LEADERBOARD</div>
+          <div class="registry-row" style="border-bottom:1px solid #EBEBEB;">
+            <span class="rr-num" style="color:#FFD700;font-weight:700;">#1</span>
+            <span class="rr-name">InfraStack</span>
+            <span class="rr-addr">24.5%</span>
+            <span style="flex:1;font-size:10px;color:#888;">ARB · 99.8% uptime</span>
+            <span class="op-status online" style=""><span class="op-dot online"></span>ONLINE</span>
+          </div>
+          <div class="registry-row" style="border-bottom:1px solid #EBEBEB;background:#FFF8E1;">
+            <span class="rr-num" style="color:#D40000;font-weight:700;">#2</span>
+            <span class="rr-name" style="color:#D40000;">Tokamak Ops A ← YOU</span>
+            <span class="rr-addr" style="color:#D40000;">20.0%</span>
+            <span style="flex:1;font-size:10px;color:#888;">OP · 99.2% uptime</span>
+            <span class="op-status online"><span class="op-dot online"></span>ONLINE</span>
+          </div>
+          <div class="registry-row" style="border-bottom:1px solid #EBEBEB;">
+            <span class="rr-num">#3</span>
+            <span class="rr-name">NodeOps Labs</span>
+            <span class="rr-addr">18.1%</span>
+            <span style="flex:1;font-size:10px;color:#888;">ARB · 97.8% uptime</span>
+            <span class="op-status online"><span class="op-dot online"></span>ONLINE</span>
+          </div>
+          <div class="registry-row">
+            <span class="rr-num">#4</span>
+            <span class="rr-name">StakeLayer</span>
+            <span class="rr-addr">12.3%</span>
+            <span style="flex:1;font-size:10px;color:#888;">ZK · 89.1% uptime</span>
+            <span class="op-status degraded"><span class="op-dot degraded"></span>DEGRADED</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bracket-note" style="margin-top:8px;">
+    <div class="bracket-line green"></div>
+    <div class="bracket-text green">NEW: "Network Position" 탭 추가 — 운영자가 전체 네트워크에서 자신의 위치 파악 가능.<br>리더보드, 요청 점유율, 내 업타임 vs 네트워크 평균 비교 제공.</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     DASHBOARD — DISCOVERY TAB
+════════════════════════════════════════════════ -->
+<div id="screen-dash-discovery" class="screen">
+  <div class="annotation-bar">
+    <span class="chip chip-new">NEW</span>
+    <span class="ann-title">Dashboard — Discovery Tab (메인 대시보드 내 운영자 탐색)</span>
+    <span class="ann-sub">src/app/page.tsx · 새 탭 추가 or 기존 MARKETPLACE 탭 확장</span>
+  </div>
+
+  <div class="app wide">
+    <div class="topbar">
+      <div class="tb-brand">SENTINAI</div>
+      <div class="tb-item"><span class="tb-dot"></span>METRICS</div>
+      <div class="tb-item">AGENTS</div>
+      <div class="tb-item">MARKETPLACE</div>
+      <div class="tb-item active">
+        NETWORK
+        <span class="tb-new-badge">NEW</span>
+      </div>
+      <div class="tb-item">NLOPS</div>
+      <div class="tb-right">
+        <span>thanos-sepolia</span>
+        <span style="color:rgba(255,255,255,.5);">0xA1b2...3c4d</span>
+      </div>
+    </div>
+
+    <!-- Stats strip -->
+    <div style="display:flex;background:#1A1A1A;border-bottom:1px solid #333;">
+      <div style="flex:1;padding:8px 14px;border-right:1px solid #333;">
+        <div style="font-size:14px;font-weight:700;color:#00FF88;">12</div>
+        <div style="font-size:8px;color:#666;font-weight:700;letter-spacing:.08em;">OPERATORS ONLINE</div>
+      </div>
+      <div style="flex:1;padding:8px 14px;border-right:1px solid #333;">
+        <div style="font-size:14px;font-weight:700;color:#FFD700;">84</div>
+        <div style="font-size:8px;color:#666;font-weight:700;letter-spacing:.08em;">SERVICES TOTAL</div>
+      </div>
+      <div style="flex:1;padding:8px 14px;border-right:1px solid #333;">
+        <div style="font-size:14px;font-weight:700;color:#80AAFF;">1,240</div>
+        <div style="font-size:8px;color:#666;font-weight:700;letter-spacing:.08em;">REQUESTS TODAY</div>
+      </div>
+      <div style="flex:1;padding:8px 14px;">
+        <div style="font-size:14px;font-weight:700;color:#FF8080;">98.7%</div>
+        <div style="font-size:8px;color:#666;font-weight:700;letter-spacing:.08em;">NETWORK UPTIME</div>
+      </div>
+    </div>
+
+    <div class="sidebar-layout" style="background:#F2F2F2;">
+      <!-- Sidebar: filter -->
+      <div style="border-right:1px solid #D0D0D0;background:#F7F7F7;padding:12px 0;min-height:440px;">
+        <div class="sb-label">FILTER</div>
+        <div class="sb-item active">All Operators (12)</div>
+        <div class="sb-item">Online Only (10)</div>
+        <div class="sb-item">Degraded (1)</div>
+        <div class="sb-sep"></div>
+        <div class="sb-label">BY CHAIN</div>
+        <div class="sb-item">OP Stack (5)</div>
+        <div class="sb-item">Arbitrum (4)</div>
+        <div class="sb-item">ZK Stack (2)</div>
+        <div class="sb-item">Thanos (1)</div>
+        <div class="sb-sep"></div>
+        <div class="sb-label">ACTIONS</div>
+        <div class="sb-item" style="color:#007A00;font-weight:700;">⊞ Compare Operators</div>
+        <div class="sb-item" style="color:#0055AA;font-weight:700;">↗ Open Marketplace</div>
+      </div>
+
+      <!-- Main: list view -->
+      <div>
+        <div style="padding:10px 14px;background:white;border-bottom:1px solid #E0E0E0;display:flex;align-items:center;gap:8px;">
+          <span style="font-size:10px;font-weight:700;color:#0A0A0A;">Network Operators</span>
+          <span style="font-size:9px;color:#888;">from ERC8004 registry</span>
+          <span style="margin-left:auto;font-size:9px;color:#AAA;">Last updated 30s ago</span>
+          <button class="btn-sm btn-outline" style="font-size:8px;padding:3px 8px;">↻ REFRESH</button>
+        </div>
+
+        <!-- Operator list rows -->
+        <div style="background:white;">
+          <div style="display:flex;padding:6px 14px;background:#F0F0F0;border-bottom:1px solid #E0E0E0;">
+            <span style="flex:0 0 160px;font-size:9px;font-weight:700;color:#AAA;letter-spacing:.06em;">OPERATOR</span>
+            <span style="flex:0 0 100px;font-size:9px;font-weight:700;color:#AAA;letter-spacing:.06em;">ADDRESS</span>
+            <span style="flex:0 0 60px;font-size:9px;font-weight:700;color:#AAA;letter-spacing:.06em;">CHAIN</span>
+            <span style="flex:0 0 60px;font-size:9px;font-weight:700;color:#AAA;letter-spacing:.06em;">STATUS</span>
+            <span style="flex:0 0 60px;font-size:9px;font-weight:700;color:#AAA;letter-spacing:.06em;">UPTIME</span>
+            <span style="flex:0 0 60px;font-size:9px;font-weight:700;color:#AAA;letter-spacing:.06em;">SERVICES</span>
+            <span style="flex:1;font-size:9px;font-weight:700;color:#AAA;letter-spacing:.06em;">CPU / MEM</span>
+            <span style="flex:0 0 80px;"></span>
+          </div>
+          <div style="display:flex;align-items:center;padding:9px 14px;border-bottom:1px solid #EBEBEB;background:#FFF8E1;">
+            <span style="flex:0 0 160px;font-size:10px;font-weight:700;color:#D40000;">★ Tokamak Ops A</span>
+            <span style="flex:0 0 100px;font-size:9px;color:#0055AA;">0xA1b2...3c4d</span>
+            <span style="flex:0 0 60px;"><span class="chain-tag">OP</span></span>
+            <span style="flex:0 0 60px;"><span style="font-size:9px;color:#007A00;font-weight:700;">● ONLINE</span></span>
+            <span style="flex:0 0 60px;font-size:10px;font-weight:700;color:#007A00;">99.2%</span>
+            <span style="flex:0 0 60px;font-size:10px;font-weight:700;">7</span>
+            <span style="flex:1;font-size:9px;color:#555;">28% / 41%</span>
+            <span style="flex:0 0 80px;"><button class="btn-sm btn-primary" style="width:100%;">BUY DATA</button></span>
+          </div>
+          <div style="display:flex;align-items:center;padding:9px 14px;border-bottom:1px solid #EBEBEB;">
+            <span style="flex:0 0 160px;font-size:10px;font-weight:700;">InfraStack</span>
+            <span style="flex:0 0 100px;font-size:9px;color:#0055AA;">0xD4e5...7f8a</span>
+            <span style="flex:0 0 60px;"><span class="chain-tag">ARB</span></span>
+            <span style="flex:0 0 60px;"><span style="font-size:9px;color:#007A00;font-weight:700;">● ONLINE</span></span>
+            <span style="flex:0 0 60px;font-size:10px;font-weight:700;color:#007A00;">99.8%</span>
+            <span style="flex:0 0 60px;font-size:10px;font-weight:700;">6</span>
+            <span style="flex:1;font-size:9px;color:#555;">19% / 38%</span>
+            <span style="flex:0 0 80px;"><button class="btn-sm btn-outline" style="width:100%;">VIEW</button></span>
+          </div>
+          <div style="display:flex;align-items:center;padding:9px 14px;border-bottom:1px solid #EBEBEB;">
+            <span style="flex:0 0 160px;font-size:10px;font-weight:700;">NodeOps Labs</span>
+            <span style="flex:0 0 100px;font-size:9px;color:#0055AA;">0xB2c3...4d5e</span>
+            <span style="flex:0 0 60px;"><span class="chain-tag">ARB</span></span>
+            <span style="flex:0 0 60px;"><span style="font-size:9px;color:#007A00;font-weight:700;">● ONLINE</span></span>
+            <span style="flex:0 0 60px;font-size:10px;font-weight:700;color:#007A00;">97.8%</span>
+            <span style="flex:0 0 60px;font-size:10px;font-weight:700;">5</span>
+            <span style="flex:1;font-size:9px;color:#555;">34% / 55%</span>
+            <span style="flex:0 0 80px;"><button class="btn-sm btn-outline" style="width:100%;">VIEW</button></span>
+          </div>
+          <div style="display:flex;align-items:center;padding:9px 14px;border-bottom:1px solid #EBEBEB;background:#FFF9F9;">
+            <span style="flex:0 0 160px;font-size:10px;font-weight:700;color:#B07000;">StakeLayer</span>
+            <span style="flex:0 0 100px;font-size:9px;color:#0055AA;">0xC3d4...5e6f</span>
+            <span style="flex:0 0 60px;"><span class="chain-tag">ZK</span></span>
+            <span style="flex:0 0 60px;"><span style="font-size:9px;color:#B07000;font-weight:700;">⚠ DEGRADED</span></span>
+            <span style="flex:0 0 60px;font-size:10px;font-weight:700;color:#B07000;">89.1%</span>
+            <span style="flex:0 0 60px;font-size:10px;font-weight:700;">4</span>
+            <span style="flex:1;font-size:9px;color:#D40000;">82% / 71% ⚠</span>
+            <span style="flex:0 0 80px;"><button class="btn-sm btn-outline" style="width:100%;color:#AAA;">DEGRADED</button></span>
+          </div>
+          <div style="padding:8px 14px;font-size:9px;color:#AAA;background:#F9F9F9;border-top:1px solid #EBEBEB;">
+            +8 more operators · <span style="color:#0055AA;cursor:pointer;">View all in Marketplace ↗</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bracket-note" style="margin-top:8px;">
+    <div class="bracket-line green"></div>
+    <div class="bracket-text green">NEW: 대시보드에 "NETWORK" 탭 추가. 운영자가 경쟁 인스턴스의 상태를 대시보드에서 바로 확인 가능.<br>자신의 인스턴스는 ★로 강조. CPU/메모리 경쟁 비교. Marketplace 링크 연동.</div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════
+     DASHBOARD — MARKETPLACE TAB
+════════════════════════════════════════════════ -->
+<div id="screen-dash-mkt-tab" class="screen">
+  <div class="annotation-bar">
+    <span class="chip chip-changed">CHANGED</span>
+    <span class="ann-title">Dashboard — Marketplace Tab (기존 탭 확장)</span>
+    <span class="ann-sub">src/app/page.tsx · MARKETPLACE 탭 내 패널 변경</span>
+  </div>
+
+  <div style="margin-bottom:16px;">
+    <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:8px;letter-spacing:.06em;">BEFORE — 단일 운영자 뷰</div>
+    <div class="app" style="box-shadow:none;border-color:#CCC;">
+      <div class="topbar">
+        <div class="tb-brand">SENTINAI</div>
+        <div class="tb-item">METRICS</div>
+        <div class="tb-item active">MARKETPLACE</div>
+      </div>
+      <div style="padding:14px;background:#F5F5F5;font-size:10px;color:#888;">
+        [ My operator info · My services · Revenue stats ]
+      </div>
+    </div>
+  </div>
+
+  <div style="font-size:10px;font-weight:700;color:#007A00;margin-bottom:8px;letter-spacing:.06em;">AFTER — 내 인스턴스 + 네트워크 비교</div>
+  <div class="app wide" style="box-shadow:none;">
+    <div class="topbar">
+      <div class="tb-brand">SENTINAI</div>
+      <div class="tb-item"><span class="tb-dot"></span>METRICS</div>
+      <div class="tb-item">AGENTS</div>
+      <div class="tb-item active">MARKETPLACE</div>
+      <div class="tb-item">NETWORK <span class="tb-new-badge">NEW</span></div>
+      <div class="tb-item">NLOPS</div>
+      <div class="tb-right"><span>thanos-sepolia</span></div>
+    </div>
+
+    <div class="tab-bar">
+      <div class="tab active">MY INSTANCE</div>
+      <div class="tab" style="color:#007A00;font-weight:700;">NETWORK OVERVIEW <span style="font-size:8px;background:#00AA44;color:white;padding:1px 5px;margin-left:4px;">NEW</span></div>
+      <div class="tab">REVENUE</div>
+      <div class="tab">SETTINGS</div>
+    </div>
+
+    <div style="padding:16px;background:#F5F5F5;">
+      <div class="g2" style="gap:12px;">
+        <!-- Left: My instance (SAME structure) -->
+        <div>
+          <div style="border:1px solid #D0D0D0;background:white;overflow:hidden;margin-bottom:10px;">
+            <div class="secbar">My Operator Instance</div>
+            <div class="op-stats">
+              <div class="op-stat"><div class="op-stat-val">247</div><div class="op-stat-lbl">REQUESTS</div></div>
+              <div class="op-stat"><div class="op-stat-val green">99.2%</div><div class="op-stat-lbl">UPTIME</div></div>
+              <div class="op-stat"><div class="op-stat-val blue">7</div><div class="op-stat-lbl">SERVICES</div></div>
+              <div class="op-stat"><div class="op-stat-val">3</div><div class="op-stat-lbl">CLIENTS</div></div>
+            </div>
+          </div>
+          <div style="border:1px solid #D0D0D0;background:white;overflow:hidden;">
+            <div class="secbar">Service Catalog</div>
+            <div class="svc-row"><span class="svc-name">SEQUENCER HEALTH</span><span class="svc-badge active">ACTIVE</span><span class="svc-price">1.99 TON</span></div>
+            <div class="svc-row"><span class="svc-name">INCIDENT SUMMARY</span><span class="svc-badge active">ACTIVE</span><span class="svc-price">4.99 TON</span></div>
+            <div class="svc-row"><span class="svc-name">RCA ANALYSIS</span><span class="svc-badge active">ACTIVE</span><span class="svc-price">7.99 TON</span></div>
+          </div>
+        </div>
+
+        <!-- Right: Network comparison (NEW) -->
+        <div style="border:1.5px solid #00AA44;background:white;overflow:hidden;" class="diff-add">
+          <div class="secbar green">Network Comparison</div>
+          <div class="op-stats" style="border-bottom:1px solid #EBEBEB;">
+            <div class="op-stat"><div class="op-stat-val green">#2</div><div class="op-stat-lbl">MY RANK</div></div>
+            <div class="op-stat"><div class="op-stat-val">20.0%</div><div class="op-stat-lbl">REQ SHARE</div></div>
+            <div class="op-stat"><div class="op-stat-val blue">12</div><div class="op-stat-lbl">TOTAL OPS</div></div>
+          </div>
+          <div style="padding:12px 14px;">
+            <div style="font-size:9px;font-weight:700;color:#AAA;letter-spacing:.08em;margin-bottom:8px;">UPTIME COMPARISON</div>
+            <!-- Mini bar chart -->
+            <div style="display:flex;align-items:flex-end;gap:4px;height:40px;margin-bottom:8px;">
+              <div style="flex:1;background:#D40000;height:100%;position:relative;">
+                <span style="position:absolute;bottom:-14px;width:100%;text-align:center;font-size:8px;color:#888;">ME</span>
+              </div>
+              <div style="flex:1;background:#0055AA;height:99%;"></div>
+              <div style="flex:1;background:#555;height:95%;"></div>
+              <div style="flex:1;background:#888;height:88%;"></div>
+              <div style="flex:1;background:#AAA;height:82%;"></div>
+            </div>
+            <div style="margin-top:18px;font-size:9px;color:#555;padding-top:6px;border-top:1px solid #EBEBEB;">
+              Network avg uptime: <strong style="color:#0055AA;">98.7%</strong> · My: <strong style="color:#007A00;">99.2%</strong> <span style="color:#007A00;">↑ +0.5%</span>
+            </div>
+          </div>
+          <div style="padding:8px 12px;background:#F9F9F9;border-top:1px solid #EBEBEB;">
+            <button class="btn-sm btn-outline" style="width:100%;font-size:9px;">VIEW FULL NETWORK TAB →</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="bracket-note" style="margin-top:8px;">
+    <div class="bracket-line blue"></div>
+    <div class="bracket-text blue">MARKETPLACE 탭: 기존 "내 인스턴스" 패널 유지 + 우측에 "Network Comparison" 패널 추가.<br>내 순위, 요청 점유율, 업타임 비교 막대. "NETWORK" 탭(신규)으로 더 보기 링크.</div>
+  </div>
+</div>
+
+<script>
+function show(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.s-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+</script>
+</body>
+</html>

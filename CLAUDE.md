@@ -10,6 +10,27 @@ npm run test:coverage                # src/lib/** 커버리지
 npm run verify                       # E2E 검증 (6단계)
 ```
 
+## Claude Code Subagents
+
+`.claude/agents/` — invoke with `@agent-name` in Claude Code:
+
+| Agent | When to use |
+|---|---|
+| `chain-plugin-scaffolder` | Adding a new L2 chain (generates 4 files in `src/chains/<name>/`) |
+| `playbook-author` | Adding a remediation playbook for a failure scenario |
+| `incident-postmortem` | Documenting a past incident (writes to `docs/postmortem/`) |
+| `dashboard-reviewer` | Code review of `src/app/page.tsx` (read-only, returns refactor plan) |
+
+## Operator Pack (for external L2 node operators)
+
+`templates/operator-claude-code/` — copy into an L2 node repo to use SentinAI MCP from that Claude Code session. Includes: `.mcp.json.template`, `CLAUDE.md.snippet`, 2 operator subagents (`l2-incident-responder`, `l2-health-auditor`), 3 slash commands (`/sentinai-status`, `/sentinai-rca`, `/sentinai-diagnose`). See `docs/guide/operator-claude-code-setup.md`.
+
+`MCP_OPERATOR_PROFILE=readonly` on the SentinAI server removes write tools from the MCP manifest for external operators.
+
+## NLOps Agent SDK
+
+`USE_AGENT_SDK=true` in `.env.local` enables the Anthropic native tool-use loop (requires `ANTHROPIC_API_KEY`). Falls back to the legacy engine on errors. See `.env.local.sample` for `AGENT_SDK_MODEL` and `AGENT_SDK_TRACE` options.
+
 ## Architecture
 
 **Agent Orchestrator (V2)** — 12개 병렬 에이전트, 이벤트 기반 실행:
