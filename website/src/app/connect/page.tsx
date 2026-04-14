@@ -59,7 +59,7 @@ const NODE_CONFIGS: NodeConfig[] = [
   {
     type: "ethereum-el",
     label: "Ethereum EL",
-    clients: "Geth · Reth · Nethermind · Besu",
+    clients: "Geth · Reth · Nethermind · Besu · py-ethclient",
     urlLabel: "Execution Client RPC URL",
     urlPlaceholder: "http://localhost:8545",
     supportsAuthToken: true,
@@ -221,6 +221,8 @@ interface BuildConfig {
   alertWebhookUrl: string;
   gatewayUrl: string;
   gatewayApiKey: string;
+  componentsCsv: string;
+  componentDepsJson: string;
 }
 
 function buildEnvLocal(cfg: BuildConfig, featureSnippets: string[] = [], deployTarget?: DeployTarget | null): string {
@@ -236,6 +238,11 @@ function buildEnvLocal(cfg: BuildConfig, featureSnippets: string[] = [], deployT
   lines.push(`${primary}=${u}`);
   if (optional) lines.push(`${optional}=<optional-l1-rpc-url>`);
   if (cfg.authToken.trim()) lines.push(`SENTINAI_RPC_AUTH_TOKEN=${cfg.authToken.trim()}`);
+  if (cfg.componentsCsv.trim()) lines.push(`SENTINAI_COMPONENTS=${cfg.componentsCsv.trim()}`);
+  if (cfg.componentDepsJson.trim()) {
+    const oneLine = cfg.componentDepsJson.replace(/\s+/g, "");
+    lines.push(`SENTINAI_COMPONENT_DEPS=${oneLine}`);
+  }
 
   if (cfg.aiProvider === "gateway") {
     lines.push(`AI_GATEWAY_URL=${cfg.gatewayUrl.trim() || "<your-gateway-url>"}`);
@@ -437,6 +444,8 @@ export default function ConnectPage() {
   const [gatewayUrl, setGatewayUrl] = useState("");
   const [gatewayApiKey, setGatewayApiKey] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [componentsCsv, setComponentsCsv] = useState("");
+  const [componentDepsJson, setComponentDepsJson] = useState("");
   const [enabledFeatures, setEnabledFeatures] = useState<Set<string>>(new Set(["redis", "auto-remediation"]));
 
   const [generated, setGenerated] = useState(false);
@@ -451,6 +460,7 @@ export default function ConnectPage() {
   const buildCfg: BuildConfig = {
     nodeType, url, authToken, networkName, aiProvider, aiApiKey,
     awsClusterName, k8sNamespace, k8sAppPrefix, alertWebhookUrl, gatewayUrl, gatewayApiKey,
+    componentsCsv, componentDepsJson,
   };
 
   const visibleFeatures = OPTIONAL_FEATURES.filter(
@@ -469,7 +479,7 @@ export default function ConnectPage() {
       .map(f => f.snippet);
     return buildEnvLocal(buildCfg, featureSnippets, deployTarget);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [nodeType, url, authToken, networkName, aiProvider, aiApiKey, awsClusterName, k8sNamespace, k8sAppPrefix, alertWebhookUrl, gatewayUrl, gatewayApiKey, deployTarget, enabledFeatures]);
+  }, [nodeType, url, authToken, networkName, aiProvider, aiApiKey, awsClusterName, k8sNamespace, k8sAppPrefix, alertWebhookUrl, gatewayUrl, gatewayApiKey, deployTarget, enabledFeatures, componentsCsv, componentDepsJson]);
 
   useEffect(() => {
     if (!testResult?.data?.dashboardUrl) return;
@@ -996,6 +1006,67 @@ export default function ConnectPage() {
                       Slack/Webhook alert on anomaly detection (ALERT_WEBHOOK_URL).
                     </p>
                   </div>
+
+                  {nodeType === "ethereum-el" && (
+                    <div style={{ borderTop: `1px solid ${C.border}`, paddingTop: 12 }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                        <label style={labelStyle}>L2 Topology Override (Optional)</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setComponentsCsv("py-ethclient,sequencer,zk-prover,da-layer,p2p");
+                            setComponentDepsJson(JSON.stringify({
+                              "py-ethclient": ["p2p"],
+                              "sequencer": ["py-ethclient"],
+                              "zk-prover": ["sequencer"],
+                              "da-layer": ["sequencer"],
+                              "p2p": [],
+                            }, null, 2));
+                            resetOutput();
+                          }}
+                          style={{
+                            fontFamily: FONT, fontSize: 8, fontWeight: 700, letterSpacing: "0.1em",
+                            color: C.primary, background: "none",
+                            border: `1px solid ${C.primary}`, cursor: "pointer",
+                            padding: "3px 8px",
+                          }}
+                        >
+                          LOAD py-ethclient PRESET
+                        </button>
+                      </div>
+                      <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "0 0 10px" }}>
+                        Only needed if your node runs integrated L2 components (e.g. py-ethclient
+                        with sequencer / zk-prover / DA layer). Leave blank for a plain L1 node.
+                      </p>
+
+                      <label style={labelStyle}>SENTINAI_COMPONENTS (csv)</label>
+                      <input
+                        type="text"
+                        value={componentsCsv}
+                        onChange={(e) => { setComponentsCsv(e.target.value); resetOutput(); }}
+                        placeholder="py-ethclient,sequencer,zk-prover,da-layer,p2p"
+                        style={{ ...inputStyle, marginBottom: 10 }}
+                      />
+
+                      <label style={labelStyle}>SENTINAI_COMPONENT_DEPS (JSON)</label>
+                      <textarea
+                        value={componentDepsJson}
+                        onChange={(e) => { setComponentDepsJson(e.target.value); resetOutput(); }}
+                        placeholder={'{"sequencer":["py-ethclient"],"zk-prover":["sequencer"]}'}
+                        rows={6}
+                        style={{
+                          ...inputStyle,
+                          fontFamily: "monospace",
+                          resize: "vertical",
+                          lineHeight: 1.5,
+                        }}
+                      />
+                      <p style={{ fontFamily: FONT, fontSize: 9, color: C.muted, margin: "4px 0 0" }}>
+                        Runtime overrides for the chain plugin component list and dependency graph
+                        (SENTINAI_COMPONENTS / SENTINAI_COMPONENT_DEPS). Invalid JSON is silently ignored at runtime.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
