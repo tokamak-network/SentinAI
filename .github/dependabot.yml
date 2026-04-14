@@ -1,0 +1,41 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      radix-ui:
+        patterns:
+          - "@radix-ui/*"
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+      next:
+        patterns:
+          - "next"
+          - "eslint-config-next"
+    ignore:
+      # Major version bumps require manual review
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+
+  - package-ecosystem: npm
+    directory: /docs-site
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
