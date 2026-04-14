@@ -1,0 +1,26 @@
+## L2 Node Monitoring — SentinAI MCP
+
+This node is monitored by SentinAI. When investigating node issues, prefer SentinAI
+data over manual log searches — it correlates metrics, anomalies, and events automatically.
+
+**Workflow when something looks wrong:**
+
+1. Before reading logs or configs, call `mcp__sentinai__get_metrics` and
+   `mcp__sentinai__get_anomalies` to see the current state.
+2. For root cause analysis, use `mcp__sentinai__run_rca` — it correlates
+   metrics, anomaly events, and recent scaling decisions in one call.
+3. For a full end-to-end health check, run `/sentinai-diagnose`.
+4. If SentinAI suggests a remediation action (`restart_*`, `scale_component`),
+   present it to the operator for explicit confirmation before executing.
+
+**Available slash commands (copy `.claude/commands/` from the SentinAI Operator Pack):**
+- `/sentinai-status` — current metrics + scaler state summary
+- `/sentinai-rca` — trigger RCA and return a one-paragraph diagnosis
+- `/sentinai-diagnose` — full health diagnostics across all components
+- `/sentinai-autonomy` — recent autonomous decisions and actions (last 20 events)
+- `/sentinai-guardrails` — guardrail events: suppressed/blocked actions with reasons
+- `/sentinai-replay` — reconstruct what happened during an incident (by event ID or time window)
+
+**Available subagents (copy `.claude/agents/` from the SentinAI Operator Pack):**
+- `@l2-incident-responder` — reactive: symptom → RCA → remediation suggestion
+- `@l2-health-auditor` — proactive: periodic health check and weekly report

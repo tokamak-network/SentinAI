@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "sentinai": {
+      "type": "http",
+      "url": "${SENTINAI_BASE_URL}/api/mcp",
+      "headers": {
+        "x-api-key": "${SENTINAI_API_KEY}"
+      }
+    }
+  }
+}

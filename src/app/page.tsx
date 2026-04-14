@@ -5,6 +5,7 @@ import type { ChatMessage, NLOpsResponse, NLOpsIntent } from '@/types/nlops';
 import type { ExperienceStats } from '@/types/experience';
 import type { ExperienceTier } from '@/types/agent-resume';
 import { NLOpsBar } from '@/components/nlops-bar';
+import { AutonomyFeedPanel } from '@/components/autonomy-feed';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
 import Link from 'next/link';
@@ -948,6 +949,9 @@ export default function Dashboard() {
           currentVcpu={vcpu}
         />
       </div>
+
+      {/* ── Autonomy Feed ── */}
+      <AutonomyFeedPanel />
 
       {/* ── NLOps Bar ── */}
       <NLOpsBar

@@ -3,6 +3,7 @@
  * Handles JSON-RPC tool invocation and policy enforcement.
  */
 
+import { getLedger } from '@/core/autonomy-ledger';
 import { getChainPlugin } from '@/chains';
 import { getWidgetResourceList, getWidgetHtml } from '@/lib/mcp-widgets';
 import { getRecentMetrics, getMetricsCount } from '@/lib/metrics-store';
@@ -103,6 +104,9 @@ const TOOL_NAMES = new Set<McpToolName>([
   'discover_agents',
   'get_agent_details',
   'get_service_pricing',
+  'get_autonomy_feed',
+  'get_guardrail_events',
+  'replay_incident',
 ]);
 
 const DEFAULT_APPROVAL_TTL_SECONDS = 300;
@@ -360,6 +364,49 @@ export const MCP_TOOLS: McpToolDefinition[] = [
     },
     writeOperation: false,
   },
+  {
+    name: 'get_autonomy_feed',
+    description: 'Returns recent autonomous decisions and actions recorded by the SentinAI pipeline — decisions taken, actions executed, suppressed actions, AI fallbacks, and guardrail blocks.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        since: { type: 'string', description: 'ISO 8601 timestamp — return entries after this time' },
+        kind: {
+          type: 'string',
+          enum: ['decision_taken', 'action_executed', 'action_suppressed', 'fallback_triggered', 'guardrail_blocked'],
+          description: 'Filter by event kind',
+        },
+        agent: { type: 'string', description: 'Filter by agent name' },
+        limit: { type: 'number', minimum: 1, maximum: 500, default: 50, description: 'Number of entries to return (newest first)' },
+      },
+    },
+    writeOperation: false,
+  },
+  {
+    name: 'get_guardrail_events',
+    description: 'Returns guardrail-triggered events only: suppressed actions (simulation mode, whitelist violation, approval required) and blocked goal plans. Use this to audit what the pipeline was prevented from doing.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        since: { type: 'string', description: 'ISO 8601 timestamp — return entries after this time' },
+        limit: { type: 'number', minimum: 1, maximum: 500, default: 50, description: 'Number of entries to return (newest first)' },
+      },
+    },
+    writeOperation: false,
+  },
+  {
+    name: 'replay_incident',
+    description: 'Returns a joined view of ledger entries and anomaly events for a given time window or anomaly event ID. Use this to reconstruct what happened during an incident.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        since: { type: 'string', description: 'ISO 8601 start of incident window' },
+        until: { type: 'string', description: 'ISO 8601 end of incident window' },
+        eventId: { type: 'string', description: 'Anomaly event ID to center the replay around (uses ±30 min window if provided)' },
+      },
+    },
+    writeOperation: false,
+  },
 ];
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -392,7 +439,14 @@ export function getMcpConfig(): McpServerConfig {
   };
 }
 
+export function isOperatorReadOnlyProfile(): boolean {
+  return process.env.MCP_OPERATOR_PROFILE === 'readonly';
+}
+
 export function getMcpToolManifest(): McpToolDefinition[] {
+  if (isOperatorReadOnlyProfile()) {
+    return MCP_TOOLS.filter((t) => !WRITE_TOOLS.has(t.name as McpToolName));
+  }
   return [...MCP_TOOLS];
 }
 
@@ -909,6 +963,89 @@ async function executeGetServicePricing(params: unknown): Promise<unknown> {
   return getServicePricingComparison(serviceKey);
 }
 
+async function executeGetAutonomyFeed(params: unknown): Promise<unknown> {
+  const p = isObject(params) ? params : {};
+  const since = typeof p.since === 'string' ? p.since : undefined;
+  const kind = typeof p.kind === 'string' ? p.kind : undefined;
+  const agent = typeof p.agent === 'string' ? p.agent : undefined;
+  const limit = clampNumber(p.limit, 1, 500, 50);
+
+  const validKinds = new Set(['decision_taken', 'action_executed', 'action_suppressed', 'fallback_triggered', 'guardrail_blocked']);
+  const entries = await getLedger().query({
+    since,
+    kind: kind && validKinds.has(kind) ? (kind as import('@/types/autonomy-ledger').LedgerEntryKind) : undefined,
+    agent,
+    limit,
+  });
+
+  return { entries, count: entries.length };
+}
+
+async function executeGetGuardrailEvents(params: unknown): Promise<unknown> {
+  const p = isObject(params) ? params : {};
+  const since = typeof p.since === 'string' ? p.since : undefined;
+  const limit = clampNumber(p.limit, 1, 500, 50);
+
+  // Fetch both suppressed actions and guardrail_blocked events separately then merge
+  const [suppressed, blocked] = await Promise.all([
+    getLedger().query({ since, kind: 'action_suppressed', limit }),
+    getLedger().query({ since, kind: 'guardrail_blocked', limit }),
+  ]);
+
+  // Merge and sort newest-first, then cap at limit
+  const merged = [...suppressed, ...blocked].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  ).slice(0, limit);
+
+  return { entries: merged, count: merged.length };
+}
+
+async function executeReplayIncident(params: unknown): Promise<unknown> {
+  const p = isObject(params) ? params : {};
+
+  let since: string | undefined;
+  let until: string | undefined;
+
+  if (typeof p.eventId === 'string' && p.eventId.trim()) {
+    // Center around event: find it in anomaly store and use ±30 min window
+    const allEvents = await getEvents(1000, 0);
+    const event = allEvents.events.find((e) => e.id === (p.eventId as string).trim());
+    if (event) {
+      const ts = event.timestamp; // Unix ms
+      since = new Date(ts - 30 * 60 * 1000).toISOString();
+      until = new Date(ts + 30 * 60 * 1000).toISOString();
+    }
+  } else {
+    since = typeof p.since === 'string' ? p.since : undefined;
+    until = typeof p.until === 'string' ? p.until : undefined;
+  }
+
+  const [ledgerEntries, anomalyEvents] = await Promise.all([
+    getLedger().query({ since, until, limit: 200 }),
+    getEvents(500, 0),
+  ]);
+
+  const filteredAnomalies = anomalyEvents.events.filter((e) => {
+    const ts = e.timestamp; // Unix ms
+    if (since && ts < new Date(since).getTime()) return false;
+    if (until && ts > new Date(until).getTime()) return false;
+    return true;
+  });
+
+  return {
+    window: { since, until },
+    ledgerEntries,
+    anomalyEvents: filteredAnomalies,
+    summary: {
+      ledgerCount: ledgerEntries.length,
+      anomalyCount: filteredAnomalies.length,
+      actionsExecuted: ledgerEntries.filter((e) => e.kind === 'action_executed').length,
+      actionsSuppressed: ledgerEntries.filter((e) => e.kind === 'action_suppressed').length,
+      guardrailBlocks: ledgerEntries.filter((e) => e.kind === 'guardrail_blocked').length,
+    },
+  };
+}
+
 async function executeTool(toolName: McpToolName, params: unknown): Promise<unknown> {
   switch (toolName) {
     case 'get_metrics':
@@ -951,6 +1088,12 @@ async function executeTool(toolName: McpToolName, params: unknown): Promise<unkn
       return executeGetAgentDetails(params);
     case 'get_service_pricing':
       return executeGetServicePricing(params);
+    case 'get_autonomy_feed':
+      return executeGetAutonomyFeed(params);
+    case 'get_guardrail_events':
+      return executeGetGuardrailEvents(params);
+    case 'replay_incident':
+      return executeReplayIncident(params);
     default: {
       const exhaustiveCheck: never = toolName;
       throw new Error(`Unknown MCP tool: ${exhaustiveCheck}`);

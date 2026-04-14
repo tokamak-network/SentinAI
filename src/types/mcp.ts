@@ -23,7 +23,10 @@ export type McpToolName =
   | 'rollback_autonomous_operation'
   | 'discover_agents'
   | 'get_agent_details'
-  | 'get_service_pricing';
+  | 'get_service_pricing'
+  | 'get_autonomy_feed'
+  | 'get_guardrail_events'
+  | 'replay_incident';
 
 export type McpAuthMode = 'api-key' | 'approval-token' | 'dual';
 

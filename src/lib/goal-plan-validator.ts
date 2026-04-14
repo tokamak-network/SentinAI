@@ -7,6 +7,8 @@ import { randomUUID } from 'crypto';
 import { getEvents } from '@/lib/anomaly-event-store';
 import { getScalingState } from '@/lib/k8s-scaler';
 import { getRecentMetrics } from '@/lib/metrics-store';
+import { getLedger } from '@/core/autonomy-ledger';
+import { ALLOWED_GOAL_PLAN_ACTIONS } from '@/lib/action-whitelist';
 import type {
   GoalPlanFailureReasonCode,
   GoalPlanIntent,
@@ -14,15 +16,6 @@ import type {
   GoalPlanStepAction,
   GoalPlannerRuntimeContext,
 } from '@/types/goal-planner';
-
-const ALLOWED_ACTIONS: GoalPlanStepAction[] = [
-  'collect_state',
-  'inspect_anomalies',
-  'run_rca',
-  'scale_execution',
-  'restart_execution',
-  'set_routing_policy',
-];
 
 const ROUTING_POLICIES = new Set(['balanced', 'cost-first', 'latency-first', 'quality-first']);
 
@@ -207,7 +200,7 @@ export function validateGoalPlanCandidate(input: GoalPlanValidationInput): GoalP
 
   candidate.steps.forEach((rawStep, index) => {
     const action = rawStep.action;
-    if (typeof action !== 'string' || !ALLOWED_ACTIONS.includes(action as GoalPlanStepAction)) {
+    if (typeof action !== 'string' || !ALLOWED_GOAL_PLAN_ACTIONS.includes(action as GoalPlanStepAction)) {
       issues.push({
         code: 'invalid_step_action',
         stepIndex: index,
@@ -267,9 +260,16 @@ export function validateGoalPlanCandidate(input: GoalPlanValidationInput): GoalP
   }
 
   if (issues.length > 0) {
+    const reason = inferFailureReason(issues);
+    getLedger().append({
+      kind: 'guardrail_blocked',
+      agent: 'goal-plan-validator',
+      verdict: reason,
+      meta: { issueCount: issues.length, firstIssue: issues[0]?.message },
+    }).catch(() => undefined);
     return {
       valid: false,
-      failureReasonCode: inferFailureReason(issues),
+      failureReasonCode: reason,
       issues,
     };
   }

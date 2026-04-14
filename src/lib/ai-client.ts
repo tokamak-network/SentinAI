@@ -22,6 +22,7 @@ import {
   selectProvidersForTask,
   shouldApplyRoutingSample,
 } from '@/lib/ai-routing';
+import { getLedger } from '@/core/autonomy-ledger';
 import type { RoutingModelTier, RoutingPolicyName, RoutingTaskClass } from '@/types/ai-routing';
 
 // =====================================================
@@ -458,6 +459,16 @@ export async function chatCompletion(options: ChatCompletionOptions): Promise<Ch
         error: message,
         budgetConstrained: sequence.budgetConstrained,
       });
+      // Record fallback if there is a next provider to try
+      if (attemptIndex < sequence.providers.length - 1) {
+        getLedger().append({
+          kind: 'fallback_triggered',
+          agent: 'ai-client',
+          action: `provider_fallback`,
+          verdict: `${provider} failed → trying ${sequence.providers[attemptIndex + 1]}`,
+          meta: { failedProvider: provider, error: message, taskClass: sequence.taskClass },
+        }).catch(() => undefined);
+      }
     }
   }
 

@@ -23,6 +23,7 @@ import type { LedgerOutcome } from '@/playbooks/learning/types';
 import { PatternMiner } from '@/playbooks/evolution/pattern-miner';
 import { getCoreRedis } from '@/core/redis';
 import type { IStateStore } from '@/types/redis';
+import { getLedger } from '@/core/autonomy-ledger';
 
 // ============================================================
 // UUID Generator
@@ -232,7 +233,15 @@ async function executeActions(
     try {
       const result = await executeAction(action, DEFAULT_SCALING_CONFIG);
       Object.assign(actionResult, result);
-      
+
+      getLedger().append({
+        kind: result.status === 'success' ? 'action_executed' : 'action_suppressed',
+        agent: 'remediation-engine',
+        action: action.type,
+        verdict: result.status,
+        meta: { output: result.output, error: result.error },
+      }).catch(() => undefined);
+
       logger.info(`[Remediation] Action ${action.type}: ${result.status}`);
 
       // Wait after execution if specified
