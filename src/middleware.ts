@@ -6,6 +6,7 @@
  * 2. Read-Only Mode: When SENTINAI_READ_ONLY_MODE is enabled, blocks write operations
  *    except for whitelisted safe endpoints.
  * 3. OAuth Well-Known: Serves RFC 8414/9728 discovery docs at domain root (bypasses basePath).
+ * 4. Rate Limiting: Per-IP sliding window for AI-heavy endpoints (nlops, rca) to limit cost.
  */
 
 import { NextResponse } from 'next/server';
@@ -132,6 +133,96 @@ function isValidSessionTokenEdge(token: string): boolean {
 
 const SESSION_COOKIE_NAME = 'sentinai_admin_session';
 
+// ---------------------------------------------------------------------------
+// Per-IP sliding window rate limiter (Edge Runtime compatible, in-process)
+// Works correctly in Docker (long-running process). Resets on server restart.
+// Map key: "<route-prefix>:<ip>", value: sorted array of request timestamps
+// ---------------------------------------------------------------------------
+const _rateLimitStore = new Map<string, number[]>();
+
+interface RateLimitRule {
+  prefix: string;
+  /** Only applies to these HTTP methods (empty = all methods) */
+  methods: string[];
+  windowMs: number;
+  maxRequests: number;
+}
+
+/**
+ * AI-heavy endpoints — rate limited to protect LLM cost.
+ * Limits are intentionally generous; the goal is preventing runaway abuse,
+ * not throttling normal use.
+ */
+const RATE_LIMIT_RULES: RateLimitRule[] = [
+  { prefix: '/api/nlops', methods: ['POST'],         windowMs: 60_000, maxRequests: 20 },
+  { prefix: '/api/rca',   methods: ['POST'],         windowMs: 60_000, maxRequests: 10 },
+];
+
+function checkRateLimit(
+  key: string,
+  windowMs: number,
+  maxRequests: number,
+  nowMs: number = Date.now(),
+): { allowed: boolean; retryAfterMs: number } {
+  const cutoff = nowMs - windowMs;
+  const timestamps = (_rateLimitStore.get(key) ?? []).filter((t) => t > cutoff);
+
+  if (timestamps.length >= maxRequests) {
+    // timestamps is sorted ascending; oldest entry is at index 0
+    const retryAfterMs = Math.max(0, timestamps[0] + windowMs - nowMs);
+    return { allowed: false, retryAfterMs };
+  }
+
+  timestamps.push(nowMs);
+  _rateLimitStore.set(key, timestamps);
+
+  // Periodic GC: evict keys whose entire history has expired
+  if (_rateLimitStore.size > 10_000) {
+    for (const [k, v] of _rateLimitStore) {
+      if (v.every((t) => t <= cutoff)) _rateLimitStore.delete(k);
+    }
+  }
+
+  return { allowed: true, retryAfterMs: 0 };
+}
+
+/** Exposed for unit tests — clears all in-process rate limit state. */
+export function _clearRateLimitStore(): void {
+  _rateLimitStore.clear();
+}
+
+function applyRateLimits(
+  request: NextRequest,
+  pathname: string,
+  method: string,
+): NextResponse | null {
+  for (const rule of RATE_LIMIT_RULES) {
+    if (!pathname.startsWith(rule.prefix)) continue;
+    if (rule.methods.length > 0 && !rule.methods.includes(method)) continue;
+
+    const ip =
+      request.headers.get('x-forwarded-for')?.split(',')[0].trim() ?? 'unknown';
+    const key = `rl:${rule.prefix}:${ip}`;
+    const result = checkRateLimit(key, rule.windowMs, rule.maxRequests);
+
+    if (!result.allowed) {
+      return NextResponse.json(
+        {
+          error: 'Too many requests',
+          retryAfterMs: result.retryAfterMs,
+        },
+        {
+          status: 429,
+          headers: {
+            'Retry-After': String(Math.ceil(result.retryAfterMs / 1000)),
+          },
+        },
+      );
+    }
+  }
+  return null;
+}
+
 /**
  * Middleware configuration.
  * - /api/*: API key guard + read-only mode
@@ -206,6 +297,10 @@ export function middleware(request: NextRequest) {
   if (AUTH_EXEMPT_ROUTES.has(pathname)) {
     return NextResponse.next();
   }
+
+  // --- Rate limiting: AI-heavy endpoints (protect LLM cost) ---
+  const rateLimitResponse = applyRateLimits(request, pathname, method);
+  if (rateLimitResponse) return rateLimitResponse;
 
   // --- Test-route guard: /api/test/* always requires authentication (defense-in-depth) ---
   // These endpoints bypass the GET-passthrough below because they can mutate state.

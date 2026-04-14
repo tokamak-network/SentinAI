@@ -8,6 +8,7 @@
  * - /api/test/* routes require API key in development when key is configured
  * - AUTH_EXEMPT_ROUTES bypass auth
  * - Fail-closed: production without SENTINAI_API_KEY blocks all writes
+ * - Rate limiting: POST /api/nlops and /api/rca are throttled per-IP
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -129,5 +130,85 @@ describe('middleware — AUTH_EXEMPT_ROUTES bypass', () => {
     const req = makeRequest('GET', 'http://localhost:3002/api/health');
     const res = await runMiddleware(req);
     expect(res.status).not.toBe(401);
+  });
+});
+
+describe('middleware — rate limiting', () => {
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    // Clear in-process rate limit store between tests
+    vi.resetModules();
+    const { _clearRateLimitStore } = await import('./middleware');
+    _clearRateLimitStore();
+  });
+
+  it('allows POST /api/nlops within rate limit', async () => {
+    vi.stubEnv('SENTINAI_API_KEY', 'a-very-strong-api-key-32-characters!!');
+    const key = 'a-very-strong-api-key-32-characters!!';
+    const req = makeRequest('POST', 'http://localhost:3002/api/nlops', key);
+    const res = await runMiddleware(req);
+    expect(res.status).not.toBe(429);
+  });
+
+  it('returns 429 when POST /api/nlops exceeds rate limit', async () => {
+    vi.stubEnv('SENTINAI_API_KEY', 'a-very-strong-api-key-32-characters!!');
+    const key = 'a-very-strong-api-key-32-characters!!';
+
+    // Exhaust the limit (20 requests per 60s)
+    vi.resetModules();
+    const { middleware, _clearRateLimitStore } = await import('./middleware');
+    _clearRateLimitStore();
+
+    for (let i = 0; i < 20; i++) {
+      const req = makeRequest('POST', 'http://localhost:3002/api/nlops', key);
+      await middleware(req);
+    }
+
+    // 21st request should be throttled
+    const req = makeRequest('POST', 'http://localhost:3002/api/nlops', key);
+    const res = await middleware(req);
+    expect(res.status).toBe(429);
+
+    const body = await res.json();
+    expect(body).toHaveProperty('retryAfterMs');
+    expect(res.headers.get('Retry-After')).toBeTruthy();
+  });
+
+  it('does NOT rate limit GET /api/nlops', async () => {
+    vi.stubEnv('SENTINAI_API_KEY', 'a-very-strong-api-key-32-characters!!');
+
+    vi.resetModules();
+    const { middleware, _clearRateLimitStore } = await import('./middleware');
+    _clearRateLimitStore();
+
+    // Exhaust POST limit
+    const key = 'a-very-strong-api-key-32-characters!!';
+    for (let i = 0; i < 20; i++) {
+      const req = makeRequest('POST', 'http://localhost:3002/api/nlops', key);
+      await middleware(req);
+    }
+
+    // GET should still pass through (not rate limited)
+    const getReq = makeRequest('GET', 'http://localhost:3002/api/nlops');
+    const res = await middleware(getReq);
+    expect(res.status).not.toBe(429);
+  });
+
+  it('returns 429 when POST /api/rca exceeds rate limit (10 req/min)', async () => {
+    vi.stubEnv('SENTINAI_API_KEY', 'a-very-strong-api-key-32-characters!!');
+    const key = 'a-very-strong-api-key-32-characters!!';
+
+    vi.resetModules();
+    const { middleware, _clearRateLimitStore } = await import('./middleware');
+    _clearRateLimitStore();
+
+    for (let i = 0; i < 10; i++) {
+      const req = makeRequest('POST', 'http://localhost:3002/api/rca', key);
+      await middleware(req);
+    }
+
+    const req = makeRequest('POST', 'http://localhost:3002/api/rca', key);
+    const res = await middleware(req);
+    expect(res.status).toBe(429);
   });
 });
