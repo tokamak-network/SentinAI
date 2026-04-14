@@ -1,9 +1,8 @@
 /**
  * Test API: Seed operation ledger with synthetic records for Evolved Playbooks testing.
  *
- * GET /api/test/seed-ledger?seed=true[&count=5][&metricName=txPoolPending][&action=restart_pod]
- *   - seed=true  → inject records (no auth needed — GET bypasses middleware API key guard)
- *   - seed omitted → show current ledger record count only
+ * GET /api/test/seed-ledger
+ *   - Returns current ledger record count only (read-only, no auth needed)
  *
  * POST /api/test/seed-ledger  (requires x-api-key header)
  *   Body (optional JSON): count, metricName, action, outcome, metricValue, zScore, anomalyType
@@ -12,7 +11,7 @@
  *   anomalyType: "monotonic", metricName: "txPoolPending", zScore: 0, metricValue: 4400,
  *   action: "restart_pod", outcome: "success"
  *
- * CAUTION: Dev/test only. Remove this endpoint before exposing to untrusted networks.
+ * CAUTION: Dev/test only. Protected by NODE_ENV guard + API key on POST.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -22,6 +21,17 @@ import type { LedgerOutcome, OperationRecord } from '@/playbooks/learning/types'
 export const dynamic = 'force-dynamic';
 
 const INSTANCE_ID = process.env.SENTINAI_INSTANCE_ID ?? 'default';
+
+/** Reject in production unless SENTINAI_ALLOW_TEST_ROUTES=true is explicitly set */
+function testRouteGuard(): NextResponse | null {
+  if (
+    process.env.NODE_ENV === 'production' &&
+    process.env.SENTINAI_ALLOW_TEST_ROUTES !== 'true'
+  ) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+  return null;
+}
 
 async function seedRecords(params: {
   count: number;
@@ -58,34 +68,19 @@ async function seedRecords(params: {
   return { inserted: inserted.length, ids: inserted, ledgerTotal: total };
 }
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  const url = new URL(request.url);
+export async function GET(_request: NextRequest): Promise<NextResponse> {
+  const guard = testRouteGuard();
+  if (guard) return guard;
 
-  // Status-only (no seed param)
-  if (!url.searchParams.has('seed') || url.searchParams.get('seed') !== 'true') {
-    const { total } = await listOperationLedger(INSTANCE_ID, { limit: 1 });
-    return NextResponse.json({ instanceId: INSTANCE_ID, ledgerTotal: total });
-  }
-
-  // Seed via GET (bypasses middleware API key guard — useful for quick testing)
-  const result = await seedRecords({
-    count:       Math.min(Number(url.searchParams.get('count') ?? 5), 50),
-    metricName:  url.searchParams.get('metricName')  ?? 'txPoolPending',
-    action:      url.searchParams.get('action')      ?? 'restart_pod',
-    outcome:     (url.searchParams.get('outcome')    ?? 'success') as LedgerOutcome,
-    metricValue: Number(url.searchParams.get('metricValue') ?? 4400),
-    zScore:      Number(url.searchParams.get('zScore')      ?? 0),
-    anomalyType: url.searchParams.get('anomalyType') ?? 'monotonic',
-  });
-
-  return NextResponse.json({
-    ok: true,
-    ...result,
-    hint: `Now call POST /api/playbook-evolution?action=mine (with x-api-key) to mine patterns.`,
-  });
+  // Status-only — seeding requires POST (API-key protected by middleware)
+  const { total } = await listOperationLedger(INSTANCE_ID, { limit: 1 });
+  return NextResponse.json({ instanceId: INSTANCE_ID, ledgerTotal: total });
 }
 
 export async function POST(request: NextRequest): Promise<NextResponse> {
+  const guard = testRouteGuard();
+  if (guard) return guard;
+
   let body: Record<string, unknown> = {};
   try { body = (await request.json()) as Record<string, unknown>; } catch { /* ok */ }
 

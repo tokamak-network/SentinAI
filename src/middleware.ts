@@ -72,10 +72,38 @@ function allowScalerWriteInReadOnlyMode(): boolean {
 }
 
 /**
- * Get configured API key (undefined = auth disabled)
+ * Get configured API key (undefined = auth disabled).
+ *
+ * Fail-closed in production: if SENTINAI_API_KEY is missing or too short,
+ * we return a sentinel value that will never match any request header, so all
+ * write operations are blocked rather than passing through unauthenticated.
+ *
+ * Minimum recommended length: 32 characters.
  */
 function getApiKey(): string | undefined {
-  return process.env.SENTINAI_API_KEY || undefined;
+  const key = process.env.SENTINAI_API_KEY;
+
+  if (!key) {
+    if (process.env.NODE_ENV === 'production') {
+      // Fail-closed: block all writes when API key is absent in production.
+      // A sentinel that can never be matched prevents accidental open access.
+      console.error(
+        '[middleware] SENTINAI_API_KEY is not set in production. ' +
+        'All write operations are blocked. Set a strong API key (min 32 chars).'
+      );
+      return '__sentinai_no_key_configured__';
+    }
+    return undefined;
+  }
+
+  if (key.length < 32) {
+    console.warn(
+      '[middleware] SENTINAI_API_KEY is shorter than 32 characters. ' +
+      'Use openssl rand -hex 32 to generate a strong key.'
+    );
+  }
+
+  return key;
 }
 
 /**
@@ -176,6 +204,29 @@ export function middleware(request: NextRequest) {
 
   // Always allow exempt routes (health checks, internal automation)
   if (AUTH_EXEMPT_ROUTES.has(pathname)) {
+    return NextResponse.next();
+  }
+
+  // --- Test-route guard: /api/test/* always requires authentication (defense-in-depth) ---
+  // These endpoints bypass the GET-passthrough below because they can mutate state.
+  if (pathname.startsWith('/api/test/')) {
+    if (
+      process.env.NODE_ENV === 'production' &&
+      process.env.SENTINAI_ALLOW_TEST_ROUTES !== 'true'
+    ) {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
+    // In non-production, still require API key for any write-capable test route
+    const apiKey = getApiKey();
+    if (apiKey) {
+      const providedKey = request.headers.get('x-api-key');
+      if (providedKey !== apiKey) {
+        return NextResponse.json(
+          { error: 'Unauthorized: invalid or missing x-api-key' },
+          { status: 401 }
+        );
+      }
+    }
     return NextResponse.next();
   }
 

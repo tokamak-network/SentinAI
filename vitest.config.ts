@@ -9,8 +9,23 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'json-summary', 'html'],
-      include: ['src/lib/**/*.ts'],
-      exclude: ['src/**/*.test.ts', 'src/lib/__tests__/**'],
+      include: [
+        'src/lib/**/*.ts',
+        'src/app/api/**/*.ts',
+        'src/core/**/*.ts',
+        'src/chains/**/*.ts',
+        'src/middleware.ts',
+      ],
+      exclude: [
+        'src/**/*.test.ts',
+        'src/lib/__tests__/**',
+        'src/app/api/**/__tests__/**',
+      ],
+      reportOnFailure: true,
+      thresholds: {
+        lines: 5,
+        functions: 35,
+      },
     },
   },
   resolve: {

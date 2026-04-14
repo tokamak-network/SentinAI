@@ -10,6 +10,7 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:coverage:check": "vitest run --coverage --reporter=verbose",
     "test:e2e": "playwright test",
     "test:real-rpc:onboarding": "vitest run src/app/api/v2/onboarding/complete/route.real-rpc.test.ts",
     "prod:gate:tier1": "bash scripts/prod-gate-tier1.sh",

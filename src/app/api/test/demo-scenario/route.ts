@@ -1,13 +1,13 @@
 /**
  * Test API: Demo scenario for playbook evolution demonstration.
  *
- * GET /api/test/demo-scenario?scenario=simulate
- *   - No auth required
+ * POST /api/test/demo-scenario  (requires x-api-key header)
+ *   Body (optional JSON): { scenario: "simulate" }
  *   - Adds 10 success records for the memoryPercent/z-score/scale_up pattern
  *   - Runs inline pattern mining
  *   - Returns the before/after diff for the targeted playbook
  *
- * CAUTION: Dev/test only. Remove before exposing to untrusted networks.
+ * CAUTION: Dev/test only. Protected by NODE_ENV guard + API key via middleware.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -17,6 +17,17 @@ import type { OperationRecord } from '@/playbooks/learning/types';
 export const dynamic = 'force-dynamic';
 
 const INSTANCE_ID = process.env.SENTINAI_INSTANCE_ID ?? 'default';
+
+/** Reject in production unless SENTINAI_ALLOW_TEST_ROUTES=true is explicitly set */
+function testRouteGuard(): NextResponse | null {
+  if (
+    process.env.NODE_ENV === 'production' &&
+    process.env.SENTINAI_ALLOW_TEST_ROUTES !== 'true'
+  ) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+  }
+  return null;
+}
 
 // Target pattern for the demo evolution scenario
 const DEMO_PATTERN = {
@@ -28,13 +39,18 @@ const DEMO_PATTERN = {
   count: 10,
 };
 
-export async function GET(request: NextRequest): Promise<NextResponse> {
-  const url = new URL(request.url);
-  const scenario = url.searchParams.get('scenario');
+export async function POST(request: NextRequest): Promise<NextResponse> {
+  const guard = testRouteGuard();
+  if (guard) return guard;
+
+  let body: { scenario?: string } = {};
+  try { body = (await request.json()) as { scenario?: string }; } catch { /* ok */ }
+
+  const scenario = body.scenario;
 
   if (scenario !== 'simulate') {
     return NextResponse.json(
-      { error: 'Unknown scenario. Use ?scenario=simulate' },
+      { error: 'Unknown scenario. Use { "scenario": "simulate" }' },
       { status: 400 }
     );
   }

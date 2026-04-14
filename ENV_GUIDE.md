@@ -19,6 +19,42 @@ npm run setup
 | `L2_RPC_URL` | L2 Chain RPC endpoint |
 | AI API Key (one of) | `QWEN_API_KEY`, `ANTHROPIC_API_KEY`, `ANTHROPIC_OAUTH_TOKEN`, `OPENAI_API_KEY`, or `GEMINI_API_KEY` |
 | `AWS_CLUSTER_NAME` | EKS cluster name (auto-detects K8S_API_URL & region) |
+| `SENTINAI_API_KEY` | API authentication key — **required in production** (see below) |
+
+## API Authentication
+
+`SENTINAI_API_KEY` protects all write operations (`POST`/`PATCH`/`DELETE`/`PUT`) via the `x-api-key` request header. In production this is **fail-closed**: if the key is absent or shorter than 32 characters, all writes are rejected.
+
+**Generate a strong key:**
+
+```bash
+openssl rand -hex 32
+```
+
+**Set the key:**
+
+```
+SENTINAI_API_KEY=<output from above>
+```
+
+**Authenticate requests:**
+
+```bash
+curl -X POST https://your-sentinai-host/api/scaler \
+  -H "x-api-key: $SENTINAI_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"scale","replicas":3}'
+```
+
+**Production behaviour without a key configured:**
+- All `POST`/`PATCH`/`DELETE`/`PUT` calls return `401 Unauthorized`
+- An error is logged at startup: `SENTINAI_API_KEY is not set in production`
+
+**Rotation procedure:**
+1. Generate a new key: `openssl rand -hex 32`
+2. Deploy the new key alongside the old one (keep old in env temporarily)
+3. Update all clients to use the new key
+4. Remove the old key and redeploy
 
 ## AI Provider
 
@@ -152,6 +188,7 @@ Autonomy policy controls when autonomous operations (goal execution, scaling, re
 | `MCP_AUTH_MODE` | `api-key` | `api-key` / `approval-token` / `dual` |
 | `MCP_APPROVAL_REQUIRED` | `true` | Require approval token for write tools |
 | `MCP_APPROVAL_TTL_SECONDS` | `300` | One-time approval token TTL |
+| `MCP_OPERATOR_PROFILE` | _(unset)_ | Set to `readonly` to remove write tools (`scale_*`, `restart_*`, `switch_l1_rpc`, etc.) from the MCP manifest — safe default for external L2 node operators |
 
 ### Agent Marketplace
 
