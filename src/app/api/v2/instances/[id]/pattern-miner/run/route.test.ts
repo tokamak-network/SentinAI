@@ -15,7 +15,7 @@ vi.mock('@/playbooks/learning/store', () => ({
       {
         operationId: 'op-1',
         instanceId: 'inst-a',
-        timestamp: '2026-02-28T00:00:00.000Z',
+        timestamp: '2026-04-10T00:00:00.000Z',
         trigger: { anomalyType: 'z-score', metricName: 'txPoolPending', metricValue: 120, zScore: 3.2 },
         playbookId: null,
         action: 'restart-batcher',
@@ -26,7 +26,7 @@ vi.mock('@/playbooks/learning/store', () => ({
       {
         operationId: 'op-2',
         instanceId: 'inst-a',
-        timestamp: '2026-02-28T00:01:00.000Z',
+        timestamp: '2026-04-10T00:01:00.000Z',
         trigger: { anomalyType: 'z-score', metricName: 'txPoolPending', metricValue: 121, zScore: 3.3 },
         playbookId: null,
         action: 'restart-batcher',
@@ -37,7 +37,7 @@ vi.mock('@/playbooks/learning/store', () => ({
       {
         operationId: 'op-3',
         instanceId: 'inst-a',
-        timestamp: '2026-02-28T00:02:00.000Z',
+        timestamp: '2026-04-10T00:02:00.000Z',
         trigger: { anomalyType: 'z-score', metricName: 'txPoolPending', metricValue: 122, zScore: 3.4 },
         playbookId: null,
         action: 'restart-batcher',

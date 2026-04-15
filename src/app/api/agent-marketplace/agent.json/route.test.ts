@@ -18,11 +18,16 @@ describe('/api/agent-marketplace/agent.json', () => {
       'anomaly_feed',
       'health_diagnostics',
       'rca_report',
+      'request_count',
+      'latency_stats',
+      'error_rate',
+      'alert_status',
+      'sla_metrics',
     ]);
     expect(body.endpoint).toBe('/api/agent-marketplace');
     expect(body.payment).toMatchObject({
       protocol: 'x402',
-      network: 'eip155:1',
+      network: 'eip155:11155111',
     });
     expect(body.opsSnapshot).toMatchObject({
       endpoint: '/api/agent-marketplace/ops-snapshot.json',

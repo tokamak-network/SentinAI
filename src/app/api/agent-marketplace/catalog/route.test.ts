@@ -18,6 +18,11 @@ describe('/api/agent-marketplace/catalog', () => {
       'anomaly_feed',
       'health_diagnostics',
       'rca_report',
+      'request_count',
+      'latency_stats',
+      'error_rate',
+      'alert_status',
+      'sla_metrics',
     ]);
     expect(body.services[0].payment.amount).toBe('100000000000000000');
     expect(body.internalNotes).toBeUndefined();

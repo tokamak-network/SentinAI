@@ -46,12 +46,12 @@ describe('/api/agent-marketplace/sequencer-health', () => {
   it('returns snapshot payload in open payment mode', async () => {
     process.env.MARKETPLACE_PAYMENT_MODE = 'open';
     const paymentPayload = Buffer.from(JSON.stringify({
-      agentId: 'agent-123',
+      buyer: 'agent-123',
       scheme: 'exact',
       network: 'eip155:1',
       token: 'ton',
       amount: '100000000000000000',
-      authorization: 'signed-payload',
+      signature: '0xdeadbeef',
     })).toString('base64');
 
     const response = await GET(new NextRequest('http://localhost/api/agent-marketplace/sequencer-health', {
