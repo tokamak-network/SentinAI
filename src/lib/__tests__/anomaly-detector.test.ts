@@ -705,10 +705,10 @@ describe('anomaly-detector', () => {
     });
 
     it('should detect memoryPercent spike when memory jumps to 88% from stable baseline (sustained)', () => {
-      // Stable history: 30% with small variance
-      const history = generateHistory(10, {}).map(m => ({
+      // Stable history: alternates 29/31 → mean=30, stdDev=1.0 (above MIN_STD_DEV threshold of 0.5)
+      const history = generateHistory(10, {}).map((m, i) => ({
         ...m,
-        memoryPercent: 30 + (Math.random() - 0.5) * 2, // 29-31%
+        memoryPercent: 29 + (i % 2) * 2, // 29, 31, 29, 31... deterministic spread
       }));
       const current = createMetric({ memoryPercent: 88 });
 
@@ -723,9 +723,9 @@ describe('anomaly-detector', () => {
     });
 
     it('should NOT detect anomaly on single transient memory spike (below sustained count)', () => {
-      const history = generateHistory(10, {}).map(m => ({
+      const history = generateHistory(10, {}).map((m, i) => ({
         ...m,
-        memoryPercent: 30 + (Math.random() - 0.5) * 2,
+        memoryPercent: 29 + (i % 2) * 2, // deterministic: 29, 31, 29, 31...
       }));
       const current = createMetric({ memoryPercent: 88 });
 
