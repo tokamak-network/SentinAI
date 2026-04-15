@@ -12,12 +12,11 @@ describe('agent-marketplace payment-verifier', () => {
 
   it('parses a base64 encoded payment header into a payment envelope', () => {
     const encoded = Buffer.from(JSON.stringify({
-      agentId: 'agent-123',
+      buyer: 'agent-123',
       scheme: 'exact',
       network: 'eip155:1',
-      token: 'ton',
       amount: '100000000000000000',
-      authorization: 'signed-payload',
+      signature: '0xdeadbeef',
     })).toString('base64');
 
     const result = parsePaymentHeader(encoded);

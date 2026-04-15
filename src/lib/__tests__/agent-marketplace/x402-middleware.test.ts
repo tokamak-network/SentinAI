@@ -91,12 +91,11 @@ describe('agent-marketplace x402-middleware', () => {
     process.env.MARKETPLACE_PAYMENT_MODE = 'open';
     const service = getAgentMarketplaceCatalog().services[0];
     const paymentPayload = Buffer.from(JSON.stringify({
-      agentId: 'agent-123',
+      buyer: 'agent-123',
       scheme: 'exact',
       network: 'eip155:1',
-      token: 'ton',
       amount: service.payment!.amount,
-      authorization: 'signed-payload',
+      signature: '0xdeadbeef',
     })).toString('base64');
 
     const request = new NextRequest('http://localhost/api/agent-marketplace/sequencer-health', {
@@ -126,12 +125,11 @@ describe('agent-marketplace x402-middleware', () => {
     process.env.MARKETPLACE_PAYMENT_MODE = 'open';
     const service = getAgentMarketplaceCatalog().services[0];
     const validPaymentPayload = Buffer.from(JSON.stringify({
-      agentId: 'agent-123',
+      buyer: 'agent-123',
       scheme: 'exact',
       network: 'eip155:1',
-      token: 'ton',
       amount: service.payment!.amount,
-      authorization: 'signed-payload',
+      signature: '0xdeadbeef',
     })).toString('base64');
 
     await withX402(
@@ -163,12 +161,11 @@ describe('agent-marketplace x402-middleware', () => {
     process.env.MARKETPLACE_RATE_LIMIT_WINDOW_MS = '60000';
     const service = getAgentMarketplaceCatalog().services[0];
     const paymentPayload = Buffer.from(JSON.stringify({
-      agentId: 'agent-123',
+      buyer: 'agent-123',
       scheme: 'exact',
       network: 'eip155:1',
-      token: 'ton',
       amount: service.payment!.amount,
-      authorization: 'signed-payload',
+      signature: '0xdeadbeef',
     })).toString('base64');
 
     const firstResponse = await withX402(

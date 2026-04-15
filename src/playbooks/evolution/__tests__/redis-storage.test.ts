@@ -6,6 +6,94 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import Redis from 'ioredis';
 import { RedisStateStore } from '@/lib/redis-store';
+
+// ioredis mock — shared in-memory store for all Redis instances
+const hoisted = vi.hoisted(() => {
+  const kv = new Map<string, string>();
+  const lists = new Map<string, string[]>();
+  const ttls = new Map<string, number>(); // key -> expiry timestamp (ms)
+
+  function isExpired(key: string): boolean {
+    const exp = ttls.get(key);
+    return exp !== undefined && Date.now() > exp;
+  }
+
+  const impl = {
+    kv,
+    lists,
+    ttls,
+    set: vi.fn(async (key: string, value: string) => {
+      kv.set(key, value);
+      ttls.delete(key);
+      return 'OK';
+    }),
+    setex: vi.fn(async (key: string, seconds: number, value: string) => {
+      kv.set(key, value);
+      ttls.set(key, Date.now() + seconds * 1000);
+      return 'OK';
+    }),
+    get: vi.fn(async (key: string) => {
+      if (isExpired(key)) { kv.delete(key); ttls.delete(key); return null; }
+      return kv.get(key) ?? null;
+    }),
+    del: vi.fn(async (...keys: string[]) => {
+      let count = 0;
+      for (const k of keys) {
+        if (kv.delete(k) || lists.delete(k)) count++;
+        ttls.delete(k);
+      }
+      return count;
+    }),
+    keys: vi.fn(async (pattern: string) => {
+      const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+      const regex = new RegExp(`^${escaped}$`);
+      const result: string[] = [];
+      for (const k of kv.keys()) {
+        if (regex.test(k) && !isExpired(k)) result.push(k);
+      }
+      for (const k of lists.keys()) {
+        if (regex.test(k)) result.push(k);
+      }
+      return result;
+    }),
+    ttl: vi.fn(async (key: string) => {
+      const exp = ttls.get(key);
+      if (exp === undefined) return kv.has(key) ? -1 : -2;
+      const remaining = Math.ceil((exp - Date.now()) / 1000);
+      return remaining > 0 ? remaining : -2;
+    }),
+    rpush: vi.fn(async (key: string, ...values: string[]) => {
+      const current = lists.get(key) ?? [];
+      current.push(...values);
+      lists.set(key, current);
+      return current.length;
+    }),
+    lrange: vi.fn(async (key: string, start: number, end: number) => {
+      const list = lists.get(key) ?? [];
+      const len = list.length;
+      const normalizedEnd = end < 0 ? len + end + 1 : end + 1;
+      return list.slice(start, normalizedEnd);
+    }),
+    scan: vi.fn(async (cursor: string, matchOpt: string, pattern: string) => {
+      const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+      const regex = new RegExp(`^${escaped}$`);
+      const result: string[] = [];
+      for (const k of kv.keys()) {
+        if (regex.test(k) && !isExpired(k)) result.push(k);
+      }
+      return ['0', result] as [string, string[]];
+    }),
+    quit: vi.fn(async () => 'OK'),
+    on: vi.fn(),
+    connect: vi.fn(async () => {}),
+  };
+
+  return impl;
+});
+
+vi.mock('ioredis', () => ({
+  default: vi.fn().mockImplementation(() => hoisted),
+}));
 import type {
   IncidentPattern,
   ABTestSession,

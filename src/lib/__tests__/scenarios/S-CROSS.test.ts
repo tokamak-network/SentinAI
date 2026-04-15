@@ -118,9 +118,9 @@ describe('S-CROSS-01: L1 RPC 장애 조치 (Failover)', () => {
     const state = getL1FailoverState();
     const activeUrl = getActiveL1RpcUrl();
 
-    // 두 번째 엔드포인트(reth-l1)로 전환
+    // 두 번째 엔드포인트(reth-l1)로 전환 (URL-based 추적: activeIndex=-1)
     expect(activeUrl).toContain('reth-l1');
-    expect(state.activeIndex).toBe(1);
+    expect(state.activeIndex).toBe(-1);
     expect(event).not.toBeNull();
   });
 
@@ -128,8 +128,10 @@ describe('S-CROSS-01: L1 RPC 장애 조치 (Failover)', () => {
     await executeFailover('manual failover');
 
     const state = getL1FailoverState();
-    const activeEndpoint = state.endpoints[state.activeIndex];
-    expect(activeEndpoint.consecutiveFailures).toBe(0);
+    // Non-proxyd 모드에서 activeIndex=-1(URL-based 추적), URL로 endpoint를 조회
+    const activeEndpoint = state.endpoints.find((e) => e.url === state.activeUrl);
+    expect(activeEndpoint).toBeDefined();
+    expect(activeEndpoint!.consecutiveFailures).toBe(0);
   });
 
   it('5분 쿨다운 내 reportL1Failure은 재failover를 차단해야 한다', async () => {

@@ -35,6 +35,11 @@ describe('agent-marketplace core types', () => {
       'anomaly_feed',
       'health_diagnostics',
       'rca_report',
+      'request_count',
+      'latency_stats',
+      'error_rate',
+      'alert_status',
+      'sla_metrics',
     ]);
     expect(sequencerHealth).toBe('sequencer_health');
     expect(incidentSummary).toBe('incident_summary');
@@ -138,7 +143,7 @@ describe('agent-marketplace core types', () => {
 
   it('builds a launch-ready catalog with only the approved phase 1 paid services active', () => {
     expect(agentMarketplaceCatalog).toEqual(defaultAgentMarketplaceCatalog);
-    expect(getAgentMarketplaceCatalog().services).toHaveLength(7);
+    expect(getAgentMarketplaceCatalog().services).toHaveLength(12);
     expect(getAgentMarketplaceCatalog().services.map((service) => service.key)).toEqual([
       'sequencer_health',
       'incident_summary',
@@ -147,6 +152,11 @@ describe('agent-marketplace core types', () => {
       'anomaly_feed',
       'health_diagnostics',
       'rca_report',
+      'request_count',
+      'latency_stats',
+      'error_rate',
+      'alert_status',
+      'sla_metrics',
     ]);
     expect(getAgentMarketplaceCatalog().services.every((service) => service.state === 'active')).toBe(true);
     expect(getAgentMarketplaceCatalog().services.every((service) => typeof service.payment?.amount === 'string')).toBe(true);

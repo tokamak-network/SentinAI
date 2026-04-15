@@ -353,12 +353,13 @@ describe('HI-OP-07: Base 2023 Sequencer 45min Outage — block plateau (COVERED)
   // Base sequencer stopped block production for 45 minutes (infrastructure refresh).
   // SentinAI detects l2BlockHeight stagnant → op-node-derivation-stall → restart.
 
-  beforeEach(() => { resetAllStreaks(); setupThanos(); });
-  afterEach(teardownChain);
+  beforeEach(() => { resetAllStreaks(); setupThanos(); vi.useFakeTimers(); });
+  afterEach(() => { teardownChain(); vi.useRealTimers(); });
 
   it('l2BlockHeight stagnant should be detected by anomaly detector', () => {
     const STUCK_HEIGHT = 15_000_000;
     const now = Date.now();
+    vi.setSystemTime(now);
     const history = Array.from({ length: 15 }, (_, i) =>
       makeMetric({
         blockHeight: STUCK_HEIGHT,
