@@ -78,7 +78,7 @@ test.describe('SIWE Auth Flow (Manual Test)', () => {
 
     // Remove ethereum provider
     await page.evaluate(() => {
-      // @ts-ignore
+      // @ts-expect-error: window.ethereum is not in the standard type definitions
       delete window.ethereum;
     });
 

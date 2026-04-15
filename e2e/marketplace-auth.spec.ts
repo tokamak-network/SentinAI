@@ -136,7 +136,7 @@ test('MetaMask not detected error message is shown when window.ethereum is undef
 
   // Evaluate script to hide ethereum provider and click button
   await page.evaluate(() => {
-    // @ts-ignore
+    // @ts-expect-error: window.ethereum is not in the standard type definitions
     delete window.ethereum;
   });
 
@@ -154,7 +154,7 @@ test('address display updates when wallet connection succeeds', async ({ page })
 
   // Mock ethereum provider to return an account
   await page.addInitScript(() => {
-    // @ts-ignore
+    // @ts-expect-error: window.ethereum is not in the standard type definitions
     window.ethereum = {
       request: async (args: any) => {
         if (args.method === 'eth_requestAccounts') {

@@ -44,8 +44,10 @@ export function resolveSelfAddress(): string | null {
   // Derive address from private key using viem if available,
   // otherwise return null to skip self-detection.
   try {
-    // Dynamic import to avoid loading viem in environments that don't need it
-    // We just do a simple check: private key → public key → address
+    // privateKeyToAddress is available as a direct viem dependency; lazy-eval
+    // via dynamic import keeps this function synchronous-compatible while still
+    // avoiding any issues in environments that exclude viem.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const { privateKeyToAddress } = require('viem/accounts') as {
       privateKeyToAddress: (key: `0x${string}`) => string;
     };

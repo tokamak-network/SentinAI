@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 
@@ -13,12 +13,8 @@ export default function AdminLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [isLoading, setIsLoading] = useState(true);
-
-  useEffect(() => {
-    // Session is already gated by middleware, so just mark as loaded
-    setIsLoading(false);
-  }, []);
+  // Session is already gated by middleware; no async check needed.
+  const [isLoading] = useState(false);
 
   async function handleLogout() {
     await fetch(`${BASE_PATH}/api/admin/auth/logout`, { method: 'POST' });

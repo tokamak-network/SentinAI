@@ -105,7 +105,7 @@ describe('siwe-session', () => {
       expect(session).not.toBeNull();
       expect(session?.address).toBe(TEST_ADDRESS);
       expect(session?.issuedAt).toBeGreaterThan(0);
-      expect(session?.expiresAt).toBeGreaterThan(session?.issuedAt!);
+      expect(session?.expiresAt).toBeGreaterThan(session?.issuedAt ?? 0);
     });
 
     it('should reject token with invalid format', () => {
@@ -240,7 +240,7 @@ describe('siwe-session', () => {
 
       const session = verifySessionToken(token);
       expect(session).not.toBeNull();
-      expect(session?.expiresAt).toBeGreaterThan(session?.issuedAt! + SESSION_TTL_MS - 1000);
+      expect(session?.expiresAt).toBeGreaterThan((session?.issuedAt ?? 0) + SESSION_TTL_MS - 1000);
     });
 
     it('should reject token with extra underscores', () => {
