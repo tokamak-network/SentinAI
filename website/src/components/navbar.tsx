@@ -37,7 +37,6 @@ export function Navbar() {
         display: 'flex', alignItems: 'center', gap: 0, marginLeft: 0, flex: 1,
       }}>
         {[
-          { href: '/docs', label: 'DOCS' },
           { href: '/marketplace', label: 'MARKETPLACE' },
         ].map(({ href, label }) => (
           <a key={label} href={href} style={{
