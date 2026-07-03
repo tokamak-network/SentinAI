@@ -20,21 +20,26 @@ const docStructure: DocSection[] = [
   {
     title: 'Get Started',
     items: [
-      { title: 'Agent Integration', href: '/docs/guide/agent-integration', emoji: '📖' },
-      { title: 'Operator Claude Code Setup', href: '/docs/guide/operator-claude-code-setup', emoji: '⚡' },
+      { title: 'Overview', href: '/docs/guide/overview', emoji: '📖' },
+      { title: 'Quick Start', href: '/docs/guide/quickstart', emoji: '⚡' },
+      { title: 'Troubleshooting', href: '/docs/guide/troubleshooting', emoji: '🔧' },
     ],
   },
   {
-    title: 'Operations',
+    title: 'Deploy',
     items: [
-      { title: 'Slack Alert Reference', href: '/docs/guide/slack-alert-reference', emoji: '🔔' },
-      { title: 'Mainnet Migration Checklist', href: '/docs/mainnet-migration', emoji: '✅' },
+      { title: 'Docker Setup', href: '/docs/guide/setup' },
+      { title: 'EC2 Deployment', href: '/docs/guide/ec2-setup-guide' },
+      { title: 'OP Stack', href: '/docs/guide/opstack-example-runbook' },
+      { title: 'Arbitrum Orbit', href: '/docs/guide/arbitrum-orbit-local-setup' },
     ],
   },
   {
     title: 'Reference',
     items: [
-      { title: 'Marketplace Architecture', href: '/docs/marketplace-architecture', emoji: '🏗️' },
+      { title: 'Architecture', href: '/docs/guide/architecture', emoji: '🏗️' },
+      { title: 'API Reference', href: '/docs/guide/api-reference', emoji: '📡' },
+      { title: 'MCP Integration', href: '/docs/guide/sentinai-mcp-user-guide' },
     ],
   },
 ];
