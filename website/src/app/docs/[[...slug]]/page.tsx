@@ -14,32 +14,27 @@ const CARDS = [
   {
     emoji: '🚀',
     title: 'Get Started',
-    description: 'Understand what SentinAI does and get it running in 5 minutes.',
+    description: 'Integrate SentinAI with your node and operate it from Claude Code.',
     links: [
-      { label: 'Overview', href: '/docs/guide/overview' },
-      { label: 'Quick Start (5 min)', href: '/docs/guide/quickstart' },
-      { label: 'Troubleshooting', href: '/docs/guide/troubleshooting' },
+      { label: 'Agent Integration', href: '/docs/guide/agent-integration' },
+      { label: 'Operator Claude Code Setup', href: '/docs/guide/operator-claude-code-setup' },
     ],
   },
   {
     emoji: '⚙️',
-    title: 'Deploy',
-    description: 'Run SentinAI on Docker, EC2, or alongside your chain node.',
+    title: 'Operations',
+    description: 'Alert reference and the go-to-mainnet checklist.',
     links: [
-      { label: 'Docker Setup', href: '/docs/guide/setup' },
-      { label: 'EC2 Deployment', href: '/docs/guide/ec2-setup-guide' },
-      { label: 'OP Stack', href: '/docs/guide/opstack-example-runbook' },
-      { label: 'Arbitrum Orbit', href: '/docs/guide/arbitrum-orbit-local-setup' },
+      { label: 'Slack Alert Reference', href: '/docs/guide/slack-alert-reference' },
+      { label: 'Mainnet Migration Checklist', href: '/docs/mainnet-migration' },
     ],
   },
   {
     emoji: '📚',
     title: 'Reference',
-    description: 'Architecture deep-dive, REST API, and external integrations.',
+    description: 'Architecture deep-dive for the agent marketplace.',
     links: [
-      { label: 'Architecture', href: '/docs/guide/architecture' },
-      { label: 'API Reference', href: '/docs/guide/api-reference' },
-      { label: 'MCP Integration', href: '/docs/guide/sentinai-mcp-user-guide' },
+      { label: 'Marketplace Architecture', href: '/docs/marketplace-architecture' },
     ],
   },
 ];
@@ -62,13 +57,13 @@ function DocsLandingPage() {
             </p>
             <div className="flex gap-3 flex-wrap">
               <Link
-                href="/docs/guide/quickstart"
+                href="/docs/guide/agent-integration"
                 className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
               >
-                ⚡ Quick Start
+                📖 Agent Integration
               </Link>
               <Link
-                href="/docs/guide/architecture"
+                href="/docs/marketplace-architecture"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 🏗️ Architecture
@@ -113,16 +108,11 @@ const DOCS_ROOT = path.join(process.cwd(), '../docs');
 
 // Flat ordered list used for prev/next navigation (matches sidebar structure)
 const NAV_ORDER = [
-  { href: '/docs/guide/overview', label: 'Overview' },
-  { href: '/docs/guide/quickstart', label: 'Quick Start' },
-  { href: '/docs/guide/troubleshooting', label: 'Troubleshooting' },
-  { href: '/docs/guide/setup', label: 'Docker Setup' },
-  { href: '/docs/guide/ec2-setup-guide', label: 'EC2 Deployment' },
-  { href: '/docs/guide/opstack-example-runbook', label: 'OP Stack' },
-  { href: '/docs/guide/arbitrum-orbit-local-setup', label: 'Arbitrum Orbit' },
-  { href: '/docs/guide/architecture', label: 'Architecture' },
-  { href: '/docs/guide/api-reference', label: 'API Reference' },
-  { href: '/docs/guide/sentinai-mcp-user-guide', label: 'MCP Integration' },
+  { href: '/docs/guide/agent-integration', label: 'Agent Integration' },
+  { href: '/docs/guide/operator-claude-code-setup', label: 'Operator Claude Code Setup' },
+  { href: '/docs/guide/slack-alert-reference', label: 'Slack Alert Reference' },
+  { href: '/docs/mainnet-migration', label: 'Mainnet Migration Checklist' },
+  { href: '/docs/marketplace-architecture', label: 'Marketplace Architecture' },
 ];
 
 type PageProps = {
@@ -194,7 +184,7 @@ export async function generateStaticParams() {
 
 function buildBreadcrumbs(slug: string[], title: string) {
   const crumbs: { label: string; href?: string }[] = [{ label: 'Docs', href: '/docs' }];
-  if (slug[0] === 'guide') crumbs.push({ label: 'Guide', href: '/docs/guide' });
+  if (slug[0] === 'guide') crumbs.push({ label: 'Guide' });
   else if (slug[0] === 'spec') crumbs.push({ label: 'Spec' });
   else if (slug[0] === 'verification') crumbs.push({ label: 'Verification' });
   crumbs.push({ label: title });
