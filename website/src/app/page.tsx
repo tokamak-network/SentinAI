@@ -4,7 +4,6 @@ import { Github } from 'lucide-react';
 import { HeroMiniature } from '@/components/hero-miniature';
 
 const GITHUB_URL = 'https://github.com/tokamak-network/SentinAI';
-const EXAMPLE_DASHBOARD_URL = 'https://sentinai.tokamak.network/thanos-sepolia';
 
 const FONT = "'IBM Plex Mono', var(--font-ibm-plex-mono), monospace";
 
@@ -146,17 +145,6 @@ function Hero() {
                 onMouseLeave={e => (e.currentTarget.style.background = '#D40000')}
               >
                 ▶ CONNECT YOUR NODE
-              </a>
-              <a href={EXAMPLE_DASHBOARD_URL} target="_blank" rel="noopener noreferrer" style={{
-                background: 'transparent', color: '#0055AA',
-                padding: '8px 20px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
-                letterSpacing: '0.1em', textDecoration: 'none', display: 'inline-flex',
-                alignItems: 'center', gap: 8, border: '1px solid #0055AA',
-              }}
-                onMouseEnter={e => { e.currentTarget.style.background = '#0055AA'; e.currentTarget.style.color = 'white'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = '#0055AA'; }}
-              >
-                VIEW DASHBOARD ↗
               </a>
               <a href="/docs" style={{
                 background: 'transparent', color: '#3A3A3A',
@@ -305,12 +293,12 @@ const capabilities = [
   {
     dot: '#FF6B6B',
     title: 'Agent Marketplace',
-    description: 'Buy/sell AI agents for ops tasks. Dynamic pricing. Custom recovery playbooks. Growing ecosystem of pre-built solutions.',
+    description: 'Monetize ops monitoring via x402 micropayments. Pay-per-call agent services. Dynamic pricing tiers. Custom recovery playbooks.',
   },
   {
     dot: '#0055AA',
     title: 'NLOps Chat',
-    description: 'Operate via natural language. Ask "scale my sequencer by 20%" in Slack. AI understands context and executes safely.',
+    description: 'Operate via natural language in the dashboard chat. Ask "scale my sequencer by 20%" — AI understands context and executes. Alerts & approvals flow through Slack.',
   },
   {
     dot: '#007A00',
