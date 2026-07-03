@@ -120,7 +120,7 @@ function Hero() {
               color: '#0A0A0A', lineHeight: 1.2, letterSpacing: '0.01em',
               marginBottom: 16, maxWidth: 560,
             }}>
-              L1 & L2 Node Infrastructure{' '}
+              L2 Node Infrastructure{' '}
               <span style={{ color: '#D40000' }}>Autonomous Operations</span>
             </h1>
 
@@ -129,8 +129,9 @@ function Hero() {
               fontFamily: FONT, fontSize: 12, color: '#707070', lineHeight: 1.7,
               marginBottom: 32, maxWidth: 480,
             }}>
-              AI-powered autonomous infrastructure for L1 & L2 nodes. Real-time anomaly detection, RCA, predictive scaling,
-              cost optimization, agent marketplace, and NLOps chat. Multi-chain support: Optimism, Arbitrum, ZK Stack, Thanos.
+              AI-powered autonomous operations for L2 nodes — real-time anomaly detection, RCA, predictive scaling,
+              cost optimization, agent marketplace, and NLOps chat. L1 execution nodes monitored with RPC failover.
+              Multi-chain: Optimism, Arbitrum, ZK Stack, Thanos.
             </p>
 
             {/* CTAs */}
@@ -288,7 +289,7 @@ const capabilities = [
   {
     dot: '#FFD700',
     title: 'Cost Optimization',
-    description: 'Real-time cost tracking across chains. Recommends optimizations. 30-50% cost reduction via smart resource allocation.',
+    description: 'Real-time cost tracking across chains. AI analyzes usage patterns and recommends resource optimizations.',
   },
   {
     dot: '#FF6B6B',
@@ -350,7 +351,7 @@ const pipeline = [
     sub: 'collector · rpc',
     color: '#0055AA',
     fill: '#F0F4FF',
-    desc: 'Collect L1/L2 metrics from RPC. Block heights, tx pool, gas ratio, CPU.',
+    desc: 'Collect L1/L2 metrics from RPC. Block heights, tx pool, gas ratio, peers.',
   },
   {
     phase: 'DETECT',
