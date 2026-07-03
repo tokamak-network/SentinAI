@@ -4,50 +4,12 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ChevronRight, Menu, X } from 'lucide-react';
 import { useState } from 'react';
+import type { DocNavSection } from '@/lib/docs-nav';
 
-interface DocSection {
-  title: string;
-  items: DocItem[];
-}
-
-interface DocItem {
-  title: string;
-  href: string;
-  emoji?: string;
-}
-
-const docStructure: DocSection[] = [
-  {
-    title: 'Get Started',
-    items: [
-      { title: 'Overview', href: '/docs/guide/overview', emoji: '📖' },
-      { title: 'Quick Start', href: '/docs/guide/quickstart', emoji: '⚡' },
-      { title: 'Troubleshooting', href: '/docs/guide/troubleshooting', emoji: '🔧' },
-    ],
-  },
-  {
-    title: 'Deploy',
-    items: [
-      { title: 'Docker Setup', href: '/docs/guide/setup' },
-      { title: 'EC2 Deployment', href: '/docs/guide/ec2-setup-guide' },
-      { title: 'OP Stack', href: '/docs/guide/opstack-example-runbook' },
-      { title: 'Arbitrum Orbit', href: '/docs/guide/arbitrum-orbit-local-setup' },
-    ],
-  },
-  {
-    title: 'Reference',
-    items: [
-      { title: 'Architecture', href: '/docs/guide/architecture', emoji: '🏗️' },
-      { title: 'API Reference', href: '/docs/guide/api-reference', emoji: '📡' },
-      { title: 'MCP Integration', href: '/docs/guide/sentinai-mcp-user-guide' },
-    ],
-  },
-];
-
-export default function DocsSidebar() {
+export default function DocsSidebar({ nav }: { nav: DocNavSection[] }) {
   const pathname = usePathname();
   const [expandedSections, setExpandedSections] = useState<Set<string>>(
-    new Set(docStructure.map((s) => s.title))
+    new Set(nav.map((s) => s.title))
   );
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -103,14 +65,14 @@ export default function DocsSidebar() {
         </div>
 
         <nav className="px-4 py-4 space-y-5 overflow-y-auto flex-1">
-          {docStructure.map((section) => {
+          {nav.map((section) => {
             const isExpanded = expandedSections.has(section.title);
             return (
               <div key={section.title}>
                 <button
                   onClick={() => toggleSection(section.title)}
                   className={`flex w-full items-center justify-between text-[10px] font-semibold uppercase tracking-wider mb-1.5 ${
-                    section.items.some((item) => pathname.startsWith(item.href))
+                    section.items.some((item) => pathname === item.href)
                       ? 'text-blue-600'
                       : 'text-slate-500 hover:text-slate-700'
                   }`}
@@ -135,7 +97,6 @@ export default function DocsSidebar() {
                                 : 'text-slate-700 hover:bg-slate-100'
                             }`}
                           >
-                            {item.emoji && <span className="text-sm flex-shrink-0">{item.emoji}</span>}
                             <span className="flex-1 break-words leading-snug">{item.title}</span>
                           </Link>
                         </li>

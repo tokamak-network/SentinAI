@@ -5,49 +5,29 @@ import { notFound } from 'next/navigation';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
 import DocsSidebar from '@/components/DocsSidebar';
 import TableOfContents from '@/components/TableOfContents';
+import { buildDocsNav, flattenNav, type DocNavSection } from '@/lib/docs-nav';
+
+// During Vercel build: process.cwd() = /vercel/path0/website/
+// So ../docs = /vercel/path0/docs/ (full repo is cloned)
+const DOCS_ROOT = path.join(process.cwd(), '../docs');
+
+// Emoji per top-level section (falls back to a generic doc icon).
+const SECTION_EMOJI: Record<string, string> = {
+  Overview: '🚀',
+  Guide: '📖',
+  Reference: '📚',
+  Proposals: '🧪',
+};
 
 // ============================================================================
 // Docs landing page (shown when /docs is visited with no slug)
 // ============================================================================
 
-const CARDS = [
-  {
-    emoji: '🚀',
-    title: 'Get Started',
-    description: 'Understand what SentinAI does and get it running in 5 minutes.',
-    links: [
-      { label: 'Overview', href: '/docs/guide/overview' },
-      { label: 'Quick Start (5 min)', href: '/docs/guide/quickstart' },
-      { label: 'Troubleshooting', href: '/docs/guide/troubleshooting' },
-    ],
-  },
-  {
-    emoji: '⚙️',
-    title: 'Deploy',
-    description: 'Run SentinAI on Docker, EC2, or alongside your chain node.',
-    links: [
-      { label: 'Docker Setup', href: '/docs/guide/setup' },
-      { label: 'EC2 Deployment', href: '/docs/guide/ec2-setup-guide' },
-      { label: 'OP Stack', href: '/docs/guide/opstack-example-runbook' },
-      { label: 'Arbitrum Orbit', href: '/docs/guide/arbitrum-orbit-local-setup' },
-    ],
-  },
-  {
-    emoji: '📚',
-    title: 'Reference',
-    description: 'Architecture deep-dive, REST API, and external integrations.',
-    links: [
-      { label: 'Architecture', href: '/docs/guide/architecture' },
-      { label: 'API Reference', href: '/docs/guide/api-reference' },
-      { label: 'MCP Integration', href: '/docs/guide/sentinai-mcp-user-guide' },
-    ],
-  },
-];
-
-function DocsLandingPage() {
+function DocsLandingPage({ nav }: { nav: DocNavSection[] }) {
+  const firstDoc = flattenNav(nav)[0];
   return (
     <div className="flex min-h-screen">
-      <DocsSidebar />
+      <DocsSidebar nav={nav} />
       <main className="flex-1 px-4 sm:px-6 lg:px-10 py-10 lg:ml-0">
         <div className="mx-auto max-w-4xl">
           <div className="mb-10">
@@ -60,40 +40,35 @@ function DocsLandingPage() {
             <p className="text-slate-500 text-base mb-6 max-w-xl">
               Autonomous monitoring and auto-scaling for L2 blockchain nodes.
             </p>
-            <div className="flex gap-3 flex-wrap">
-              <Link
-                href="/docs/guide/quickstart"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
-              >
-                ⚡ Quick Start
-              </Link>
-              <Link
-                href="/docs/guide/architecture"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
-              >
-                🏗️ Architecture
-              </Link>
-            </div>
+            {firstDoc && (
+              <div className="flex gap-3 flex-wrap">
+                <Link
+                  href={firstDoc.href}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+                >
+                  Get Started →
+                </Link>
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-            {CARDS.map((card) => (
+            {nav.map((section) => (
               <div
-                key={card.title}
+                key={section.title}
                 className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm hover:shadow-md transition-shadow"
               >
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xl">{card.emoji}</span>
-                  <h2 className="text-base font-semibold text-slate-900">{card.title}</h2>
+                <div className="flex items-center gap-2 mb-4">
+                  <span className="text-xl">{SECTION_EMOJI[section.title] ?? '📄'}</span>
+                  <h2 className="text-base font-semibold text-slate-900">{section.title}</h2>
                 </div>
-                <p className="text-xs text-slate-500 mb-4 leading-relaxed">{card.description}</p>
                 <ul className="space-y-1.5">
-                  {card.links.map((link) => (
-                    <li key={link.href}>
+                  {section.items.map((item) => (
+                    <li key={item.href}>
                       <Link
-                        href={link.href}
+                        href={item.href}
                         className="text-sm text-blue-600 hover:text-blue-500 hover:underline transition-colors"
                       >
-                        {link.label} →
+                        {item.title} →
                       </Link>
                     </li>
                   ))}
@@ -106,24 +81,6 @@ function DocsLandingPage() {
     </div>
   );
 }
-
-// During Vercel build: process.cwd() = /vercel/path0/website/
-// So ../docs = /vercel/path0/docs/ (full repo is cloned)
-const DOCS_ROOT = path.join(process.cwd(), '../docs');
-
-// Flat ordered list used for prev/next navigation (matches sidebar structure)
-const NAV_ORDER = [
-  { href: '/docs/guide/overview', label: 'Overview' },
-  { href: '/docs/guide/quickstart', label: 'Quick Start' },
-  { href: '/docs/guide/troubleshooting', label: 'Troubleshooting' },
-  { href: '/docs/guide/setup', label: 'Docker Setup' },
-  { href: '/docs/guide/ec2-setup-guide', label: 'EC2 Deployment' },
-  { href: '/docs/guide/opstack-example-runbook', label: 'OP Stack' },
-  { href: '/docs/guide/arbitrum-orbit-local-setup', label: 'Arbitrum Orbit' },
-  { href: '/docs/guide/architecture', label: 'Architecture' },
-  { href: '/docs/guide/api-reference', label: 'API Reference' },
-  { href: '/docs/guide/sentinai-mcp-user-guide', label: 'MCP Integration' },
-];
 
 type PageProps = {
   params: Promise<{ slug?: string[] }>;
@@ -194,7 +151,8 @@ export async function generateStaticParams() {
 
 function buildBreadcrumbs(slug: string[], title: string) {
   const crumbs: { label: string; href?: string }[] = [{ label: 'Docs', href: '/docs' }];
-  if (slug[0] === 'guide') crumbs.push({ label: 'Guide', href: '/docs/guide' });
+  // Intermediate directory crumbs are non-clickable: docs/<dir> has no index page.
+  if (slug[0] === 'guide') crumbs.push({ label: 'Guide' });
   else if (slug[0] === 'spec') crumbs.push({ label: 'Spec' });
   else if (slug[0] === 'verification') crumbs.push({ label: 'Verification' });
   crumbs.push({ label: title });
@@ -203,10 +161,11 @@ function buildBreadcrumbs(slug: string[], title: string) {
 
 export default async function DocsPage({ params }: PageProps) {
   const { slug } = await params;
+  const nav = await buildDocsNav();
 
   // Show landing page when no slug provided
   if (!slug || slug.length === 0) {
-    return <DocsLandingPage />;
+    return <DocsLandingPage nav={nav} />;
   }
 
   const content = await readDocFile(slug);
@@ -214,14 +173,15 @@ export default async function DocsPage({ params }: PageProps) {
 
   const title = extractTitle(content);
   const currentHref = `/docs/${slug.join('/')}`;
-  const navIdx = NAV_ORDER.findIndex((n) => n.href === currentHref);
-  const prevPage = navIdx > 0 ? NAV_ORDER[navIdx - 1] : null;
-  const nextPage = navIdx >= 0 && navIdx < NAV_ORDER.length - 1 ? NAV_ORDER[navIdx + 1] : null;
+  const flat = flattenNav(nav);
+  const navIdx = flat.findIndex((n) => n.href === currentHref);
+  const prevPage = navIdx > 0 ? flat[navIdx - 1] : null;
+  const nextPage = navIdx >= 0 && navIdx < flat.length - 1 ? flat[navIdx + 1] : null;
   const breadcrumbs = buildBreadcrumbs(slug, title);
 
   return (
     <div className="flex min-h-screen">
-      <DocsSidebar />
+      <DocsSidebar nav={nav} />
 
       <main className="flex-1 px-3 sm:px-4 lg:px-10 py-8 lg:ml-0">
         <div className="mx-auto max-w-4xl xl:max-w-5xl">
@@ -261,7 +221,7 @@ export default async function DocsPage({ params }: PageProps) {
                     >
                       <span className="text-[10px] uppercase tracking-wider text-slate-400">Previous</span>
                       <span className="text-sm font-medium text-blue-600 group-hover:text-blue-500 transition-colors">
-                        ← {prevPage.label}
+                        ← {prevPage.title}
                       </span>
                     </Link>
                   ) : (
@@ -274,7 +234,7 @@ export default async function DocsPage({ params }: PageProps) {
                     >
                       <span className="text-[10px] uppercase tracking-wider text-slate-400">Next</span>
                       <span className="text-sm font-medium text-blue-600 group-hover:text-blue-500 transition-colors">
-                        {nextPage.label} →
+                        {nextPage.title} →
                       </span>
                     </Link>
                   ) : (
