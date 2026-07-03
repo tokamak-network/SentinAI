@@ -147,17 +147,6 @@ function Hero() {
               >
                 ▶ CONNECT YOUR NODE
               </a>
-              <a href="/docs" style={{
-                background: 'transparent', color: '#3A3A3A',
-                padding: '8px 20px', fontFamily: FONT, fontSize: 10, fontWeight: 700,
-                letterSpacing: '0.1em', textDecoration: 'none', display: 'inline-flex',
-                alignItems: 'center', gap: 8, border: '1px solid #D0D0D0',
-              }}
-                onMouseEnter={e => (e.currentTarget.style.borderColor = '#A0A0A0')}
-                onMouseLeave={e => (e.currentTarget.style.borderColor = '#D0D0D0')}
-              >
-                READ DOCS
-              </a>
             </div>
 
             {/* Terminal block */}
@@ -601,7 +590,6 @@ function Footer() {
         {/* Links */}
         <nav style={{ display: 'flex', gap: 20, alignItems: 'center' }}>
           {[
-            { href: '/docs', label: 'DOCS' },
             { href: GITHUB_URL, label: 'GITHUB', external: true },
             { href: 'https://x.com/tokamak_network', label: 'X / TWITTER', external: true },
           ].map(({ href, label, external }) => (
