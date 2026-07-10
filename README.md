@@ -84,20 +84,34 @@ cp .env.thanos.example .env.local
 
 For EC2 deployment, use `bash scripts/install.sh` which handles everything.
 
-**Minimum required (3 variables for full functionality):**
+**Required:**
 ```bash
 L2_RPC_URL=https://your-l2-rpc-endpoint.com    # L2 Chain RPC
-ANTHROPIC_API_KEY=your-api-key-here             # AI features
-AWS_CLUSTER_NAME=my-cluster-name                # K8s (auto-detects K8S_API_URL & region)
+REDIS_URL=redis://localhost:6379                # State store (scaling cooldown, metrics, goal queue)
 ```
+
+**AI Provider (choose one or more; priority Qwen > Claude > GPT > Gemini):**
+```bash
+QWEN_API_KEY=your-qwen-api-key-here
+# ANTHROPIC_API_KEY=sk-ant-...
+# OPENAI_API_KEY=sk-...
+# GEMINI_API_KEY=AIza...
+```
+An AI Gateway (`AI_GATEWAY_URL`) is used by default if no provider key is set.
+
+**Optional:**
+```bash
+AWS_CLUSTER_NAME=my-cluster-name                # K8s monitoring (auto-detects K8S_API_URL from cluster name; AWS_REGION resolved separately via `aws configure get region` or the AWS_REGION env var)
+SENTINAI_API_KEY=replace-with-strong-random-value  # required in production only — server fail-closes without it
+```
+
+See `.env.local.sample` for the full annotated list.
 
 **L1 RPC Configuration (Important Architecture Note):**
 - **SentinAI monitoring path**: Set via `SENTINAI_L1_RPC_URL` (optional, has default fallback).
 - **L2 node failover pool**: Set via `L1_RPC_URLS` (comma-separated).
 - **Proxyd mode** (optional): controlled with `L1_PROXYD_*` variables.
-- See `docs/guide/proxyd-failover-setup.md` for details.
 
-> `K8S_API_URL` and `AWS_REGION` are auto-detected at runtime from `AWS_CLUSTER_NAME`.
 > AWS credentials use the standard chain: env vars, `~/.aws/credentials`, or IAM Role.
 
 ## Deployment
@@ -118,7 +132,7 @@ The installer prompts for:
 1. **Setup Mode**: `core` (recommended) or `advanced`
 2. **L2 RPC URL** (required)
 3. **AI Provider + API Key** (required)
-4. **Chain plugin** (`thanos` / `optimism` / `zkstack`)
+4. **Chain plugin** (`thanos` / `optimism` / `zkstack` / `arbitrum`, plus aliases `op-stack`, `my-l2`, `arbitrum-orbit`/`nitro`, `zksync`/`zk-stack`)
 5. **Orchestrator** (`k8s` or `docker`) and cluster info (if needed)
 6. **Advanced mode only**: MCP, AI routing, agent memory, fault-proof, domain/alerts
 
@@ -283,6 +297,6 @@ docker run -p 8080:8080 \
   sentinai:local
 ```
 
-On first startup, SentinAI will auto-bootstrap onboarding from environment variables and create an active instance for `/v2`.
+> The container always listens on port 8080 internally. `docker-compose.yml` maps it to host port **3002** (`3002:8080`); this direct `docker run` example maps it to host port **8080** instead — adjust `-p` to whichever host port you want.
 
-See full guide: `docs/guide/self-hosted-onboarding.md`
+On first startup, SentinAI will auto-bootstrap onboarding from environment variables and create an active instance for `/v2`.
