@@ -1,5 +1,7 @@
 # SentinAI (Autonomous Node Guardian)
 
+> **⚠️ Archived**: This repository is no longer maintained. Start with [docs/guide/getting-started.md](docs/guide/getting-started.md) before reading anything else.
+
 ## Overview
 A Next.js dashboard for monitoring and auto-scaling Optimism-based L2 networks.
 
