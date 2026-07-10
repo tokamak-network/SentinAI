@@ -154,8 +154,11 @@ describe('S-L1-GETH-02: Geth Mempool 모니터링', () => {
     const now = Date.now();
 
     // 5분간 50배 증가 (100 → 5000)
+    // Oldest point kept inside the 300s monotonic-increase window with margin,
+    // so wall-clock drift across repeated detectAnomalies() calls below doesn't
+    // push it out of range (it sat exactly on the boundary before).
     const history: MetricDataPoint[] = [
-      makeMetric({ txPoolPending: 100, timestamp: now - 300_000 }),
+      makeMetric({ txPoolPending: 100, timestamp: now - 280_000 }),
       makeMetric({ txPoolPending: 500, timestamp: now - 240_000 }),
       makeMetric({ txPoolPending: 1500, timestamp: now - 180_000 }),
       makeMetric({ txPoolPending: 3000, timestamp: now - 120_000 }),
